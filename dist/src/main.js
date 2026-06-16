@@ -7,82 +7,9 @@ const statusOptions = [
   "Cancelled",
 ];
 
-let orders = [
-  {
-    id: "UC-000126",
-    client: "Urban Coffee",
-    clientInitials: "UC",
-    clientAddress: "123 Brew St.",
-    cityState: "Austin, TX 78701",
-    requestedBy: "Clark Lubguban",
-    requesterRole: "Operations Manager",
-    requesterEmail: "clark@urbancoffee.com",
-    requesterPhone: "(512) 555-0188",
-    items: "Admin Polo Uniform",
-    itemLines: [{ name: "Admin Polo Uniform", qty: 1 }],
-    qty: 1,
-    fulfillment: "Delivery",
-    shipTo: "Urban Coffee - Central Warehouse",
-    shipAddress: "500 Roastery Way, Austin, TX 78702",
-    neededDate: "June 28, 2026",
-    daysUntilNeeded: "12 days",
-    status: "Pending Review",
-    submitted: "Today, 9:24 AM",
-    priority: "Standard",
-    notes:
-      "Single admin polo reorder for new branch manager. Match existing Urban Coffee embroidery placement.",
-  },
-  {
-    id: "SA-000125",
-    client: "Salon Aurelia",
-    clientInitials: "SA",
-    clientAddress: "48 Rose Lane",
-    cityState: "Dallas, TX 75201",
-    requestedBy: "Maya Patel",
-    requesterRole: "Owner",
-    requesterEmail: "maya@salonaurelia.com",
-    requesterPhone: "(214) 555-0140",
-    items: "Embroidered Staff Cap",
-    itemLines: [{ name: "Embroidered Staff Cap", qty: 12 }],
-    qty: 12,
-    fulfillment: "Pickup",
-    shipTo: "TRRY Apparel Pickup Counter",
-    shipAddress: "Main production office",
-    neededDate: "June 30, 2026",
-    daysUntilNeeded: "14 days",
-    status: "Approved",
-    submitted: "Yesterday, 4:12 PM",
-    priority: "Standard",
-    notes:
-      "Approved for pickup. Client requested the same thread color used on the previous cap batch.",
-  },
-  {
-    id: "CC-000124",
-    client: "Clinic Central",
-    clientInitials: "CC",
-    clientAddress: "210 Medical Plaza",
-    cityState: "Houston, TX 77002",
-    requestedBy: "Dr. Amanda Ruiz",
-    requesterRole: "Admin Director",
-    requesterEmail: "amanda@cliniccentral.com",
-    requesterPhone: "(713) 555-0162",
-    items: "Admin Polo Uniform",
-    itemLines: [{ name: "Admin Polo Uniform", qty: 24 }],
-    qty: 24,
-    fulfillment: "Delivery",
-    shipTo: "Clinic Central Receiving",
-    shipAddress: "210 Medical Plaza, Houston, TX 77002",
-    neededDate: "July 2, 2026",
-    daysUntilNeeded: "16 days",
-    status: "In Production",
-    submitted: "June 15, 2026",
-    priority: "High",
-    notes:
-      "Production is underway. Confirm final packing count before dispatch to Clinic Central receiving desk.",
-  },
-];
+let orders = [];
 
-let selectedId = "UC-000126";
+let selectedId = null;
 let activeFilter = "All";
 let query = "";
 let draftStatus = "Pending Review";
@@ -97,11 +24,11 @@ const routes = {
 };
 
 const statMeta = [
-  { label: "Pending Review", value: 18, icon: "queue", delta: "12% vs last week" },
-  { label: "Approved", value: 32, icon: "check", delta: "8% vs last week" },
-  { label: "In Production", value: 56, icon: "factory", delta: "15% vs last week" },
-  { label: "Ready", value: 21, icon: "ready", delta: "5% vs last week" },
-  { label: "Completed", value: 128, icon: "calendar", delta: "16% vs last month" },
+  { label: "Pending Review", value: 0, icon: "queue", delta: "No data yet" },
+  { label: "Approved", value: 0, icon: "check", delta: "No data yet" },
+  { label: "In Production", value: 0, icon: "factory", delta: "No data yet" },
+  { label: "Ready", value: 0, icon: "ready", delta: "No data yet" },
+  { label: "Completed", value: 0, icon: "calendar", delta: "No data yet" },
 ];
 
 function render() {
@@ -118,7 +45,9 @@ function render() {
         ${
           currentRoute === "Orders"
             ? renderOrdersPage(selectedOrder, filteredOrders)
-            : renderPlaceholderPage(currentRoute)
+            : currentRoute === "Overview"
+              ? renderOverviewPage()
+              : renderPlaceholderPage(currentRoute)
         }
         ${renderFooter()}
       </section>
@@ -159,6 +88,51 @@ function renderPlaceholderPage(title) {
       <section class="placeholder-page">
         <p class="placeholder-kicker">TRRY Apparel Management</p>
         <h1>${title} - Coming soon</h1>
+      </section>
+    </main>
+  `;
+}
+
+function renderOverviewPage() {
+  const overviewMetrics = [
+    { label: "Website Visits", value: "-" },
+    { label: "Portal Visits", value: "-" },
+    { label: "Reorder Requests", value: "0" },
+    { label: "Estimated Sales Value", value: "PHP 0" },
+  ];
+
+  return `
+    <main class="orders-page">
+      <div class="page-heading">
+        <div>
+          <h1>Overview</h1>
+          <p class="subtitle">Monitor TRRY Apparel admin operations as real data becomes available.</p>
+        </div>
+      </div>
+
+      <section class="overview-grid">
+        ${overviewMetrics
+          .map(
+            (metric) => `
+              <article class="overview-card">
+                <p>${metric.label}</p>
+                <strong>${metric.value}</strong>
+              </article>`
+          )
+          .join("")}
+      </section>
+
+      <section class="overview-content">
+        <article class="analytics-card">
+          <h2>No analytics data yet</h2>
+          <p>Connect Supabase or analytics to start tracking.</p>
+        </article>
+        <article class="activity-card">
+          <h2>Top Client Activity</h2>
+          <p><strong>Urban Coffee</strong> - 2 approved products saved</p>
+          <h2>Recent Portal Activity</h2>
+          <p>No recent activity yet</p>
+        </article>
       </section>
     </main>
   `;
@@ -219,10 +193,10 @@ function renderTopHeader() {
           <span></span>
         </button>
         <div class="profile-area">
-          <div class="avatar">AT</div>
+          <div class="avatar">TA</div>
           <div>
-            <strong>Alex Thorne</strong>
-            <span>Super Admin</span>
+            <strong>TRRY Admin</strong>
+            <span>Admin</span>
           </div>
           <span class="chevron"></span>
         </div>
@@ -329,7 +303,14 @@ function renderTable(filteredOrders) {
       </thead>
       <tbody>${rows}</tbody>
     </table>
-    ${filteredOrders.length === 0 ? '<div class="empty-state">No orders match this view.</div>' : ""}
+    ${
+      filteredOrders.length === 0
+        ? `<div class="empty-state">
+            <strong>No reorder requests yet</strong>
+            <span>New client reorder requests will appear here.</span>
+          </div>`
+        : ""
+    }
     <div class="table-footer">
       <span>Showing 1 to ${filteredOrders.length} of ${orders.length} orders</span>
       <div class="pager">
