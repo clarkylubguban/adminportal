@@ -33,7 +33,7 @@ const products = [
     logoPlacement: "Left Chest Embroidery",
     fabric: "Cotton Blend",
     status: "Approved",
-    visible: "Visible",
+    visible: "Yes",
     created: "MVP Setup",
     updated: "Recently",
   },
@@ -46,7 +46,7 @@ const products = [
     logoPlacement: "Front Embroidery",
     fabric: "Cotton",
     status: "Approved",
-    visible: "Visible",
+    visible: "Yes",
     created: "MVP Setup",
     updated: "Recently",
   },
@@ -412,6 +412,7 @@ function renderProductsPage(selectedProduct) {
               <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search products" type="search" />
             </label>
           </div>
+          <p class="table-helper-text">Select a product to view details.</p>
           <table class="products-table">
             <thead>
               <tr>
@@ -631,7 +632,7 @@ function renderOrderRow(order) {
 
 function renderProductRow(item) {
   return `
-    <tr class="${item.code === selectedProductCode ? "selected" : ""}">
+    <tr class="${item.code === selectedProductCode ? "selected" : ""}" data-product-code="${item.code}">
       <td>
         <div class="client-cell">
           <span class="product-thumb ${statusToClass(item.category)}"></span>
@@ -796,15 +797,18 @@ function renderProductPanel(product) {
         <div class="settings-row"><span>Logo placement</span><strong>${product.logoPlacement}</strong></div>
         <div class="settings-row"><span>Fabric / spec</span><strong>${product.fabric}</strong></div>
         <div class="settings-row"><span>Product code</span><strong>${product.code}</strong></div>
-        <div class="settings-row"><span>Created date</span><strong>${product.created}</strong></div>
+        <div class="settings-row"><span>Visible in portal</span><strong>${product.visible}</strong></div>
+        <div class="settings-row"><span>Created</span><strong>${product.created}</strong></div>
         <div class="settings-row"><span>Last updated</span><strong>${product.updated}</strong></div>
       </section>
       <section class="quick-panel-actions product-actions">
-        <button type="button">Edit Product</button>
-        <button type="button">Duplicate</button>
-        <button type="button">View Spec Sheet</button>
-        <button type="button">Download Mockup</button>
+        <button disabled title="Client portal product linking will be connected later." type="button">View in Client Portal</button>
+        <button data-copy-value="${product.code}" data-copy-message="Product code copied" type="button">Copy Product Code</button>
+        <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
+        <button disabled title="Editing will be connected to Supabase later." type="button">Edit Product</button>
+        <button disabled title="Duplicate will be enabled after Supabase connection." type="button">Duplicate</button>
       </section>
+      ${renderFeedback()}
     </aside>
   `;
 }

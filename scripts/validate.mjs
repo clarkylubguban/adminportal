@@ -38,6 +38,11 @@ const requiredCopy = [
   "Add Internal Note",
   "Open Portal",
   "View Orders",
+  "Select a product to view details.",
+  "Visible in portal",
+  "View in Client Portal",
+  "Copy Product Code",
+  "Product code copied",
   "Edit Product",
   "Danger Zone",
 ];

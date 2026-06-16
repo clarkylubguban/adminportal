@@ -1095,6 +1095,23 @@ tbody tr:hover td {
   cursor: pointer;
 }
 
+.products-table tbody tr {
+  cursor: pointer;
+}
+
+.products-table tbody tr:hover td {
+  background: #fff8f2;
+}
+
+.table-helper-text {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-weight: 700;
+  margin: 0;
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
 th:nth-child(1),
 td:nth-child(1) {
   width: 108px;
@@ -1688,8 +1705,13 @@ td:nth-child(9) {
 
 .quick-panel-actions button:disabled {
   background: #f4f4f4;
+  border-color: #e0e0e0;
   color: #9a9a9a;
   cursor: not-allowed;
+}
+
+.product-actions {
+  grid-template-columns: 1fr;
 }
 
 .product-image-panel {
