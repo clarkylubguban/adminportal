@@ -1,0 +1,380 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport">
+<title>TRRY Apparel Management - Mobile Overview</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<style>
+    .material-symbols-outlined {
+      font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+    }
+    body {
+      font-family: 'Hanken Grotesk', sans-serif;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .hide-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .hide-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+    /* Safe area for mobile notch/home indicator */
+    .pb-safe {
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+  </style>
+<script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "tertiary-fixed-dim": "#c6c6c7",
+            "primary": "#a04100",
+            "secondary-fixed": "#e5e2e1",
+            "error": "#ba1a1a",
+            "on-surface": "#1b1c1c",
+            "surface-dim": "#dbdad9",
+            "outline": "#8e7164",
+            "on-tertiary-fixed": "#1a1c1c",
+            "on-tertiary": "#ffffff",
+            "surface": "#fbf9f8",
+            "surface-tint": "#a04100",
+            "outline-variant": "#e2bfb0",
+            "background": "#fbf9f8",
+            "inverse-primary": "#ffb693",
+            "error-container": "#ffdad6",
+            "surface-container-lowest": "#ffffff",
+            "surface-container": "#efeded",
+            "on-tertiary-fixed-variant": "#454747",
+            "tertiary-fixed": "#e2e2e2",
+            "surface-container-highest": "#e4e2e2",
+            "tertiary": "#5d5f5f",
+            "primary-fixed-dim": "#ffb693",
+            "on-secondary-container": "#636262",
+            "on-secondary": "#ffffff",
+            "on-surface-variant": "#5a4136",
+            "tertiary-container": "#989999",
+            "primary-container": "#ff6b00",
+            "surface-container-low": "#f5f3f3",
+            "on-primary-fixed-variant": "#7a3000",
+            "on-error": "#ffffff",
+            "on-primary-fixed": "#351000",
+            "secondary": "#5f5e5e",
+            "surface-bright": "#fbf9f8",
+            "on-tertiary-container": "#2f3132",
+            "on-secondary-fixed-variant": "#474746",
+            "on-error-container": "#93000a",
+            "inverse-surface": "#303031",
+            "secondary-fixed-dim": "#c8c6c5",
+            "surface-variant": "#e4e2e2",
+            "on-primary-container": "#572000",
+            "surface-container-high": "#e9e8e7",
+            "secondary-container": "#e2dfde",
+            "on-primary": "#ffffff",
+            "primary-fixed": "#ffdbcc",
+            "inverse-on-surface": "#f2f0f0",
+            "on-secondary-fixed": "#1c1b1b",
+            "on-background": "#1b1c1c"
+          },
+          "borderRadius": {
+            "DEFAULT": "0.25rem",
+            "lg": "0.5rem",
+            "xl": "0.75rem",
+            "full": "9999px"
+          },
+          "spacing": {
+            "container-max": "1440px",
+            "stack-md": "16px",
+            "gutter": "24px",
+            "sidebar-width": "240px",
+            "stack-sm": "8px",
+            "stack-lg": "24px",
+            "margin-page": "32px"
+          },
+          "fontFamily": {
+            "headline-lg": ["Hanken Grotesk"],
+            "label-sm": ["Hanken Grotesk"],
+            "label-bold": ["Hanken Grotesk"],
+            "body-md": ["Hanken Grotesk"],
+            "body-lg": ["Hanken Grotesk"],
+            "display": ["Hanken Grotesk"],
+            "headline-md": ["Hanken Grotesk"]
+          },
+          "fontSize": {
+            "headline-lg": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+            "headline-lg-mobile": ["20px", { "lineHeight": "1.2", "fontWeight": "600" }],
+            "label-sm": ["11px", { "lineHeight": "1", "fontWeight": "500" }],
+            "label-sm-mobile": ["10px", { "lineHeight": "1", "fontWeight": "500" }],
+            "label-bold": ["12px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700" }],
+            "body-md": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+            "body-lg": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+            "display": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+            "headline-md": ["20px", { "lineHeight": "1.4", "fontWeight": "600" }]
+          }
+        },
+      },
+    }
+  </script>
+</head>
+<body class="bg-surface text-on-surface min-h-screen flex flex-col md:hidden">
+<!-- TopAppBar Execution -->
+<header class="fixed top-0 left-0 w-full z-50 bg-surface dark:bg-on-surface border-b border-outline-variant flex justify-between items-center px-4 h-16 transition-colors duration-200 ease-in-out">
+<div class="flex items-center gap-3">
+<button class="p-2 hover:bg-surface-container-low rounded-full transition-colors">
+<span class="material-symbols-outlined text-primary" data-icon="menu">menu</span>
+</button>
+<h1 class="font-display text-headline-md text-primary tracking-tighter">TRRY APPAREL</h1>
+</div>
+<div class="flex items-center gap-2">
+<button class="p-2 hover:bg-surface-container-low rounded-full transition-colors">
+<span class="material-symbols-outlined text-secondary" data-icon="search">search</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary-fixed flex items-center justify-center text-on-primary-fixed font-bold text-xs border border-outline-variant overflow-hidden">
+<img alt="Alex Thorne" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBPSqpQORqAe8WM0buRnw2eYUs8neaFgjVG8CqY7UpNntA044P9DoMMec9eSFGUCs_6zL_etb3BPUAl8RTJ81XzOl5oSzmPIYLjygg7YGgYJ0oU0DxfumQGwtmFht7qLcXBOCp5Ec6qkrjaMa-tTkudrSPyfqF0HSS1XNY0tTijZ5CBLiwyCO5ct4zTl-JaHL7AWLmeIYlbdYZwlzURJ7K8e2-NOLEi6zNZBOQACnh3zQWPfGCSzQnWwwb8zt2MxDVE901o-FtvFTE">
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 mt-16 mb-16 overflow-y-auto px-4 py-6 space-y-6">
+<!-- Hero / Welcome -->
+<section>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Overview</h2>
+<p class="font-body-md text-body-md text-secondary mt-1">Monitor key operations for TRRY Apparel.</p>
+</section>
+<!-- KPI Stack - Vertical for Mobile -->
+<section class="grid grid-cols-1 gap-3">
+<!-- Pending Review -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-primary-fixed-dim/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="pending_actions">pending_actions</span>
+</div>
+<div>
+<p class="font-label-bold text-label-bold text-secondary uppercase">Pending Review</p>
+<p class="font-display text-display text-on-surface">18</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-primary flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span> 12%
+          </span>
+<p class="font-label-sm text-tertiary-container">vs last week</p>
+</div>
+</div>
+<!-- Approved -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-green-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-green-700" data-icon="check_circle">check_circle</span>
+</div>
+<div>
+<p class="font-label-bold text-label-bold text-secondary uppercase">Approved</p>
+<p class="font-display text-display text-on-surface">32</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-green-700 flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span> 10%
+          </span>
+<p class="font-label-sm text-tertiary-container">vs last week</p>
+</div>
+</div>
+<!-- In Production -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-orange-700" data-icon="factory">factory</span>
+</div>
+<div>
+<p class="font-label-bold text-label-bold text-secondary uppercase">In Production</p>
+<p class="font-display text-display text-on-surface">56</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-orange-700 flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span> 15%
+          </span>
+<p class="font-label-sm text-tertiary-container">vs last week</p>
+</div>
+</div>
+<!-- Ready to Ship -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-blue-100 flex items-center justify-center">
+<span class="material-symbols-outlined text-blue-700" data-icon="local_shipping">local_shipping</span>
+</div>
+<div>
+<p class="font-label-bold text-label-bold text-secondary uppercase">Ready to Ship</p>
+<p class="font-display text-display text-on-surface">21</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-error flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="trending_down">trending_down</span> 5%
+          </span>
+<p class="font-label-sm text-tertiary-container">vs last week</p>
+</div>
+</div>
+<!-- Completed -->
+<div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant flex items-center justify-between shadow-sm">
+<div class="flex items-center gap-4">
+<div class="w-12 h-12 rounded-lg bg-surface-container-highest flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary" data-icon="inventory">inventory</span>
+</div>
+<div>
+<p class="font-label-bold text-label-bold text-secondary uppercase">Completed</p>
+<p class="font-display text-display text-on-surface">128</p>
+</div>
+</div>
+<div class="text-right">
+<span class="font-label-sm text-green-700 flex items-center justify-end gap-1">
+<span class="material-symbols-outlined text-sm" data-icon="trending_up">trending_up</span> 18%
+          </span>
+<p class="font-label-sm text-tertiary-container">vs last month</p>
+</div>
+</div>
+</section>
+<!-- Quick Actions Horizontal Scroll -->
+<section>
+<div class="flex items-center justify-between mb-3">
+<h3 class="font-headline-md text-on-surface">Quick Actions</h3>
+<button class="text-primary font-label-bold text-label-bold">View all</button>
+</div>
+<div class="flex gap-3 overflow-x-auto pb-4 hide-scrollbar -mx-4 px-4">
+<button class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest border border-outline-variant rounded-xl flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform">
+<div class="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary" data-icon="add_box">add_box</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface text-center px-2">Create Order</span>
+</button>
+<button class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest border border-outline-variant rounded-xl flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform">
+<div class="w-10 h-10 rounded-full bg-secondary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary" data-icon="person_add">person_add</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface text-center px-2">Add Client</span>
+</button>
+<button class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest border border-outline-variant rounded-xl flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform">
+<div class="w-10 h-10 rounded-full bg-tertiary-container/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-tertiary" data-icon="inventory_2">inventory_2</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface text-center px-2">Add Product</span>
+</button>
+<button class="flex-shrink-0 w-32 h-32 bg-surface-container-lowest border border-outline-variant rounded-xl flex flex-col items-center justify-center gap-2 active:scale-95 transition-transform">
+<div class="w-10 h-10 rounded-full bg-error-container/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-error" data-icon="assignment_late">assignment_late</span>
+</div>
+<span class="font-label-bold text-label-bold text-on-surface text-center px-2">Reorder Request</span>
+</button>
+</div>
+</section>
+<!-- Recent Activity Feed -->
+<section class="space-y-4">
+<div class="flex items-center justify-between">
+<h3 class="font-headline-md text-on-surface">Today's Activity</h3>
+<span class="font-label-sm text-secondary">May 25, 2024</span>
+</div>
+<div class="bg-surface-container-lowest rounded-xl border border-outline-variant divide-y divide-outline-variant/30">
+<!-- Activity Item 1 -->
+<div class="p-4 flex gap-3">
+<div class="flex-shrink-0 w-2 flex flex-col items-center">
+<div class="w-2 h-2 rounded-full bg-primary mt-1.5"></div>
+<div class="flex-1 w-px bg-outline-variant/30 my-1"></div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<span class="font-label-bold text-label-bold text-primary">9:45 AM</span>
+<span class="bg-orange-100 text-orange-700 font-label-bold text-[9px] px-1.5 py-0.5 rounded-full uppercase">In Production</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface mt-1">Order <span class="font-bold">TRRY-2505-0142</span> moved to production</p>
+<p class="font-label-sm text-tertiary-container mt-0.5">Urban Stitch Co. - Premium Hoodie</p>
+</div>
+</div>
+<!-- Activity Item 2 -->
+<div class="p-4 flex gap-3">
+<div class="flex-shrink-0 w-2 flex flex-col items-center">
+<div class="w-2 h-2 rounded-full bg-secondary-container mt-1.5 border border-outline"></div>
+<div class="flex-1 w-px bg-outline-variant/30 my-1"></div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<span class="font-label-bold text-label-bold text-on-surface-variant">9:15 AM</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface mt-1">New reorder request submitted</p>
+<p class="font-label-sm text-tertiary-container mt-0.5">Peak Performance - Training Tee</p>
+</div>
+</div>
+<!-- Activity Item 3 -->
+<div class="p-4 flex gap-3">
+<div class="flex-shrink-0 w-2 flex flex-col items-center">
+<div class="w-2 h-2 rounded-full bg-green-500 mt-1.5"></div>
+</div>
+<div class="flex-1">
+<div class="flex justify-between items-start">
+<span class="font-label-bold text-label-bold text-green-700">8:30 AM</span>
+<span class="bg-green-100 text-green-700 font-label-bold text-[9px] px-1.5 py-0.5 rounded-full uppercase">Approved</span>
+</div>
+<p class="font-body-md text-body-md text-on-surface mt-1">Product approved</p>
+<p class="font-label-sm text-tertiary-container mt-0.5">TRRY Performance Polo - White</p>
+</div>
+</div>
+</div>
+<button class="w-full py-3 border border-outline-variant rounded-xl text-primary font-label-bold text-label-bold hover:bg-surface-container-low transition-colors">
+        Load More Activity
+      </button>
+</section>
+<!-- FAB (Contextual for Home/Overview) -->
+<div class="fixed bottom-20 right-4 z-[60]">
+<button class="w-14 h-14 bg-primary-container text-on-primary-container rounded-2xl shadow-xl flex items-center justify-center active:scale-90 transition-transform duration-150">
+<span class="material-symbols-outlined text-3xl" data-icon="add" style="font-variation-settings: 'FILL' 0, 'wght' 600, 'GRAD' 0, 'opsz' 48;">add</span>
+</button>
+</div>
+</main>
+<!-- BottomNavBar Execution -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-16 bg-surface border-t border-outline-variant px-2 pb-safe z-50 shadow-lg">
+<!-- Overview (ACTIVE) -->
+<a class="flex flex-col items-center justify-center text-primary font-bold transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard" style="font-variation-settings: 'FILL' 1;">dashboard</span>
+<span class="font-label-sm-mobile text-label-sm-mobile mt-1">Overview</span>
+</a>
+<!-- Orders -->
+<a class="flex flex-col items-center justify-center text-secondary transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="assignment">assignment</span>
+<span class="font-label-sm-mobile text-label-sm-mobile mt-1">Orders</span>
+</a>
+<!-- Clients -->
+<a class="flex flex-col items-center justify-center text-secondary transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="group">group</span>
+<span class="font-label-sm-mobile text-label-sm-mobile mt-1">Clients</span>
+</a>
+<!-- Products -->
+<a class="flex flex-col items-center justify-center text-secondary transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-label-sm-mobile text-label-sm-mobile mt-1">Products</span>
+</a>
+<!-- Settings -->
+<a class="flex flex-col items-center justify-center text-secondary transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-label-sm-mobile text-label-sm-mobile mt-1">Settings</span>
+</a>
+</nav>
+<script>
+    // Simple micro-interaction for KPI cards on tap
+    document.querySelectorAll('.bg-surface-container-lowest').forEach(card => {
+      card.addEventListener('touchstart', () => {
+        card.classList.add('bg-surface-container-low');
+      });
+      card.addEventListener('touchend', () => {
+        card.classList.remove('bg-surface-container-low');
+      });
+    });
+
+    // Dark mode toggle simulation (can be linked to system prefs)
+    if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      // document.documentElement.classList.add('dark');
+    }
+  </script>
+</body></html>

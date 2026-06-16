@@ -1,0 +1,359 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0" name="viewport">
+<title>TRRY APPAREL | Client Management</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "primary": "#a04100",
+                        "secondary-fixed": "#e5e2e1",
+                        "error": "#ba1a1a",
+                        "on-surface": "#1b1c1c",
+                        "surface-dim": "#dbdad9",
+                        "outline": "#8e7164",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#fbf9f8",
+                        "surface-tint": "#a04100",
+                        "outline-variant": "#e2bfb0",
+                        "background": "#fbf9f8",
+                        "inverse-primary": "#ffb693",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container": "#efeded",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "tertiary-fixed": "#e2e2e2",
+                        "surface-container-highest": "#e4e2e2",
+                        "tertiary": "#5d5f5f",
+                        "primary-fixed-dim": "#ffb693",
+                        "on-secondary-container": "#636262",
+                        "on-secondary": "#ffffff",
+                        "on-surface-variant": "#5a4136",
+                        "tertiary-container": "#989999",
+                        "primary-container": "#ff6b00",
+                        "surface-container-low": "#f5f3f3",
+                        "on-primary-fixed-variant": "#7a3000",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#351000",
+                        "secondary": "#5f5e5e",
+                        "surface-bright": "#fbf9f8",
+                        "on-tertiary-container": "#2f3132",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-error-container": "#93000a",
+                        "inverse-surface": "#303031",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "surface-variant": "#e4e2e2",
+                        "on-primary-container": "#572000",
+                        "surface-container-high": "#e9e8e7",
+                        "secondary-container": "#e2dfde",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#ffdbcc",
+                        "inverse-on-surface": "#f2f0f0",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "on-background": "#1b1c1c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "stack-md": "16px",
+                        "gutter": "24px",
+                        "sidebar-width": "240px",
+                        "stack-sm": "8px",
+                        "stack-lg": "24px",
+                        "margin-page": "32px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Hanken Grotesk"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "label-bold": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "display": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "label-sm": ["11px", {"lineHeight": "1", "fontWeight": "500"}],
+                        "label-sm-mobile": ["10px", {"lineHeight": "1", "fontWeight": "500"}],
+                        "label-bold": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "display": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-surface text-on-surface flex flex-col min-h-screen">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-4 h-16 w-full z-50 bg-surface dark:bg-on-surface border-b border-outline-variant dark:border-outline fixed top-0 left-0 right-0">
+<div class="flex items-center gap-4">
+<button class="p-2 text-primary dark:text-primary-fixed-dim hover:bg-surface-container-low dark:hover:bg-secondary-container transition-colors duration-200 ease-in-out">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<h1 class="font-display text-display text-primary dark:text-primary-fixed-dim tracking-tighter uppercase text-xl md:text-2xl">TRRY APPAREL</h1>
+</div>
+<div class="flex items-center gap-3">
+<button class="p-2 text-secondary hover:bg-surface-container-low transition-colors duration-200">
+<span class="material-symbols-outlined">search</span>
+</button>
+<div class="w-8 h-8 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-label-bold text-label-bold">AT</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-20 pb-20 px-4 max-w-full overflow-x-hidden">
+<!-- Screen Title -->
+<div class="mb-6">
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile text-on-surface">Clients</h2>
+<p class="font-body-md text-body-md text-secondary">Manage apparel portal access and client performance.</p>
+</div>
+<!-- Summary Statistics Bento -->
+<div class="grid grid-cols-2 gap-3 mb-6">
+<!-- Total Clients Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 flex flex-col gap-2 shadow-sm">
+<div class="flex items-center justify-between">
+<div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+<span class="material-symbols-outlined text-primary text-[18px]">group</span>
+</div>
+<span class="text-[10px] font-label-bold text-primary px-1.5 py-0.5 bg-primary/5 rounded-full">+12%</span>
+</div>
+<div>
+<p class="font-label-bold text-label-bold text-secondary uppercase tracking-wider">Total Clients</p>
+<p class="font-display text-2xl text-on-surface">86</p>
+</div>
+</div>
+<!-- Active Portals Card -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 flex flex-col gap-2 shadow-sm">
+<div class="flex items-center justify-between">
+<div class="w-8 h-8 rounded-full bg-outline-variant/20 flex items-center justify-center">
+<span class="material-symbols-outlined text-outline text-[18px]">hub</span>
+</div>
+<span class="text-[10px] font-label-bold text-secondary px-1.5 py-0.5 bg-secondary-container rounded-full">Stable</span>
+</div>
+<div>
+<p class="font-label-bold text-label-bold text-secondary uppercase tracking-wider">Active Portals</p>
+<p class="font-display text-2xl text-on-surface">42</p>
+</div>
+</div>
+</div>
+<!-- Search & Filter Bar -->
+<div class="flex gap-2 mb-6">
+<div class="relative flex-grow">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary text-lg">search</span>
+<input class="w-full pl-10 pr-4 py-3 bg-surface-container rounded-lg border-none focus:ring-1 focus:ring-primary text-body-md font-body-md" placeholder="Search clients..." type="text">
+</div>
+<button class="bg-primary text-on-primary p-3 rounded-lg flex items-center justify-center transition-transform active:scale-95">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+<!-- Client List -->
+<div class="flex flex-col gap-3">
+<!-- Client Row 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm hover:border-primary transition-colors duration-200">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-3">
+<img class="w-10 h-10 rounded-lg object-cover" data-alt="A professional studio portrait of a corporate logo for a modern apparel client, minimalist aesthetic with crisp edges, set against a clean white background, high-end branding photography." src="https://lh3.googleusercontent.com/aida-public/AB6AXuBAXbOTMlU_MbnipO-Qil3oo8e71xyExx8H2pDr54g96761x0QGwLtxjDPY46oHYxi-mOhGKs6zBS79J93aIM-jydtx9pTYqYcTZjl-62txOPyFJ6vDWp_2rnpXbrWapeypThOjEmGlWlWAk3ZWXEJgMzRPqZBc4DHCDykwDRY5ttIy-hM4p3f3cB7HYGis2B24v4b8iF0KmewdJaZD69wznEa0V8x6fMG_rdReJ68_T8byP-_UI529gLjZON7wHXs68BlLAUWV4f8">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface text-sm">Urban Stitch Co.</h3>
+<p class="font-body-md text-xs text-secondary">urban-stitch-main</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full text-[10px] font-label-bold bg-green-100 text-green-800 uppercase">Active</span>
+</div>
+<div class="flex items-center justify-between border-t border-outline-variant pt-3">
+<div class="flex flex-col">
+<span class="text-[10px] font-label-bold text-secondary uppercase">Portal Health</span>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-green-500"></span>
+<span class="font-body-md text-xs text-on-surface">99.8% Uptime</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 border border-outline-variant rounded-lg font-label-bold text-label-bold text-on-surface hover:bg-surface-container transition-colors">
+                            View Orders
+                        </button>
+<button class="px-3 py-1.5 bg-primary/10 text-primary rounded-lg font-label-bold text-label-bold hover:bg-primary/20 transition-colors">
+                            Open Portal
+                        </button>
+</div>
+</div>
+</div>
+<!-- Client Row 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm hover:border-primary transition-colors duration-200">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-3">
+<img class="w-10 h-10 rounded-lg object-cover" data-alt="Modern corporate logo on a frosted glass office door, soft morning light, architectural photography, minimalist black and white palette with sharp professional focus." src="https://lh3.googleusercontent.com/aida-public/AB6AXuD-qz3FearPAMdMQFT5VYUWV-kXugNKyJ6uODKbUAXsuVj9Zl3YaZQc2RmB3TMojE-XtnP7jikIJBEreyg90Tqo1DZ03wWkw4xiJIiHD50x8u5vMyNjlvoZfs4uxH9H01rssQ3pdlca1_enUnv3zpy4kYsKPLIvr6dfmNvIjfC4B2QbDYZKm2gdzAXWdOvRMKpSKirWfwMVrvmP6_YHS8UXjqIvgRsYc1vb_4jOWK1m3rE98qmhb-YurCOnkVvAvgX0KfSi41KUlzY">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface text-sm">Peak Performance</h3>
+<p class="font-body-md text-xs text-secondary">peak-performance-internal</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full text-[10px] font-label-bold bg-amber-100 text-amber-800 uppercase">Pending Setup</span>
+</div>
+<div class="flex items-center justify-between border-t border-outline-variant pt-3">
+<div class="flex flex-col">
+<span class="text-[10px] font-label-bold text-secondary uppercase">Portal Health</span>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-amber-500"></span>
+<span class="font-body-md text-xs text-on-surface">Configuring DNS</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 border border-outline-variant rounded-lg font-label-bold text-label-bold text-on-surface hover:bg-surface-container transition-colors">
+                            Manage
+                        </button>
+<button class="px-3 py-1.5 bg-primary/10 text-primary rounded-lg font-label-bold text-label-bold hover:bg-primary/20 transition-colors">
+                            Setup
+                        </button>
+</div>
+</div>
+</div>
+<!-- Client Row 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm hover:border-primary transition-colors duration-200">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-3">
+<img class="w-10 h-10 rounded-lg object-cover" data-alt="Digital agency logo on a vibrant screen, abstract geometric shapes in orange and black, high-tech industrial aesthetic, close-up shot with soft bokeh background." src="https://lh3.googleusercontent.com/aida-public/AB6AXuApfowRr0SvzMxXdmXvJVYcmsdMImZVSd9iJLCiM5WBofLKfgUXZS737CWxVBRwb__tiDEiWYePAsqpG0iJ1H9d0DYmpn89LIIwRytnKOTE8k5UFMv1RwZE5dy8-8WggHHXtSJI6HblKyPi-n7B_0ts7yU2LCVCUtCJQwEjpWaEeNOvM9aushId1lCDAKVuY5CxTIlE0zQZKTcfcCALUPqmHLlh6giEeqemo6hyJm-CJZPPMx6EWoCLM1FpI0Pa1-bKU7WIdoZYdzg">
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface text-sm">Velocity Sports</h3>
+<p class="font-body-md text-xs text-secondary">v-sports-portal</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full text-[10px] font-label-bold bg-green-100 text-green-800 uppercase">Active</span>
+</div>
+<div class="flex items-center justify-between border-t border-outline-variant pt-3">
+<div class="flex flex-col">
+<span class="text-[10px] font-label-bold text-secondary uppercase">Portal Health</span>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-green-500"></span>
+<span class="font-body-md text-xs text-on-surface">100% Uptime</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 border border-outline-variant rounded-lg font-label-bold text-label-bold text-on-surface hover:bg-surface-container transition-colors">
+                            View Orders
+                        </button>
+<button class="px-3 py-1.5 bg-primary/10 text-primary rounded-lg font-label-bold text-label-bold hover:bg-primary/20 transition-colors">
+                            Open Portal
+                        </button>
+</div>
+</div>
+</div>
+<!-- Client Row 4 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-4 shadow-sm hover:border-primary transition-colors duration-200 opacity-60">
+<div class="flex justify-between items-start mb-3">
+<div class="flex items-center gap-3">
+<div class="w-10 h-10 rounded-lg bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">corporate_fare</span>
+</div>
+<div>
+<h3 class="font-headline-md text-headline-md text-on-surface text-sm">Elevate Apparel</h3>
+<p class="font-body-md text-xs text-secondary">elevate-ap-02</p>
+</div>
+</div>
+<span class="px-2 py-0.5 rounded-full text-[10px] font-label-bold bg-surface-container-highest text-secondary uppercase">Offline</span>
+</div>
+<div class="flex items-center justify-between border-t border-outline-variant pt-3">
+<div class="flex flex-col">
+<span class="text-[10px] font-label-bold text-secondary uppercase">Portal Health</span>
+<div class="flex items-center gap-1">
+<span class="w-2 h-2 rounded-full bg-error"></span>
+<span class="font-body-md text-xs text-error">System Down</span>
+</div>
+</div>
+<div class="flex gap-2">
+<button class="px-3 py-1.5 border border-outline-variant rounded-lg font-label-bold text-label-bold text-on-surface hover:bg-surface-container transition-colors">
+                            Diagnostics
+                        </button>
+</div>
+</div>
+</div>
+</div>
+<div class="mt-8 flex justify-center pb-8">
+<button class="text-primary font-label-bold text-label-bold uppercase tracking-widest flex items-center gap-2">
+                Load More Clients
+                <span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-16 bg-surface dark:bg-on-surface px-2 pb-safe border-t border-outline-variant dark:border-outline shadow-lg z-50">
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm-mobile">Overview</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">assignment</span>
+<span class="font-label-sm text-label-sm-mobile">Orders</span>
+</a>
+<!-- ACTIVE TAB: Clients -->
+<a class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed-dim font-bold hover:bg-surface-container-high transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">group</span>
+<span class="font-label-sm text-label-sm-mobile">Clients</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-sm text-label-sm-mobile">Products</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-sm text-label-sm-mobile">Settings</span>
+</a>
+</nav>
+<script>
+        // Micro-interaction for buttons
+        document.querySelectorAll('button').forEach(btn => {
+            btn.addEventListener('click', function(e) {
+                const rect = btn.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                
+                let ripple = document.createElement('span');
+                ripple.style.position = 'absolute';
+                ripple.style.left = x + 'px';
+                ripple.style.top = y + 'px';
+                ripple.style.width = '0';
+                ripple.style.height = '0';
+                ripple.style.background = 'rgba(255,255,255,0.3)';
+                ripple.style.borderRadius = '100%';
+                ripple.style.transform = 'translate(-50%, -50%)';
+                ripple.style.transition = 'width 0.3s ease-out, height 0.3s ease-out, opacity 0.3s ease-out';
+                
+                btn.style.overflow = 'hidden';
+                btn.style.position = btn.style.position || 'relative';
+                btn.appendChild(ripple);
+                
+                setTimeout(() => {
+                    ripple.style.width = '200px';
+                    ripple.style.height = '200px';
+                    ripple.style.opacity = '0';
+                }, 0);
+                
+                setTimeout(() => {
+                    ripple.remove();
+                }, 300);
+            });
+        });
+    </script>
+</body></html>

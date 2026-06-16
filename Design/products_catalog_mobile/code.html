@@ -1,0 +1,337 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport">
+<title>TRRY APPAREL | Product Catalog</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:ital,wght@0,100..900;1,100..900&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "primary": "#a04100",
+                        "secondary-fixed": "#e5e2e1",
+                        "error": "#ba1a1a",
+                        "on-surface": "#1b1c1c",
+                        "surface-dim": "#dbdad9",
+                        "outline": "#8e7164",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#fbf9f8",
+                        "surface-tint": "#a04100",
+                        "outline-variant": "#e2bfb0",
+                        "background": "#fbf9f8",
+                        "inverse-primary": "#ffb693",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container": "#efeded",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "tertiary-fixed": "#e2e2e2",
+                        "surface-container-highest": "#e4e2e2",
+                        "tertiary": "#5d5f5f",
+                        "primary-fixed-dim": "#ffb693",
+                        "on-secondary-container": "#636262",
+                        "on-secondary": "#ffffff",
+                        "on-surface-variant": "#5a4136",
+                        "tertiary-container": "#989999",
+                        "primary-container": "#ff6b00",
+                        "surface-container-low": "#f5f3f3",
+                        "on-primary-fixed-variant": "#7a3000",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#351000",
+                        "secondary": "#5f5e5e",
+                        "surface-bright": "#fbf9f8",
+                        "on-tertiary-container": "#2f3132",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-error-container": "#93000a",
+                        "inverse-surface": "#303031",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "surface-variant": "#e4e2e2",
+                        "on-primary-container": "#572000",
+                        "surface-container-high": "#e9e8e7",
+                        "secondary-container": "#e2dfde",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#ffdbcc",
+                        "inverse-on-surface": "#f2f0f0",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "on-background": "#1b1c1c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "stack-md": "16px",
+                        "gutter": "24px",
+                        "sidebar-width": "240px",
+                        "stack-sm": "8px",
+                        "stack-lg": "24px",
+                        "margin-page": "32px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Hanken Grotesk"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "label-bold": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "display": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "1.2", "fontWeight": "600"}],
+                        "label-sm": ["11px", {"lineHeight": "1", "fontWeight": "500"}],
+                        "label-sm-mobile": ["10px", {"lineHeight": "1", "fontWeight": "500"}],
+                        "label-bold": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "display": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .product-card-shadow { box-shadow: 0px 4px 20px rgba(0,0,0,0.04); }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col pb-20">
+<!-- TopAppBar -->
+<header class="bg-surface dark:bg-on-surface flex justify-between items-center px-4 h-16 w-full z-50 border-b border-outline-variant dark:border-outline fixed top-0">
+<div class="flex items-center gap-3">
+<button class="p-2 hover:bg-surface-container-low dark:hover:bg-secondary-container transition-colors duration-200 ease-in-out rounded-full">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim">menu</span>
+</button>
+<h1 class="font-display text-display text-primary dark:text-primary-fixed-dim tracking-tighter text-[22px]">TRRY APPAREL</h1>
+</div>
+<div class="flex items-center gap-2">
+<div class="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center border border-outline-variant overflow-hidden">
+<img alt="Alex Thorne" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCIYkq2jE-Vgl_VFM1NGxaRyp-1RI0r--V5eigY_dxrVStW_61IbvFRex1xxvHGNsjZn8yd0_xBD9tN8M49sUo6aMCU9BsvQESWhjbql-9Qj6Q0k73ZkX_u5uECscJEBIjoLS1xuph3MshdIVtgItV2X6UgPnFdUfk7Gku6V_JnH6eMehi2ibl7j5yTFPTYMbDw5RDZw9IMUrq-lDCKV3NQlDj7syojAxC8PaK79KLMKjQ4RrnmzNU-MfAQUPVOJvQp5N2Evoo_by4">
+</div>
+</div>
+</header>
+<!-- Main Content Canvas -->
+<main class="flex-grow pt-20 px-4">
+<!-- Summary Stats Bento (Mobile Style) -->
+<div class="grid grid-cols-2 gap-3 mb-6">
+<div class="bg-surface-container-lowest p-4 rounded-xl product-card-shadow border border-outline-variant/30">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-[18px]">inventory_2</span>
+<span class="font-label-bold text-label-bold text-secondary uppercase opacity-70">Total Items</span>
+</div>
+<div class="text-[28px] font-bold text-on-surface">86</div>
+<div class="text-[10px] text-primary flex items-center font-bold">
+<span class="material-symbols-outlined text-[14px]">trending_up</span> 12% vs last month
+                </div>
+</div>
+<div class="bg-surface-container-lowest p-4 rounded-xl product-card-shadow border border-outline-variant/30">
+<div class="flex items-center gap-2 mb-1">
+<span class="material-symbols-outlined text-primary text-[18px]">pending_actions</span>
+<span class="font-label-bold text-label-bold text-secondary uppercase opacity-70">Drafts</span>
+</div>
+<div class="text-[28px] font-bold text-on-surface">22</div>
+<div class="text-[10px] text-secondary flex items-center">
+<span class="material-symbols-outlined text-[14px]">remove</span> 0% change
+                </div>
+</div>
+</div>
+<!-- Search & Filters -->
+<div class="mb-6 space-y-4">
+<div class="relative">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-secondary">search</span>
+<input class="w-full pl-10 pr-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg focus:ring-1 focus:ring-primary focus:border-primary outline-none text-body-md font-body-md" placeholder="Search catalog..." type="text">
+</div>
+<div class="flex gap-2 overflow-x-auto hide-scrollbar pb-1">
+<button class="px-4 py-2 bg-primary text-white rounded-full font-label-bold text-label-bold whitespace-nowrap shadow-sm">All Products</button>
+<button class="px-4 py-2 bg-white border border-outline-variant text-secondary rounded-full font-label-bold text-label-bold whitespace-nowrap hover:bg-surface-container-high transition-colors">Uniforms</button>
+<button class="px-4 py-2 bg-white border border-outline-variant text-secondary rounded-full font-label-bold text-label-bold whitespace-nowrap hover:bg-surface-container-high transition-colors">Caps</button>
+<button class="px-4 py-2 bg-white border border-outline-variant text-secondary rounded-full font-label-bold text-label-bold whitespace-nowrap hover:bg-surface-container-high transition-colors">Merch</button>
+</div>
+</div>
+<!-- Product List -->
+<div class="space-y-4">
+<h2 class="font-headline-md text-headline-md-mobile text-on-surface mb-2">Uniforms Catalog</h2>
+<!-- Product Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant p-4 rounded-xl product-card-shadow">
+<div class="flex gap-4 mb-4">
+<div class="w-20 h-24 bg-surface-container-high rounded-lg flex-shrink-0 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A professional high-angle shot of a black high-performance polo shirt with reinforced stitching and industrial detailing, displayed against a clean studio background. The lighting is crisp and cool, highlighting the texture of the pique cotton fabric. The overall mood is high-end corporate apparel with a functional, durable edge." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDgcmlTX1-0i-kkMmMz-u0sanHSMU_8l4ukdG-zAW-sVIPcjIyPI49VQ7QK3eHrHhXyq5u17XBSybGdhCyfZbwZogQ11lcz6VVreuAKz6WbZqJVp0V1OP-r8ZEV4IpbycQN9qFYzoXLYDfYuileXha3R-zWrNnR7umwBNcTtnTAOJlN3CQh_JTlWLzWcGGFgcuZ5b4jnky_l6g8sphqIXFVvbbm6ATSLr2T8UAfwLmtOZfplZQf-KFk1YlFs4lOWP3g6qwz1mxSDWE">
+</div>
+<div class="flex-grow flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start">
+<span class="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Approved</span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox">
+<div class="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<h3 class="font-headline-md text-headline-md-mobile text-on-surface mt-1">Admin Polo Uniform</h3>
+<p class="text-label-sm text-secondary font-label-sm">TRRY-P-00241</p>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-y-3 pt-3 border-t border-outline-variant/30">
+<div>
+<p class="text-[10px] uppercase font-bold text-secondary opacity-60">Fabric</p>
+<p class="text-body-md font-body-md text-on-surface">Pique Cotton</p>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-secondary opacity-60">Color</p>
+<p class="text-body-md font-body-md text-on-surface">Deep Black</p>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-secondary opacity-60">Portal Status</p>
+<p class="text-body-md font-body-md text-primary font-bold">Visible to Client</p>
+</div>
+<div class="flex justify-end items-end">
+<button class="bg-surface-container-high p-2 rounded-lg hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">edit</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Card 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant p-4 rounded-xl product-card-shadow">
+<div class="flex gap-4 mb-4">
+<div class="w-20 h-24 bg-surface-container-high rounded-lg flex-shrink-0 overflow-hidden">
+<img class="w-full h-full object-cover" data-alt="A detailed product photo of a grey heathered zip-up hoodie made from heavy-weight industrial grade fabric. The garment features metallic zippers and charcoal accents. It is presented in a minimalist light-mode environment with soft diffuse shadows and clean lines that emphasize its quality and utilitarian design." src="https://lh3.googleusercontent.com/aida-public/AB6AXuCno2uJDUKd7vGX8ufOVfBIAQ2GQANyz6B8_jsmt61d2v2ndS5KsLRmHe7gdqFvkPz1TiuZdTg5CZGCUzp9TlWN3KBZj1Mdg-hzV6PfOuuvXzL1zNE4kZ88lwNGQDZixrqdcDxb2pLQzpqHHGWIMtL-AgxzR5L5owBXoEv22Lt9NtXUfi3shsIvdwMcCTV3KF9jbGn_YRtnkqG4mZ7JCwgcfzd2a30uRYi6TMnIV3c-biPu8f02X8cY8R9h_eKDTMOjmDczQTpiH-s">
+</div>
+<div class="flex-grow flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start">
+<span class="bg-amber-100 text-amber-800 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Draft</span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox">
+<div class="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<h3 class="font-headline-md text-headline-md-mobile text-on-surface mt-1">Premium Hoodie</h3>
+<p class="text-label-sm text-secondary font-label-sm">TRRY-H-01334</p>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-y-3 pt-3 border-t border-outline-variant/30">
+<div>
+<p class="text-[10px] uppercase font-bold text-secondary opacity-60">Fabric</p>
+<p class="text-body-md font-body-md text-on-surface">320 GSM Fleece</p>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-secondary opacity-60">Color</p>
+<p class="text-body-md font-body-md text-on-surface">Charcoal Heather</p>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-secondary opacity-60">Portal Status</p>
+<p class="text-body-md font-body-md text-secondary italic">Hidden</p>
+</div>
+<div class="flex justify-end items-end">
+<button class="bg-surface-container-high p-2 rounded-lg hover:bg-surface-container-highest transition-colors">
+<span class="material-symbols-outlined text-[20px] text-on-surface-variant">edit</span>
+</button>
+</div>
+</div>
+</div>
+<!-- Product Card 3 (Status: Hidden) -->
+<div class="bg-surface-container-low border border-dashed border-outline-variant p-4 rounded-xl opacity-80">
+<div class="flex gap-4 mb-4">
+<div class="w-20 h-24 bg-surface-container-high rounded-lg flex-shrink-0 overflow-hidden grayscale">
+<img class="w-full h-full object-cover" data-alt="Close up view of a navy blue structured canvas cap with a precision-embroidered logo. The image captures the fine weave of the textile and the three-dimensional quality of the stitching. The background is a flat, neutral light grey, maintaining a corporate and clean visual identity." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAKHahC60uLKBR2KbsFKJSXta3MlbjMeSn2H7LJ4Ww9A69nMryspf03N6tLCTDqm4Mt0fIY_YrHiy9pfWfIY0ztdw8hMfZucaIR8GqWv1isT2snpgKCJAoco3UtFTPkesebIOQCUqgIawTdUBPVyo8mhIoUg7AJM0yDIwQx9ETZWXT9kSmyVZGYlIZ9I0WnRyCvXJHkXsbQcDfySbD9yBe5wi2NecoF3g05ME6WDtie6ZRcswbbKQhH-Hm9ADs4YzAe-WavMJ0Z20s">
+</div>
+<div class="flex-grow flex flex-col justify-between">
+<div>
+<div class="flex justify-between items-start">
+<span class="bg-gray-200 text-gray-700 text-[10px] font-bold px-2 py-0.5 rounded uppercase tracking-wider">Archived</span>
+<label class="relative inline-flex items-center cursor-pointer">
+<input class="sr-only peer" type="checkbox">
+<div class="w-8 h-4 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-primary"></div>
+</label>
+</div>
+<h3 class="font-headline-md text-headline-md-mobile text-on-surface mt-1">Trucker Tech Cap</h3>
+<p class="text-label-sm text-secondary font-label-sm">TRRY-C-00109</p>
+</div>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-y-3 pt-3 border-t border-outline-variant/30">
+<div>
+<p class="text-[10px] uppercase font-bold text-secondary opacity-60">Fabric</p>
+<p class="text-body-md font-body-md text-on-surface">Canvas Blend</p>
+</div>
+<div>
+<p class="text-[10px] uppercase font-bold text-secondary opacity-60">Color</p>
+<p class="text-body-md font-body-md text-on-surface">Navy / Black</p>
+</div>
+</div>
+</div>
+</div>
+<!-- FAB - Add Product (Contextual) -->
+<button class="fixed bottom-20 right-6 w-14 h-14 bg-primary text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 transition-transform duration-150 z-40">
+<span class="material-symbols-outlined text-[28px]">add</span>
+</button>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-16 bg-surface dark:bg-on-surface px-2 pb-safe border-t border-outline-variant dark:border-outline shadow-lg z-50">
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dim transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm-mobile">Overview</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dim transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">assignment</span>
+<span class="font-label-sm text-label-sm-mobile">Orders</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dim transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-sm text-label-sm-mobile">Clients</span>
+</a>
+<a class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed-dim font-bold transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">inventory_2</span>
+<span class="font-label-sm text-label-sm-mobile">Products</span>
+</a>
+<a class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dim transition-transform duration-150 scale-95 active:scale-90" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-label-sm text-label-sm-mobile">Settings</span>
+</a>
+</nav>
+<script>
+        // Simple Interaction logic for Filter Chips
+        const filterChips = document.querySelectorAll('.overflow-x-auto button');
+        filterChips.forEach(chip => {
+            chip.addEventListener('click', () => {
+                filterChips.forEach(c => {
+                    c.classList.remove('bg-primary', 'text-white', 'shadow-sm');
+                    c.classList.add('bg-white', 'border', 'border-outline-variant', 'text-secondary');
+                });
+                chip.classList.remove('bg-white', 'border', 'border-outline-variant', 'text-secondary');
+                chip.classList.add('bg-primary', 'text-white', 'shadow-sm');
+            });
+        });
+
+        // Toggle logic visual feedback
+        const toggles = document.querySelectorAll('input[type="checkbox"]');
+        toggles.forEach(toggle => {
+            toggle.addEventListener('change', (e) => {
+                const statusLabel = e.target.closest('.bg-surface-container-lowest').querySelector('.text-primary, .text-secondary.italic');
+                if(statusLabel) {
+                    if(e.target.checked) {
+                        statusLabel.textContent = 'Visible to Client';
+                        statusLabel.className = 'text-body-md font-body-md text-primary font-bold';
+                    } else {
+                        statusLabel.textContent = 'Hidden';
+                        statusLabel.className = 'text-body-md font-body-md text-secondary italic';
+                    }
+                }
+            });
+        });
+    </script>
+</body></html>

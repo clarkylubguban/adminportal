@@ -1,0 +1,274 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, viewport-fit=cover" name="viewport">
+<title>TRRY APPAREL | Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "primary": "#a04100",
+                        "secondary-fixed": "#e5e2e1",
+                        "error": "#ba1a1a",
+                        "on-surface": "#1b1c1c",
+                        "surface-dim": "#dbdad9",
+                        "outline": "#8e7164",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#fbf9f8",
+                        "surface-tint": "#a04100",
+                        "outline-variant": "#e2bfb0",
+                        "background": "#fbf9f8",
+                        "inverse-primary": "#ffb693",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container": "#efeded",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "tertiary-fixed": "#e2e2e2",
+                        "surface-container-highest": "#e4e2e2",
+                        "tertiary": "#5d5f5f",
+                        "primary-fixed-dim": "#ffb693",
+                        "on-secondary-container": "#636262",
+                        "on-secondary": "#ffffff",
+                        "on-surface-variant": "#5a4136",
+                        "tertiary-container": "#989999",
+                        "primary-container": "#ff6b00",
+                        "surface-container-low": "#f5f3f3",
+                        "on-primary-fixed-variant": "#7a3000",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#351000",
+                        "secondary": "#5f5e5e",
+                        "surface-bright": "#fbf9f8",
+                        "on-tertiary-container": "#2f3132",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-error-container": "#93000a",
+                        "inverse-surface": "#303031",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "surface-variant": "#e4e2e2",
+                        "on-primary-container": "#572000",
+                        "surface-container-high": "#e9e8e7",
+                        "secondary-container": "#e2dfde",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#ffdbcc",
+                        "inverse-on-surface": "#f2f0f0",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "on-background": "#1b1c1c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "stack-md": "16px",
+                        "gutter": "24px",
+                        "sidebar-width": "240px",
+                        "stack-sm": "8px",
+                        "stack-lg": "24px",
+                        "margin-page": "32px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Hanken Grotesk"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "label-bold": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "display": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", { "lineHeight": "1.3", "fontWeight": "600" }],
+                        "label-sm": ["11px", { "lineHeight": "1", "fontWeight": "500" }],
+                        "label-sm-mobile": ["10px", { "lineHeight": "1", "fontWeight": "500" }],
+                        "label-bold": ["12px", { "lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700" }],
+                        "body-md": ["14px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "body-lg": ["16px", { "lineHeight": "1.5", "fontWeight": "400" }],
+                        "display": ["32px", { "lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700" }],
+                        "headline-md": ["20px", { "lineHeight": "1.4", "fontWeight": "600" }]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+    </style>
+</head>
+<body class="bg-background text-on-background selection:bg-primary-container selection:text-on-primary-container">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-4 h-16 w-full z-50 fixed top-0 bg-surface dark:bg-on-surface border-b border-outline-variant dark:border-outline">
+<div class="flex items-center gap-3">
+<button class="p-2 hover:bg-surface-container-low dark:hover:bg-secondary-container rounded-full transition-colors duration-200">
+<span class="material-symbols-outlined text-primary dark:text-primary-fixed-dim">menu</span>
+</button>
+<h1 class="font-display text-headline-md text-primary dark:text-primary-fixed-dim tracking-tighter">TRRY APPAREL</h1>
+</div>
+<div class="flex items-center">
+<div class="w-8 h-8 rounded-full bg-secondary-container flex items-center justify-center overflow-hidden border border-outline-variant">
+<img alt="Alex Thorne" class="w-full h-full object-cover" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC27gI0QWt8RsDvaKa7EJesZnFcP7GMYzK8qX5wamRd2XKAoeEPmuQGCLkFuai-oyLYfOoSQufmzjNtnHOm1k26mXbSiWPP-OuzlEUGrATV7EZKVRIeNbVul7moAmynVE8PQ5-hprEBnNvUIqAcyvReArrtg-7BwYqF6vFf6UzG_Ei9bacYM0ZwRZSd13tRBAhAPi2vxTzt8nPvk1mTj9xwvteQfADnJoYWema363Q-wHw-hX9fuBkvXP-SETv5a8VMz_LEMuKTT4k">
+</div>
+</div>
+</header>
+<!-- Main Content -->
+<main class="pt-20 pb-24 px-4 max-w-md mx-auto">
+<div class="flex flex-col gap-6">
+<header>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Settings</h2>
+<p class="font-body-md text-body-md text-secondary mt-1">Manage your account preferences and factory defaults.</p>
+</header>
+<!-- Company Profile Section -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-5 shadow-sm">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-primary">business</span>
+<h3 class="font-headline-md text-headline-md">Company Profile</h3>
+</div>
+<div class="space-y-4">
+<div>
+<label class="font-label-bold text-label-bold text-secondary uppercase block mb-1">Company Name</label>
+<input class="w-full p-3 rounded-lg border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-body-md" type="text" value="TRRY Apparel">
+</div>
+<div>
+<label class="font-label-bold text-label-bold text-secondary uppercase block mb-1">Support Email</label>
+<input class="w-full p-3 rounded-lg border border-outline-variant focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all font-body-md" type="email" value="support@trryapparel.com">
+</div>
+<button class="w-full bg-primary-container text-on-primary-container font-headline-md py-3 rounded-lg hover:brightness-110 active:scale-[0.98] transition-all">
+                        Save Changes
+                    </button>
+</div>
+</section>
+<!-- Notification Preferences -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-5 shadow-sm">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-primary">notifications</span>
+<h3 class="font-headline-md text-headline-md">Notification Preferences</h3>
+</div>
+<div class="divide-y divide-outline-variant">
+<div class="flex items-center justify-between py-4">
+<span class="font-body-md text-body-md text-on-surface">Email alerts for new requests</span>
+<div class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox">
+<div class="w-11 h-6 bg-secondary-container peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</div>
+</div>
+<div class="flex items-center justify-between py-4">
+<span class="font-body-md text-body-md text-on-surface">Email alerts for status updates</span>
+<div class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox">
+<div class="w-11 h-6 bg-secondary-container peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</div>
+</div>
+</div>
+</section>
+<!-- Workflow Statuses -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant p-5 shadow-sm">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-primary">dynamic_feed</span>
+<h3 class="font-headline-md text-headline-md">Workflow Statuses</h3>
+</div>
+<div class="space-y-2">
+<div class="flex items-center justify-between p-3 bg-surface-container rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-secondary"></div>
+<span class="font-body-md">Pending Review</span>
+</div>
+<span class="material-symbols-outlined text-secondary text-sm">drag_handle</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary"></div>
+<span class="font-body-md">In Production</span>
+</div>
+<span class="material-symbols-outlined text-secondary text-sm">drag_handle</span>
+</div>
+<div class="flex items-center justify-between p-3 bg-surface-container rounded-lg">
+<div class="flex items-center gap-3">
+<div class="w-2 h-2 rounded-full bg-primary-container"></div>
+<span class="font-body-md">Ready to Ship</span>
+</div>
+<span class="material-symbols-outlined text-secondary text-sm">drag_handle</span>
+</div>
+</div>
+<button class="mt-4 w-full border border-outline-variant border-dashed text-primary font-label-bold py-2 rounded-lg flex items-center justify-center gap-2 hover:bg-surface-container transition-colors">
+<span class="material-symbols-outlined text-sm">add</span>
+                    ADD STATUS
+                </button>
+</section>
+<!-- Danger Zone -->
+<section class="bg-error-container/20 rounded-xl border border-error/20 p-5 shadow-sm">
+<div class="flex items-center gap-3 mb-4 text-error">
+<span class="material-symbols-outlined">warning</span>
+<h3 class="font-headline-md text-headline-md">Danger Zone</h3>
+</div>
+<p class="font-body-md text-body-md text-on-surface-variant mb-4">Deleting data is irreversible. Please proceed with extreme caution.</p>
+<div class="space-y-3">
+<button class="w-full border border-error text-error font-headline-md py-3 rounded-lg hover:bg-error hover:text-white transition-all">
+                        Clear Audit Logs
+                    </button>
+<button class="w-full bg-error text-white font-headline-md py-3 rounded-lg hover:brightness-110 transition-all">
+                        Deactivate Workspace
+                    </button>
+</div>
+</section>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-16 bg-surface dark:bg-on-surface px-2 pb-safe border-t border-outline-variant dark:border-outline shadow-lg z-50">
+<button class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dim transition-transform duration-150 scale-95 active:scale-90">
+<span class="material-symbols-outlined">dashboard</span>
+<span class="font-label-sm text-label-sm-mobile">Overview</span>
+</button>
+<button class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dim transition-transform duration-150 scale-95 active:scale-90">
+<span class="material-symbols-outlined">assignment</span>
+<span class="font-label-sm text-label-sm-mobile">Orders</span>
+</button>
+<button class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dim transition-transform duration-150 scale-95 active:scale-90">
+<span class="material-symbols-outlined">group</span>
+<span class="font-label-sm text-label-sm-mobile">Clients</span>
+</button>
+<button class="flex flex-col items-center justify-center text-secondary dark:text-secondary-fixed-dim hover:bg-surface-container-high dark:hover:bg-surface-dim transition-transform duration-150 scale-95 active:scale-90">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-label-sm text-label-sm-mobile">Products</span>
+</button>
+<button class="flex flex-col items-center justify-center text-primary dark:text-primary-fixed-dim font-bold transition-transform duration-150 scale-95 active:scale-90">
+<span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">settings</span>
+<span class="font-label-sm text-label-sm-mobile">Settings</span>
+</button>
+</nav>
+<script>
+        // Simple micro-interactions
+        document.querySelectorAll('button, input[type="checkbox"]').forEach(el => {
+            el.addEventListener('click', () => {
+                // Haptic feedback simulation or additional logic can go here
+                if(el.tagName === 'BUTTON' && el.textContent.trim().toLowerCase() === 'save changes') {
+                    const originalText = el.textContent;
+                    el.disabled = true;
+                    el.textContent = 'Saving...';
+                    el.classList.add('opacity-70');
+                    setTimeout(() => {
+                        el.textContent = 'Saved!';
+                        el.classList.replace('bg-primary-container', 'bg-green-600');
+                        el.classList.replace('text-on-primary-container', 'text-white');
+                        setTimeout(() => {
+                            el.textContent = originalText;
+                            el.classList.replace('bg-green-600', 'bg-primary-container');
+                            el.classList.replace('text-white', 'text-on-primary-container');
+                            el.disabled = false;
+                            el.classList.remove('opacity-70');
+                        }, 2000);
+                    }, 800);
+                }
+            });
+        });
+    </script>
+</body></html>

@@ -2159,8 +2159,20 @@ td:nth-child(9) {
 }
 
 @media (max-width: 900px) {
+  html,
+  body {
+    overflow-x: hidden;
+    width: 100%;
+  }
+
   .app-shell {
     display: block;
+    width: 100%;
+  }
+
+  .workspace {
+    max-width: 100%;
+    overflow-x: hidden;
   }
 
   .sidebar {
@@ -2180,6 +2192,11 @@ td:nth-child(9) {
     gap: 8px;
     overflow-x: auto;
     padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .sidebar nav::-webkit-scrollbar {
+    display: none;
   }
 
   .sidebar a {
@@ -2205,7 +2222,19 @@ td:nth-child(9) {
     grid-template-columns: 1fr;
     height: auto;
     gap: 12px;
-    padding: 14px 18px;
+    padding: 14px 16px;
+  }
+
+  .header-brand {
+    gap: 12px;
+  }
+
+  .header-brand strong {
+    font-size: 15px;
+  }
+
+  .global-search-wrap {
+    width: 100%;
   }
 
   .header-actions {
@@ -2213,7 +2242,21 @@ td:nth-child(9) {
   }
 
   .orders-page {
-    padding: 18px;
+    padding: 16px;
+  }
+
+  h1 {
+    font-size: 24px;
+  }
+
+  .subtitle {
+    font-size: 13px;
+  }
+
+  .split-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
   }
 
   .status-grid,
@@ -2253,6 +2296,11 @@ td:nth-child(9) {
   .filter-tabs {
     overflow-x: auto;
     padding-bottom: 2px;
+    scrollbar-width: none;
+  }
+
+  .filter-tabs::-webkit-scrollbar {
+    display: none;
   }
 
   .table-actions,
@@ -2265,16 +2313,264 @@ td:nth-child(9) {
 
   .orders-list-card,
   .content-card {
-    overflow-x: auto;
+    overflow: visible;
   }
 
   table {
-    min-width: 760px;
+    min-width: 0;
+  }
+
+  .orders-table,
+  .clients-table,
+  .products-table,
+  .recent-table {
+    display: block;
+    width: 100%;
+  }
+
+  .orders-table thead,
+  .clients-table thead,
+  .products-table thead,
+  .recent-table thead {
+    display: none;
+  }
+
+  .orders-table tbody,
+  .clients-table tbody,
+  .products-table tbody,
+  .recent-table tbody {
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+  }
+
+  .orders-table tr,
+  .clients-table tr,
+  .products-table tr,
+  .recent-table tr {
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: var(--card-shadow);
+    display: grid;
+    overflow: hidden;
+  }
+
+  .orders-table tr.selected,
+  .clients-table tr.selected,
+  .products-table tr.selected {
+    border-color: var(--orange);
+    background: #fff7f1;
+  }
+
+  .orders-table td,
+  .clients-table td,
+  .products-table td,
+  .recent-table td {
+    align-items: center;
+    border: 0;
+    border-top: 1px solid var(--line);
+    display: flex;
+    gap: 14px;
+    height: auto;
+    justify-content: space-between;
+    min-height: 42px;
+    padding: 10px 12px;
+    text-align: right;
+    width: 100%;
+  }
+
+  .orders-table td:first-child,
+  .clients-table td:first-child,
+  .products-table td:first-child,
+  .recent-table td:first-child {
+    border-top: 0;
+  }
+
+  tbody tr.selected td,
+  tbody tr.selected td:first-child,
+  tbody tr.selected td:last-child {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+
+  .orders-table td::before,
+  .clients-table td::before,
+  .products-table td::before,
+  .recent-table td::before {
+    color: var(--muted);
+    content: "";
+    flex: 0 0 auto;
+    font-size: 10px;
+    font-weight: 800;
+    letter-spacing: 0.03em;
+    text-align: left;
+    text-transform: uppercase;
+  }
+
+  .orders-table td:nth-child(1)::before {
+    content: "Request No.";
+  }
+  .orders-table td:nth-child(2)::before {
+    content: "Client";
+  }
+  .orders-table td:nth-child(3)::before {
+    content: "Requested By";
+  }
+  .orders-table td:nth-child(4)::before {
+    content: "Items";
+  }
+  .orders-table td:nth-child(5)::before {
+    content: "Qty";
+  }
+  .orders-table td:nth-child(6)::before {
+    content: "Fulfillment";
+  }
+  .orders-table td:nth-child(7)::before {
+    content: "Needed Date";
+  }
+  .orders-table td:nth-child(8)::before {
+    content: "Status";
+  }
+  .orders-table td:nth-child(9)::before {
+    content: "View";
+  }
+
+  .clients-table td:nth-child(1)::before {
+    content: "Client";
+  }
+  .clients-table td:nth-child(2)::before {
+    content: "Portal Slug";
+  }
+  .clients-table td:nth-child(3)::before {
+    content: "Account Type";
+  }
+  .clients-table td:nth-child(4)::before {
+    content: "Active Orders";
+  }
+  .clients-table td:nth-child(5)::before {
+    content: "Saved Employees";
+  }
+  .clients-table td:nth-child(6)::before {
+    content: "Approved Products";
+  }
+  .clients-table td:nth-child(7)::before {
+    content: "Status";
+  }
+  .clients-table td:nth-child(8)::before {
+    content: "View";
+  }
+
+  .products-table td:nth-child(1)::before {
+    content: "Product";
+  }
+  .products-table td:nth-child(2)::before {
+    content: "Client";
+  }
+  .products-table td:nth-child(3)::before {
+    content: "Category";
+  }
+  .products-table td:nth-child(4)::before {
+    content: "Color";
+  }
+  .products-table td:nth-child(5)::before {
+    content: "Logo Placement";
+  }
+  .products-table td:nth-child(6)::before {
+    content: "Fabric / Spec";
+  }
+  .products-table td:nth-child(7)::before {
+    content: "Status";
+  }
+  .products-table td:nth-child(8)::before {
+    content: "Action";
+  }
+
+  .recent-table td:nth-child(1)::before {
+    content: "Order ID";
+  }
+  .recent-table td:nth-child(2)::before {
+    content: "Client";
+  }
+  .recent-table td:nth-child(3)::before {
+    content: "Product";
+  }
+  .recent-table td:nth-child(4)::before {
+    content: "Status";
+  }
+  .recent-table td:nth-child(5)::before {
+    content: "Due Date";
+  }
+  .recent-table td:nth-child(6)::before {
+    content: "Last Updated";
+  }
+
+  .orders-table .client-cell,
+  .clients-table .client-cell,
+  .products-table .client-cell {
+    justify-content: flex-end;
+    min-width: 0;
+    text-align: right;
+  }
+
+  .orders-table .stacked-cell,
+  .products-table .stacked-cell,
+  .recent-table .stacked-cell {
+    min-width: 0;
+    text-align: right;
   }
 
   .detail-panel {
     position: static;
     min-height: auto;
+    width: 100%;
+  }
+
+  .status-grid {
+    gap: 10px;
+  }
+
+  .status-card {
+    min-height: 76px;
+    padding: 14px;
+  }
+
+  .quick-actions,
+  .client-detail-panel .quick-panel-actions,
+  .panel-stat-grid,
+  .detail-metrics {
+    grid-template-columns: 1fr;
+  }
+
+  .quick-panel-actions a,
+  .quick-panel-actions button,
+  .primary-button,
+  .note-button {
+    width: 100%;
+  }
+
+  .product-image-panel {
+    padding-top: 0;
+  }
+
+  .product-mock {
+    height: 150px;
+  }
+
+  .table-footer {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+
+  .pager {
+    flex-wrap: wrap;
+  }
+
+  .settings-card {
+    padding: 16px;
   }
 
   .footer {

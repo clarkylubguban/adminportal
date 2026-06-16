@@ -1,0 +1,342 @@
+<!DOCTYPE html><html class="light" lang="en"><head>
+<meta charset="utf-8">
+<meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport">
+<title>Orders Management | TRRY APPAREL</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet">
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "primary": "#a04100",
+                        "secondary-fixed": "#e5e2e1",
+                        "error": "#ba1a1a",
+                        "on-surface": "#1b1c1c",
+                        "surface-dim": "#dbdad9",
+                        "outline": "#8e7164",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "on-tertiary": "#ffffff",
+                        "surface": "#fbf9f8",
+                        "surface-tint": "#a04100",
+                        "outline-variant": "#e2bfb0",
+                        "background": "#fbf9f8",
+                        "inverse-primary": "#ffb693",
+                        "error-container": "#ffdad6",
+                        "surface-container-lowest": "#ffffff",
+                        "surface-container": "#efeded",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "tertiary-fixed": "#e2e2e2",
+                        "surface-container-highest": "#e4e2e2",
+                        "tertiary": "#5d5f5f",
+                        "primary-fixed-dim": "#ffb693",
+                        "on-secondary-container": "#636262",
+                        "on-secondary": "#ffffff",
+                        "on-surface-variant": "#5a4136",
+                        "tertiary-container": "#989999",
+                        "primary-container": "#ff6b00",
+                        "surface-container-low": "#f5f3f3",
+                        "on-primary-fixed-variant": "#7a3000",
+                        "on-error": "#ffffff",
+                        "on-primary-fixed": "#351000",
+                        "secondary": "#5f5e5e",
+                        "surface-bright": "#fbf9f8",
+                        "on-tertiary-container": "#2f3132",
+                        "on-secondary-fixed-variant": "#474746",
+                        "on-error-container": "#93000a",
+                        "inverse-surface": "#303031",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "surface-variant": "#e4e2e2",
+                        "on-primary-container": "#572000",
+                        "surface-container-high": "#e9e8e7",
+                        "secondary-container": "#e2dfde",
+                        "on-primary": "#ffffff",
+                        "primary-fixed": "#ffdbcc",
+                        "inverse-on-surface": "#f2f0f0",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "on-background": "#1b1c1c"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                    "spacing": {
+                        "container-max": "1440px",
+                        "stack-md": "16px",
+                        "gutter": "24px",
+                        "sidebar-width": "240px",
+                        "stack-sm": "8px",
+                        "stack-lg": "24px",
+                        "margin-page": "32px"
+                    },
+                    "fontFamily": {
+                        "headline-lg": ["Hanken Grotesk"],
+                        "label-sm": ["Hanken Grotesk"],
+                        "label-bold": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"],
+                        "display": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"]
+                    },
+                    "fontSize": {
+                        "headline-lg": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "headline-lg-mobile": ["20px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                        "label-sm": ["11px", {"lineHeight": "1", "fontWeight": "500"}],
+                        "label-sm-mobile": ["10px", {"lineHeight": "1", "fontWeight": "500"}],
+                        "label-bold": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                        "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                        "display": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                        "headline-md": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}]
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .material-symbols-outlined { font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24; }
+        .bottom-sheet { transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .bottom-sheet.active { transform: translateY(0); }
+    </style>
+</head>
+<body class="bg-surface text-on-surface">
+<!-- TopAppBar -->
+<header class="flex justify-between items-center px-4 h-16 w-full z-50 fixed top-0 bg-surface dark:bg-on-surface border-b border-outline-variant dark:border-outline">
+<div class="flex items-center gap-3">
+<span class="material-symbols-outlined text-primary">menu</span>
+<h1 class="font-display text-display text-primary tracking-tighter text-[22px]">TRRY APPAREL</h1>
+</div>
+<div class="flex items-center gap-4">
+<span class="material-symbols-outlined text-secondary">search</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img alt="Alex Thorne" class="w-full h-full object-cover" data-alt="A professional headshot of a young male production manager with short dark hair and a confident expression. He is wearing a clean, modern black polo shirt with a subtle logo. The background is a blurred industrial design studio with soft, natural morning light casting gentle shadows across his features." src="https://lh3.googleusercontent.com/aida-public/AB6AXuDEGq1dO06oeo7VTGMj8kFmq10reTZfFEdmMTiA8DcB2YLoZfaQVueWIkgVHHIck652RoxlXXJKQ_R9aYg8dy-Gt5FxqvUIsv6pMyeT03CAC7tRSXTCzmnPS0Ai0Q3spNyXZbOg14pvIwYPd5xUAN8LdBXB65hGdA4b5xqgydGkaQbtu_roXZiKOi4DzpfrnoO_TPx4FWZJYrIBQb-5x0P42n2UO5XyKGSwyAUDuw2NfXhTKSCHLyaizygRt9wbudXr160keVy6Rxo">
+</div>
+</div>
+</header>
+<main class="pt-16 pb-24 px-4 overflow-x-hidden">
+<!-- Page Title & Quick Actions -->
+<div class="py-6 flex justify-between items-end">
+<div>
+<p class="font-label-bold text-label-bold text-primary uppercase tracking-wider mb-1">Production Queue</p>
+<h2 class="font-headline-lg-mobile text-headline-lg-mobile">Orders Dashboard</h2>
+</div>
+<button class="bg-primary text-on-primary w-10 h-10 rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-transform">
+<span class="material-symbols-outlined">add</span>
+</button>
+</div>
+<!-- Metric Cards (Horizontal Scroll) -->
+<div class="flex gap-3 overflow-x-auto no-scrollbar pb-2 mb-6">
+<div class="min-w-[140px] bg-white p-4 rounded-xl border border-outline-variant shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="material-symbols-outlined text-primary text-[20px]">pending_actions</span>
+<span class="text-xs text-secondary font-medium">+12%</span>
+</div>
+<div class="font-display text-2xl text-on-surface">18</div>
+<div class="text-[10px] font-bold text-secondary uppercase tracking-tight">Pending Review</div>
+</div>
+<div class="min-w-[140px] bg-white p-4 rounded-xl border border-outline-variant shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="material-symbols-outlined text-primary text-[20px]">check_circle</span>
+<span class="text-xs text-secondary font-medium">+5%</span>
+</div>
+<div class="font-display text-2xl text-on-surface">32</div>
+<div class="text-[10px] font-bold text-secondary uppercase tracking-tight">Approved</div>
+</div>
+<div class="min-w-[140px] bg-white p-4 rounded-xl border border-outline-variant shadow-sm">
+<div class="flex items-center justify-between mb-2">
+<span class="material-symbols-outlined text-primary text-[20px]">factory</span>
+<span class="text-xs text-secondary font-medium">+15%</span>
+</div>
+<div class="font-display text-2xl text-on-surface">56</div>
+<div class="text-[10px] font-bold text-secondary uppercase tracking-tight">In Production</div>
+</div>
+</div>
+<!-- Filter Tabs -->
+<div class="flex gap-2 overflow-x-auto no-scrollbar mb-6">
+<button class="px-4 py-2 rounded-full bg-primary text-on-primary text-xs font-bold whitespace-nowrap">All Orders</button>
+<button class="px-4 py-2 rounded-full bg-surface-container text-secondary text-xs font-bold whitespace-nowrap">Pending</button>
+<button class="px-4 py-2 rounded-full bg-surface-container text-secondary text-xs font-bold whitespace-nowrap">In Production</button>
+<button class="px-4 py-2 rounded-full bg-surface-container text-secondary text-xs font-bold whitespace-nowrap">Ready</button>
+<button class="px-4 py-2 rounded-full bg-surface-container text-secondary text-xs font-bold whitespace-nowrap">Completed</button>
+</div>
+<!-- Order List -->
+<div class="space-y-3">
+<!-- Order Card 1 -->
+<div class="bg-white p-4 rounded-xl border border-outline-variant flex justify-between items-center active:bg-surface-container-low transition-colors" onclick="openDetails('TRRY-2505-0142', 'Urban Stitch Co.', 'Premium Hoodie', '56', 'In Production', 'bg-primary-container text-on-primary-container')">
+<div class="flex gap-4 items-center">
+<div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">inventory_2</span>
+</div>
+<div>
+<h3 class="font-bold text-sm text-on-surface">TRRY-2505-0142</h3>
+<p class="text-xs text-secondary">Urban Stitch Co. • 56 Units</p>
+</div>
+</div>
+<div class="flex flex-col items-end gap-1">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-primary-container text-on-primary-container">In Production</span>
+<span class="text-[10px] text-secondary">2h ago</span>
+</div>
+</div>
+<!-- Order Card 2 -->
+<div class="bg-white p-4 rounded-xl border border-outline-variant flex justify-between items-center active:bg-surface-container-low transition-colors" onclick="openDetails('TRRY-2505-0141', 'Peak Performance', 'Training Tee', '120', 'Pending', 'bg-tertiary-container text-on-tertiary-container')">
+<div class="flex gap-4 items-center">
+<div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">apparel</span>
+</div>
+<div>
+<h3 class="font-bold text-sm text-on-surface">TRRY-2505-0141</h3>
+<p class="text-xs text-secondary">Peak Performance • 120 Units</p>
+</div>
+</div>
+<div class="flex flex-col items-end gap-1">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-tertiary-container text-on-tertiary-container">Pending Review</span>
+<span class="text-[10px] text-secondary">4h ago</span>
+</div>
+</div>
+<!-- Order Card 3 -->
+<div class="bg-white p-4 rounded-xl border border-outline-variant flex justify-between items-center active:bg-surface-container-low transition-colors" onclick="openDetails('TRRY-2505-0140', 'Velocity Sports', 'Track Jacket', '85', 'Approved', 'bg-secondary-container text-on-secondary-container')">
+<div class="flex gap-4 items-center">
+<div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">straighten</span>
+</div>
+<div>
+<h3 class="font-bold text-sm text-on-surface">TRRY-2505-0140</h3>
+<p class="text-xs text-secondary">Velocity Sports • 85 Units</p>
+</div>
+</div>
+<div class="flex flex-col items-end gap-1">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-secondary-container text-on-secondary-container">Approved</span>
+<span class="text-[10px] text-secondary">6h ago</span>
+</div>
+</div>
+<!-- Order Card 4 -->
+<div class="bg-white p-4 rounded-xl border border-outline-variant flex justify-between items-center active:bg-surface-container-low transition-colors opacity-80">
+<div class="flex gap-4 items-center">
+<div class="w-12 h-12 rounded-lg bg-surface-container-high flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">local_shipping</span>
+</div>
+<div>
+<h3 class="font-bold text-sm text-on-surface">TRRY-2505-0139</h3>
+<p class="text-xs text-secondary">Elevate Apparel • 40 Units</p>
+</div>
+</div>
+<div class="flex flex-col items-end gap-1">
+<span class="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-outline-variant text-on-surface-variant">Ready to Ship</span>
+<span class="text-[10px] text-secondary">8h ago</span>
+</div>
+</div>
+</div>
+</main>
+<!-- BottomNavBar -->
+<nav class="fixed bottom-0 left-0 w-full flex justify-around items-center h-16 bg-surface dark:bg-on-surface px-2 pb-safe border-t border-outline-variant dark:border-outline z-50">
+<div class="flex flex-col items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[24px]">dashboard</span>
+<span class="font-label-sm text-label-sm-mobile mt-1">Overview</span>
+</div>
+<div class="flex flex-col items-center justify-center text-primary font-bold">
+<span class="material-symbols-outlined text-[24px]" style="font-variation-settings: 'FILL' 1;">assignment</span>
+<span class="font-label-sm text-label-sm-mobile mt-1">Orders</span>
+</div>
+<div class="flex flex-col items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[24px]">group</span>
+<span class="font-label-sm text-label-sm-mobile mt-1">Clients</span>
+</div>
+<div class="flex flex-col items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[24px]">inventory_2</span>
+<span class="font-label-sm text-label-sm-mobile mt-1">Products</span>
+</div>
+<div class="flex flex-col items-center justify-center text-secondary">
+<span class="material-symbols-outlined text-[24px]">settings</span>
+<span class="font-label-sm text-label-sm-mobile mt-1">Settings</span>
+</div>
+</nav>
+<!-- Bottom Sheet Details -->
+<div class="fixed inset-0 bg-black/40 z-[60] hidden opacity-0 transition-opacity duration-300" id="backdrop" onclick="closeDetails()"></div>
+<div class="fixed bottom-0 left-0 w-full bg-white rounded-t-[2rem] z-[70] bottom-sheet max-h-[751px] overflow-y-auto px-6 pt-2 pb-8" id="orderSheet">
+<div class="flex justify-center mb-6">
+<div class="w-12 h-1.5 bg-outline-variant rounded-full"></div>
+</div>
+<div class="flex justify-between items-start mb-6">
+<div>
+<h4 class="font-display text-2xl text-on-surface" id="detail-id">TRRY-2505-0142</h4>
+<p class="text-secondary font-medium" id="detail-client">Urban Stitch Co.</p>
+</div>
+<span class="px-3 py-1 rounded text-xs font-bold uppercase" id="detail-status">In Production</span>
+</div>
+<div class="grid grid-cols-2 gap-4 mb-8">
+<div class="bg-surface-container-low p-4 rounded-xl">
+<p class="text-[10px] text-secondary uppercase font-bold tracking-wider mb-1">Product</p>
+<p class="text-sm font-bold text-on-surface" id="detail-product">Premium Hoodie</p>
+</div>
+<div class="bg-surface-container-low p-4 rounded-xl">
+<p class="text-[10px] text-secondary uppercase font-bold tracking-wider mb-1">Quantity</p>
+<p class="text-sm font-bold text-on-surface" id="detail-qty">56 Units</p>
+</div>
+</div>
+<div class="mb-8">
+<h5 class="font-label-bold text-label-bold text-secondary uppercase mb-4">Internal Notes</h5>
+<div class="space-y-4">
+<div class="flex gap-3">
+<div class="w-8 h-8 rounded-full bg-primary-container/20 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-sm">edit</span>
+</div>
+<div class="bg-surface p-3 rounded-lg border border-outline-variant flex-1">
+<p class="text-xs text-on-surface">Fabric inspection passed. Cutting stage completed. Ready for sewing line 4.</p>
+<p class="text-[10px] text-secondary mt-2">Alex Thorne • 2h ago</p>
+</div>
+</div>
+</div>
+<div class="mt-4 flex gap-2">
+<input class="flex-1 text-sm border border-outline-variant rounded-lg px-3 py-2 focus:ring-1 focus:ring-primary focus:border-primary outline-none" placeholder="Add a note..." type="text">
+<button class="bg-surface-container-high text-primary w-10 h-10 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined">send</span>
+</button>
+</div>
+</div>
+<div class="flex gap-3">
+<button class="flex-1 bg-surface border border-outline-variant text-on-surface py-4 rounded-xl font-bold text-sm active:bg-surface-container transition-colors">View Spec Sheet</button>
+<button class="flex-[2] bg-primary text-on-primary py-4 rounded-xl font-bold text-sm shadow-lg active:scale-95 transition-transform">Update Status</button>
+</div>
+</div>
+<script>
+        function openDetails(id, client, product, qty, statusLabel, statusClass) {
+            document.getElementById('detail-id').innerText = id;
+            document.getElementById('detail-client').innerText = client;
+            document.getElementById('detail-product').innerText = product;
+            document.getElementById('detail-qty').innerText = qty + ' Units';
+            
+            const statusEl = document.getElementById('detail-status');
+            statusEl.innerText = statusLabel;
+            statusEl.className = `px-3 py-1 rounded text-xs font-bold uppercase ${statusClass}`;
+
+            const sheet = document.getElementById('orderSheet');
+            const backdrop = document.getElementById('backdrop');
+            
+            backdrop.classList.remove('hidden');
+            setTimeout(() => {
+                backdrop.classList.add('opacity-100');
+                sheet.classList.add('active');
+            }, 10);
+        }
+
+        function closeDetails() {
+            const sheet = document.getElementById('orderSheet');
+            const backdrop = document.getElementById('backdrop');
+            
+            sheet.classList.remove('active');
+            backdrop.classList.remove('opacity-100');
+            setTimeout(() => {
+                backdrop.classList.add('hidden');
+            }, 300);
+        }
+    </script>
+</body></html>
