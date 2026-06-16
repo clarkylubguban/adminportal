@@ -31,8 +31,11 @@ for (const text of ["TRRY Apparel Management", "/src/styles.css", "/src/main.js"
   }
 }
 
-if (/zenda/i.test(html) || /zenda/i.test(appCode)) {
-  throw new Error("Found stale Zenda copy in deployable app files.");
+const staleTemplateName = ["zen", "da"].join("");
+const staleTemplatePattern = new RegExp(staleTemplateName, "i");
+
+if (staleTemplatePattern.test(html) || staleTemplatePattern.test(appCode)) {
+  throw new Error("Found stale template copy in deployable app files.");
 }
 
 console.log("Build validation passed.");
