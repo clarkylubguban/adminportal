@@ -4,9 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "node server.mjs",
-    "build": "node scripts/validate.mjs",
-    "preview": "node server.mjs"
+    "dev": "node scripts/local-dev.mjs",
+    "build": "node scripts/build.mjs",
+    "preview": "node scripts/local-dev.mjs"
   },
   "dependencies": {},
   "devDependencies": {}

@@ -1,10 +1,9 @@
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
-import { dirname, extname, join, normalize } from "node:path";
-import { fileURLToPath } from "node:url";
+import { extname, join, normalize } from "node:path";
 
 const preferredPort = Number(process.env.PORT || 5173);
-const root = dirname(fileURLToPath(import.meta.url));
+const root = process.cwd();
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -19,7 +18,6 @@ async function handleRequest(request, response) {
   try {
     const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
     const pathname = decodeURIComponent(url.pathname);
-
     const requestedPath =
       pathname === "/" || pathname === "/orders" ? "/index.html" : pathname;
     const filePath = normalize(join(root, requestedPath));
@@ -42,9 +40,9 @@ async function handleRequest(request, response) {
 }
 
 function listen(port, attempts = 0) {
-  const server = createServer(handleRequest);
+  const localServer = createServer(handleRequest);
 
-  server.once("error", (error) => {
+  localServer.once("error", (error) => {
     if (error.code === "EADDRINUSE" && attempts < 10) {
       listen(port + 1, attempts + 1);
       return;
@@ -53,7 +51,7 @@ function listen(port, attempts = 0) {
     throw error;
   });
 
-  server.listen(port, "127.0.0.1", () => {
+  localServer.listen(port, "127.0.0.1", () => {
     console.log(`TRRY Admin Portal running at http://127.0.0.1:${port}/orders`);
   });
 }

@@ -2,9 +2,9 @@ import { access, readFile } from "node:fs/promises";
 
 const requiredFiles = [
   "index.html",
-  "server.mjs",
   "src/main.js",
   "src/styles.css",
+  "vercel.json",
 ];
 
 await Promise.all(requiredFiles.map((file) => access(file)));
