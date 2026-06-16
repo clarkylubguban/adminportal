@@ -21,7 +21,7 @@
 
 body {
   margin: 0;
-  min-width: 1600px;
+  min-width: 1440px;
   min-height: 100vh;
   background: var(--canvas);
 }
@@ -51,17 +51,17 @@ button {
   flex-direction: column;
   border-right: 1px solid #eeeeee;
   background: #ffffff;
-  padding: 30px 18px 24px;
+  padding: 24px 16px 18px;
 }
 
 .brand-lockup {
-  padding: 0 22px 44px;
+  padding: 0 22px 30px;
 }
 
 .brand-lockup strong {
   display: block;
   color: var(--orange);
-  font-size: 32px;
+  font-size: 28px;
   font-weight: 900;
   letter-spacing: 0.16em;
   line-height: 0.95;
@@ -70,15 +70,15 @@ button {
 .brand-lockup span {
   color: #111111;
   display: block;
-  font-size: 12px;
+  font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.6em;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .sidebar nav {
   display: grid;
-  gap: 10px;
+  gap: 8px;
 }
 
 .sidebar a {
@@ -87,12 +87,12 @@ button {
   border-radius: 6px;
   color: #111111;
   display: flex;
-  gap: 16px;
-  height: 48px;
-  padding: 0 20px;
+  gap: 14px;
+  height: 42px;
+  padding: 0 18px;
   text-decoration: none;
-  font-size: 15px;
-  font-weight: 700;
+  font-size: 14px;
+  font-weight: 650;
 }
 
 .sidebar a.active {
@@ -106,21 +106,21 @@ button {
   left: -18px;
   top: 0;
   width: 5px;
-  height: 48px;
+  height: 42px;
   background: var(--orange);
 }
 
 .system-card {
   align-items: center;
   display: flex;
-  gap: 12px;
+  gap: 10px;
   margin-top: auto;
-  min-height: 64px;
+  min-height: 56px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #ffffff;
-  padding: 12px 14px;
-  box-shadow: 0 10px 26px rgba(17, 24, 39, 0.07);
+  padding: 10px 12px;
+  box-shadow: 0 8px 18px rgba(17, 24, 39, 0.055);
 }
 
 .system-card strong,
@@ -130,8 +130,8 @@ button {
 
 .system-card strong {
   display: block;
-  font-size: 12px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 750;
 }
 
 .system-card p {
@@ -139,9 +139,9 @@ button {
   color: #149b36;
   display: flex;
   gap: 7px;
-  font-size: 11px;
-  font-weight: 700;
-  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 650;
+  margin-top: 3px;
 }
 
 .system-card p span,
@@ -280,26 +280,26 @@ button {
 }
 
 .shield-icon {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   color: var(--orange);
 }
 
 .shield-icon::before {
-  left: 5px;
+  left: 4px;
   top: 2px;
-  width: 22px;
-  height: 25px;
+  width: 20px;
+  height: 22px;
   border: 2px solid currentColor;
   border-radius: 14px 14px 10px 10px;
   clip-path: polygon(50% 0, 100% 18%, 100% 70%, 50% 100%, 0 70%, 0 18%);
 }
 
 .shield-icon::after {
-  left: 12px;
-  top: 12px;
-  width: 10px;
-  height: 6px;
+  left: 10px;
+  top: 11px;
+  width: 9px;
+  height: 5px;
   border-left: 2px solid currentColor;
   border-bottom: 2px solid currentColor;
   transform: rotate(-45deg);
@@ -315,21 +315,21 @@ button {
   background: #050505;
   color: #ffffff;
   display: grid;
-  grid-template-columns: minmax(420px, 1fr) 380px 268px;
-  gap: 22px;
-  height: 72px;
-  padding: 0 30px;
+  grid-template-columns: minmax(380px, 1fr) 360px 244px;
+  gap: 18px;
+  height: 64px;
+  padding: 0 28px;
 }
 
 .header-brand {
   align-items: center;
   display: flex;
-  gap: 22px;
+  gap: 18px;
 }
 
 .header-brand strong {
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 17px;
+  font-weight: 850;
   letter-spacing: 0.01em;
   text-transform: uppercase;
 }
@@ -340,8 +340,8 @@ button {
 }
 
 .menu-button {
-  width: 28px;
-  height: 28px;
+  width: 26px;
+  height: 26px;
   border: 0;
   background: transparent;
   color: #ffffff;
@@ -374,25 +374,25 @@ button {
 }
 
 .global-search {
-  height: 40px;
+  height: 36px;
   background: #111111;
   border: 1px solid #343434;
   border-radius: 8px;
   color: #ffffff;
-  padding: 0 13px 0 18px;
+  padding: 0 12px 0 15px;
 }
 
 .header-actions {
   align-items: center;
   display: flex;
   justify-content: flex-end;
-  gap: 18px;
+  gap: 14px;
 }
 
 .notification-button {
   display: grid;
-  width: 40px;
-  height: 40px;
+  width: 36px;
+  height: 36px;
   place-items: center;
   border: 1px solid #2d2d2d;
   border-radius: 8px;
@@ -459,21 +459,21 @@ button {
   align-items: center;
   border-left: 1px solid #2c2c2c;
   display: flex;
-  gap: 10px;
-  height: 42px;
-  padding-left: 20px;
+  gap: 9px;
+  height: 38px;
+  padding-left: 16px;
 }
 
 .profile-area .avatar {
   display: grid;
-  width: 38px;
-  height: 38px;
+  width: 34px;
+  height: 34px;
   place-items: center;
   border: 2px solid #ffffff;
   border-radius: 50%;
   background: #e9e0d7;
   color: #3a2a20;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 900;
 }
 
@@ -483,14 +483,14 @@ button {
 }
 
 .profile-area strong {
-  font-size: 13px;
-  font-weight: 900;
+  font-size: 12px;
+  font-weight: 800;
 }
 
 .profile-area span {
   color: #bbbbbb;
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 550;
 }
 
 .profile-area .chevron {
@@ -503,11 +503,11 @@ button {
 }
 
 .orders-page {
-  padding: 30px 32px 0;
+  padding: 24px 28px 0;
 }
 
 .page-heading {
-  margin-bottom: 22px;
+  margin-bottom: 18px;
 }
 
 h1,
@@ -517,22 +517,22 @@ p {
 }
 
 h1 {
-  font-size: 30px;
+  font-size: 28px;
   line-height: 1.15;
-  margin-bottom: 7px;
+  margin-bottom: 5px;
 }
 
 .subtitle {
   color: var(--muted);
-  font-size: 15px;
+  font-size: 14px;
   margin-bottom: 0;
 }
 
 .status-grid {
   display: grid;
-  grid-template-columns: repeat(5, minmax(150px, 1fr));
-  gap: 14px;
-  margin-bottom: 22px;
+  grid-template-columns: repeat(5, minmax(138px, 1fr));
+  gap: 12px;
+  margin-bottom: 18px;
 }
 
 .status-card {
@@ -541,15 +541,15 @@ h1 {
   border: 1px solid var(--line);
   border-radius: 8px;
   display: flex;
-  gap: 18px;
-  min-height: 110px;
-  padding: 20px;
+  gap: 14px;
+  min-height: 88px;
+  padding: 16px;
   box-shadow: var(--card-shadow);
 }
 
 .icon-mark {
-  width: 48px;
-  height: 48px;
+  width: 40px;
+  height: 40px;
   border-radius: 50%;
   background: #fff0e5;
   color: var(--orange);
@@ -557,89 +557,89 @@ h1 {
 
 .icon-mark.queue::before,
 .icon-mark.calendar::before {
-  inset: 13px;
-  border: 2px solid currentColor;
+  inset: 11px;
+  border: 1.8px solid currentColor;
   border-radius: 3px;
 }
 
 .icon-mark.queue::after {
-  left: 24px;
-  top: 26px;
-  width: 10px;
-  height: 10px;
-  border: 2px solid currentColor;
+  left: 21px;
+  top: 22px;
+  width: 8px;
+  height: 8px;
+  border: 1.8px solid currentColor;
   border-radius: 50%;
   background: #fff0e5;
 }
 
 .icon-mark.check::before {
-  left: 15px;
-  top: 17px;
-  width: 16px;
-  height: 9px;
-  border-left: 3px solid currentColor;
-  border-bottom: 3px solid currentColor;
+  left: 13px;
+  top: 15px;
+  width: 14px;
+  height: 8px;
+  border-left: 2.5px solid currentColor;
+  border-bottom: 2.5px solid currentColor;
   transform: rotate(-45deg);
 }
 
 .icon-mark.check::after {
-  inset: 12px;
-  border: 2px solid currentColor;
+  inset: 10px;
+  border: 1.8px solid currentColor;
   border-radius: 50%;
 }
 
 .icon-mark.factory::before {
-  left: 13px;
-  right: 13px;
-  bottom: 13px;
-  height: 14px;
-  border: 2px solid currentColor;
+  left: 11px;
+  right: 11px;
+  bottom: 11px;
+  height: 12px;
+  border: 1.8px solid currentColor;
   border-top: 0;
 }
 
 .icon-mark.factory::after {
-  left: 14px;
-  top: 13px;
-  width: 19px;
-  height: 12px;
-  border: 2px solid currentColor;
+  left: 12px;
+  top: 11px;
+  width: 17px;
+  height: 10px;
+  border: 1.8px solid currentColor;
   border-bottom: 0;
   transform: skewX(-16deg);
 }
 
 .icon-mark.ready::before {
-  left: 13px;
-  top: 13px;
-  width: 20px;
-  height: 18px;
-  border: 2px solid currentColor;
+  left: 11px;
+  top: 11px;
+  width: 17px;
+  height: 16px;
+  border: 1.8px solid currentColor;
   transform: rotate(30deg) skewY(-30deg);
 }
 
 .icon-mark.calendar::after {
-  left: 15px;
-  top: 13px;
-  width: 16px;
-  height: 2px;
+  left: 13px;
+  top: 11px;
+  width: 14px;
+  height: 1.8px;
   background: currentColor;
   box-shadow: 0 7px 0 currentColor;
 }
 
 .status-card p {
   color: #4b5563;
-  font-size: 11px;
-  font-weight: 900;
+  font-size: 10px;
+  font-weight: 800;
   letter-spacing: 0.02em;
-  margin-bottom: 8px;
+  margin-bottom: 6px;
   text-transform: uppercase;
 }
 
 .status-card strong {
   display: block;
   color: #050505;
-  font-size: 26px;
+  font-size: 23px;
   line-height: 1;
-  margin-bottom: 9px;
+  margin-bottom: 7px;
 }
 
 .status-card small {
@@ -647,8 +647,8 @@ h1 {
   color: #777777;
   display: flex;
   gap: 6px;
-  font-size: 11px;
-  font-weight: 700;
+  font-size: 10px;
+  font-weight: 600;
 }
 
 .status-card small span {
@@ -662,12 +662,12 @@ h1 {
 .orders-workbench {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 20px;
+  gap: 16px;
   align-items: start;
 }
 
 .orders-workbench.has-panel {
-  grid-template-columns: minmax(0, 1fr) 316px;
+  grid-template-columns: minmax(0, 1fr) 292px;
 }
 
 .orders-list-card,
@@ -687,26 +687,26 @@ h1 {
   align-items: center;
   display: flex;
   justify-content: space-between;
-  gap: 14px;
-  padding: 16px 18px;
+  gap: 12px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--line);
   background: #ffffff;
 }
 
 .filter-tabs {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .filter-tabs button {
-  height: 36px;
-  padding: 0 15px;
+  height: 30px;
+  padding: 0 12px;
   border: 1px solid #e4e4e4;
   border-radius: 7px;
   background: #ffffff;
   color: #222222;
-  font-size: 12px;
-  font-weight: 700;
+  font-size: 11.5px;
+  font-weight: 600;
 }
 
 .filter-tabs button.active {
@@ -717,17 +717,17 @@ h1 {
 
 .table-actions {
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .search-field {
-  width: 278px;
-  height: 38px;
+  width: 246px;
+  height: 32px;
   color: #777777;
   background: #ffffff;
   border: 1px solid #dfdfdf;
   border-radius: 7px;
-  padding: 0 12px;
+  padding: 0 10px;
 }
 
 .search-field:focus-within {
@@ -742,8 +742,8 @@ h1 {
 
 .filter-button {
   display: grid;
-  width: 40px;
-  height: 38px;
+  width: 34px;
+  height: 32px;
   place-items: center;
   border: 1px solid #dfdfdf;
   border-radius: 7px;
@@ -776,10 +776,10 @@ thead th {
 
 th {
   color: #5f6673;
-  font-size: 10px;
-  font-weight: 900;
+  font-size: 9.5px;
+  font-weight: 800;
   letter-spacing: 0.02em;
-  padding: 14px 14px;
+  padding: 11px 12px;
   text-align: left;
   text-transform: uppercase;
   white-space: nowrap;
@@ -788,9 +788,9 @@ th {
 td {
   border-top: 1px solid var(--line);
   color: #111111;
-  font-size: 12.5px;
-  height: 62px;
-  padding: 12px 14px;
+  font-size: 12px;
+  height: 52px;
+  padding: 9px 12px;
   vertical-align: middle;
 }
 
@@ -816,22 +816,22 @@ tbody tr:hover td {
 
 th:nth-child(1),
 td:nth-child(1) {
-  width: 112px;
+  width: 108px;
 }
 
 th:nth-child(2),
 td:nth-child(2) {
-  width: 132px;
+  width: 126px;
 }
 
 th:nth-child(3),
 td:nth-child(3) {
-  width: 126px;
+  width: 122px;
 }
 
 th:nth-child(4),
 td:nth-child(4) {
-  width: 124px;
+  width: 118px;
 }
 
 th:nth-child(5),
@@ -841,17 +841,17 @@ td:nth-child(5) {
 
 th:nth-child(6),
 td:nth-child(6) {
-  width: 90px;
+  width: 84px;
 }
 
 th:nth-child(7),
 td:nth-child(7) {
-  width: 124px;
+  width: 118px;
 }
 
 th:nth-child(8),
 td:nth-child(8) {
-  width: 118px;
+  width: 112px;
 }
 
 th:nth-child(9),
@@ -863,13 +863,13 @@ td:nth-child(9) {
 .request-id,
 .client-cell strong,
 .stacked-cell strong {
-  font-weight: 900;
+  font-weight: 750;
 }
 
 .client-cell {
   align-items: center;
   display: flex;
-  gap: 10px;
+  gap: 8px;
 }
 
 .client-logo {
@@ -877,12 +877,12 @@ td:nth-child(9) {
   border-radius: 50%;
   color: #ffffff;
   display: inline-flex;
-  flex: 0 0 30px;
-  height: 30px;
+  flex: 0 0 26px;
+  height: 26px;
   justify-content: center;
-  width: 30px;
+  width: 26px;
   background: #0c3e2f;
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 900;
 }
 
@@ -897,10 +897,10 @@ td:nth-child(9) {
 }
 
 .client-logo.large {
-  flex-basis: 58px;
-  width: 58px;
-  height: 58px;
-  font-size: 12px;
+  flex-basis: 46px;
+  width: 46px;
+  height: 46px;
+  font-size: 10px;
 }
 
 .stacked-cell strong,
@@ -910,9 +910,9 @@ td:nth-child(9) {
 
 .stacked-cell span {
   color: #696969;
-  font-size: 11px;
-  font-weight: 600;
-  margin-top: 3px;
+  font-size: 10.5px;
+  font-weight: 500;
+  margin-top: 2px;
 }
 
 .stacked-cell.needed span {
@@ -923,7 +923,7 @@ td:nth-child(9) {
   align-items: center;
   display: inline-flex;
   gap: 5px;
-  font-weight: 800;
+  font-weight: 650;
 }
 
 .fulfillment span::before {
@@ -949,11 +949,11 @@ td:nth-child(9) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 23px;
+  min-height: 20px;
   border-radius: 5px;
-  padding: 4px 9px;
-  font-size: 10px;
-  font-weight: 900;
+  padding: 3px 7px;
+  font-size: 9px;
+  font-weight: 800;
   line-height: 1;
   text-transform: uppercase;
   white-space: nowrap;
@@ -997,8 +997,8 @@ td:nth-child(9) {
 
 .view-button {
   display: inline-grid;
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   place-items: center;
   border: 0;
   border-radius: 6px;
@@ -1036,21 +1036,21 @@ td:nth-child(9) {
   border-top: 1px solid var(--line);
   color: #666666;
   display: flex;
-  font-size: 12px;
+  font-size: 11.5px;
   justify-content: space-between;
-  min-height: 56px;
-  padding: 0 16px;
+  min-height: 48px;
+  padding: 0 14px;
 }
 
 .pager {
   align-items: center;
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
 .pager button {
-  width: 32px;
-  height: 32px;
+  width: 28px;
+  height: 28px;
   border: 1px solid #e3e3e3;
   border-radius: 7px;
   background: #ffffff;
@@ -1066,9 +1066,9 @@ td:nth-child(9) {
 
 .detail-panel {
   position: sticky;
-  top: 88px;
-  min-height: 670px;
-  padding: 20px;
+  top: 78px;
+  min-height: 590px;
+  padding: 16px;
   align-self: start;
 }
 
@@ -1077,47 +1077,47 @@ td:nth-child(9) {
   border-bottom: 1px solid var(--line);
   display: flex;
   justify-content: space-between;
-  margin: -2px 0 18px;
-  padding-bottom: 18px;
+  margin: -2px 0 14px;
+  padding-bottom: 14px;
 }
 
 .panel-header h2 {
   color: var(--ink);
-  font-size: 18px;
-  font-weight: 900;
+  font-size: 16px;
+  font-weight: 800;
   margin: 0;
 }
 
 .close-panel {
-  width: 28px;
-  height: 28px;
+  width: 24px;
+  height: 24px;
   border: 0;
   background: transparent;
   color: #374151;
-  font-size: 24px;
+  font-size: 22px;
   line-height: 1;
 }
 
 .panel-section {
   border-bottom: 1px solid var(--line);
-  margin-bottom: 18px;
-  padding-bottom: 18px;
+  margin-bottom: 14px;
+  padding-bottom: 14px;
 }
 
 .section-title,
 .status-editor label {
   color: #374151;
   display: block;
-  font-size: 13px;
-  font-weight: 850;
-  margin-bottom: 12px;
+  font-size: 11.5px;
+  font-weight: 750;
+  margin-bottom: 9px;
 }
 
 .client-profile,
 .person-row,
 .ship-block {
   display: flex;
-  gap: 14px;
+  gap: 11px;
 }
 
 .client-profile strong,
@@ -1132,24 +1132,24 @@ td:nth-child(9) {
 
 .client-profile strong {
   color: var(--ink);
-  font-size: 17px;
-  font-weight: 900;
-  margin-bottom: 6px;
+  font-size: 15px;
+  font-weight: 800;
+  margin-bottom: 4px;
 }
 
 .client-profile span,
 .person-row span,
 .ship-block span {
   color: #555555;
-  font-size: 12px;
-  line-height: 1.45;
+  font-size: 11.5px;
+  line-height: 1.4;
 }
 
 .client-profile a {
   color: var(--orange);
-  font-size: 12px;
-  font-weight: 850;
-  margin-top: 10px;
+  font-size: 11.5px;
+  font-weight: 750;
+  margin-top: 8px;
   text-decoration: none;
 }
 
@@ -1158,7 +1158,7 @@ td:nth-child(9) {
   top: 2px;
   width: 8px;
   height: 8px;
-  border: 2px solid currentColor;
+  border: 1.7px solid currentColor;
   border-radius: 50%;
 }
 
@@ -1167,7 +1167,7 @@ td:nth-child(9) {
   bottom: 2px;
   width: 14px;
   height: 8px;
-  border: 2px solid currentColor;
+  border: 1.7px solid currentColor;
   border-top-left-radius: 12px;
   border-top-right-radius: 12px;
   border-bottom: 0;
@@ -1175,7 +1175,7 @@ td:nth-child(9) {
 
 .item-lines {
   display: grid;
-  gap: 12px;
+  gap: 9px;
 }
 
 .item-lines div,
@@ -1188,19 +1188,19 @@ td:nth-child(9) {
 
 .item-lines span,
 .total-line span {
-  font-size: 12px;
+  font-size: 11.5px;
   line-height: 1.35;
 }
 
 .item-lines strong,
 .total-line strong {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .total-line {
   border-top: 1px solid var(--line);
-  margin-top: 14px;
-  padding-top: 14px;
+  margin-top: 11px;
+  padding-top: 11px;
 }
 
 .total-line span,
@@ -1213,7 +1213,7 @@ td:nth-child(9) {
   top: 2px;
   width: 10px;
   height: 14px;
-  border: 2px solid currentColor;
+  border: 1.7px solid currentColor;
   border-radius: 8px 8px 8px 0;
   transform: rotate(-45deg);
 }
@@ -1233,22 +1233,22 @@ td:nth-child(9) {
 
 .status-editor {
   display: grid;
-  gap: 12px;
+  gap: 10px;
 }
 
 .status-editor select {
   appearance: none;
-  height: 44px;
+  height: 38px;
   border: 1px solid #dddddd;
   border-radius: 7px;
-  background: linear-gradient(45deg, transparent 50%, #6b7280 50%) calc(100% - 18px) 18px / 6px 6px no-repeat,
-    linear-gradient(135deg, #6b7280 50%, transparent 50%) calc(100% - 14px) 18px / 6px 6px no-repeat,
+  background: linear-gradient(45deg, transparent 50%, #6b7280 50%) calc(100% - 17px) 16px / 5px 5px no-repeat,
+    linear-gradient(135deg, #6b7280 50%, transparent 50%) calc(100% - 14px) 16px / 5px 5px no-repeat,
     #ffffff;
   color: var(--ink);
   padding: 0 38px 0 14px;
   outline: 0;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .status-editor select:focus {
@@ -1259,8 +1259,8 @@ td:nth-child(9) {
 .primary-button,
 .note-button {
   border-radius: 7px;
-  font-weight: 900;
-  height: 44px;
+  font-weight: 800;
+  height: 38px;
   padding: 0 16px;
 }
 
@@ -1268,7 +1268,7 @@ td:nth-child(9) {
   border: 1px solid var(--orange);
   background: var(--orange);
   color: #ffffff;
-  box-shadow: 0 10px 18px rgba(255, 90, 0, 0.18);
+  box-shadow: 0 8px 14px rgba(255, 90, 0, 0.16);
 }
 
 .note-button {
@@ -1279,7 +1279,7 @@ td:nth-child(9) {
   display: inline-flex;
   justify-content: center;
   gap: 8px;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .note-button span::before {
@@ -1302,11 +1302,11 @@ td:nth-child(9) {
   border-top: 1px solid var(--line);
   color: #777777;
   display: flex;
-  font-size: 12px;
+  font-size: 11.5px;
   justify-content: space-between;
-  margin-top: 24px;
-  min-height: 58px;
-  padding: 0 26px;
+  margin-top: 18px;
+  min-height: 48px;
+  padding: 0 28px;
 }
 
 .footer div,
