@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "/orders",
+      "permanent": false
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/orders",
+      "destination": "/index.html"
+    }
+  ]
+}

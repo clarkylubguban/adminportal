@@ -19,8 +19,13 @@ async function handleRequest(request, response) {
   try {
     const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
     const pathname = decodeURIComponent(url.pathname);
-    const requestedPath =
-      pathname === "/" || pathname === "/orders" ? "/index.html" : pathname;
+    if (pathname === "/") {
+      response.writeHead(302, { Location: "/orders" });
+      response.end();
+      return;
+    }
+
+    const requestedPath = pathname === "/orders" ? "/index.html" : pathname;
     const filePath = normalize(join(root, requestedPath));
 
     if (!filePath.startsWith(root)) {
