@@ -127,6 +127,7 @@ let orders = [
 let selectedId = orders[0]?.id ?? null;
 let selectedProductCode = products[0].code;
 let activeFilter = "All";
+let clientKpiFilter = "All";
 let productFilter = "All";
 let query = "";
 let draftStatus = orders[0]?.status ?? "Pending Review";
@@ -181,11 +182,11 @@ function render() {
 
 function renderOverviewPage() {
   const cards = [
-    { label: "Pending Review", value: countOrders("Pending Review"), icon: "queue", delta: "Needs admin review" },
-    { label: "Approved", value: countOrders("Approved"), icon: "check", delta: "Ready for scheduling" },
-    { label: "In Production", value: countOrders("In Production"), icon: "factory", delta: "Production active" },
-    { label: "Ready to Ship", value: countOrders("Ready"), icon: "ready", delta: "Awaiting dispatch" },
-    { label: "Completed This Month", value: countOrders("Completed"), icon: "calendar", delta: "June 2026" },
+    { label: "Pending Review", value: countOrders("Pending Review"), icon: "queue", delta: "Needs admin review", orderFilter: "Pending Review", route: "/orders" },
+    { label: "Approved", value: countOrders("Approved"), icon: "check", delta: "Ready for scheduling", orderFilter: "Approved", route: "/orders" },
+    { label: "In Production", value: countOrders("In Production"), icon: "factory", delta: "Production active", orderFilter: "In Production", route: "/orders" },
+    { label: "Ready to Ship", value: countOrders("Ready"), icon: "ready", delta: "Awaiting dispatch", orderFilter: "Ready", route: "/orders" },
+    { label: "Completed This Month", value: countOrders("Completed"), icon: "calendar", delta: "June 2026", orderFilter: "Completed", route: "/orders" },
   ];
 
   return `
@@ -228,9 +229,10 @@ function renderOverviewPage() {
               <span class="mini-label">Admin tools</span>
             </div>
             <div class="quick-actions">
-              ${["Create Order", "Add Client", "Add Product", "Reorder Request"]
-                .map((label) => `<button type="button"><span></span>${label}</button>`)
-                .join("")}
+              <button disabled title="Coming soon" type="button"><span></span><div><strong>Create Order</strong><small>Coming soon</small></div></button>
+              <button disabled title="Connect Supabase first" type="button"><span></span><div><strong>Add Client</strong><small>Connect Supabase first</small></div></button>
+              <button disabled title="Connect Supabase first" type="button"><span></span><div><strong>Add Product</strong><small>Connect Supabase first</small></div></button>
+              <button data-route-target="/orders" type="button"><span></span><div><strong>Reorder Request</strong><small>Open order queue</small></div></button>
             </div>
           </article>
         </div>
@@ -267,18 +269,24 @@ function renderOrdersPage(selectedOrder, filteredOrders) {
 function renderClientsPage() {
   const normalizedQuery = clientQuery.trim().toLowerCase();
   const clientSlug = "urban-coffee";
+  const matchesKpi =
+    clientKpiFilter === "All" ||
+    (clientKpiFilter === "Active" && clientProgram.status === "Active") ||
+    (clientKpiFilter === "Pending Setup" && clientProgram.status === "Pending Setup") ||
+    (clientKpiFilter === "High Activity" && clientProgram.activeOrders > 3);
   const clientMatches =
-    !normalizedQuery ||
-    [clientProgram.name, clientSlug, clientProgram.domain]
-      .join(" ")
-      .toLowerCase()
-      .includes(normalizedQuery);
+    matchesKpi &&
+    (!normalizedQuery ||
+      [clientProgram.name, clientSlug, clientProgram.domain]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery));
 
   const cards = [
-    { label: "Total Clients", value: "1", icon: "clients", delta: "Urban Coffee active" },
-    { label: "Active Portals", value: "1", icon: "ready", delta: "Private portal live" },
-    { label: "Pending Setup", value: "0", icon: "calendar", delta: "No blocked setup" },
-    { label: "High Activity", value: "0", icon: "factory", delta: "No high activity yet" },
+    { label: "Total Clients", value: "1", icon: "clients", delta: "Urban Coffee active", clientFilter: "All", active: clientKpiFilter === "All" },
+    { label: "Active Portals", value: "1", icon: "ready", delta: "Private portal live", clientFilter: "Active", active: clientKpiFilter === "Active" },
+    { label: "Pending Setup", value: "0", icon: "calendar", delta: "No blocked setup", clientFilter: "Pending Setup", active: clientKpiFilter === "Pending Setup" },
+    { label: "High Activity", value: "0", icon: "factory", delta: "No high activity yet", clientFilter: "High Activity", active: clientKpiFilter === "High Activity" },
   ];
 
   return `
@@ -360,6 +368,8 @@ function renderProductsPage(selectedProduct) {
   const visibleProducts = products.filter((item) => {
     const matchesFilter =
       productFilter === "All" ||
+      (productFilter === "Approved" && item.status === "Approved") ||
+      (productFilter === "Pending Approval" && item.status === "Pending Approval") ||
       item.category === productFilter ||
       (productFilter === "Merch" && item.category === "Merch") ||
       (productFilter === "Accessories" && item.category === "Accessories") ||
@@ -375,10 +385,10 @@ function renderProductsPage(selectedProduct) {
   });
 
   const cards = [
-    { label: "Approved Products", value: products.length, icon: "check", delta: "Visible in client portal" },
-    { label: "Draft Products", value: "0", icon: "queue", delta: "No drafts yet" },
-    { label: "Pending Approval", value: "0", icon: "calendar", delta: "No blocked specs" },
-    { label: "Top Category", value: "Uniforms", icon: "ready", delta: "Primary program" },
+    { label: "Approved Products", value: products.length, icon: "check", delta: "Visible in client portal", productFilter: "Approved", active: productFilter === "Approved" },
+    { label: "Draft Products", value: "0", icon: "queue", delta: "No drafts yet", productFilter: "Drafts", active: productFilter === "Drafts" },
+    { label: "Pending Approval", value: "0", icon: "calendar", delta: "No blocked specs", productFilter: "Pending Approval", active: productFilter === "Pending Approval" },
+    { label: "Top Category", value: "Uniforms", icon: "ready", delta: "Primary program", productFilter: "Uniforms", active: productFilter === "Uniforms" },
   ];
 
   return `
@@ -520,7 +530,7 @@ function renderRecentOrdersTable() {
         ${orders
           .map(
             (order) => `
-              <tr>
+              <tr data-recent-order-id="${order.id}">
                 <td class="request-id">${order.id}</td>
                 <td>${order.client}</td>
                 <td><div class="stacked-cell"><strong>${order.items}</strong><span>${order.qty} units</span></div></td>
@@ -597,7 +607,7 @@ function renderOrdersTable(filteredOrders) {
 
 function renderOrderRow(order) {
   return `
-    <tr class="${order.id === selectedId ? "selected" : ""}">
+    <tr class="${order.id === selectedId ? "selected" : ""}" data-order-id="${order.id}">
       <td class="request-id">${order.id}</td>
       <td>
         <div class="client-cell">
@@ -893,12 +903,13 @@ function renderGlobalSearchHint() {
 
   if (
     "admin polo uniform".includes(normalized) ||
-    "embroidered staff cap".includes(normalized)
+    "embroidered staff cap".includes(normalized) ||
+    normalized.includes("cap")
   ) {
     return `<button class="search-suggestion" data-route-target="/products" type="button">Open Products</button>`;
   }
 
-  if ("orders".includes(normalized) || "reorder".includes(normalized)) {
+  if ("orders".includes(normalized) || "reorder".includes(normalized) || normalized.includes("trry-uc")) {
     return `<button class="search-suggestion" data-route-target="/orders" type="button">Open Orders</button>`;
   }
 
@@ -906,8 +917,20 @@ function renderGlobalSearchHint() {
 }
 
 function renderStatusCard(item) {
+  const interactiveAttrs = [
+    item.route ? `data-route-target="${item.route}"` : "",
+    item.orderFilter ? `data-order-filter="${item.orderFilter}"` : "",
+    item.clientFilter ? `data-client-filter="${item.clientFilter}"` : "",
+    item.productFilter ? `data-product-kpi-filter="${item.productFilter}"` : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+  const classes = ["status-card", interactiveAttrs ? "clickable-card" : "", item.active ? "active" : ""]
+    .filter(Boolean)
+    .join(" ");
+
   return `
-    <article class="status-card">
+    <article class="${classes}" ${interactiveAttrs}>
       <span class="icon-mark ${item.icon}" aria-hidden="true"></span>
       <div>
         <p>${item.label}</p>
@@ -962,6 +985,30 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-order-filter]").forEach((card) => {
+    card.addEventListener("click", () => {
+      activeFilter = card.dataset.orderFilter;
+      if (card.dataset.routeTarget) {
+        window.history.pushState({}, "", card.dataset.routeTarget);
+      }
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-client-filter]").forEach((card) => {
+    card.addEventListener("click", () => {
+      clientKpiFilter = card.dataset.clientFilter;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-product-kpi-filter]").forEach((card) => {
+    card.addEventListener("click", () => {
+      productFilter = card.dataset.productKpiFilter;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       activeFilter = button.dataset.filter;
@@ -972,6 +1019,17 @@ function bindEvents() {
   document.querySelectorAll("[data-product-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       productFilter = button.dataset.productFilter;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-recent-order-id]").forEach((row) => {
+    row.addEventListener("click", () => {
+      const order = orders.find((item) => item.id === row.dataset.recentOrderId);
+      selectedId = row.dataset.recentOrderId;
+      draftStatus = order?.status ?? draftStatus;
+      activeFilter = "All";
+      window.history.pushState({}, "", "/orders");
       render();
     });
   });
@@ -1023,6 +1081,13 @@ function bindEvents() {
       globalSearchQuery = event.target.value;
       render();
       document.getElementById("global-search")?.focus();
+    });
+    globalSearch.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      const route = getSearchRoute(globalSearch.value);
+      if (!route) return;
+      event.preventDefault();
+      applySearchRoute(route);
     });
   }
 
@@ -1087,11 +1152,11 @@ window.addEventListener("popstate", render);
 
 function getOrderStatCards() {
   return [
-    { label: "Pending Review", value: countOrders("Pending Review"), icon: "queue", delta: "Awaiting admin action" },
-    { label: "Approved", value: countOrders("Approved"), icon: "check", delta: "Ready for scheduling" },
-    { label: "In Production", value: countOrders("In Production"), icon: "factory", delta: "Currently moving" },
-    { label: "Ready", value: countOrders("Ready"), icon: "ready", delta: "Awaiting fulfillment" },
-    { label: "Completed", value: countOrders("Completed"), icon: "calendar", delta: "Closed requests" },
+    { label: "Pending Review", value: countOrders("Pending Review"), icon: "queue", delta: "Awaiting admin action", orderFilter: "Pending Review", active: activeFilter === "Pending Review" },
+    { label: "Approved", value: countOrders("Approved"), icon: "check", delta: "Ready for scheduling", orderFilter: "Approved", active: activeFilter === "Approved" },
+    { label: "In Production", value: countOrders("In Production"), icon: "factory", delta: "Currently moving", orderFilter: "In Production", active: activeFilter === "In Production" },
+    { label: "Ready", value: countOrders("Ready"), icon: "ready", delta: "Awaiting fulfillment", orderFilter: "Ready", active: activeFilter === "Ready" },
+    { label: "Completed", value: countOrders("Completed"), icon: "calendar", delta: "Closed requests", orderFilter: "Completed", active: activeFilter === "Completed" },
   ];
 }
 
@@ -1113,6 +1178,50 @@ function getFilteredOrders() {
 
     return matchesFilter && matchesQuery;
   });
+}
+
+function getSearchRoute(value) {
+  const normalized = value.trim().toLowerCase();
+  if (!normalized) return null;
+
+  if ("urban coffee".includes(normalized)) {
+    return { path: "/clients", clientQuery: "Urban Coffee" };
+  }
+
+  if ("admin polo uniform".includes(normalized)) {
+    return { path: "/products", productQuery: "Admin Polo" };
+  }
+
+  if ("embroidered staff cap".includes(normalized) || normalized.includes("cap")) {
+    return { path: "/products", productQuery: "Cap" };
+  }
+
+  if (normalized.includes("trry-uc") || "orders".includes(normalized) || "reorder".includes(normalized)) {
+    return { path: "/orders", orderQuery: value.trim() };
+  }
+
+  return null;
+}
+
+function applySearchRoute(route) {
+  if (route.clientQuery) {
+    clientQuery = route.clientQuery;
+    clientKpiFilter = "All";
+  }
+
+  if (route.productQuery) {
+    productQuery = route.productQuery;
+    productFilter = "All";
+  }
+
+  if (route.orderQuery) {
+    query = route.orderQuery;
+    activeFilter = "All";
+  }
+
+  globalSearchQuery = "";
+  window.history.pushState({}, "", route.path);
+  render();
 }
 
 function statusToClass(status) {

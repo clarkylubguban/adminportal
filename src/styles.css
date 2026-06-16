@@ -569,6 +569,21 @@ h1 {
   box-shadow: var(--card-shadow);
 }
 
+.status-card.clickable-card {
+  cursor: pointer;
+}
+
+.status-card.clickable-card:hover {
+  border-color: #ffd4b9;
+  background: #fffaf6;
+  transform: translateY(-1px);
+}
+
+.status-card.active {
+  border-color: var(--orange);
+  background: #fff7f1;
+}
+
 .icon-mark {
   width: 40px;
   height: 40px;
@@ -1091,8 +1106,15 @@ tbody tr:hover td {
   background: #fffaf7;
 }
 
+.orders-table tbody tr,
+.recent-table tbody tr,
 .clients-table tbody tr {
   cursor: pointer;
+}
+
+.recent-table tbody tr:hover td,
+.orders-table tbody tr:hover td {
+  background: #fff8f2;
 }
 
 .products-table tbody tr {
@@ -1544,6 +1566,37 @@ td:nth-child(9) {
   padding: 0 12px;
   font-size: 12px;
   font-weight: 800;
+}
+
+.quick-actions button:hover:not(:disabled),
+.quick-panel-actions a:hover,
+.quick-panel-actions button:hover:not(:disabled) {
+  border-color: var(--orange);
+  color: var(--orange);
+  background: #fffaf6;
+}
+
+.quick-actions button:disabled {
+  background: #f4f4f4;
+  color: #9a9a9a;
+  cursor: not-allowed;
+}
+
+.quick-actions button strong,
+.quick-actions button small {
+  display: block;
+}
+
+.quick-actions button div {
+  min-width: 0;
+  text-align: left;
+}
+
+.quick-actions button small {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 650;
+  margin-top: 2px;
 }
 
 .quick-actions button span {
