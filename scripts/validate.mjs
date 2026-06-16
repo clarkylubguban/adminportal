@@ -35,7 +35,7 @@ const staleTemplateName = ["zen", "da"].join("");
 const staleTemplatePattern = new RegExp(staleTemplateName, "i");
 
 if (staleTemplatePattern.test(html) || staleTemplatePattern.test(appCode)) {
-  throw new Error("Found stale template copy in deployable app files.");
+  throw new Error("Found stale copy in deployable app files.");
 }
 
 console.log("Build validation passed.");
