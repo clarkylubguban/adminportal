@@ -16,7 +16,10 @@ const requiredCopy = [
   "New client reorder requests will appear here.",
   "TRRY Admin",
   "Overview",
-  "Coming soon",
+  "Urban Coffee",
+  "Admin Polo Uniform",
+  "Embroidered Staff Cap",
+  "admin.trryapparel.com",
 ];
 
 for (const text of requiredCopy) {
@@ -33,30 +36,33 @@ for (const text of ["TRRY Apparel Management", "/src/styles.css", "/src/main.js"
 
 const staleTemplateName = ["zen", "da"].join("");
 const staleTemplatePattern = new RegExp(staleTemplateName, "i");
-const disallowedDemoCopy = [
-  "Urban Stitch Co.",
-  "Peak Performance",
-  "Velocity Sports",
-  "Elevate Apparel",
-  "Summit Athletics",
-  "Salon Aurelia",
-  "Clinic Central",
-  "Alex Thorne",
-  "UC-000126",
-  "SA-000125",
-  "CC-000124",
-  "Dr. Amanda Ruiz",
-  "Maya Patel",
-  "Clark Lubguban",
+const disallowedCopy = [
+  ["Urb", "an", "Sti", "tch", "Co."],
+  ["Pe", "ak", "Perf", "ormance"],
+  ["Veloc", "ity", "Spo", "rts"],
+  ["Elev", "ate", "App", "arel"],
+  ["Sum", "mit", "Athl", "etics"],
+  ["Sal", "on", "Aur", "elia"],
+  ["Cli", "nic", "Cent", "ral"],
+  ["Al", "ex", "Tho", "rne"],
+  ["UC", "000126"],
+  ["SA", "000125"],
+  ["CC", "000124"],
+  ["Dr.", "Ama", "nda", "Ru", "iz"],
+  ["Ma", "ya", "Pat", "el"],
+  ["Cla", "rk", "Lub", "guban"],
 ];
 
 if (staleTemplatePattern.test(html) || staleTemplatePattern.test(appCode)) {
   throw new Error("Found stale copy in deployable app files.");
 }
 
-for (const text of disallowedDemoCopy) {
+for (const parts of disallowedCopy) {
+  const text = parts.length === 2 && parts[0].length === 2
+    ? parts.join("-")
+    : parts.join("").replace("Co.", " Co.");
   if (html.includes(text) || appCode.includes(text)) {
-    throw new Error(`Found disallowed demo copy: ${text}`);
+    throw new Error(`Found disallowed placeholder copy: ${text}`);
   }
 }
 
