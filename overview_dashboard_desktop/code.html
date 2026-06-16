@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TRRY Apparel Management - Overview Dashboard</title>
+<!-- Google Fonts & Material Symbols -->
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        .material-symbols-outlined.filled {
+            font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+    </style>
+<!-- Tailwind Config defined by the Design System -->
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "primary-fixed": "#ffdbcc",
+                    "on-primary-fixed-variant": "#7a3000",
+                    "on-error-container": "#93000a",
+                    "primary-fixed-dim": "#ffb693",
+                    "surface-bright": "#fbf9f8",
+                    "primary-container": "#ff6b00",
+                    "error": "#ba1a1a",
+                    "on-tertiary-fixed-variant": "#454747",
+                    "on-primary-fixed": "#351000",
+                    "secondary-container": "#e2dfde",
+                    "inverse-on-surface": "#f2f0f0",
+                    "on-surface": "#1b1c1c",
+                    "on-tertiary-fixed": "#1a1c1c",
+                    "tertiary-fixed": "#e2e2e2",
+                    "primary": "#a04100",
+                    "on-secondary-fixed": "#1c1b1b",
+                    "outline": "#8e7164",
+                    "on-background": "#1b1c1c",
+                    "on-primary": "#ffffff",
+                    "background": "#fbf9f8",
+                    "on-primary-container": "#572000",
+                    "surface-container-highest": "#e4e2e2",
+                    "error-container": "#ffdad6",
+                    "surface-dim": "#dbdad9",
+                    "surface": "#fbf9f8",
+                    "on-tertiary-container": "#2f3132",
+                    "inverse-surface": "#303031",
+                    "surface-tint": "#a04100",
+                    "tertiary-container": "#989999",
+                    "secondary": "#5f5e5e",
+                    "surface-container-high": "#e9e8e7",
+                    "tertiary-fixed-dim": "#c6c6c7",
+                    "on-secondary-fixed-variant": "#474746",
+                    "inverse-primary": "#ffb693",
+                    "on-tertiary": "#ffffff",
+                    "tertiary": "#5d5f5f",
+                    "surface-container-low": "#f5f3f3",
+                    "secondary-fixed": "#e5e2e1",
+                    "surface-container-lowest": "#ffffff",
+                    "on-secondary-container": "#636262",
+                    "on-secondary": "#ffffff",
+                    "surface-variant": "#e4e2e2",
+                    "surface-container": "#efeded",
+                    "on-surface-variant": "#5a4136",
+                    "on-error": "#ffffff",
+                    "secondary-fixed-dim": "#c8c6c5",
+                    "outline-variant": "#e2bfb0"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.25rem",
+                    "lg": "0.5rem",
+                    "xl": "0.75rem",
+                    "full": "9999px"
+            },
+            "spacing": {
+                    "stack-lg": "24px",
+                    "stack-sm": "8px",
+                    "container-max": "1440px",
+                    "stack-md": "16px",
+                    "gutter": "24px",
+                    "sidebar-width": "240px",
+                    "margin-page": "32px"
+            },
+            "fontFamily": {
+                    "label-sm": ["Hanken Grotesk"],
+                    "label-bold": ["Hanken Grotesk"],
+                    "headline-md": ["Hanken Grotesk"],
+                    "headline-lg": ["Hanken Grotesk"],
+                    "display": ["Hanken Grotesk"],
+                    "body-md": ["Hanken Grotesk"],
+                    "body-lg": ["Hanken Grotesk"]
+            },
+            "fontSize": {
+                    "label-sm": ["11px", {"lineHeight": "1", "fontWeight": "500"}],
+                    "label-bold": ["12px", {"lineHeight": "1", "letterSpacing": "0.05em", "fontWeight": "700"}],
+                    "headline-md": ["20px", {"lineHeight": "1.4", "fontWeight": "600"}],
+                    "headline-lg": ["24px", {"lineHeight": "1.3", "fontWeight": "600"}],
+                    "display": ["32px", {"lineHeight": "1.2", "letterSpacing": "-0.02em", "fontWeight": "700"}],
+                    "body-md": ["14px", {"lineHeight": "1.5", "fontWeight": "400"}],
+                    "body-lg": ["16px", {"lineHeight": "1.5", "fontWeight": "400"}]
+            }
+          }
+        }
+      }
+    </script>
+</head>
+<body class="bg-background text-on-background font-body-md text-body-md antialiased min-h-screen flex">
+<!-- JSON Component: SideNavBar -->
+<nav class="bg-inverse-surface dark:bg-surface-container-lowest fixed left-0 top-0 h-full w-[240px] border-r border-outline-variant shadow-sm z-40 hidden md:flex flex-col h-full py-stack-lg">
+<!-- Brand Identity -->
+<div class="px-gutter mb-stack-lg flex items-center space-x-3">
+<div class="w-10 h-10 rounded bg-primary-container flex items-center justify-center">
+<span class="material-symbols-outlined text-on-primary">factory</span>
+</div>
+<div>
+<h1 class="font-display text-display text-on-primary-fixed dark:text-primary-fixed-dim text-lg tracking-tight">IndustrialSaaS</h1>
+<p class="font-label-sm text-label-sm text-surface-variant uppercase tracking-wider mt-1">Production Manager</p>
+</div>
+</div>
+<!-- CTA Action Button -->
+<div class="px-gutter mb-stack-lg">
+<button class="w-full bg-primary-container text-on-primary font-label-bold text-label-bold py-3 rounded-lg flex items-center justify-center space-x-2 hover:bg-primary transition-colors active:scale-95 duration-150">
+<span class="material-symbols-outlined">add</span>
+<span>New Production Run</span>
+</button>
+</div>
+<!-- Navigation Links -->
+<div class="flex-1 overflow-y-auto px-4 space-y-2">
+<!-- Active State Navigation -->
+<a class="flex items-center space-x-3 px-3 py-3 rounded text-primary-container font-bold border-l-4 border-primary-container bg-surface-variant/10 active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined filled">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+<!-- Inactive State Navigation -->
+<a class="flex items-center space-x-3 px-3 py-3 rounded border-l-4 border-transparent text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">factory</span>
+<span class="font-body-md text-body-md">Production</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-3 rounded border-l-4 border-transparent text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">inventory_2</span>
+<span class="font-body-md text-body-md">Inventory</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-3 rounded border-l-4 border-transparent text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">shopping_cart</span>
+<span class="font-body-md text-body-md">Orders</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-3 rounded border-l-4 border-transparent text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">bar_chart</span>
+<span class="font-body-md text-body-md">Analytics</span>
+</a>
+<a class="flex items-center space-x-3 px-3 py-3 rounded border-l-4 border-transparent text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</div>
+<!-- Bottom Profile Snippet (Optional/Implied) -->
+<div class="px-gutter pt-stack-lg border-t border-outline-variant/30 mt-auto">
+<div class="flex items-center space-x-3">
+<img alt="User Profile" class="w-10 h-10 rounded-full object-cover border border-outline-variant" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDZk89-amXKrGspTHbKn6lh0lsdK-QPfBbu2wuvI1CmNrh0XP6J-jUlZdUkQPEr7nyhwQ1LcAtFpLx9_bhFDKFB_VlFcAiAhzRiovqKKhmKCKQ5PCNBlAUkYVZH9GZJTASkujxubsL23Q2Wu-SnXHpmZ6BjGS9c6X4Y-umq6VvoH3ui38Hc-rYmOQQ1RI--bkbD60sMmPfaAtL4WWWoFb8lJArSd96LGCGcKW2AKbmNgT_U6ifhBCU-qVrQ4Lh0Kf3upQVikkdOh8k"/>
+<div>
+<p class="font-body-sm text-body-md text-on-surface-variant">Admin User</p>
+</div>
+</div>
+</div>
+</nav>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col md:ml-sidebar-width min-h-screen">
+<!-- JSON Component: TopNavBar -->
+<header class="bg-inverse-surface dark:bg-surface-container-lowest fixed top-0 right-0 w-full md:w-[calc(100%-240px)] z-30 border-b border-outline-variant shadow-md flex justify-between items-center h-16 px-gutter">
+<!-- Left Side: Search Bar & Mobile Nav Toggle -->
+<div class="flex items-center flex-1">
+<button class="md:hidden mr-4 text-surface-variant hover:text-on-surface-variant">
+<span class="material-symbols-outlined">menu</span>
+</button>
+<!-- Search Component -->
+<div class="relative w-full max-w-md hidden sm:block focus-within:ring-2 focus-within:ring-primary rounded-lg transition-all">
+<div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+<span class="material-symbols-outlined text-surface-variant">search</span>
+</div>
+<input class="block w-full pl-10 pr-3 py-2 border border-outline-variant rounded-lg leading-5 bg-surface-container-lowest placeholder-surface-variant text-on-surface focus:outline-none focus:border-primary-container sm:text-sm transition-colors" placeholder="Search orders, clients, or cmd+k..." type="text"/>
+</div>
+</div>
+<!-- Right Side: Actions & Profile -->
+<div class="flex items-center space-x-4">
+<!-- Trailing Icon Actions -->
+<button class="text-surface-variant hover:text-primary-fixed-dim transition-all relative p-2 rounded-full hover:bg-surface-variant/10">
+<span class="material-symbols-outlined">notifications</span>
+<span class="absolute top-1 right-1 w-2 h-2 bg-primary-container rounded-full"></span>
+</button>
+<button class="text-surface-variant hover:text-primary-fixed-dim transition-all p-2 rounded-full hover:bg-surface-variant/10">
+<span class="material-symbols-outlined">help_outline</span>
+</button>
+<!-- Divider -->
+<div class="h-6 w-px bg-outline-variant mx-2"></div>
+<!-- Trailing Primary Action (Quick Action Button) -->
+<button class="hidden sm:flex items-center space-x-1 bg-surface-container-highest text-on-surface font-label-bold text-label-bold px-4 py-2 rounded border border-outline-variant hover:bg-surface-variant hover:text-primary-fixed-dim transition-all focus-within:ring-2 focus-within:ring-primary">
+<span>Quick Action</span>
+<span class="material-symbols-outlined text-[16px]">expand_more</span>
+</button>
+<!-- Profile Avatar -->
+<img alt="Manager Avatar" class="w-8 h-8 rounded-full border border-outline-variant object-cover cursor-pointer" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDZk89-amXKrGspTHbKn6lh0lsdK-QPfBbu2wuvI1CmNrh0XP6J-jUlZdUkQPEr7nyhwQ1LcAtFpLx9_bhFDKFB_VlFcAiAhzRiovqKKhmKCKQ5PCNBlAUkYVZH9GZJTASkujxubsL23Q2Wu-SnXHpmZ6BjGS9c6X4Y-umq6VvoH3ui38Hc-rYmOQQ1RI--bkbD60sMmPfaAtL4WWWoFb8lJArSd96LGCGcKW2AKbmNgT_U6ifhBCU-qVrQ4Lh0Kf3upQVikkdOh8k"/>
+</div>
+</header>
+<!-- Canvas Area -->
+<main class="flex-1 p-margin-page mt-16 bg-background overflow-x-hidden">
+<!-- Page Header -->
+<div class="mb-stack-lg flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-surface">Overview Dashboard</h2>
+<p class="font-body-md text-body-md text-secondary mt-1">TRRY Apparel Management System</p>
+</div>
+<div class="flex items-center space-x-2 text-label-sm font-label-sm text-secondary bg-surface-container py-1 px-3 rounded-full border border-outline-variant">
+<span class="material-symbols-outlined text-[14px]">calendar_today</span>
+<span>Last updated: Just now</span>
+</div>
+</div>
+<!-- Dashboard Layout Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Main Column (Left/Center) - Takes 8 cols on large screens -->
+<div class="lg:col-span-8 flex flex-col gap-stack-lg">
+<!-- KPI Metric Cards Grid -->
+<div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-stack-md">
+<!-- Metric Card 1 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container transform -translate-x-full group-hover:translate-x-0 transition-transform"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">pending_actions</span>
+</div>
+<span class="font-label-bold text-label-bold text-primary-container bg-primary-fixed px-2 py-1 rounded">+4%</span>
+</div>
+<p class="font-body-md text-body-md text-secondary mb-1 uppercase tracking-wide text-xs">Pending Review</p>
+<h3 class="font-display text-display text-on-surface">28</h3>
+</div>
+<!-- Metric Card 2 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container transform -translate-x-full group-hover:translate-x-0 transition-transform"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">check_circle</span>
+</div>
+<span class="font-label-bold text-label-bold text-primary-container bg-primary-fixed px-2 py-1 rounded">+12%</span>
+</div>
+<p class="font-body-md text-body-md text-secondary mb-1 uppercase tracking-wide text-xs">Approved</p>
+<h3 class="font-display text-display text-on-surface">114</h3>
+</div>
+<!-- Metric Card 3 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container transform -translate-x-full group-hover:translate-x-0 transition-transform"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">precision_manufacturing</span>
+</div>
+<span class="font-label-bold text-label-bold text-primary-container bg-primary-fixed px-2 py-1 rounded">+8%</span>
+</div>
+<p class="font-body-md text-body-md text-secondary mb-1 uppercase tracking-wide text-xs">In Production</p>
+<h3 class="font-display text-display text-on-surface">45</h3>
+</div>
+<!-- Metric Card 4 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow relative overflow-hidden group">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container transform -translate-x-full group-hover:translate-x-0 transition-transform"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">local_shipping</span>
+</div>
+<span class="font-label-bold text-label-bold text-primary-container bg-primary-fixed px-2 py-1 rounded">New</span>
+</div>
+<p class="font-body-md text-body-md text-secondary mb-1 uppercase tracking-wide text-xs">Ready to Ship</p>
+<h3 class="font-display text-display text-on-surface">19</h3>
+</div>
+<!-- Metric Card 5 -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] hover:shadow-md transition-shadow relative overflow-hidden group sm:col-span-2 xl:col-span-1">
+<div class="absolute left-0 top-0 bottom-0 w-1 bg-primary-container transform -translate-x-full group-hover:translate-x-0 transition-transform"></div>
+<div class="flex justify-between items-start mb-4">
+<div class="w-10 h-10 rounded-full bg-surface-container flex items-center justify-center">
+<span class="material-symbols-outlined text-secondary">task_alt</span>
+</div>
+</div>
+<p class="font-body-md text-body-md text-secondary mb-1 uppercase tracking-wide text-xs">Completed</p>
+<h3 class="font-display text-display text-on-surface">342</h3>
+</div>
+</div>
+<!-- Recent Orders Table -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.04)] overflow-hidden flex flex-col flex-1">
+<div class="p-stack-md border-b border-outline-variant flex justify-between items-center bg-surface-bright">
+<h3 class="font-headline-md text-headline-md text-on-surface">Recent Orders</h3>
+<button class="text-primary-container hover:text-primary font-label-bold text-label-bold flex items-center space-x-1">
+<span>View All</span>
+<span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+</button>
+</div>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr class="bg-surface-container-low border-b border-outline-variant">
+<th class="px-6 py-4 font-label-bold text-label-bold text-secondary uppercase tracking-[0.05em] text-xs">Order ID</th>
+<th class="px-6 py-4 font-label-bold text-label-bold text-secondary uppercase tracking-[0.05em] text-xs">Client</th>
+<th class="px-6 py-4 font-label-bold text-label-bold text-secondary uppercase tracking-[0.05em] text-xs">Category</th>
+<th class="px-6 py-4 font-label-bold text-label-bold text-secondary uppercase tracking-[0.05em] text-xs">Date</th>
+<th class="px-6 py-4 font-label-bold text-label-bold text-secondary uppercase tracking-[0.05em] text-xs">Status</th>
+<th class="px-6 py-4 font-label-bold text-label-bold text-secondary uppercase tracking-[0.05em] text-xs text-right">Action</th>
+</tr>
+</thead>
+<tbody class="divide-y divide-outline-variant">
+<!-- Row 1 -->
+<tr class="hover:bg-surface-container-low transition-colors min-h-[56px] group">
+<td class="px-6 py-4 whitespace-nowrap font-label-bold text-on-surface">#TR-8902</td>
+<td class="px-6 py-4 whitespace-nowrap text-on-surface">Apex Athletics</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Activewear</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Oct 24, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary-fixed text-on-primary-fixed-variant border border-primary-fixed-dim">
+                                                Production
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-surface-variant hover:text-on-surface transition-colors p-1 rounded hover:bg-surface-variant/20">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 2 -->
+<tr class="hover:bg-surface-container-low transition-colors min-h-[56px] group">
+<td class="px-6 py-4 whitespace-nowrap font-label-bold text-on-surface">#TR-8901</td>
+<td class="px-6 py-4 whitespace-nowrap text-on-surface">Summit Gear</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Outerwear</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Oct 23, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-container-high text-on-surface border border-outline-variant">
+                                                Approved
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-surface-variant hover:text-on-surface transition-colors p-1 rounded hover:bg-surface-variant/20">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 3 -->
+<tr class="hover:bg-surface-container-low transition-colors min-h-[56px] group">
+<td class="px-6 py-4 whitespace-nowrap font-label-bold text-on-surface">#TR-8898</td>
+<td class="px-6 py-4 whitespace-nowrap text-on-surface">Urban Thread</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Basics</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Oct 22, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-tertiary-fixed text-on-tertiary-fixed-variant border border-tertiary-fixed-dim">
+                                                Shipped
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-surface-variant hover:text-on-surface transition-colors p-1 rounded hover:bg-surface-variant/20">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 4 -->
+<tr class="hover:bg-surface-container-low transition-colors min-h-[56px] group">
+<td class="px-6 py-4 whitespace-nowrap font-label-bold text-on-surface">#TR-8895</td>
+<td class="px-6 py-4 whitespace-nowrap text-on-surface">Vanguard</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Denim</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Oct 21, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-error-container text-on-error-container border border-error/20">
+                                                On Hold
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-surface-variant hover:text-on-surface transition-colors p-1 rounded hover:bg-surface-variant/20">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+<!-- Row 5 -->
+<tr class="hover:bg-surface-container-low transition-colors min-h-[56px] group">
+<td class="px-6 py-4 whitespace-nowrap font-label-bold text-on-surface">#TR-8890</td>
+<td class="px-6 py-4 whitespace-nowrap text-on-surface">Apex Athletics</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Activewear</td>
+<td class="px-6 py-4 whitespace-nowrap text-secondary">Oct 19, 2023</td>
+<td class="px-6 py-4 whitespace-nowrap">
+<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-surface-dim text-on-surface border border-outline-variant">
+                                                Completed
+                                            </span>
+</td>
+<td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+<button class="text-surface-variant hover:text-on-surface transition-colors p-1 rounded hover:bg-surface-variant/20">
+<span class="material-symbols-outlined">more_vert</span>
+</button>
+</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</div>
+<!-- Right Sidebar Column - Takes 4 cols on large screens -->
+<div class="lg:col-span-4 flex flex-col gap-stack-lg">
+<!-- Quick Actions Grid -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-md shadow-[0px_4px_20px_rgba(0,0,0,0.04)]">
+<h3 class="font-headline-md text-headline-md text-on-surface mb-4 px-2">Quick Actions</h3>
+<div class="grid grid-cols-2 gap-3">
+<button class="flex flex-col items-center justify-center p-4 bg-surface-container-low border border-outline-variant rounded-lg hover:border-primary-container hover:bg-primary-fixed/30 transition-all group">
+<span class="material-symbols-outlined text-secondary group-hover:text-primary-container mb-2">add_shopping_cart</span>
+<span class="font-label-bold text-label-bold text-on-surface">Create Order</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 bg-surface-container-low border border-outline-variant rounded-lg hover:border-primary-container hover:bg-primary-fixed/30 transition-all group">
+<span class="material-symbols-outlined text-secondary group-hover:text-primary-container mb-2">person_add</span>
+<span class="font-label-bold text-label-bold text-on-surface">Add Client</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 bg-surface-container-low border border-outline-variant rounded-lg hover:border-primary-container hover:bg-primary-fixed/30 transition-all group">
+<span class="material-symbols-outlined text-secondary group-hover:text-primary-container mb-2">category</span>
+<span class="font-label-bold text-label-bold text-on-surface">Add Product</span>
+</button>
+<button class="flex flex-col items-center justify-center p-4 bg-surface-container-low border border-outline-variant rounded-lg hover:border-primary-container hover:bg-primary-fixed/30 transition-all group">
+<span class="material-symbols-outlined text-secondary group-hover:text-primary-container mb-2">refresh</span>
+<span class="font-label-bold text-label-bold text-on-surface">Reorder</span>
+</button>
+</div>
+</div>
+<!-- Today's Activity Timeline -->
+<div class="bg-surface-container-lowest border border-outline-variant rounded-xl p-stack-lg shadow-[0px_4px_20px_rgba(0,0,0,0.04)] flex-1">
+<div class="flex justify-between items-center mb-6">
+<h3 class="font-headline-md text-headline-md text-on-surface">Today's Activity</h3>
+<button class="text-surface-variant hover:text-on-surface">
+<span class="material-symbols-outlined">filter_list</span>
+</button>
+</div>
+<div class="relative border-l border-outline-variant ml-3 space-y-6 pb-4">
+<!-- Timeline Item 1 -->
+<div class="relative pl-6">
+<div class="absolute w-3 h-3 bg-surface-dim border-2 border-surface-container-lowest rounded-full -left-[6.5px] top-1"></div>
+<div class="flex justify-between items-start">
+<div>
+<p class="font-body-md text-on-surface font-medium">Order marked complete</p>
+<p class="font-body-md text-secondary text-sm mt-0.5">Order #TR-8890 finished production.</p>
+</div>
+<span class="font-label-sm text-secondary text-xs whitespace-nowrap ml-2">10:45 AM</span>
+</div>
+</div>
+<!-- Timeline Item 2 -->
+<div class="relative pl-6">
+<div class="absolute w-3 h-3 bg-primary-container border-2 border-surface-container-lowest rounded-full -left-[6.5px] top-1"></div>
+<div class="flex justify-between items-start">
+<div>
+<p class="font-body-md text-on-surface font-medium">Internal note added</p>
+<p class="font-body-md text-secondary text-sm mt-0.5">Delay on hardware for Outerwear batch.</p>
+</div>
+<span class="font-label-sm text-secondary text-xs whitespace-nowrap ml-2">09:12 AM</span>
+</div>
+</div>
+<!-- Timeline Item 3 -->
+<div class="relative pl-6">
+<div class="absolute w-3 h-3 bg-surface-dim border-2 border-surface-container-lowest rounded-full -left-[6.5px] top-1"></div>
+<div class="flex justify-between items-start">
+<div>
+<p class="font-body-md text-on-surface font-medium">New client created</p>
+<p class="font-body-md text-secondary text-sm mt-0.5">Profile setup for "Lumina Studio".</p>
+</div>
+<span class="font-label-sm text-secondary text-xs whitespace-nowrap ml-2">08:30 AM</span>
+</div>
+</div>
+<!-- Timeline Item 4 -->
+<div class="relative pl-6">
+<div class="absolute w-3 h-3 bg-surface-dim border-2 border-surface-container-lowest rounded-full -left-[6.5px] top-1"></div>
+<div class="flex justify-between items-start">
+<div>
+<p class="font-body-md text-on-surface font-medium">Batch dispatched</p>
+<p class="font-body-md text-secondary text-sm mt-0.5">Shipment #402 left facility.</p>
+</div>
+<span class="font-label-sm text-secondary text-xs whitespace-nowrap ml-2">Yesterday</span>
+</div>
+</div>
+</div>
+<button class="w-full mt-4 py-2 border border-outline-variant text-on-surface font-label-bold text-label-bold rounded hover:bg-surface-container-low transition-colors">
+                            View Full Log
+                        </button>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

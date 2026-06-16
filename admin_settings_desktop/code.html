@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>TRRY Apparel Management - Admin Settings</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary-fixed": "#ffdbcc",
+                        "on-primary-fixed-variant": "#7a3000",
+                        "on-error-container": "#93000a",
+                        "primary-fixed-dim": "#ffb693",
+                        "surface-bright": "#fbf9f8",
+                        "primary-container": "#ff6b00",
+                        "error": "#ba1a1a",
+                        "on-tertiary-fixed-variant": "#454747",
+                        "on-primary-fixed": "#351000",
+                        "secondary-container": "#e2dfde",
+                        "inverse-on-surface": "#f2f0f0",
+                        "on-surface": "#1b1c1c",
+                        "on-tertiary-fixed": "#1a1c1c",
+                        "tertiary-fixed": "#e2e2e2",
+                        "primary": "#a04100",
+                        "on-secondary-fixed": "#1c1b1b",
+                        "outline": "#8e7164",
+                        "on-background": "#1b1c1c",
+                        "on-primary": "#ffffff",
+                        "background": "#fbf9f8",
+                        "on-primary-container": "#572000",
+                        "surface-container-highest": "#e4e2e2",
+                        "error-container": "#ffdad6",
+                        "surface-dim": "#dbdad9",
+                        "surface": "#fbf9f8",
+                        "on-tertiary-container": "#2f3132",
+                        "inverse-surface": "#303031",
+                        "surface-tint": "#a04100",
+                        "tertiary-container": "#989999",
+                        "secondary": "#5f5e5e",
+                        "surface-container-high": "#e9e8e7",
+                        "tertiary-fixed-dim": "#c6c6c7",
+                        "on-secondary-fixed-variant": "#474746",
+                        "inverse-primary": "#ffb693",
+                        "on-tertiary": "#ffffff",
+                        "tertiary": "#5d5f5f",
+                        "surface-container-low": "#f5f3f3",
+                        "secondary-fixed": "#e5e2e1",
+                        "surface-container-lowest": "#ffffff",
+                        "on-secondary-container": "#636262",
+                        "on-secondary": "#ffffff",
+                        "surface-variant": "#e4e2e2",
+                        "surface-container": "#efeded",
+                        "on-surface-variant": "#5a4136",
+                        "on-error": "#ffffff",
+                        "secondary-fixed-dim": "#c8c6c5",
+                        "outline-variant": "#e2bfb0"
+                    },
+                    borderRadius: {
+                        DEFAULT: "0.25rem",
+                        lg: "0.5rem",
+                        xl: "0.75rem",
+                        full: "9999px"
+                    },
+                    spacing: {
+                        "stack-lg": "24px",
+                        "stack-sm": "8px",
+                        "container-max": "1440px",
+                        "stack-md": "16px",
+                        "gutter": "24px",
+                        "sidebar-width": "240px",
+                        "margin-page": "32px"
+                    },
+                    fontFamily: {
+                        "label-sm": ["Hanken Grotesk"],
+                        "label-bold": ["Hanken Grotesk"],
+                        "headline-md": ["Hanken Grotesk"],
+                        "headline-lg": ["Hanken Grotesk"],
+                        "display": ["Hanken Grotesk"],
+                        "body-md": ["Hanken Grotesk"],
+                        "body-lg": ["Hanken Grotesk"]
+                    },
+                    fontSize: {
+                        "label-sm": ["11px", { lineHeight: "1", fontWeight: "500" }],
+                        "label-bold": ["12px", { lineHeight: "1", letterSpacing: "0.05em", fontWeight: "700" }],
+                        "headline-md": ["20px", { lineHeight: "1.4", fontWeight: "600" }],
+                        "headline-lg": ["24px", { lineHeight: "1.3", fontWeight: "600" }],
+                        "display": ["32px", { lineHeight: "1.2", letterSpacing: "-0.02em", fontWeight: "700" }],
+                        "body-md": ["14px", { lineHeight: "1.5", fontWeight: "400" }],
+                        "body-lg": ["16px", { lineHeight: "1.5", fontWeight: "400" }]
+                    }
+                }
+            }
+        };
+    </script>
+<style>
+        body { font-family: 'Hanken Grotesk', sans-serif; }
+    </style>
+</head>
+<body class="bg-background text-on-background min-h-screen flex">
+<!-- SideNavBar -->
+<aside class="fixed left-0 top-0 h-full w-[240px] bg-inverse-surface dark:bg-surface-container-lowest text-primary-container dark:text-primary-fixed-dim border-r border-outline-variant shadow-sm z-40 flex flex-col h-full py-stack-lg">
+<div class="px-gutter mb-8">
+<h1 class="font-display text-display text-on-primary-fixed dark:text-primary-fixed-dim">IndustrialSaaS</h1>
+<p class="font-body-md text-body-md text-surface-variant mt-1">Production Manager</p>
+</div>
+<nav class="flex-1 overflow-y-auto px-4 space-y-2">
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-body-md text-body-md">Dashboard</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="factory">factory</span>
+<span class="font-body-md text-body-md">Production</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="inventory_2">inventory_2</span>
+<span class="font-body-md text-body-md">Inventory</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="shopping_cart">shopping_cart</span>
+<span class="font-body-md text-body-md">Orders</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-surface-variant hover:text-on-surface-variant hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="bar_chart">bar_chart</span>
+<span class="font-body-md text-body-md">Analytics</span>
+</a>
+<a class="flex items-center space-x-3 px-4 py-3 rounded-lg text-primary-container font-bold border-l-4 border-primary-container bg-surface-variant/10 hover:bg-surface-variant/20 transition-colors active:scale-95 duration-150" href="#">
+<span class="material-symbols-outlined" data-icon="settings">settings</span>
+<span class="font-body-md text-body-md">Settings</span>
+</a>
+</nav>
+<div class="px-gutter mt-auto pt-4">
+<button class="w-full bg-primary-container text-on-primary font-label-bold text-label-bold py-3 rounded-lg hover:bg-primary transition-colors flex items-center justify-center space-x-2">
+<span class="material-symbols-outlined text-[18px]">add</span>
+<span>New Production Run</span>
+</button>
+</div>
+</aside>
+<!-- Main Content Wrapper -->
+<div class="flex-1 flex flex-col min-w-0 ml-sidebar-width">
+<!-- TopNavBar -->
+<header class="fixed top-0 right-0 w-[calc(100%-240px)] z-50 bg-inverse-surface dark:bg-surface-container-lowest border-b border-outline-variant shadow-md h-16 px-gutter flex justify-between items-center">
+<div class="flex items-center space-x-4">
+<div class="relative focus-within:ring-2 focus-within:ring-primary rounded-md">
+<span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-surface-variant">search</span>
+<input class="pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-md font-body-md text-body-md text-on-surface focus:outline-none focus:border-primary-container w-64" placeholder="Search (Cmd+K)" type="text"/>
+</div>
+</div>
+<div class="flex items-center space-x-6">
+<div class="flex items-center space-x-4">
+<button class="text-surface-variant hover:text-primary-fixed-dim transition-all relative">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+<span class="absolute top-0 right-0 w-2 h-2 bg-error rounded-full"></span>
+</button>
+<button class="text-surface-variant hover:text-primary-fixed-dim transition-all">
+<span class="material-symbols-outlined" data-icon="help_outline">help_outline</span>
+</button>
+</div>
+<div class="h-8 w-px bg-outline-variant"></div>
+<div class="flex items-center space-x-3 cursor-pointer group">
+<img alt="Manager Avatar" class="w-8 h-8 rounded-full border border-outline-variant group-hover:border-primary-container transition-colors" data-alt="A professional headshot of an industrial production manager, looking confident. Clean, modern light-mode lighting. Monochromatic background with a hint of corporate orange. High-end, high-visibility aesthetic. Corporate Tooling vibe." src="https://lh3.googleusercontent.com/aida-public/AB6AXuAGpr6IY03FmIlmaYP-NTehK6twHGjGAC3U6Pa8SdqRnuO2A6G0XLVJoDq2JTwcDMxG_VTUOGkQ6jKao2xJ-t8gSX4xvHERSp2zExGL5PagliS8_rMcVoo2fF7eJ9RexitvmST10nCdlOsMsBqIaZX1TpwB4q6Ca5BmfqYnzmsIMunuLbifBvbpEY7hKqqXXqEsTMXsZG6qyl5ws1viwmogCl_XtcXSy1RoiZyx025u82bVjAfgKVEkx2qLJFmLObX_wHmUfWvxy3k"/>
+<span class="font-label-bold text-label-bold text-primary-container">Quick Action</span>
+</div>
+</div>
+</header>
+<!-- Main Canvas -->
+<main class="flex-1 mt-16 p-margin-page overflow-y-auto">
+<div class="max-w-[1024px] mx-auto">
+<!-- Page Header -->
+<div class="flex justify-between items-end mb-stack-lg pb-stack-sm border-b border-outline-variant">
+<div>
+<h2 class="font-headline-lg text-headline-lg text-on-background">Admin Settings</h2>
+<p class="font-body-md text-body-md text-secondary mt-1">Manage system configurations, user profiles, and application behavior.</p>
+</div>
+<button class="bg-primary-container text-on-primary font-label-bold text-label-bold px-6 py-2.5 rounded hover:bg-primary transition-colors shadow-sm">
+                        Save Changes
+                    </button>
+</div>
+<!-- Settings Layout: Grid -->
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter">
+<!-- Left Column (Wider) -->
+<div class="lg:col-span-8 space-y-stack-lg">
+<!-- Admin Profile Section -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm p-6">
+<h3 class="font-headline-md text-headline-md text-on-background mb-4 pb-2 border-b border-surface-container-high flex items-center">
+<span class="material-symbols-outlined mr-2 text-primary-container">person</span> Admin Profile
+                            </h3>
+<div class="grid grid-cols-2 gap-4">
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Full Name</label>
+<input class="w-full bg-surface-bright border border-outline-variant rounded p-2.5 font-body-md text-on-background focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all" type="text" value="Jane Doe"/>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Email Address</label>
+<input class="w-full bg-surface-bright border border-outline-variant rounded p-2.5 font-body-md text-on-background focus:outline-none focus:border-primary-container focus:ring-1 focus:ring-primary-container transition-all" type="email" value="jane.doe@trryapparel.com"/>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Role</label>
+<input class="w-full bg-surface-container-low border border-surface-dim rounded p-2.5 font-body-md text-tertiary cursor-not-allowed" disabled="" type="text" value="Operations Director"/>
+</div>
+<div class="flex items-end">
+<button class="w-full bg-surface-bright border border-outline-variant text-on-background font-label-bold text-label-bold py-2.5 rounded hover:bg-surface-container transition-colors">
+                                        Change Password
+                                    </button>
+</div>
+</div>
+</section>
+<!-- Workflow Settings Section -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm p-6">
+<h3 class="font-headline-md text-headline-md text-on-background mb-4 pb-2 border-b border-surface-container-high flex items-center">
+<span class="material-symbols-outlined mr-2 text-primary-container">account_tree</span> Workflow Settings
+                            </h3>
+<p class="font-body-md text-body-md text-secondary mb-4">Define and order the production statuses applied to internal work orders.</p>
+<div class="space-y-2">
+<!-- Draggable Items (Simulated) -->
+<div class="flex items-center p-3 bg-surface border border-outline-variant rounded group hover:border-primary-container transition-colors cursor-grab">
+<span class="material-symbols-outlined text-tertiary mr-3 group-hover:text-primary-container">drag_indicator</span>
+<span class="font-body-md text-body-md font-medium flex-1">Drafting</span>
+<span class="material-symbols-outlined text-secondary hover:text-error cursor-pointer">delete</span>
+</div>
+<div class="flex items-center p-3 bg-surface border border-outline-variant rounded group hover:border-primary-container transition-colors cursor-grab">
+<span class="material-symbols-outlined text-tertiary mr-3 group-hover:text-primary-container">drag_indicator</span>
+<span class="font-body-md text-body-md font-medium flex-1">Cutting</span>
+<span class="material-symbols-outlined text-secondary hover:text-error cursor-pointer">delete</span>
+</div>
+<div class="flex items-center p-3 bg-surface border border-outline-variant rounded group hover:border-primary-container transition-colors cursor-grab">
+<span class="material-symbols-outlined text-tertiary mr-3 group-hover:text-primary-container">drag_indicator</span>
+<span class="font-body-md text-body-md font-medium flex-1">Assembly</span>
+<span class="material-symbols-outlined text-secondary hover:text-error cursor-pointer">delete</span>
+</div>
+<button class="mt-2 text-primary-container font-label-bold text-label-bold hover:text-primary transition-colors flex items-center py-2">
+<span class="material-symbols-outlined mr-1 text-[18px]">add</span> Add Status
+                                </button>
+</div>
+</section>
+<!-- Notification Preferences -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm p-6">
+<h3 class="font-headline-md text-headline-md text-on-background mb-4 pb-2 border-b border-surface-container-high flex items-center">
+<span class="material-symbols-outlined mr-2 text-primary-container">notifications_active</span> Notification Preferences
+                            </h3>
+<div class="overflow-x-auto">
+<table class="w-full text-left border-collapse">
+<thead>
+<tr>
+<th class="font-label-sm text-label-sm uppercase tracking-wider text-secondary pb-3 border-b border-surface-container-high">Event Type</th>
+<th class="font-label-sm text-label-sm uppercase tracking-wider text-secondary pb-3 border-b border-surface-container-high text-center">In-App</th>
+<th class="font-label-sm text-label-sm uppercase tracking-wider text-secondary pb-3 border-b border-surface-container-high text-center">Email</th>
+<th class="font-label-sm text-label-sm uppercase tracking-wider text-secondary pb-3 border-b border-surface-container-high text-center">SMS</th>
+</tr>
+</thead>
+<tbody class="font-body-md text-body-md">
+<tr class="hover:bg-surface-container-low transition-colors border-b border-surface-container-high">
+<td class="py-4 font-medium">Critical Stock Alert</td>
+<td class="py-4 text-center"><input checked="" class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+<td class="py-4 text-center"><input checked="" class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+<td class="py-4 text-center"><input checked="" class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors border-b border-surface-container-high">
+<td class="py-4 font-medium">Order Status Change</td>
+<td class="py-4 text-center"><input checked="" class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+<td class="py-4 text-center"><input class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+<td class="py-4 text-center"><input class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+</tr>
+<tr class="hover:bg-surface-container-low transition-colors">
+<td class="py-4 font-medium">Daily Summary Report</td>
+<td class="py-4 text-center"><input class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+<td class="py-4 text-center"><input checked="" class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+<td class="py-4 text-center"><input class="rounded text-primary-container focus:ring-primary-container" type="checkbox"/></td>
+</tr>
+</tbody>
+</table>
+</div>
+</section>
+</div>
+<!-- Right Column (Narrower) -->
+<div class="lg:col-span-4 space-y-stack-lg">
+<!-- Company Identity -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm p-6">
+<h3 class="font-headline-md text-headline-md text-on-background mb-4 pb-2 border-b border-surface-container-high flex items-center">
+<span class="material-symbols-outlined mr-2 text-primary-container">domain</span> Identity
+                            </h3>
+<div class="space-y-4">
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Organization Name</label>
+<input class="w-full bg-surface-bright border border-outline-variant rounded p-2 font-body-md focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none" type="text" value="TRRY Apparel Mgt"/>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Address</label>
+<textarea class="w-full bg-surface-bright border border-outline-variant rounded p-2 font-body-md focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none resize-none" rows="2">124 Industrial Pkwy, Sector 4
+Manufacturing Dist.</textarea>
+</div>
+<div class="grid grid-cols-2 gap-3">
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Currency</label>
+<select class="w-full bg-surface-bright border border-outline-variant rounded p-2 font-body-md focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none">
+<option>USD ($)</option>
+<option>EUR (€)</option>
+</select>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Timezone</label>
+<select class="w-full bg-surface-bright border border-outline-variant rounded p-2 font-body-md focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none">
+<option>EST (UTC-5)</option>
+<option>PST (UTC-8)</option>
+</select>
+</div>
+</div>
+</div>
+</section>
+<!-- Portal Customization -->
+<section class="bg-surface-container-lowest rounded-xl border border-outline-variant shadow-sm p-6">
+<h3 class="font-headline-md text-headline-md text-on-background mb-4 pb-2 border-b border-surface-container-high flex items-center">
+<span class="material-symbols-outlined mr-2 text-primary-container">palette</span> Portal
+                            </h3>
+<div class="space-y-4">
+<div class="flex items-center justify-between">
+<div>
+<p class="font-body-md font-medium text-on-background">Client Tracking</p>
+<p class="font-label-sm text-secondary">Allow clients to view order status.</p>
+</div>
+<label class="relative inline-flex items-center cursor-pointer">
+<input checked="" class="sr-only peer" type="checkbox" value=""/>
+<div class="w-11 h-6 bg-surface-container-high peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-container"></div>
+</label>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Subdomain</label>
+<div class="flex">
+<input class="w-full bg-surface-bright border border-r-0 border-outline-variant rounded-l p-2 font-body-md focus:border-primary-container focus:ring-1 focus:ring-primary-container outline-none text-right" type="text" value="trry"/>
+<span class="inline-flex items-center px-3 rounded-r border border-l-0 border-outline-variant bg-surface-container-low text-secondary font-body-md">
+                                            .portal.com
+                                        </span>
+</div>
+</div>
+<div>
+<label class="block font-label-sm text-label-sm text-secondary mb-1 uppercase tracking-wider">Accent Theme</label>
+<div class="flex space-x-2">
+<button class="w-8 h-8 rounded-full bg-[#ff6b00] ring-2 ring-offset-2 ring-primary-container"></button>
+<button class="w-8 h-8 rounded-full bg-[#0ea5e9] hover:ring-2 ring-offset-2 ring-[#0ea5e9] transition-all"></button>
+<button class="w-8 h-8 rounded-full bg-[#10b981] hover:ring-2 ring-offset-2 ring-[#10b981] transition-all"></button>
+<button class="w-8 h-8 rounded-full bg-[#6366f1] hover:ring-2 ring-offset-2 ring-[#6366f1] transition-all"></button>
+</div>
+</div>
+</div>
+</section>
+<!-- Danger Zone -->
+<section class="bg-[#fff5f5] rounded-xl border border-error-container shadow-sm p-6">
+<h3 class="font-headline-md text-headline-md text-error mb-2 flex items-center">
+<span class="material-symbols-outlined mr-2">warning</span> Danger Zone
+                            </h3>
+<p class="font-body-md text-body-md text-on-surface-variant mb-4">Irreversible administrative actions.</p>
+<div class="space-y-3">
+<button class="w-full bg-white border border-error-container text-error font-label-bold text-label-bold py-2.5 rounded hover:bg-error-container/20 transition-colors">
+                                    Archive Organization
+                                </button>
+<button class="w-full bg-error text-white font-label-bold text-label-bold py-2.5 rounded hover:bg-[#a30000] transition-colors">
+                                    Delete Organization
+                                </button>
+</div>
+</section>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>
