@@ -156,6 +156,7 @@ function render() {
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell">
+      ${renderMobileTopBar()}
       ${renderSidebar(currentRoute)}
       <section class="workspace">
         ${renderTopHeader()}
@@ -174,6 +175,7 @@ function render() {
         }
         ${renderFooter()}
       </section>
+      ${renderMobileBottomNav(currentRoute)}
     </div>
   `;
 
@@ -655,6 +657,7 @@ function renderProductRow(item) {
       <td>${item.logoPlacement}</td>
       <td>${item.fabric}</td>
       <td>${renderStatusPill(item.status)}</td>
+      <td class="mobile-only-cell"><span class="status-pill visible">${item.visible}</span></td>
       <td><button class="view-button" data-product-code="${item.code}" aria-label="View ${item.product}" type="button"><span></span></button></td>
     </tr>
   `;
@@ -890,6 +893,45 @@ function renderTopHeader() {
         </div>
       </div>
     </header>
+  `;
+}
+
+function renderMobileTopBar() {
+  return `
+    <header class="mobile-top-bar">
+      <button aria-label="Open navigation" class="mobile-menu-button" type="button">
+        <span></span>
+      </button>
+      <strong>TRRY APPAREL</strong>
+      <div class="mobile-top-actions">
+        <button aria-label="Search" class="mobile-search-button" type="button"><span></span></button>
+        <span class="mobile-avatar" aria-label="TRRY Admin">TA</span>
+      </div>
+    </header>
+  `;
+}
+
+function renderMobileBottomNav(currentRoute) {
+  const navItems = [
+    { label: "Overview", path: "/overview" },
+    { label: "Orders", path: "/orders" },
+    { label: "Clients", path: "/clients" },
+    { label: "Products", path: "/products" },
+    { label: "Settings", path: "/settings" },
+  ];
+
+  return `
+    <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
+      ${navItems
+        .map(
+          (item) => `
+            <a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>
+              <span class="nav-icon ${item.label.toLowerCase()}" aria-hidden="true"></span>
+              <small>${item.label}</small>
+            </a>`
+        )
+        .join("")}
+    </nav>
   `;
 }
 
