@@ -87,6 +87,15 @@ let activeFilter = "All";
 let query = "";
 let draftStatus = "Pending Review";
 
+const routes = {
+  "/": "Orders",
+  "/orders": "Orders",
+  "/overview": "Overview",
+  "/clients": "Clients",
+  "/products": "Products",
+  "/settings": "Settings",
+};
+
 const statMeta = [
   { label: "Pending Review", value: 18, icon: "queue", delta: "12% vs last week" },
   { label: "Approved", value: 32, icon: "check", delta: "8% vs last week" },
@@ -96,34 +105,21 @@ const statMeta = [
 ];
 
 function render() {
+  const currentRoute = getCurrentRoute();
+
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const filteredOrders = getFilteredOrders();
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell">
-      ${renderSidebar()}
+      ${renderSidebar(currentRoute)}
       <section class="workspace">
         ${renderTopHeader()}
-        <main class="orders-page">
-          <div class="page-heading">
-            <div>
-              <h1>Orders</h1>
-              <p class="subtitle">Manage incoming reorder requests from client portals.</p>
-            </div>
-          </div>
-
-          <section class="status-grid" aria-label="Order status summary">
-            ${statMeta.map(renderStatusCard).join("")}
-          </section>
-
-          <section class="orders-workbench ${selectedOrder ? "has-panel" : ""}">
-            <div class="orders-list-card">
-              ${renderToolbar()}
-              ${renderTable(filteredOrders)}
-            </div>
-            ${selectedOrder ? renderDetailPanel(selectedOrder) : ""}
-          </section>
-        </main>
+        ${
+          currentRoute === "Orders"
+            ? renderOrdersPage(selectedOrder, filteredOrders)
+            : renderPlaceholderPage(currentRoute)
+        }
         ${renderFooter()}
       </section>
     </div>
@@ -132,8 +128,50 @@ function render() {
   bindEvents();
 }
 
-function renderSidebar() {
-  const navItems = ["Overview", "Orders", "Clients", "Products", "Settings"];
+function renderOrdersPage(selectedOrder, filteredOrders) {
+  return `
+    <main class="orders-page">
+      <div class="page-heading">
+        <div>
+          <h1>Orders</h1>
+          <p class="subtitle">Manage incoming reorder requests from client portals.</p>
+        </div>
+      </div>
+
+      <section class="status-grid" aria-label="Order status summary">
+        ${statMeta.map(renderStatusCard).join("")}
+      </section>
+
+      <section class="orders-workbench ${selectedOrder ? "has-panel" : ""}">
+        <div class="orders-list-card">
+          ${renderToolbar()}
+          ${renderTable(filteredOrders)}
+        </div>
+        ${selectedOrder ? renderDetailPanel(selectedOrder) : ""}
+      </section>
+    </main>
+  `;
+}
+
+function renderPlaceholderPage(title) {
+  return `
+    <main class="orders-page">
+      <section class="placeholder-page">
+        <p class="placeholder-kicker">TRRY Apparel Management</p>
+        <h1>${title} - Coming soon</h1>
+      </section>
+    </main>
+  `;
+}
+
+function renderSidebar(currentRoute) {
+  const navItems = [
+    { label: "Overview", path: "/overview" },
+    { label: "Orders", path: "/orders" },
+    { label: "Clients", path: "/clients" },
+    { label: "Products", path: "/products" },
+    { label: "Settings", path: "/settings" },
+  ];
 
   return `
     <aside class="sidebar">
@@ -145,11 +183,9 @@ function renderSidebar() {
         ${navItems
           .map(
             (item) => `
-              <a class="${item === "Orders" ? "active" : ""}" href="${
-                item === "Orders" ? "/orders" : "#"
-              }">
-                <span class="nav-icon ${item.toLowerCase()}" aria-hidden="true"></span>
-                ${item}
+              <a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>
+                <span class="nav-icon ${item.label.toLowerCase()}" aria-hidden="true"></span>
+                ${item.label}
               </a>`
           )
           .join("")}
@@ -398,6 +434,14 @@ function renderStatusPill(status) {
 }
 
 function bindEvents() {
+  document.querySelectorAll("[data-route-link]").forEach((link) => {
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      window.history.pushState({}, "", link.getAttribute("href"));
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-filter]").forEach((button) => {
     button.addEventListener("click", () => {
       activeFilter = button.dataset.filter;
@@ -442,6 +486,8 @@ function bindEvents() {
   });
 }
 
+window.addEventListener("popstate", render);
+
 function getFilteredOrders() {
   const normalizedQuery = query.trim().toLowerCase();
 
@@ -460,6 +506,10 @@ function getFilteredOrders() {
 
 function statusToClass(status) {
   return status.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+}
+
+function getCurrentRoute() {
+  return routes[window.location.pathname] ?? "Orders";
 }
 
 function escapeHtml(value) {

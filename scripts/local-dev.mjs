@@ -14,12 +14,20 @@ const contentTypes = {
   ".svg": "image/svg+xml",
 };
 
+const appRoutes = new Set([
+  "/",
+  "/orders",
+  "/overview",
+  "/clients",
+  "/products",
+  "/settings",
+]);
+
 async function handleRequest(request, response) {
   try {
     const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
     const pathname = decodeURIComponent(url.pathname);
-    const requestedPath =
-      pathname === "/" || pathname === "/orders" ? "/index.html" : pathname;
+    const requestedPath = appRoutes.has(pathname) ? "/index.html" : pathname;
     const filePath = normalize(join(root, requestedPath));
 
     if (!filePath.startsWith(root)) {
