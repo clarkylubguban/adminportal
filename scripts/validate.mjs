@@ -20,6 +20,14 @@ const requiredCopy = [
   "Admin Polo Uniform",
   "Embroidered Staff Cap",
   "admin.trryapparel.com",
+  "Showing 0 orders",
+  "Portal link copied",
+  "Search products",
+  "Admin domain copied",
+  "Not Connected",
+  "Open Portal",
+  "Copy Link",
+  "Add Product",
 ];
 
 for (const text of requiredCopy) {

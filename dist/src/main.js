@@ -13,6 +13,10 @@ let selectedId = null;
 let activeFilter = "All";
 let query = "";
 let draftStatus = "Pending Review";
+let productQuery = "";
+let feedbackMessage = "";
+let globalSearchQuery = "";
+let feedbackTimer = null;
 
 const routes = {
   "/": "Orders",
@@ -159,14 +163,31 @@ function renderClientsPage() {
             <strong>${clientProgram.lastUpdated}</strong>
           </div>
         </div>
+        <div class="client-actions">
+          <a class="secondary-action" href="https://${clientProgram.domain}" target="_blank" rel="noreferrer">
+            Open Portal
+          </a>
+          <button class="secondary-action" data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">
+            Copy Link
+          </button>
+        </div>
       </section>
 
+      ${renderFeedback()}
       <p class="page-note">More client management tools coming soon.</p>
     </main>
   `;
 }
 
 function renderProductsPage() {
+  const normalizedQuery = productQuery.trim().toLowerCase();
+  const visibleProducts = approvedProducts.filter((item) =>
+    [item.product, item.category, item.color, item.logoPlacement]
+      .join(" ")
+      .toLowerCase()
+      .includes(normalizedQuery)
+  );
+
   return `
     <main class="orders-page">
       <div class="page-heading">
@@ -174,6 +195,15 @@ function renderProductsPage() {
           <h1>Products</h1>
           <p class="subtitle">Approved products saved for each client portal.</p>
         </div>
+      </div>
+
+      <div class="products-toolbar">
+        <label class="search-field product-search">
+          <span aria-hidden="true"></span>
+          <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search products" type="search" />
+        </label>
+        <span class="page-count">${approvedProducts.length} approved products</span>
+        <button class="disabled-action" disabled title="Product editing will be connected to Supabase later." type="button">Add Product</button>
       </div>
 
       <section class="content-card table-card">
@@ -190,7 +220,7 @@ function renderProductsPage() {
             </tr>
           </thead>
           <tbody>
-            ${approvedProducts
+            ${visibleProducts
               .map(
                 (item) => `
                   <tr>
@@ -211,6 +241,14 @@ function renderProductsPage() {
               .join("")}
           </tbody>
         </table>
+        ${
+          visibleProducts.length === 0
+            ? `<div class="empty-state compact-empty">
+                <strong>No products found</strong>
+                <span>Try a different product, category, color, or logo placement.</span>
+              </div>`
+            : ""
+        }
       </section>
 
       <p class="page-note">Product editing will be connected to Supabase later.</p>
@@ -232,7 +270,7 @@ function renderSettingsPage() {
       title: "Database",
       rows: [
         ["Supabase project", "trryportalsystem"],
-        ["Status", "Not connected in app yet"],
+        ["Status", `<span class="status-pill not-connected">Not Connected</span>`],
         ["Note", "Read-only connection planned next."],
       ],
     },
@@ -274,16 +312,24 @@ function renderSettingsPage() {
           )
           .join("")}
       </section>
+
+      <section class="settings-actions">
+        <button class="primary-button compact-button" data-copy-value="https://admin.trryapparel.com" data-copy-message="Admin domain copied" type="button">
+          Copy Admin Domain
+        </button>
+        <p>Next: connect adminportal to Supabase read-only.</p>
+      </section>
+      ${renderFeedback()}
     </main>
   `;
 }
 
 function renderOverviewPage() {
   const overviewMetrics = [
-    { label: "Website Visits", value: "-" },
-    { label: "Portal Visits", value: "-" },
+    { label: "Website Visits", value: "&mdash;" },
+    { label: "Portal Visits", value: "&mdash;" },
     { label: "Reorder Requests", value: "0" },
-    { label: "Estimated Sales Value", value: "PHP 0" },
+    { label: "Estimated Sales Value", value: "&#8369;0" },
   ];
 
   return `
@@ -311,10 +357,11 @@ function renderOverviewPage() {
         <article class="analytics-card">
           <h2>No analytics data yet</h2>
           <p>Connect Supabase or analytics to start tracking.</p>
+          <small>Analytics will appear after tracking is connected.</small>
         </article>
         <article class="activity-card">
           <h2>Top Client Activity</h2>
-          <p><strong>Urban Coffee</strong> - 2 approved products saved</p>
+          <p><strong>Urban Coffee</strong> &mdash; 2 approved products saved.</p>
           <h2>Recent Portal Activity</h2>
           <p>No recent activity yet</p>
         </article>
@@ -369,10 +416,13 @@ function renderTopHeader() {
         </button>
         <strong><span>TRRY</span> Apparel Management</strong>
       </div>
-      <label class="global-search">
-        <input placeholder="Search orders, clients, products..." type="search" />
-        <span aria-hidden="true"></span>
-      </label>
+      <div class="global-search-wrap">
+        <label class="global-search">
+          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders, clients, products..." type="search" />
+          <span aria-hidden="true"></span>
+        </label>
+        ${renderGlobalSearchHint()}
+      </div>
       <div class="header-actions">
         <button class="notification-button" aria-label="Notifications" type="button">
           <span></span>
@@ -388,6 +438,24 @@ function renderTopHeader() {
       </div>
     </header>
   `;
+}
+
+function renderGlobalSearchHint() {
+  const normalized = globalSearchQuery.trim().toLowerCase();
+  if (!normalized) return "";
+
+  if ("urban coffee".includes(normalized)) {
+    return `<button class="search-suggestion" data-route-target="/clients" type="button">Open Clients</button>`;
+  }
+
+  if (
+    "admin polo uniform".includes(normalized) ||
+    "embroidered staff cap".includes(normalized)
+  ) {
+    return `<button class="search-suggestion" data-route-target="/products" type="button">Open Products</button>`;
+  }
+
+  return "";
 }
 
 function renderStatusCard(item) {
@@ -497,14 +565,18 @@ function renderTable(filteredOrders) {
         : ""
     }
     <div class="table-footer">
-      <span>Showing 1 to ${filteredOrders.length} of ${orders.length} orders</span>
-      <div class="pager">
-        <button type="button" aria-label="Previous page"></button>
-        <button class="active" type="button">1</button>
-        <button type="button">2</button>
-        <button type="button">3</button>
-        <button type="button" aria-label="Next page"></button>
-      </div>
+      <span>${orders.length === 0 ? "Showing 0 orders" : `Showing 1 to ${filteredOrders.length} of ${orders.length} orders`}</span>
+      ${
+        orders.length === 0
+          ? ""
+          : `<div class="pager">
+              <button type="button" aria-label="Previous page"></button>
+              <button class="active" type="button">1</button>
+              <button type="button">2</button>
+              <button type="button">3</button>
+              <button type="button" aria-label="Next page"></button>
+            </div>`
+      }
     </div>
   `;
 }
@@ -599,12 +671,31 @@ function renderStatusPill(status) {
   return `<span class="status-pill ${statusToClass(status)}">${status}</span>`;
 }
 
+function renderFeedback() {
+  return feedbackMessage ? `<p class="copy-feedback">${feedbackMessage}</p>` : "";
+}
+
 function bindEvents() {
   document.querySelectorAll("[data-route-link]").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
       window.history.pushState({}, "", link.getAttribute("href"));
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-route-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      window.history.pushState({}, "", button.dataset.routeTarget);
+      globalSearchQuery = "";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-copy-value]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await copyToClipboard(button.dataset.copyValue);
+      showFeedback(button.dataset.copyMessage);
     });
   });
 
@@ -633,6 +724,24 @@ function bindEvents() {
     });
   }
 
+  const globalSearch = document.getElementById("global-search");
+  if (globalSearch) {
+    globalSearch.addEventListener("input", (event) => {
+      globalSearchQuery = event.target.value;
+      render();
+      document.getElementById("global-search")?.focus();
+    });
+  }
+
+  const productSearch = document.getElementById("product-search");
+  if (productSearch) {
+    productSearch.addEventListener("input", (event) => {
+      productQuery = event.target.value;
+      render();
+      document.getElementById("product-search")?.focus();
+    });
+  }
+
   document.getElementById("close-detail")?.addEventListener("click", () => {
     selectedId = null;
     draftStatus = "";
@@ -650,6 +759,35 @@ function bindEvents() {
     );
     render();
   });
+}
+
+async function copyToClipboard(value) {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(value);
+      return;
+    } catch {
+      // Fall through to the input fallback for older or restricted browsers.
+    }
+  }
+
+  const input = document.createElement("input");
+  input.value = value;
+  document.body.appendChild(input);
+  input.select();
+  document.execCommand("copy");
+  input.remove();
+}
+
+function showFeedback(message) {
+  feedbackMessage = message;
+  render();
+
+  if (feedbackTimer) window.clearTimeout(feedbackTimer);
+  feedbackTimer = window.setTimeout(() => {
+    feedbackMessage = "";
+    render();
+  }, 1800);
 }
 
 window.addEventListener("popstate", render);
