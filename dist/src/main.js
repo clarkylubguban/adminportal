@@ -52,6 +52,20 @@ const products = [
   },
 ];
 
+const imageAngleLabels = ["Front", "Back", "Detail", "Size Chart"];
+
+let productImages = products.flatMap((product) =>
+  imageAngleLabels.map((angleLabel, index) => ({
+    id: `${product.code}-${statusToClass(angleLabel)}`,
+    product_id: product.code,
+    image_url: createProductImageDataUrl(product, angleLabel),
+    angle_label: angleLabel,
+    sort_order: index + 1,
+    is_main: angleLabel === "Front",
+    created_at: "2026-06-17T00:00:00+08:00",
+  }))
+);
+
 let orders = [
   {
     id: "TRRY-UC-0003",
@@ -134,6 +148,7 @@ let draftStatus = orders[0]?.status ?? "Pending Review";
 let clientQuery = "";
 let selectedClientId = clientProgram.id;
 let productQuery = "";
+let selectedImageAngle = "Front";
 let feedbackMessage = "";
 let globalSearchQuery = "";
 let feedbackTimer = null;
@@ -643,11 +658,13 @@ function renderOrderRow(order) {
 }
 
 function renderProductRow(item) {
+  const mainImage = getMainProductImage(item.code);
+
   return `
     <tr class="${item.code === selectedProductCode ? "selected" : ""}" data-product-code="${item.code}">
       <td>
         <div class="client-cell">
-          <span class="product-thumb ${statusToClass(item.category)}"></span>
+          <span class="product-thumb has-image ${statusToClass(item.category)}" style="background-image: url('${escapeHtml(mainImage.image_url)}')"></span>
           <div><strong>${item.product}</strong><span>${item.code}</span></div>
         </div>
       </td>
@@ -791,14 +808,29 @@ function renderClientPanel() {
 }
 
 function renderProductPanel(product) {
+  const productImage = getActiveProductImage(product.code);
+
   return `
     <aside class="detail-panel product-detail-panel">
       <div class="panel-header">
         <h2>Product Details</h2>
       </div>
       <section class="product-image-panel">
-        <div class="product-mock ${statusToClass(product.category)}"></div>
+        <div class="product-image-viewer" style="background-image: url('${escapeHtml(productImage.image_url)}')">
+          <span>${productImage.angle_label}</span>
+        </div>
+        <div class="image-angle-strip" aria-label="Product image angles">
+          ${getProductImages(product.code)
+            .map(
+              (image) => `
+                <button class="${image.angle_label === productImage.angle_label ? "active" : ""}" data-image-angle="${image.angle_label}" type="button">
+                  ${image.angle_label}${image.is_main ? " - Main" : ""}
+                </button>`
+            )
+            .join("")}
+        </div>
       </section>
+      ${renderProductImageManager(product)}
       <section class="panel-section">
         <div class="panel-title-row">
           <h2>${product.product}</h2>
@@ -823,6 +855,51 @@ function renderProductPanel(product) {
       </section>
       ${renderFeedback()}
     </aside>
+  `;
+}
+
+function renderProductImageManager(product) {
+  const images = getProductImages(product.code);
+
+  return `
+    <section class="panel-section image-manager-section">
+      <div class="section-heading-row">
+        <p class="section-title">Product Images</p>
+        <span>Front required</span>
+      </div>
+      <div class="image-manager-grid">
+        ${imageAngleLabels
+          .map((angleLabel) => {
+            const image = images.find((item) => item.angle_label === angleLabel);
+            const isFront = angleLabel === "Front";
+
+            return `
+              <article class="image-slot ${image?.is_main ? "main" : ""}">
+                <div class="image-slot-preview ${image ? "" : "empty"}" ${image ? `style="background-image: url('${escapeHtml(image.image_url)}')"` : ""}>
+                  <span>${angleLabel}</span>
+                </div>
+                <div class="image-slot-meta">
+                  <strong>${angleLabel}</strong>
+                  <small>${isFront ? "Required" : "Optional"}${image?.is_main ? " - Main" : ""}</small>
+                </div>
+                <div class="image-slot-actions">
+                  <label class="image-action-button">
+                    ${image ? "Replace" : "Add"}
+                    <input data-image-upload-code="${product.code}" data-image-upload-angle="${angleLabel}" type="file" accept="image/*" />
+                  </label>
+                  <button ${image ? "" : "disabled"} data-set-main-image="${product.code}" data-set-main-angle="${angleLabel}" type="button">
+                    Main
+                  </button>
+                  <button ${!image || isFront ? "disabled" : ""} data-remove-image="${product.code}" data-remove-angle="${angleLabel}" title="${isFront ? "Front image is required." : "Remove image"}" type="button">
+                    Remove
+                  </button>
+                </div>
+              </article>
+            `;
+          })
+          .join("")}
+      </div>
+    </section>
   `;
 }
 
@@ -1095,7 +1172,43 @@ function bindEvents() {
   document.querySelectorAll("[data-product-code]").forEach((button) => {
     button.addEventListener("click", () => {
       selectedProductCode = button.dataset.productCode;
+      selectedImageAngle = getMainProductImage(selectedProductCode).angle_label;
       render();
+    });
+  });
+
+  document.querySelectorAll("[data-image-angle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedImageAngle = button.dataset.imageAngle;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-set-main-image]").forEach((button) => {
+    button.addEventListener("click", () => {
+      setMainProductImage(button.dataset.setMainImage, button.dataset.setMainAngle);
+      selectedImageAngle = button.dataset.setMainAngle;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-remove-image]").forEach((button) => {
+    button.addEventListener("click", () => {
+      removeProductImage(button.dataset.removeImage, button.dataset.removeAngle);
+      selectedImageAngle = getMainProductImage(button.dataset.removeImage).angle_label;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-image-upload-code]").forEach((input) => {
+    input.addEventListener("change", async (event) => {
+      const [file] = event.target.files;
+      if (!file) return;
+
+      const imageUrl = await readFileAsDataUrl(file);
+      upsertProductImage(input.dataset.imageUploadCode, input.dataset.imageUploadAngle, imageUrl);
+      selectedImageAngle = input.dataset.imageUploadAngle;
+      showFeedback(`${input.dataset.imageUploadAngle} image updated`);
     });
   });
 
@@ -1177,6 +1290,15 @@ async function copyToClipboard(value) {
   input.select();
   document.execCommand("copy");
   input.remove();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
 }
 
 function showFeedback(message) {
@@ -1264,6 +1386,115 @@ function applySearchRoute(route) {
   globalSearchQuery = "";
   window.history.pushState({}, "", route.path);
   render();
+}
+
+function getProductImages(productCode) {
+  return productImages
+    .filter((image) => image.product_id === productCode)
+    .sort((a, b) => a.sort_order - b.sort_order);
+}
+
+function getMainProductImage(productCode) {
+  const images = getProductImages(productCode);
+  return images.find((image) => image.is_main) ?? images[0] ?? createFallbackProductImage(productCode);
+}
+
+function getActiveProductImage(productCode) {
+  const images = getProductImages(productCode);
+  return (
+    images.find((image) => image.angle_label === selectedImageAngle) ??
+    images.find((image) => image.is_main) ??
+    images[0] ??
+    createFallbackProductImage(productCode)
+  );
+}
+
+function setMainProductImage(productCode, angleLabel) {
+  productImages = productImages.map((image) =>
+    image.product_id === productCode
+      ? { ...image, is_main: image.angle_label === angleLabel }
+      : image
+  );
+}
+
+function upsertProductImage(productCode, angleLabel, imageUrl) {
+  const existingImage = productImages.find(
+    (image) => image.product_id === productCode && image.angle_label === angleLabel
+  );
+  const sortOrder = imageAngleLabels.indexOf(angleLabel) + 1;
+
+  if (existingImage) {
+    productImages = productImages.map((image) =>
+      image.id === existingImage.id
+        ? { ...image, image_url: imageUrl, sort_order: sortOrder }
+        : image
+    );
+    return;
+  }
+
+  productImages = [
+    ...productImages,
+    {
+      id: `${productCode}-${statusToClass(angleLabel)}-${Date.now()}`,
+      product_id: productCode,
+      image_url: imageUrl,
+      angle_label: angleLabel,
+      sort_order: sortOrder,
+      is_main: false,
+      created_at: new Date().toISOString(),
+    },
+  ];
+}
+
+function removeProductImage(productCode, angleLabel) {
+  if (angleLabel === "Front") return;
+
+  const removedImage = productImages.find(
+    (image) => image.product_id === productCode && image.angle_label === angleLabel
+  );
+
+  productImages = productImages.filter(
+    (image) => !(image.product_id === productCode && image.angle_label === angleLabel)
+  );
+
+  if (removedImage?.is_main) {
+    setMainProductImage(productCode, "Front");
+  }
+}
+
+function createFallbackProductImage(productCode) {
+  const product = products.find((item) => item.code === productCode) ?? products[0];
+
+  return {
+    id: `${productCode}-front-fallback`,
+    product_id: productCode,
+    image_url: createProductImageDataUrl(product, "Front"),
+    angle_label: "Front",
+    sort_order: 1,
+    is_main: true,
+    created_at: "2026-06-17T00:00:00+08:00",
+  };
+}
+
+function createProductImageDataUrl(product, angleLabel) {
+  const isCap = product.category === "Caps";
+  const baseColor = isCap ? "#172554" : "#111111";
+  const accentColor = isCap ? "#dbeafe" : "#fbf9f8";
+  const labelColor = isCap ? "#1e3a8a" : "#a04100";
+  const shape = isCap
+    ? `<path d="M42 105c24-27 88-27 112 0 17 0 28 7 34 22H8c6-15 17-22 34-22Z" fill="${baseColor}"/><path d="M52 104c5-31 87-31 92 0" fill="#243b73"/><path d="M42 128h112" stroke="${accentColor}" stroke-width="3"/>`
+    : `<path d="M62 38h72l22 28-18 17-10-11v84H68V72L58 83 40 66l22-28Z" fill="${baseColor}"/><path d="M78 38c3 15 37 15 40 0" fill="#2a2a2a"/><path d="M82 78h28v23H82z" fill="${accentColor}" opacity=".2"/>`;
+  const svg = `
+    <svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240">
+      <rect width="320" height="240" rx="18" fill="#f5f3f3"/>
+      <rect x="18" y="18" width="284" height="204" rx="14" fill="#ffffff" stroke="#e2bfb0"/>
+      <g transform="translate(62 36)">${shape}</g>
+      <text x="28" y="194" fill="#111827" font-family="Arial, sans-serif" font-size="19" font-weight="700">${product.product}</text>
+      <text x="28" y="216" fill="${labelColor}" font-family="Arial, sans-serif" font-size="13" font-weight="700">${angleLabel}</text>
+    </svg>
+  `;
+
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function statusToClass(status) {
