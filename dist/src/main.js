@@ -860,6 +860,16 @@ function renderProductPanel(product) {
 
 function renderProductImageManager(product) {
   const images = getProductImages(product.code);
+  const imageRows = [
+    ...images,
+    ...imageAngleLabels
+      .filter((angleLabel) => !images.some((image) => image.angle_label === angleLabel))
+      .map((angleLabel) => ({
+        angle_label: angleLabel,
+        image_url: "",
+        is_main: false,
+      })),
+  ];
 
   return `
     <section class="panel-section image-manager-section">
@@ -868,30 +878,38 @@ function renderProductImageManager(product) {
         <span>Front required</span>
       </div>
       <div class="image-manager-grid">
-        ${imageAngleLabels
-          .map((angleLabel) => {
-            const image = images.find((item) => item.angle_label === angleLabel);
+        ${imageRows
+          .map((image, index) => {
+            const angleLabel = image.angle_label;
+            const savedIndex = images.findIndex((item) => item.angle_label === angleLabel);
+            const hasImage = Boolean(image.image_url);
             const isFront = angleLabel === "Front";
 
             return `
-              <article class="image-slot ${image?.is_main ? "main" : ""}">
-                <div class="image-slot-preview ${image ? "" : "empty"}" ${image ? `style="background-image: url('${escapeHtml(image.image_url)}')"` : ""}>
+              <article class="image-slot ${image.is_main ? "main" : ""}">
+                <div class="image-slot-preview ${hasImage ? "" : "empty"}" ${hasImage ? `style="background-image: url('${escapeHtml(image.image_url)}')"` : ""}>
                   <span>${angleLabel}</span>
                 </div>
                 <div class="image-slot-meta">
                   <strong>${angleLabel}</strong>
-                  <small>${isFront ? "Required" : "Optional"}${image?.is_main ? " - Main" : ""}</small>
+                  <small>${isFront ? "Required" : "Optional"}${image.is_main ? " - Main" : ""}</small>
                 </div>
                 <div class="image-slot-actions">
                   <label class="image-action-button">
-                    ${image ? "Replace" : "Add"}
+                    ${hasImage ? "Replace" : "Add"}
                     <input data-image-upload-code="${product.code}" data-image-upload-angle="${angleLabel}" type="file" accept="image/*" />
                   </label>
-                  <button ${image ? "" : "disabled"} data-set-main-image="${product.code}" data-set-main-angle="${angleLabel}" type="button">
+                  <button ${hasImage ? "" : "disabled"} data-set-main-image="${product.code}" data-set-main-angle="${angleLabel}" type="button">
                     Main
                   </button>
-                  <button ${!image || isFront ? "disabled" : ""} data-remove-image="${product.code}" data-remove-angle="${angleLabel}" title="${isFront ? "Front image is required." : "Remove image"}" type="button">
+                  <button ${!hasImage || isFront ? "disabled" : ""} data-remove-image="${product.code}" data-remove-angle="${angleLabel}" title="${isFront ? "Front image is required." : "Remove image"}" type="button">
                     Remove
+                  </button>
+                  <button ${!hasImage || savedIndex <= 0 ? "disabled" : ""} data-reorder-image="${product.code}" data-reorder-angle="${angleLabel}" data-reorder-direction="up" type="button">
+                    Up
+                  </button>
+                  <button ${!hasImage || savedIndex < 0 || savedIndex === images.length - 1 ? "disabled" : ""} data-reorder-image="${product.code}" data-reorder-angle="${angleLabel}" data-reorder-direction="down" type="button">
+                    Down
                   </button>
                 </div>
               </article>
@@ -1200,6 +1218,18 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-reorder-image]").forEach((button) => {
+    button.addEventListener("click", () => {
+      reorderProductImage(
+        button.dataset.reorderImage,
+        button.dataset.reorderAngle,
+        button.dataset.reorderDirection
+      );
+      selectedImageAngle = button.dataset.reorderAngle;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-image-upload-code]").forEach((input) => {
     input.addEventListener("change", async (event) => {
       const [file] = event.target.files;
@@ -1421,14 +1451,16 @@ function upsertProductImage(productCode, angleLabel, imageUrl) {
   const existingImage = productImages.find(
     (image) => image.product_id === productCode && image.angle_label === angleLabel
   );
-  const sortOrder = imageAngleLabels.indexOf(angleLabel) + 1;
+  const nextSortOrder =
+    Math.max(0, ...getProductImages(productCode).map((image) => image.sort_order)) + 1;
 
   if (existingImage) {
     productImages = productImages.map((image) =>
       image.id === existingImage.id
-        ? { ...image, image_url: imageUrl, sort_order: sortOrder }
+        ? { ...image, image_url: imageUrl }
         : image
     );
+    normalizeProductImageSortOrder(productCode);
     return;
   }
 
@@ -1439,11 +1471,12 @@ function upsertProductImage(productCode, angleLabel, imageUrl) {
       product_id: productCode,
       image_url: imageUrl,
       angle_label: angleLabel,
-      sort_order: sortOrder,
+      sort_order: nextSortOrder,
       is_main: false,
       created_at: new Date().toISOString(),
     },
   ];
+  normalizeProductImageSortOrder(productCode);
 }
 
 function removeProductImage(productCode, angleLabel) {
@@ -1460,6 +1493,36 @@ function removeProductImage(productCode, angleLabel) {
   if (removedImage?.is_main) {
     setMainProductImage(productCode, "Front");
   }
+
+  normalizeProductImageSortOrder(productCode);
+}
+
+function reorderProductImage(productCode, angleLabel, direction) {
+  const images = getProductImages(productCode);
+  const currentIndex = images.findIndex((image) => image.angle_label === angleLabel);
+  if (currentIndex < 0) return;
+
+  const nextIndex = direction === "up" ? currentIndex - 1 : currentIndex + 1;
+  if (nextIndex < 0 || nextIndex >= images.length) return;
+
+  const reorderedImages = [...images];
+  const [movedImage] = reorderedImages.splice(currentIndex, 1);
+  reorderedImages.splice(nextIndex, 0, movedImage);
+
+  const untouchedImages = productImages.filter((image) => image.product_id !== productCode);
+  productImages = [
+    ...untouchedImages,
+    ...reorderedImages.map((image, index) => ({ ...image, sort_order: index + 1 })),
+  ];
+}
+
+function normalizeProductImageSortOrder(productCode) {
+  productImages = productImages.map((image) => {
+    if (image.product_id !== productCode) return image;
+
+    const sortedIndex = getProductImages(productCode).findIndex((item) => item.id === image.id);
+    return { ...image, sort_order: sortedIndex + 1 };
+  });
 }
 
 function createFallbackProductImage(productCode) {
