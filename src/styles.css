@@ -212,6 +212,106 @@ button {
   display: block;
 }
 
+.lucide-icon {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  line-height: 0;
+}
+
+.lucide-icon svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+span.lucide-icon::before,
+span.lucide-icon::after {
+  content: none !important;
+  display: none !important;
+}
+
+.nav-icon.lucide-icon,
+.menu-icon,
+.search-icon,
+.notification-icon,
+.filter-icon,
+.view-icon,
+.fulfillment-icon,
+.person-icon.lucide-icon,
+.pin-icon.lucide-icon,
+.note-icon,
+.mobile-menu-icon,
+.mobile-search-icon {
+  position: relative;
+}
+
+.nav-icon.lucide-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.shield-icon.lucide-icon {
+  width: 28px;
+  height: 28px;
+  color: var(--orange);
+}
+
+.menu-icon,
+.search-icon,
+.notification-icon,
+.filter-icon,
+.view-icon,
+.mobile-menu-icon,
+.mobile-search-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.icon-mark.lucide-icon {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.icon-mark.lucide-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.fulfillment-icon {
+  width: 15px;
+  height: 15px;
+}
+
+.person-icon.lucide-icon,
+.pin-icon.lucide-icon {
+  width: 20px;
+  height: 20px;
+}
+
+.note-icon {
+  width: 17px;
+  height: 17px;
+}
+
+.external-link-icon.lucide-icon {
+  width: 13px;
+  height: 13px;
+}
+
+.action-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--orange);
+}
+
+.quick-actions button .action-icon {
+  border: 0 !important;
+  border-radius: 0 !important;
+  flex: 0 0 22px;
+}
+
 .nav-icon.overview::before {
   inset: 2px;
   border: 2px solid currentColor;
@@ -531,6 +631,16 @@ button {
   border-bottom: 2px solid var(--orange);
   transform: rotate(45deg);
   margin-left: 8px;
+}
+
+.profile-area .chevron.lucide-icon {
+  display: inline-flex;
+  width: 14px;
+  height: 14px;
+  border: 0;
+  transform: none;
+  margin-left: 6px;
+  color: var(--orange);
 }
 
 .orders-page {

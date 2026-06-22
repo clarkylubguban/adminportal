@@ -1,6 +1,65 @@
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import { isSupabaseReady } from "./lib/supabaseClient.js";
 
+const lucideIcons = {
+  "layout-dashboard": '<rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect>',
+  "clipboard-list": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M12 11h4"></path><path d="M12 16h4"></path><path d="M8 11h.01"></path><path d="M8 16h.01"></path>',
+  users: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><path d="M16 3.128a4 4 0 0 1 0 7.744"></path><path d="M22 21v-2a4 4 0 0 0-3-3.87"></path><circle cx="9" cy="7" r="4"></circle>',
+  shirt: '<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.47a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.47a2 2 0 0 0-1.34-2.23z"></path>',
+  settings: '<path d="M9.671 4.136a2.34 2.34 0 0 1 4.659 0 2.34 2.34 0 0 0 3.319 1.915 2.34 2.34 0 0 1 2.33 4.033 2.34 2.34 0 0 0 0 3.831 2.34 2.34 0 0 1-2.33 4.033 2.34 2.34 0 0 0-3.319 1.915 2.34 2.34 0 0 1-4.659 0 2.34 2.34 0 0 0-3.32-1.915 2.34 2.34 0 0 1-2.33-4.033 2.34 2.34 0 0 0 0-3.831A2.34 2.34 0 0 1 6.35 6.051a2.34 2.34 0 0 0 3.319-1.915"></path><circle cx="12" cy="12" r="3"></circle>',
+  "shield-check": '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.68-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path>',
+  menu: '<path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path>',
+  search: '<path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle>',
+  bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path>',
+  "chevron-down": '<path d="m6 9 6 6 6-6"></path>',
+  filter: '<path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"></path>',
+  eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle>',
+  truck: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"></path><path d="M15 18H9"></path><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"></path><circle cx="17" cy="18" r="2"></circle><circle cx="7" cy="18" r="2"></circle>',
+  "map-pin": '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"></path><circle cx="12" cy="10" r="3"></circle>',
+  user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
+  "file-text": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>',
+  "external-link": '<path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>',
+  "circle-check": '<circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path>',
+  factory: '<path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"></path><path d="M17 18h1"></path><path d="M12 18h1"></path><path d="M7 18h1"></path>',
+  package: '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="m7.5 4.27 9 5.15"></path>',
+  "calendar-check": '<path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path>',
+  "clipboard-plus": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 14h6"></path><path d="M12 11v6"></path>',
+  "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M19 8v6"></path><path d="M22 11h-6"></path>',
+  "package-plus": '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 8v8"></path><path d="M8 12h8"></path>',
+};
+
+function renderIcon(name, className = "") {
+  const icon = lucideIcons[name] ?? lucideIcons["circle-check"];
+  const classes = [className, "lucide-icon"].filter(Boolean).join(" ");
+
+  return `<span class="${classes}" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${icon}</svg></span>`;
+}
+
+function getNavIcon(label) {
+  const icons = {
+    Overview: "layout-dashboard",
+    Orders: "clipboard-list",
+    Clients: "users",
+    Products: "shirt",
+    Settings: "settings",
+  };
+
+  return icons[label] ?? "circle-check";
+}
+
+function getCardIcon(icon) {
+  const icons = {
+    queue: "clipboard-list",
+    check: "circle-check",
+    factory: "factory",
+    ready: "package",
+    calendar: "calendar-check",
+    clients: "users",
+  };
+
+  return icons[icon] ?? "circle-check";
+}
+
 const statusOptions = [
   "Pending Review",
   "Approved",
@@ -273,10 +332,10 @@ function renderOverviewPage() {
               <span class="mini-label">Admin tools</span>
             </div>
             <div class="quick-actions">
-              <button disabled title="Coming soon" type="button"><span></span><div><strong>Create Order</strong><small>Coming soon</small></div></button>
-              <button disabled title="Connect Supabase first" type="button"><span></span><div><strong>Add Client</strong><small>Connect Supabase first</small></div></button>
-              <button disabled title="Connect Supabase first" type="button"><span></span><div><strong>Add Product</strong><small>Connect Supabase first</small></div></button>
-              <button data-route-target="/orders" type="button"><span></span><div><strong>Reorder Request</strong><small>Open order queue</small></div></button>
+              <button disabled title="Coming soon" type="button">${renderIcon("clipboard-plus", "action-icon")}<div><strong>Create Order</strong><small>Coming soon</small></div></button>
+              <button disabled title="Connect Supabase first" type="button">${renderIcon("user-plus", "action-icon")}<div><strong>Add Client</strong><small>Connect Supabase first</small></div></button>
+              <button disabled title="Connect Supabase first" type="button">${renderIcon("package-plus", "action-icon")}<div><strong>Add Product</strong><small>Connect Supabase first</small></div></button>
+              <button data-route-target="/orders" type="button">${renderIcon("clipboard-list", "action-icon")}<div><strong>Reorder Request</strong><small>Open order queue</small></div></button>
             </div>
           </article>
         </div>
@@ -348,7 +407,7 @@ function renderClientsPage() {
 
       <div class="clients-action-row">
         <label class="search-field clients-search">
-          <span aria-hidden="true"></span>
+          ${renderIcon("search", "search-icon")}
           <input id="client-search" value="${escapeHtml(clientQuery)}" placeholder="Search clients by name, slug, or domain..." type="search" />
         </label>
         <button class="primary-button disabled-primary" disabled title="Client creation will be connected to Supabase later." type="button">
@@ -387,7 +446,7 @@ function renderClientsPage() {
                       <td>${clientProgram.savedEmployees}</td>
                       <td>${clientProgram.approvedProducts}</td>
                       <td><span class="status-pill active">${clientProgram.status}</span></td>
-                      <td><button class="view-button" data-client-id="${clientProgram.id}" type="button" aria-label="View Urban Coffee"><span></span></button></td>
+                      <td><button class="view-button" data-client-id="${clientProgram.id}" type="button" aria-label="View Urban Coffee">${renderIcon("eye", "view-icon")}</button></td>
                     </tr>`
                   : ""
               }
@@ -462,7 +521,7 @@ function renderProductsPage(selectedProduct) {
                 .join("")}
             </div>
             <label class="search-field product-search">
-              <span aria-hidden="true"></span>
+              ${renderIcon("search", "search-icon")}
               <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search products" type="search" />
             </label>
           </div>
@@ -604,10 +663,10 @@ function renderToolbar() {
       </div>
       <div class="table-actions">
         <label class="search-field wide-search">
-          <span aria-hidden="true"></span>
+          ${renderIcon("search", "search-icon")}
           <input id="order-search" value="${escapeHtml(query)}" placeholder="Search request no., client, or requested by..." type="search" />
         </label>
-        <button class="filter-button" aria-label="Advanced filters" type="button"><span></span></button>
+        <button class="filter-button" aria-label="Advanced filters" type="button">${renderIcon("filter", "filter-icon")}</button>
       </div>
     </div>
   `;
@@ -698,7 +757,7 @@ function renderOrderRow(order) {
       </td>
       <td>${order.itemCount}</td>
       <td>${order.qtyLabel ?? order.qty}</td>
-      <td><span class="fulfillment ${statusToClass(order.fulfillment)}"><span></span>${order.fulfillment}</span></td>
+      <td><span class="fulfillment ${statusToClass(order.fulfillment)}">${renderIcon(isPickupFulfillment(order.fulfillment) ? "map-pin" : "truck", "fulfillment-icon")}${order.fulfillment}</span></td>
       <td>
         <div class="stacked-cell needed">
           <strong>${order.neededDate}</strong>
@@ -708,7 +767,7 @@ function renderOrderRow(order) {
       <td>${renderStatusPill(order.status)}</td>
       <td>
         <button class="view-button" data-order-id="${order.id}" aria-label="View ${order.id}" type="button">
-          <span></span>
+          ${renderIcon("eye", "view-icon")}
         </button>
       </td>
     </tr>
@@ -733,7 +792,7 @@ function renderProductRow(item) {
       <td>${item.fabric}</td>
       <td>${renderStatusPill(item.status)}</td>
       <td class="mobile-only-cell"><span class="status-pill visible">${item.visible}</span></td>
-      <td><button class="view-button" data-product-code="${item.code}" aria-label="View ${item.product}" type="button"><span></span></button></td>
+      <td><button class="view-button" data-product-code="${item.code}" aria-label="View ${item.product}" type="button">${renderIcon("eye", "view-icon")}</button></td>
     </tr>
   `;
 }
@@ -764,7 +823,7 @@ function renderOrderDetailPanel(order) {
       <section class="panel-section">
         <p class="section-title">Requested By</p>
         <div class="person-row">
-          <span class="person-icon"></span>
+          ${renderIcon("user", "person-icon")}
           <div>
             <strong>${order.requestedBy}</strong>
             <span>${order.requesterRole}</span>
@@ -791,7 +850,7 @@ function renderOrderDetailPanel(order) {
 
       <section class="panel-section">
         <div class="ship-block">
-          <span class="pin-icon"></span>
+          ${renderIcon(isPickupFulfillment(order.fulfillment) ? "map-pin" : "truck", "pin-icon")}
           <div>
             <p class="section-title">${fulfillmentDestination.label}</p>
             <strong>${fulfillmentDestination.value}</strong>
@@ -811,7 +870,7 @@ function renderOrderDetailPanel(order) {
             .join("")}
         </select>
         <button class="primary-button" id="update-status" type="button">Update Status</button>
-        <button class="note-button" type="button"><span></span>Add Internal Note</button>
+        <button class="note-button" type="button">${renderIcon("file-text", "note-icon")}Add Internal Note</button>
       </section>
     </aside>
   `;
@@ -861,7 +920,7 @@ function renderClientPanel() {
           ${renderStatusPill(clientProgram.status)}
         </div>
         <a class="portal-link" href="https://${clientProgram.domain}" target="_blank" rel="noreferrer">
-          ${clientProgram.domain}<span class="external-link-icon" aria-hidden="true"></span>
+          ${clientProgram.domain}${renderIcon("external-link", "external-link-icon")}
         </a>
       </section>
       <section class="panel-section">
@@ -1021,14 +1080,14 @@ function renderSidebar(currentRoute) {
           .map(
             (item) => `
               <a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>
-                <span class="nav-icon ${item.label.toLowerCase()}" aria-hidden="true"></span>
+                ${renderIcon(getNavIcon(item.label), "nav-icon")}
                 ${item.label}
               </a>`
           )
           .join("")}
       </nav>
       <div class="system-card">
-        <span class="shield-icon" aria-hidden="true"></span>
+        ${renderIcon("shield-check", "shield-icon")}
         <div>
           <strong>System Status</strong>
           <p><span></span> All systems operational</p>
@@ -1043,20 +1102,20 @@ function renderTopHeader() {
     <header class="top-header">
       <div class="header-brand">
         <button aria-label="Toggle navigation" class="menu-button" type="button">
-          <span></span>
+          ${renderIcon("menu", "menu-icon")}
         </button>
         <strong><span>TRRY</span> Apparel Management</strong>
       </div>
       <div class="global-search-wrap">
         <label class="global-search">
           <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders, clients, products..." type="search" />
-          <span aria-hidden="true"></span>
+          ${renderIcon("search", "search-icon")}
         </label>
         ${renderGlobalSearchHint()}
       </div>
       <div class="header-actions">
         <button class="notification-button" aria-label="Notifications" type="button">
-          <span></span>
+          ${renderIcon("bell", "notification-icon")}
         </button>
         <div class="profile-area">
           <div class="avatar">TA</div>
@@ -1064,7 +1123,7 @@ function renderTopHeader() {
             <strong>TRRY Admin</strong>
             <span>Mother Admin</span>
           </div>
-          <span class="chevron"></span>
+          ${renderIcon("chevron-down", "chevron")}
         </div>
       </div>
     </header>
@@ -1075,11 +1134,11 @@ function renderMobileTopBar() {
   return `
     <header class="mobile-top-bar">
       <button aria-label="Open navigation" class="mobile-menu-button" type="button">
-        <span></span>
+        ${renderIcon("menu", "mobile-menu-icon")}
       </button>
       <strong>TRRY APPAREL</strong>
       <div class="mobile-top-actions">
-        <button aria-label="Search" class="mobile-search-button" type="button"><span></span></button>
+        <button aria-label="Search" class="mobile-search-button" type="button">${renderIcon("search", "mobile-search-icon")}</button>
         <span class="mobile-avatar" aria-label="TRRY Admin">TA</span>
       </div>
     </header>
@@ -1101,7 +1160,7 @@ function renderMobileBottomNav(currentRoute) {
         .map(
           (item) => `
             <a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>
-              <span class="nav-icon ${item.label.toLowerCase()}" aria-hidden="true"></span>
+              ${renderIcon(getNavIcon(item.label), "nav-icon")}
               <small>${item.label}</small>
             </a>`
         )
@@ -1148,7 +1207,7 @@ function renderStatusCard(item) {
 
   return `
     <article class="${classes}" ${interactiveAttrs}>
-      <span class="icon-mark ${item.icon}" aria-hidden="true"></span>
+      ${renderIcon(getCardIcon(item.icon), `icon-mark ${item.icon}`)}
       <div>
         <p>${item.label}</p>
         <strong>${item.value}</strong>
