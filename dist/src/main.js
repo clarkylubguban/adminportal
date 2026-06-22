@@ -739,6 +739,8 @@ function renderProductRow(item) {
 }
 
 function renderOrderDetailPanel(order) {
+  const fulfillmentDestination = getFulfillmentDestination(order);
+
   return `
     <aside class="detail-panel" aria-label="Selected order details">
       <div class="panel-header">
@@ -791,9 +793,9 @@ function renderOrderDetailPanel(order) {
         <div class="ship-block">
           <span class="pin-icon"></span>
           <div>
-            <p class="section-title">Ship To</p>
-            <strong>${order.shipTo}</strong>
-            <span>${order.shipAddress}</span>
+            <p class="section-title">${fulfillmentDestination.label}</p>
+            <strong>${fulfillmentDestination.value}</strong>
+            <span>${fulfillmentDestination.helper}</span>
           </div>
         </div>
       </section>
@@ -813,6 +815,26 @@ function renderOrderDetailPanel(order) {
       </section>
     </aside>
   `;
+}
+
+function getFulfillmentDestination(order) {
+  if (isPickupFulfillment(order.fulfillment)) {
+    return {
+      label: "Pickup Location",
+      value: "TRRY Apparel",
+      helper: "Customer will pick up at TRRY.",
+    };
+  }
+
+  return {
+    label: "Ship To",
+    value: order.shipTo || `${order.client} - Delivery`,
+    helper: order.shipAddress || "Delivery address to be confirmed",
+  };
+}
+
+function isPickupFulfillment(value) {
+  return String(value || "").toLowerCase().includes("pickup");
 }
 
 function renderEmptyDetailPanel() {
