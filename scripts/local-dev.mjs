@@ -27,7 +27,15 @@ async function handleRequest(request, response) {
   try {
     const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
     const pathname = decodeURIComponent(url.pathname);
-    const requestedPath = appRoutes.has(pathname) ? "/index.html" : pathname;
+    const routePath = normalizeRoutePath(pathname);
+
+    if (routePath === "/src/env.js") {
+      response.writeHead(200, { "Content-Type": contentTypes[".js"] });
+      response.end(await createEnvScript());
+      return;
+    }
+
+    const requestedPath = appRoutes.has(routePath) ? "/index.html" : pathname;
     const filePath = normalize(join(root, requestedPath));
 
     if (!filePath.startsWith(root)) {
@@ -45,6 +53,11 @@ async function handleRequest(request, response) {
     response.writeHead(404);
     response.end("Not found");
   }
+}
+
+function normalizeRoutePath(pathname) {
+  if (pathname === "/") return "/";
+  return pathname.replace(/\/+$/, "");
 }
 
 function listen(port, attempts = 0) {
@@ -65,3 +78,32 @@ function listen(port, attempts = 0) {
 }
 
 listen(preferredPort);
+
+async function createEnvScript() {
+  const env = await readLocalEnv();
+  const publicEnv = {
+    VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? env.VITE_SUPABASE_URL ?? "",
+    VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY ?? "",
+    VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA ?? env.VITE_USE_SUPABASE_DATA ?? "true",
+  };
+
+  return `window.TRRY_ADMIN_ENV = ${JSON.stringify(publicEnv, null, 2)};\n`;
+}
+
+async function readLocalEnv() {
+  try {
+    const contents = await readFile(".env", "utf8");
+    return Object.fromEntries(
+      contents
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter((line) => line && !line.startsWith("#") && line.includes("="))
+        .map((line) => {
+          const index = line.indexOf("=");
+          return [line.slice(0, index), line.slice(index + 1).replace(/^['"]|['"]$/g, "")];
+        })
+    );
+  } catch {
+    return {};
+  }
+}

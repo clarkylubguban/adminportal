@@ -8,6 +8,7 @@
     "build": "node scripts/build.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
-  "dependencies": {},
-  "devDependencies": {}
+  "dependencies": {
+    "@supabase/supabase-js": "^2.108.2"
+  }
 }

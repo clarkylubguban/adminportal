@@ -56,7 +56,7 @@ for (const text of requiredCopy) {
   }
 }
 
-for (const text of ["TRRY Apparel Management", "/src/styles.css", "/src/main.js"]) {
+for (const text of ["TRRY Apparel Management", "/src/styles.css", "/src/env.js", "/src/main.js"]) {
   if (!html.includes(text)) {
     throw new Error(`Root index.html is missing: ${text}`);
   }

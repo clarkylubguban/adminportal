@@ -1,3 +1,6 @@
+import { getAdminReorderRequests } from "./services/adminOrders.js";
+import { isSupabaseReady } from "./lib/supabaseClient.js";
+
 const statusOptions = [
   "Pending Review",
   "Approved",
@@ -66,7 +69,7 @@ let productImages = products.flatMap((product) =>
   }))
 );
 
-let orders = [
+const localOrders = [
   {
     id: "TRRY-UC-0003",
     client: "Urban Coffee",
@@ -138,6 +141,10 @@ let orders = [
   },
 ];
 
+const shouldLoadSupabaseOrders = isSupabaseReady();
+
+let orders = shouldLoadSupabaseOrders ? [] : [...localOrders];
+
 let selectedId = orders[0]?.id ?? null;
 let selectedProductCode = products[0].code;
 let activeFilter = "All";
@@ -152,6 +159,8 @@ let selectedImageAngle = "Front";
 let feedbackMessage = "";
 let globalSearchQuery = "";
 let feedbackTimer = null;
+let hasLoadedAdminOrders = false;
+let orderLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 
 const routes = {
   "/": "Overview",
@@ -161,6 +170,8 @@ const routes = {
   "/products": "Products",
   "/settings": "Settings",
 };
+
+const defaultRoutePath = "/";
 
 function render() {
   const currentRoute = getCurrentRoute();
@@ -195,6 +206,22 @@ function render() {
   `;
 
   bindEvents();
+}
+
+async function loadAdminOrders() {
+  if (hasLoadedAdminOrders) return;
+  hasLoadedAdminOrders = true;
+
+  const result = await getAdminReorderRequests(localOrders);
+  orders = result.orders;
+  orderLoadState = result.status;
+
+  if (!orders.some((order) => order.id === selectedId)) {
+    selectedId = orders[0]?.id ?? null;
+    draftStatus = orders[0]?.status ?? "Pending Review";
+  }
+
+  render();
 }
 
 function renderOverviewPage() {
@@ -588,6 +615,7 @@ function renderToolbar() {
 
 function renderOrdersTable(filteredOrders) {
   const rows = filteredOrders.map(renderOrderRow).join("");
+  const emptyState = getOrdersEmptyState(filteredOrders);
 
   return `
     <table class="orders-table">
@@ -607,8 +635,8 @@ function renderOrdersTable(filteredOrders) {
       <tbody>${rows}</tbody>
     </table>
     ${
-      filteredOrders.length === 0
-        ? `<div class="empty-state"><strong>No reorder requests found</strong><span>Try changing the filter or search term.</span></div>`
+      emptyState
+        ? `<div class="empty-state"><strong>${emptyState.title}</strong><span>${emptyState.description}</span></div>`
         : ""
     }
     <div class="table-footer">
@@ -620,6 +648,36 @@ function renderOrdersTable(filteredOrders) {
       </div>
     </div>
   `;
+}
+
+function getOrdersEmptyState(filteredOrders) {
+  if (filteredOrders.length > 0) return null;
+
+  if (orderLoadState === "loading") {
+    return {
+      title: "Loading reorder requests...",
+      description: "Checking Supabase for incoming client portal orders.",
+    };
+  }
+
+  if (orderLoadState === "error") {
+    return {
+      title: "Unable to load Supabase orders.",
+      description: "Check Supabase network access, RLS policies, and table columns.",
+    };
+  }
+
+  if (orders.length === 0) {
+    return {
+      title: "No reorder requests yet.",
+      description: "New client reorder requests will appear here.",
+    };
+  }
+
+  return {
+    title: "No reorder requests found",
+    description: "Try changing the filter or search term.",
+  };
 }
 
 function renderOrderRow(order) {
@@ -639,7 +697,7 @@ function renderOrderRow(order) {
         </div>
       </td>
       <td>${order.itemCount}</td>
-      <td>${order.qty}</td>
+      <td>${order.qtyLabel ?? order.qty}</td>
       <td><span class="fulfillment ${statusToClass(order.fulfillment)}"><span></span>${order.fulfillment}</span></td>
       <td>
         <div class="stacked-cell needed">
@@ -723,10 +781,10 @@ function renderOrderDetailPanel(order) {
         <p class="section-title">Items</p>
         <div class="item-lines">
           ${order.itemLines
-            .map((item) => `<div><span>${item.name}</span><strong>${item.qty}</strong></div>`)
+            .map((item) => `<div><span>${item.name}${item.sizeSummary ? ` - ${item.sizeSummary}` : ""}</span><strong>${item.qty}</strong></div>`)
             .join("")}
         </div>
-        <div class="total-line"><span>Total Quantity</span><strong>${order.qty}</strong></div>
+        <div class="total-line"><span>Total Quantity</span><strong>${order.qtyLabel ?? order.qty}</strong></div>
       </section>
 
       <section class="panel-section">
@@ -1102,14 +1160,14 @@ function bindEvents() {
   document.querySelectorAll("[data-route-link]").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
-      window.history.pushState({}, "", link.getAttribute("href"));
+      navigateTo(link.getAttribute("href"));
       render();
     });
   });
 
   document.querySelectorAll("[data-route-target]").forEach((button) => {
     button.addEventListener("click", () => {
-      window.history.pushState({}, "", button.dataset.routeTarget);
+      navigateTo(button.dataset.routeTarget);
       globalSearchQuery = "";
       render();
     });
@@ -1126,7 +1184,7 @@ function bindEvents() {
     card.addEventListener("click", () => {
       activeFilter = card.dataset.orderFilter;
       if (card.dataset.routeTarget) {
-        window.history.pushState({}, "", card.dataset.routeTarget);
+        navigateTo(card.dataset.routeTarget);
       }
       render();
     });
@@ -1166,7 +1224,7 @@ function bindEvents() {
       selectedId = row.dataset.recentOrderId;
       draftStatus = order?.status ?? draftStatus;
       activeFilter = "All";
-      window.history.pushState({}, "", "/orders");
+      navigateTo("/orders");
       render();
     });
   });
@@ -1414,7 +1472,7 @@ function applySearchRoute(route) {
   }
 
   globalSearchQuery = "";
-  window.history.pushState({}, "", route.path);
+  navigateTo(route.path);
   render();
 }
 
@@ -1565,7 +1623,22 @@ function statusToClass(status) {
 }
 
 function getCurrentRoute() {
-  return routes[window.location.pathname] ?? "Overview";
+  return routes[getRoutePath()] ?? routes[defaultRoutePath];
+}
+
+function getRoutePath() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  return routes[path] ? path : defaultRoutePath;
+}
+
+function navigateTo(path) {
+  const normalizedPath = normalizeRoutePath(path);
+  window.history.pushState({}, "", normalizedPath);
+}
+
+function normalizeRoutePath(path) {
+  const routePath = String(path || defaultRoutePath).split("?")[0].replace(/\/+$/, "") || "/";
+  return routes[routePath] ? routePath : defaultRoutePath;
 }
 
 function escapeHtml(value) {
@@ -1583,3 +1656,4 @@ function escapeHtml(value) {
 }
 
 render();
+loadAdminOrders();

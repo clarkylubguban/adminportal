@@ -1,0 +1,5 @@
+window.TRRY_ADMIN_ENV = window.TRRY_ADMIN_ENV || {
+  VITE_SUPABASE_URL: "",
+  VITE_SUPABASE_ANON_KEY: "",
+  VITE_USE_SUPABASE_DATA: "true",
+};
