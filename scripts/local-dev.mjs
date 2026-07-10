@@ -29,6 +29,12 @@ async function handleRequest(request, response) {
     const pathname = decodeURIComponent(url.pathname);
     const routePath = normalizeRoutePath(pathname);
 
+    if (/^\/api\/inquiries\/[^/]+\/artwork\/?$/.test(routePath)) {
+      const { default: handleArtworkRequest } = await import("../api/inquiries/[id]/artwork.js");
+      await handleArtworkRequest(request, response);
+      return;
+    }
+
     if (routePath === "/src/env.js") {
       response.writeHead(200, { "Content-Type": contentTypes[".js"] });
       response.end(await createEnvScript());
@@ -77,22 +83,40 @@ function listen(port, attempts = 0) {
   });
 }
 
+await loadServerEnv();
 listen(preferredPort);
 
+
+async function loadServerEnv() {
+  const env = {
+    ...(await readLocalEnv(".env")),
+    ...(await readLocalEnv(".env.local")),
+  };
+
+  for (const [key, value] of Object.entries(env)) {
+    if (process.env[key] === undefined) {
+      process.env[key] = value;
+    }
+  }
+}
 async function createEnvScript() {
-  const env = await readLocalEnv();
+  const env = {
+    ...(await readLocalEnv(".env")),
+    ...(await readLocalEnv(".env.local")),
+  };
   const publicEnv = {
     VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? env.VITE_SUPABASE_URL ?? "",
     VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY ?? "",
     VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA ?? env.VITE_USE_SUPABASE_DATA ?? "true",
+    VITE_ADMIN_ACCESS_CODE: process.env.VITE_ADMIN_ACCESS_CODE ?? env.VITE_ADMIN_ACCESS_CODE ?? "",
   };
 
   return `window.TRRY_ADMIN_ENV = ${JSON.stringify(publicEnv, null, 2)};\n`;
 }
 
-async function readLocalEnv() {
+async function readLocalEnv(file = ".env") {
   try {
-    const contents = await readFile(".env", "utf8");
+    const contents = await readFile(file, "utf8");
     return Object.fromEntries(
       contents
         .split(/\r?\n/)
