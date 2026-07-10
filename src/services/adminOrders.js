@@ -1,6 +1,6 @@
-import { isSupabaseReady, readSupabaseTable } from "../lib/supabaseClient.js";
+import { isSupabaseReady, readSupabaseTableWithAuth } from "../lib/supabaseClient.js";
 
-export async function getAdminReorderRequests(fallbackOrders = []) {
+export async function getAdminReorderRequests(fallbackOrders = [], authSession) {
   if (!isSupabaseReady()) {
     return {
       orders: [...fallbackOrders],
@@ -11,7 +11,7 @@ export async function getAdminReorderRequests(fallbackOrders = []) {
   }
 
   try {
-    const requests = await fetchReorderRequests();
+    const requests = await fetchReorderRequests(authSession);
 
     if (!Array.isArray(requests) || requests.length === 0) {
       return {
@@ -22,8 +22,8 @@ export async function getAdminReorderRequests(fallbackOrders = []) {
       };
     }
 
-    const clients = await fetchClientsForRequests(requests);
-    const requestItems = await fetchItemsForRequests(requests);
+    const clients = await fetchClientsForRequests(requests, authSession);
+    const requestItems = await fetchItemsForRequests(requests, authSession);
 
     return {
       orders: requests.map((request) =>
@@ -44,51 +44,51 @@ export async function getAdminReorderRequests(fallbackOrders = []) {
   }
 }
 
-async function fetchReorderRequests() {
+async function fetchReorderRequests(authSession) {
   try {
-    return await readSupabaseTable("reorder_requests", {
+    return await readSupabaseTableWithAuth("reorder_requests", {
       select: "*",
       order: "created_at.desc",
-    });
+    }, getAccessToken(authSession));
   } catch (error) {
     console.warn("Retrying reorder_requests without created_at sort.", error);
-    return readSupabaseTable("reorder_requests", {
+    return readSupabaseTableWithAuth("reorder_requests", {
       select: "*",
-    });
+    }, getAccessToken(authSession));
   }
 }
 
-async function fetchClientsForRequests(requests) {
+async function fetchClientsForRequests(requests, authSession) {
   const clientIds = uniqueValues(requests.map((request) => getFirstValue(request, ["client_id", "clientId"])));
   if (clientIds.length === 0) return [];
 
   try {
-    return await readSupabaseTable("clients", {
+    return await readSupabaseTableWithAuth("clients", {
       select: "*",
       id: `in.(${clientIds.join(",")})`,
-    });
+    }, getAccessToken(authSession));
   } catch (error) {
     console.warn("Unable to load related clients for admin orders.", error);
     return [];
   }
 }
 
-async function fetchItemsForRequests(requests) {
+async function fetchItemsForRequests(requests, authSession) {
   const requestIds = uniqueValues(requests.map((request) => request.id));
   if (requestIds.length === 0) return [];
 
   try {
-    return await readSupabaseTable("request_items", {
+    return await readSupabaseTableWithAuth("request_items", {
       select: "*",
       request_id: `in.(${requestIds.join(",")})`,
-    });
+    }, getAccessToken(authSession));
   } catch (error) {
     console.warn("Unable to load request_items by request_id; trying legacy key.", error);
     try {
-      return await readSupabaseTable("request_items", {
+      return await readSupabaseTableWithAuth("request_items", {
         select: "*",
         reorder_request_id: `in.(${requestIds.join(",")})`,
-      });
+      }, getAccessToken(authSession));
     } catch (legacyError) {
       console.warn("Unable to load related request_items for admin orders.", legacyError);
       return [];
@@ -96,6 +96,15 @@ async function fetchItemsForRequests(requests) {
   }
 }
 
+function getAccessToken(authSession) {
+  const accessToken = typeof authSession === "string" ? authSession : authSession?.access_token;
+
+  if (!accessToken) {
+    throw new Error("Supabase auth session is required for Admin Orders.");
+  }
+
+  return accessToken;
+}
 function mapReorderRequestToOrder(request, clients, requestItems) {
   const clientId = getFirstValue(request, ["client_id", "clientId"]);
   const client = clients.find((item) => String(item.id) === String(clientId)) ?? {};

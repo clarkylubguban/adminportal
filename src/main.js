@@ -1,5 +1,19 @@
+import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
-import { isSupabaseReady } from "./lib/supabaseClient.js";
+import {
+  createOpsBoardInquiry,
+  getOpsBoardInquiries,
+
+  updateOpsInquiryOdooSO,
+  updateOpsInquiryStatus,
+} from "./services/opsBoard.js";
+import { getApprovedAdminUser } from "./services/adminUsers.js";
+import {
+  getCurrentAdminAuthSession,
+  isSupabaseReady,
+  signInAdminWithPassword,
+  signOutAdmin,
+} from "./lib/supabaseClient.js";
 
 const lucideIcons = {
   "layout-dashboard": '<rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect>',
@@ -11,7 +25,9 @@ const lucideIcons = {
   menu: '<path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path>',
   search: '<path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle>',
   bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path>',
+  bot: '<path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path>',
   "chevron-down": '<path d="m6 9 6 6 6-6"></path>',
+  "chevron-right": '<path d="m9 18 6-6-6-6"></path>',
   filter: '<path d="M10 20a1 1 0 0 0 .553.895l2 1A1 1 0 0 0 14 21v-7a2 2 0 0 1 .517-1.341L21.74 4.67A1 1 0 0 0 21 3H3a1 1 0 0 0-.742 1.67l7.225 7.989A2 2 0 0 1 10 14z"></path>',
   eye: '<path d="M2.062 12.348a1 1 0 0 1 0-.696 10.75 10.75 0 0 1 19.876 0 1 1 0 0 1 0 .696 10.75 10.75 0 0 1-19.876 0"></path><circle cx="12" cy="12" r="3"></circle>',
   truck: '<path d="M14 18V6a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v11a1 1 0 0 0 1 1h2"></path><path d="M15 18H9"></path><path d="M19 18h2a1 1 0 0 0 1-1v-3.65a1 1 0 0 0-.22-.624l-3.48-4.35A1 1 0 0 0 17.52 8H14"></path><circle cx="17" cy="18" r="2"></circle><circle cx="7" cy="18" r="2"></circle>',
@@ -26,6 +42,7 @@ const lucideIcons = {
   "clipboard-plus": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 14h6"></path><path d="M12 11v6"></path>',
   "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M19 8v6"></path><path d="M22 11h-6"></path>',
   "package-plus": '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 8v8"></path><path d="M8 12h8"></path>',
+  sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.064 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.064a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path><path d="M4 17v2"></path><path d="M5 18H3"></path>',
 };
 
 function renderIcon(name, className = "") {
@@ -71,6 +88,7 @@ const statusOptions = [
 
 const clientProgram = {
   id: "urban-coffee",
+  supabaseClientId: "91a0967d-c946-43f7-b03d-f289fe3f5eec",
   name: "Urban Coffee",
   initials: "UC",
   domain: "urbancoffee.trryapparel.com",
@@ -128,6 +146,95 @@ let productImages = products.flatMap((product) =>
   }))
 );
 
+const OPS_LIME = "#DDFF4F";
+const OPS_INK = "#111111";
+const OPS_RED = "#E23F32";
+
+const opsStatus = {
+  new: { label: "New / Inquiry Received", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
+  quote: { label: "Needs Quote", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
+  sent: { label: "Quote Sent", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
+  followup: { label: "Follow Up", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
+  won: { label: "Won / Odoo Created", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
+  lost: { label: "Lost", dot: OPS_RED, bg: "#FFF5F4", text: OPS_RED },
+};
+
+const opsServiceTypes = [
+  "DTF Per Meter",
+  "Embroidery",
+  "Screen Printing",
+  "Print Only",
+  "DTF Printing",
+];
+const opsSource = {
+  FB: { label: "FB", bg: "#FFFFFF", text: OPS_INK },
+  "Walk-in": { label: "Walk-in", bg: "#FFFFFF", text: OPS_INK },
+  Referral: { label: "Referral", bg: "#FFFFFF", text: OPS_INK },
+  Portal: { label: "Portal", bg: OPS_LIME, text: OPS_INK },
+};
+
+const opsStatusNameToKey = {
+  "New / Inquiry Received": "new",
+  "New Inquiry": "new",
+  "Need Details": "followup",
+  "Needs Quote": "quote",
+  "Quote Needed": "quote",
+  "Quote Sent": "sent",
+  "Follow Up": "followup",
+  "Won / Odoo Created": "won",
+  Lost: "lost",
+};
+
+const emptyOpsExtract = {
+  customerName: "",
+  businessName: "",
+  source: "FB",
+  serviceType: "",
+  quantity: "",
+  neededDate: "",
+  summary: "",
+  missingDetails: "",
+  suggestedStatus: "New / Inquiry Received",
+  nextAction: "",
+  suggestedReply: "",
+};
+
+const localOpsInquiries = [
+  { id: "TRY-0148", customer: "Ma. Theresa Cafe", service: "DTF Print", qty: "30 pcs", dueDate: "2026-07-11", followUpDate: null, next: "Reply with fabric options", assigned: "Jena", source: "FB", status: "new", odooSO: "" },
+  { id: "TRY-0147", customer: "Kagawad Lito / Brgy. Hinaplanon", service: "Uniform + Embroidery", qty: "45 pcs", dueDate: "2026-07-07", followUpDate: null, next: "Ask sizes + logo file", assigned: "Jena", source: "FB", status: "followup", odooSO: "" },
+  { id: "TRY-0146", customer: "Iligan Riders Club", service: "Screen Print", qty: "60 pcs", dueDate: "2026-07-15", followUpDate: null, next: "Prepare quotation", assigned: "Clark", source: "Referral", status: "quote", odooSO: "" },
+  { id: "TRY-0145", customer: "St. Michael's College Org", service: "Org Shirts (DTF)", qty: "120 pcs", dueDate: "2026-07-22", followUpDate: "2026-07-07", next: "Follow up - quote sent Jul 6", assigned: "Clark", source: "Portal", status: "sent", odooSO: "" },
+  { id: "TRY-0144", customer: "D' Native Grill", service: "Staff Uniforms", qty: "18 pcs", dueDate: "2026-07-14", followUpDate: null, next: "Schedule production", assigned: "Clark", source: "Walk-in", status: "won", odooSO: "SO-2214" },
+  { id: "TRY-0143", customer: "J&M Trading", service: "Cap Embroidery", qty: "25 pcs", dueDate: null, followUpDate: null, next: "Went with another supplier", assigned: "Jena", source: "FB", status: "lost", odooSO: "" },
+];
+
+const shouldLoadSupabaseOps = isSupabaseReady();
+
+let opsInquiries = shouldLoadSupabaseOps ? [] : [...localOpsInquiries];
+let opsLoadState = shouldLoadSupabaseOps ? "loading" : "local";
+let opsLoadError = "";
+let hasLoadedOpsInquiries = false;
+
+const opsProduction = [
+  { name: "DTF", jobs: 0, note: "Production tracking not connected yet." },
+  { name: "Embroidery", jobs: 0, note: "Production tracking not connected yet." },
+  { name: "Screen Print", jobs: 0, note: "Production tracking not connected yet." },
+  { name: "Ready for Pickup", jobs: 0, note: "Production tracking not connected yet." },
+];
+
+const opsPriorities = [
+  { text: "Follow up pending quotation - St. Michael's College Org", tag: "Quote Sent", tone: "sent" },
+  { text: "Ask missing details - Brgy. Hinaplanon needs sizes + logo file", tag: "Follow Up", tone: "followup" },
+  { text: "Create Odoo Sales Order - Iligan Riders Club confirmed 60 pcs", tag: "Confirmed", tone: "won" },
+  { text: "Check production queue - embroidery due this week", tag: "Production", tone: "followup" },
+];
+
+let opsRawMessage = "";
+let opsExtractFields = null;
+let opsSavedNotice = false;
+let opsSoDraft = null;
+let opsArtworkRequests = {};
+let expandedOpsInquiryId = null;
 const localOrders = [
   {
     id: "TRRY-UC-0003",
@@ -219,7 +326,9 @@ let feedbackMessage = "";
 let globalSearchQuery = "";
 let feedbackTimer = null;
 let hasLoadedAdminOrders = false;
+let hasLoadedAdminClients = false;
 let orderLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
+let clientLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 
 const routes = {
   "/": "Overview",
@@ -231,8 +340,28 @@ const routes = {
 };
 
 const defaultRoutePath = "/";
+const ADMIN_ACCESS_SESSION_KEY = "trry_admin_access_unlocked";
+const SIDEBAR_COLLAPSED_STORAGE_KEY = "trry_admin_sidebar_collapsed_v3";
+
+let adminAccessCodeInput = "";
+let adminAccessError = "";
+let adminAccessUnlockedMemory = false;
+let adminAuthStatus = isSupabaseReady() ? "checking" : "access-code";
+let adminAuthSession = null;
+let adminUser = null;
+let adminLoginEmail = "";
+let adminLoginPassword = "";
+let adminLoginError = "";
+let adminAuthMessage = "";
+let isSidebarCollapsed = getStoredSidebarCollapsed();
+let isMobileSidebarOpen = false;
 
 function render() {
+  if (!canRenderAdminShell()) {
+    renderAdminAuthGate();
+    return;
+  }
+
   const currentRoute = getCurrentRoute();
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct =
@@ -240,10 +369,11 @@ function render() {
   const filteredOrders = getFilteredOrders();
 
   document.getElementById("root").innerHTML = `
-    <div class="app-shell">
+    <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""}">
       ${renderMobileTopBar()}
       ${renderSidebar(currentRoute)}
-      <section class="workspace">
+      <button class="sidebar-backdrop" type="button" aria-label="Close navigation"></button>
+      <section class="workspace ${isSidebarCollapsed ? "is-expanded" : ""}">
         ${renderTopHeader()}
         ${
           currentRoute === "Orders"
@@ -267,11 +397,319 @@ function render() {
   bindEvents();
 }
 
+
+function canRenderAdminShell() {
+  if (!isSupabaseReady()) {
+    return isAdminAccessUnlocked();
+  }
+
+  return adminAuthStatus === "approved" && Boolean(adminAuthSession && adminUser);
+}
+
+function renderAdminAuthGate() {
+  if (!isSupabaseReady()) {
+    renderAdminAccessGate();
+    return;
+  }
+
+  if (adminAuthStatus === "checking" || adminAuthStatus === "role-checking") {
+    renderAdminAuthLoading();
+    return;
+  }
+
+  if (adminAuthStatus === "blocked") {
+    renderAdminBlockedScreen();
+    return;
+  }
+
+  renderAdminLoginScreen();
+}
+
+function renderAdminAuthLoading() {
+  const message = adminAuthStatus === "role-checking" ? "Checking admin role..." : "Checking admin session...";
+
+  document.getElementById("root").innerHTML = `
+    <main class="admin-access-page">
+      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin loading">
+        <div class="admin-access-brand"><strong>TRRY</strong><span>APPAREL MANAGEMENT</span></div>
+        <div class="admin-access-heading">
+          <p>ADMIN AUTH</p>
+          <h1>TRRY ADMIN LOGIN</h1>
+          <span>${escapeHtml(message)}</span>
+        </div>
+      </section>
+    </main>
+  `;
+}
+
+function renderAdminLoginScreen() {
+  document.getElementById("root").innerHTML = `
+    <main class="admin-access-page">
+      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin login">
+        <div class="admin-access-brand"><strong>TRRY</strong><span>APPAREL MANAGEMENT</span></div>
+        <div class="admin-access-heading">
+          <p>STAFF ACCESS</p>
+          <h1>TRRY ADMIN LOGIN</h1>
+          <span>Staff operations dashboard. Sign in to continue.</span>
+        </div>
+        <form class="admin-access-form" id="admin-login-form">
+          <label for="admin-login-email">EMAIL</label>
+          <input id="admin-login-email" value="${escapeHtml(adminLoginEmail)}" type="email" autocomplete="email" />
+          <label for="admin-login-password">PASSWORD</label>
+          <input id="admin-login-password" value="${escapeHtml(adminLoginPassword)}" type="password" autocomplete="current-password" />
+          ${adminLoginError ? `<p class="admin-access-error">${escapeHtml(adminLoginError)}</p>` : ""}
+          <button type="submit">SIGN IN</button>
+        </form>
+        <p class="admin-access-note">Internal beta only. Admin auth and secure RLS hardening continue in the next phase.</p>
+      </section>
+    </main>
+  `;
+
+  bindAdminLoginEvents();
+}
+
+function renderAdminBlockedScreen() {
+  document.getElementById("root").innerHTML = `
+    <main class="admin-access-page">
+      <section class="admin-access-card admin-login-card blocked" aria-label="TRRY Admin access blocked">
+        <div class="admin-access-brand"><strong>TRRY</strong><span>APPAREL MANAGEMENT</span></div>
+        <div class="admin-access-heading">
+          <p>ACCESS BLOCKED</p>
+          <h1>TRRY ADMIN LOGIN</h1>
+          <span>Your account is not approved for TRRY Admin access.</span>
+        </div>
+        ${adminAuthMessage ? `<p class="admin-access-error">${escapeHtml(adminAuthMessage)}</p>` : ""}
+        <button class="admin-logout-button" id="admin-blocked-logout" type="button">LOGOUT</button>
+      </section>
+    </main>
+  `;
+
+  document.getElementById("admin-blocked-logout")?.addEventListener("click", async () => {
+    await logoutAdminUser();
+  });
+}
+
+function bindAdminLoginEvents() {
+  const email = document.getElementById("admin-login-email");
+  const password = document.getElementById("admin-login-password");
+  const form = document.getElementById("admin-login-form");
+
+  email?.addEventListener("input", (event) => {
+    adminLoginEmail = event.target.value;
+    adminLoginError = "";
+  });
+
+  password?.addEventListener("input", (event) => {
+    adminLoginPassword = event.target.value;
+    adminLoginError = "";
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await loginAdminUser();
+  });
+
+  email?.focus();
+}
+
+async function loginAdminUser() {
+  adminLoginError = "";
+  adminAuthStatus = "checking";
+  render();
+
+  try {
+    const session = await signInAdminWithPassword(adminLoginEmail.trim(), adminLoginPassword);
+    adminLoginPassword = "";
+    await approveAdminSession(session);
+  } catch (error) {
+    console.error("Admin login failed.", error);
+    adminAuthStatus = "login";
+    adminLoginError = "Invalid login. Check your email or password.";
+    render();
+  }
+}
+
+async function approveAdminSession(session) {
+  adminAuthStatus = "role-checking";
+  adminAuthSession = session;
+  render();
+
+  try {
+    const approvedUser = await getApprovedAdminUser(session);
+
+    if (!approvedUser) {
+      adminUser = null;
+      adminAuthStatus = "blocked";
+      adminAuthMessage = "Your account is not approved for TRRY Admin access.";
+      render();
+      return;
+    }
+
+    adminUser = approvedUser;
+    adminAuthStatus = "approved";
+    adminAuthMessage = "";
+    render();
+    startAdminDataLoading();
+  } catch (error) {
+    console.error("Admin role check failed.", error);
+    adminUser = null;
+    adminAuthStatus = "blocked";
+    adminAuthMessage = error.message || "Unable to verify TRRY Admin access.";
+    render();
+  }
+}
+
+async function initializeAdminAuth() {
+  if (!isSupabaseReady()) {
+    adminAuthStatus = "access-code";
+    render();
+    if (isAdminAccessUnlocked()) startAdminDataLoading();
+    return;
+  }
+
+  adminAuthStatus = "checking";
+  render();
+
+  const session = await getCurrentAdminAuthSession();
+  if (!session) {
+    adminAuthSession = null;
+    adminUser = null;
+    adminAuthStatus = "login";
+    render();
+    return;
+  }
+
+  await approveAdminSession(session);
+}
+
+async function logoutAdminUser() {
+  await signOutAdmin();
+  adminAuthSession = null;
+  adminUser = null;
+  adminLoginPassword = "";
+  adminAuthMessage = "";
+  adminAuthStatus = isSupabaseReady() ? "login" : "access-code";
+  render();
+}
+function renderAdminAccessGate() {
+  document.getElementById("root").innerHTML = `
+    <main class="admin-access-page">
+      <section class="admin-access-card" aria-label="TRRY Admin access gate">
+        <div class="admin-access-brand">
+          <strong>TRRY</strong>
+          <span>APPAREL MANAGEMENT</span>
+        </div>
+        <div class="admin-access-heading">
+          <p>INTERNAL BETA</p>
+          <h1>TRRY ADMIN ACCESS</h1>
+          <span>Internal beta dashboard. Enter access code to continue.</span>
+        </div>
+        <form class="admin-access-form" id="admin-access-form">
+          <label for="admin-access-code">ADMIN ACCESS CODE</label>
+          <input
+            id="admin-access-code"
+            value="${escapeHtml(adminAccessCodeInput)}"
+            type="password"
+            autocomplete="current-password"
+            inputmode="text"
+            aria-invalid="${adminAccessError ? "true" : "false"}"
+          />
+          ${adminAccessError ? `<p class="admin-access-error">${escapeHtml(adminAccessError)}</p>` : ""}
+          <button type="submit">UNLOCK ADMIN</button>
+        </form>
+        <p class="admin-access-note">Internal beta only. Admin auth and secure RLS will be added before production use.</p>
+      </section>
+    </main>
+  `;
+
+  bindAdminAccessGateEvents();
+}
+
+function bindAdminAccessGateEvents() {
+  const input = document.getElementById("admin-access-code");
+  const form = document.getElementById("admin-access-form");
+
+  input?.addEventListener("input", (event) => {
+    adminAccessCodeInput = event.target.value;
+    adminAccessError = "";
+  });
+
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const configuredCode = getAdminAccessCode();
+
+    if (!configuredCode || adminAccessCodeInput.trim() !== configuredCode) {
+      adminAccessError = "Invalid access code. Try again.";
+      renderAdminAccessGate();
+      document.getElementById("admin-access-code")?.focus();
+      return;
+    }
+
+    setAdminAccessUnlocked();
+    adminAccessCodeInput = "";
+    adminAccessError = "";
+    render();
+    startAdminDataLoading();
+  });
+
+  input?.focus();
+}
+
+function getAdminAccessCode() {
+  return String(window.TRRY_ADMIN_ENV?.VITE_ADMIN_ACCESS_CODE ?? "");
+}
+
+function isAdminAccessUnlocked() {
+  if (adminAccessUnlockedMemory) return true;
+
+  try {
+    return sessionStorage.getItem(ADMIN_ACCESS_SESSION_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
+function setAdminAccessUnlocked() {
+  adminAccessUnlockedMemory = true;
+
+  try {
+    sessionStorage.setItem(ADMIN_ACCESS_SESSION_KEY, "true");
+  } catch {
+    // If sessionStorage is unavailable, keep access for this page load only.
+  }
+}
+
+function getStoredSidebarCollapsed() {
+  try {
+    const storedValue = localStorage.getItem(SIDEBAR_COLLAPSED_STORAGE_KEY);
+    return storedValue === "true";
+  } catch {
+    return false;
+  }
+}
+
+function setStoredSidebarCollapsed(value) {
+  isSidebarCollapsed = value;
+
+  try {
+    localStorage.setItem(SIDEBAR_COLLAPSED_STORAGE_KEY, String(value));
+  } catch {
+    // localStorage is a convenience only; the shell still works without it.
+  }
+}
+
+function startAdminDataLoading() {
+  if (!canRenderAdminShell()) return;
+  loadOpsBoardInquiries();
+  loadAdminOrders();
+  loadAdminClients();
+}
+
 async function loadAdminOrders() {
   if (hasLoadedAdminOrders) return;
   hasLoadedAdminOrders = true;
 
-  const result = await getAdminReorderRequests(localOrders);
+  const result = await getAdminReorderRequests(localOrders, adminAuthSession);
   orders = result.orders;
   orderLoadState = result.status;
 
@@ -283,78 +721,488 @@ async function loadAdminOrders() {
   render();
 }
 
+async function loadAdminClients() {
+  if (hasLoadedAdminClients) return;
+  hasLoadedAdminClients = true;
+
+  const result = await getAdminClientPrograms(clientProgram, adminAuthSession);
+  Object.assign(clientProgram, result.clients[0] ?? clientProgram);
+  clientLoadState = result.status;
+
+  render();
+}
+async function loadOpsBoardInquiries() {
+  if (hasLoadedOpsInquiries) return;
+  hasLoadedOpsInquiries = true;
+
+  const result = await getOpsBoardInquiries(localOpsInquiries, adminAuthSession);
+  opsInquiries = result.inquiries;
+  opsLoadState = result.status;
+  opsLoadError = result.error?.message ?? "";
+
+  render();
+}
 function renderOverviewPage() {
-  const cards = [
-    { label: "Pending Review", value: countOrders("Pending Review"), icon: "queue", delta: "Needs admin review", orderFilter: "Pending Review", route: "/orders" },
-    { label: "Approved", value: countOrders("Approved"), icon: "check", delta: "Ready for scheduling", orderFilter: "Approved", route: "/orders" },
-    { label: "In Production", value: countOrders("In Production"), icon: "factory", delta: "Production active", orderFilter: "In Production", route: "/orders" },
-    { label: "Ready to Ship", value: countOrders("Ready"), icon: "ready", delta: "Awaiting dispatch", orderFilter: "Ready", route: "/orders" },
-    { label: "Completed This Month", value: countOrders("Completed"), icon: "calendar", delta: "June 2026", orderFilter: "Completed", route: "/orders" },
+  const overdueList = opsInquiries.filter(isOpsOverdue);
+  const counts = getOpsCounts();
+  const summaryCards = [
+    { label: "New Inquiries", value: counts.newToday, hint: "came in today" },
+    { label: "Quotes Due", value: counts.quotesDue, hint: "waiting on us" },
+    { label: "Follow-ups", value: counts.followUps, hint: "needs staff check" },
+    { label: "Production Today", value: counts.prodToday, hint: "jobs on the floor" },
+    { label: "Converted to Odoo", value: counts.converted, hint: "official SOs", gold: true },
   ];
+  const columns = ["new", "quote", "sent", "followup", "won", "lost"];
 
   return `
-    <main class="orders-page">
-      <div class="page-heading split-heading">
-        <div>
-          <h1>Overview</h1>
-          <p class="subtitle">Monitor key client portal orders and production movement across TRRY Apparel.</p>
-        </div>
-        <span class="date-chip">June 2026 Operations</span>
-      </div>
-
-      <section class="status-grid" aria-label="Operations summary">
-        ${cards.map(renderStatusCard).join("")}
-      </section>
-
-      <section class="overview-dashboard-grid">
-        <article class="content-card dashboard-table-card">
-          <div class="card-header">
-            <h2>Recent Orders</h2>
-            <button class="link-button" data-route-target="/orders" type="button">View all orders</button>
+    <main class="orders-page ops-board-page">
+      <div class="ops-shell">
+        <header class="ops-hero">
+          <div>
+            <p class="ops-date-line">Wed / Jul 8, 2026 / Iligan City</p>
+            <h1>Today's Operations</h1>
+            <p class="subtitle">See inquiries, follow-ups, production, and AI actions in one view.</p>
           </div>
-          ${renderRecentOrdersTable()}
-        </article>
-        <div class="side-stack">
-          <article class="activity-card">
-            <div class="card-header">
-              <h2>Today's Activity</h2>
-              <span class="mini-label">Live queue</span>
-            </div>
-            <div class="activity-list">
-              <div><span></span><strong>New reorder request submitted</strong><p>Urban Coffee - Admin Polo Uniform</p></div>
-              <div><span></span><strong>Status moved to Approved</strong><p>Urban Coffee - Embroidered Staff Cap</p></div>
-              <div><span></span><strong>Production queue updated</strong><p>Urban Coffee - Mixed reorder request</p></div>
-            </div>
-          </article>
-          <article class="activity-card">
-            <div class="card-header">
-              <h2>Quick Actions</h2>
-              <span class="mini-label">Admin tools</span>
-            </div>
-            <div class="quick-actions">
-              <button disabled title="Coming soon" type="button">${renderIcon("clipboard-plus", "action-icon")}<div><strong>Create Order</strong><small>Coming soon</small></div></button>
-              <button disabled title="Connect Supabase first" type="button">${renderIcon("user-plus", "action-icon")}<div><strong>Add Client</strong><small>Connect Supabase first</small></div></button>
-              <button disabled title="Connect Supabase first" type="button">${renderIcon("package-plus", "action-icon")}<div><strong>Add Product</strong><small>Connect Supabase first</small></div></button>
-              <button data-route-target="/orders" type="button">${renderIcon("clipboard-list", "action-icon")}<div><strong>Reorder Request</strong><small>Open order queue</small></div></button>
-            </div>
-          </article>
-        </div>
-      </section>
-    </main>
-  `;
+          <div class="ops-rule-card">
+            <strong>Iron rules</strong>
+            <span>No quote before review / no production without approval / no production without Odoo.</span>
+          </div>
+        </header>
+        <section class="ops-kpi-grid" aria-label="Ops board summary">${summaryCards.map(renderOpsSummaryCard).join("")}</section>${renderOpsPersistenceNotice()}
+        <section class="ops-priority-section ops-full-row"><div class="ops-section-heading"><h2>Today's Priority</h2>${overdueList.length ? `<span class="ops-overdue-count">${overdueList.length} overdue</span>` : ""}</div><div class="ops-priority-list">${getOpsPriorityItems().map(renderOpsPriorityRow).join("")}</div></section>
+        <section class="ops-card ops-ai-card ops-full-row">
+          <div class="ops-section-heading compact"><div><h2>${renderIcon("sparkles", "ops-heading-icon")} AI Capture Inquiry</h2><p>I-paste ang message. AI reads it, you review, you save. No auto-save.</p></div></div>
+          <textarea id="ops-raw-message" rows="3" placeholder="Paste Facebook / Messenger inquiry here...">${escapeHtml(opsRawMessage)}</textarea>
+          <div class="ops-action-row"><button class="ops-dark-button" id="ops-extract-inquiry" type="button" ${opsRawMessage.trim() ? "" : "disabled"}>${renderIcon("sparkles", "ops-button-icon")} Extract Inquiry</button>${opsSavedNotice ? `<span class="ops-save-notice">${renderIcon("circle-check", "ops-notice-icon")} Inquiry saved to pipeline</span>` : ""}</div>
+          ${opsExtractFields ? renderOpsReviewForm() : ""}
+        </section>
+        <section class="ops-pipeline-section"><div class="ops-section-heading split"><h2>Inquiry Pipeline</h2><span>Won = Odoo Sales Order created</span></div><div class="ops-kanban" aria-label="Inquiry pipeline">${columns.map(renderOpsColumn).join("")}</div></section>${renderOpsInquiryDrawer()}
+        <section class="ops-production-section"><h2>Production Snapshot</h2><div class="ops-production-grid">${opsProduction.map(renderOpsProductionCard).join("")}</div></section>
+      </div>
+    </main>`;
 }
 
+
+function renderOpsPersistenceNotice() {
+  if (opsLoadState === "success") return "";
+
+  if (opsLoadState === "loading") {
+    return `<section class="ops-persistence-card"><strong>Loading Ops Board inquiries</strong><span>Reading from Supabase...</span></section>`;
+  }
+
+  if (opsLoadState === "empty") {
+    return `<section class="ops-persistence-card"><strong>No persisted inquiries yet</strong><span>Save a reviewed inquiry to create the first Ops Board card in Supabase.</span></section>`;
+  }
+
+  if (opsLoadState === "local") {
+    return `<section class="ops-persistence-card"><strong>Local preview mode</strong><span>Supabase data is disabled or env is missing, so Ops Board changes reset on refresh.</span></section>`;
+  }
+
+  if (opsLoadState === "missing-table" || opsLoadState === "error") {
+    const title = opsLoadState === "missing-table" ? "Ops Board table is not ready" : "Unable to load Ops Board inquiries";
+    return `<section class="ops-persistence-card error"><strong>${title}</strong><span>${escapeHtml(opsLoadError || "Unable to load inquiries. Check the Supabase connection and admin access.")}</span></section>`;
+  }
+
+  return "";
+}
+function getOpsCounts() {
+  return {
+    newToday: opsInquiries.filter((item) => item.status === "new").length,
+    quotesDue: opsInquiries.filter((item) => item.status === "quote").length,
+    followUps: opsInquiries.filter((item) => item.status === "sent" || item.status === "followup").length,
+    prodToday: opsProduction.filter((item) => item.name !== "Ready for Pickup").reduce((total, item) => total + item.jobs, 0),
+    converted: opsInquiries.filter((item) => item.status === "won" && item.odooSO).length,
+  };
+}
+
+function getOpsPriorityItems() {
+  const today = todayIsoDate();
+  const selected = [];
+  const seen = new Set();
+  const addInquiry = (item, tag, tone, text) => {
+    if (!item || seen.has(item.id)) return;
+    seen.add(item.id);
+    selected.push({
+      inquiryId: item.id,
+      text,
+      tag,
+      tone,
+    });
+  };
+
+  opsInquiries.filter(isOpsOverdue).forEach((item) =>
+    addInquiry(item, "Overdue", "overdue", `${item.customer} - ${item.next || "Needs staff check"}`)
+  );
+
+  opsInquiries
+    .filter((item) => item.status === "followup" && item.followUpDate === today)
+    .forEach((item) => addInquiry(item, "Follow Up", "followup", `${item.customer} - follow up today`));
+
+  opsInquiries
+    .filter((item) => item.status === "sent" && !item.odooSO)
+    .forEach((item) => addInquiry(item, "Quote Sent", "sent", `${item.customer} - quote sent, confirm next step`));
+
+  opsInquiries
+    .filter((item) => item.status === "quote")
+    .forEach((item) => addInquiry(item, "Needs Quote", "quote", `${item.customer} - prepare quotation`));
+
+  opsInquiries
+    .filter((item) => /confirm/i.test(item.next || "") && !item.odooSO)
+    .forEach((item) => addInquiry(item, "Need SO", "sent", `${item.customer} - add Odoo SO number`));
+
+  const limited = selected.slice(0, 6).map((item, index) => ({ ...item, number: index + 1 }));
+
+  if (limited.length) return limited;
+
+  return [{ number: 1, text: "No linked inquiry yet.", tag: "Clear", tone: "new", inquiryId: "" }];
+}
+function renderOpsSummaryCard(card) {
+  return `<article class="ops-kpi-card ${card.gold ? "gold" : ""}"><strong>${card.value}</strong><span>${card.label}</span><small>${card.hint}</small></article>`;
+}
+
+function renderOpsReviewForm() {
+  const fields = opsExtractFields;
+  const simpleFields = [["customerName", "Customer Name"], ["businessName", "Business Name"], ["quantity", "Quantity"], ["neededDate", "Needed Date"], ["nextAction", "Next Action"]];
+  const textFields = [["summary", "Summary", 2], ["missingDetails", "Missing Details", 2], ["suggestedReply", "Suggested Reply", 3]];
+  return `<div class="ops-review-box"><p class="ops-review-label">Review before saving - edit anything AI got wrong</p><div class="ops-review-grid">${simpleFields.map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}<label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label><label><span>Suggested Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Needs Quote", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div><div class="ops-review-stack">${textFields.map(([key, label, rows]) => renderOpsTextarea(key, label, fields[key], rows)).join("")}</div><div class="ops-action-row"><button class="ops-gold-button" id="ops-save-inquiry" type="button">Save Inquiry</button><button class="ops-light-button" id="ops-clear-inquiry" type="button">Clear</button></div></div>`;
+}
+
+function renderOpsServiceTypeSelect(value) {
+  return `<label><span>Service Type</span><select data-ops-field="serviceType"><option value="" ${value ? "" : "selected"}>Select service type</option>${opsServiceTypes.map((serviceType) => `<option value="${serviceType}" ${serviceType === value ? "selected" : ""}>${serviceType}</option>`).join("")}</select></label>`;
+}
+function renderOpsInput(key, label, value) {
+  return `<label><span>${label}</span><input data-ops-field="${key}" value="${escapeHtml(value)}" /></label>`;
+}
+
+function renderOpsTextarea(key, label, value, rows) {
+  return `<label><span>${label}</span><textarea data-ops-field="${key}" rows="${rows}">${escapeHtml(value)}</textarea></label>`;
+}
+
+function renderOpsPriorityRow(item) {
+  const tone = item.tone === "overdue" ? { bg: "#FEECEC", text: "#B91C1C" } : opsStatus[item.tone] || { bg: "#FFFFFF", text: OPS_INK };
+  const isLinked = Boolean(item.inquiryId);
+  const isActive = isLinked && expandedOpsInquiryId === item.inquiryId;
+  return `<button class="ops-priority-row ${item.tone === "overdue" ? "overdue" : ""} ${isActive ? "active" : ""} ${isLinked ? "" : "no-link"}" ${isLinked ? `data-ops-priority-id="${escapeHtml(item.inquiryId)}"` : ""} type="button"><span class="ops-row-number">${String(item.number).padStart(2, "0")}</span><span class="ops-priority-text">${escapeHtml(item.text)}</span><span class="ops-mini-badge" style="background:${tone.bg};color:${tone.text}">${escapeHtml(item.tag)}</span>${renderIcon("chevron-right", "ops-chevron-icon")}</button>`;
+}
+
+function renderOpsColumn(statusKey) {
+  const status = opsStatus[statusKey];
+  const items = opsInquiries.filter((item) => item.status === statusKey);
+  return `<section class="ops-column"><header><span style="background:${status.dot}"></span><strong>${status.label}</strong><small>${items.length}</small></header><div class="ops-column-list">${items.length ? items.map((item) => renderOpsInquiryCard(item, statusKey)).join("") : `<div class="ops-empty-column">Walay sulod - clear!</div>`}</div></section>`;
+}
+
+function renderOpsInquiryCard(item, statusKey) {
+  const status = opsStatus[statusKey];
+  const overdue = isOpsOverdue(item);
+  const isSelected = expandedOpsInquiryId === item.id;
+  return `<article class="ops-ticket-card ops-accordion-card ${overdue ? "overdue" : ""} ${isSelected ? "is-expanded" : ""}"><button class="ops-ticket-summary ${isSelected ? "active" : ""}" data-ops-card-id="${escapeHtml(item.id)}" data-ops-toggle-details="${escapeHtml(item.id)}" type="button" aria-expanded="${isSelected ? "true" : "false"}" aria-label="${isSelected ? "Close" : "Open"} inquiry ${escapeHtml(item.id)} details"><span class="ops-summary-text"><strong>${escapeHtml(item.customer)}</strong><small>${escapeHtml(item.qty)} / ${status.label}</small></span><span class="ops-summary-indicator">${isSelected ? "x" : "+"}</span></button></article>`;
+}
+
+function renderOpsInquiryDrawer() {
+  const item = opsInquiries.find((inquiry) => inquiry.id === expandedOpsInquiryId);
+  if (!item) return "";
+
+  const status = opsStatus[item.status] ?? opsStatus.new;
+  const source = opsSource[item.source] ?? opsSource.FB;
+  const overdue = isOpsOverdue(item);
+
+  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content">${renderOpsInquiryDetails(item, source, status, overdue)}${renderOpsArtworkAction(item)}${item.status === "sent" ? renderOpsOdooAction(item) : ""}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+}
+function renderOpsInquiryDetails(item, source, status, overdue) {
+  return `<div class="ops-ticket-details"><div><span>Inquiry ID</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Status</span><strong>${escapeHtml(status.label)}${overdue ? " / Overdue" : ""}</strong></div><div><span>Source</span><strong>${escapeHtml(source.label)}</strong></div><div><span>Product</span><strong>${escapeHtml(item.service || "-")}</strong></div><div><span>Quantity</span><strong>${escapeHtml(item.qty || "-")}</strong></div><div><span>Date</span><strong>${renderOpsCardDate(item)}</strong></div><div><span>Contact</span><strong>${escapeHtml(item.contact || "-")}</strong></div><div><span>Assigned staff</span><strong>${escapeHtml(item.assigned || "Unassigned")}</strong></div><div class="wide"><span>Full inquiry / message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div><div class="wide"><span>Next action</span><strong>${escapeHtml(item.next || "Review inquiry")}</strong></div><div><span>Estimated value</span><strong>${formatOpsValue(item.estimatedValue)}</strong></div><div><span>Odoo SO:</span><strong>${escapeHtml(item.odooSO || "Not created yet")}</strong></div></div>`;
+}
+function renderOpsArtworkAction(item) {
+  const request = opsArtworkRequests[item.id] ?? {};
+  const isLoading = request.status === "loading";
+  const message = request.message ? `<p class="ops-artwork-message ${request.status === "error" ? "error" : ""}">${escapeHtml(request.message)}</p>` : "";
+
+  return `<div class="ops-artwork-action"><span>Artwork file</span><div><button class="ops-dark-button mini" data-ops-view-artwork="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>${renderIcon("external-link", "ops-button-icon")}${isLoading ? "OPENING ARTWORK..." : "VIEW ARTWORK"}</button></div>${message}</div>`;
+}
+
+async function openOpsArtwork(inquiryId) {
+  if (!inquiryId) return;
+
+  opsArtworkRequests = {
+    ...opsArtworkRequests,
+    [inquiryId]: { status: "loading", message: "" },
+  };
+  render();
+
+  try {
+    const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/artwork`, {
+      headers: adminAuthSession?.access_token
+        ? { Authorization: `Bearer ${adminAuthSession.access_token}` }
+        : {},
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok || !payload?.ok || !payload?.signedUrl) {
+      opsArtworkRequests = {
+        ...opsArtworkRequests,
+        [inquiryId]: { status: "error", message: getOpsArtworkErrorMessage(response.status, payload?.error) },
+      };
+      render();
+      return;
+    }
+
+    window.open(payload.signedUrl, "_blank", "noopener,noreferrer");
+    opsArtworkRequests = {
+      ...opsArtworkRequests,
+      [inquiryId]: { status: "opened", message: `OPENED ${payload.filename || "ARTWORK FILE"}` },
+    };
+    render();
+  } catch (error) {
+    console.error("Unable to open inquiry artwork.", error);
+    opsArtworkRequests = {
+      ...opsArtworkRequests,
+      [inquiryId]: { status: "error", message: "ARTWORK LINK FAILED. TRY AGAIN." },
+    };
+    render();
+  }
+}
+
+function getOpsArtworkErrorMessage(status, error) {
+  if (status === 404 && error === "no artwork uploaded") return "NO ARTWORK FILE AVAILABLE";
+  if (status === 400) return "INVALID INQUIRY REFERENCE";
+  if (status === 401) return "ADMIN SESSION REQUIRED";
+  if (status === 404) return "INQUIRY NOT FOUND";
+  return "ARTWORK LINK FAILED. TRY AGAIN.";
+}
+function renderOpsStaffActions(item, statusKey) {
+  const actions = getOpsStatusActions(statusKey);
+
+  if (actions.length === 0) {
+    const finalText = statusKey === "won" ? "Closed - Odoo SO created" : "Closed - lost inquiry";
+    return `<div class="ops-card-final">${finalText}</div>`;
+  }
+
+  return `<div class="ops-card-actions"><span>Staff actions</span><div>${actions
+    .map((action) => `<button class="ops-move-button ${action.tone || ""}" data-ops-move-id="${item.id}" data-ops-move-to="${action.to}" type="button">${action.label}</button>`)
+    .join("")}</div></div>`;
+}
+
+function getOpsStatusActions(statusKey) {
+  const actions = {
+    new: [
+      { to: "quote", label: "Needs Quote", next: "Prepare quote and confirm requirements" },
+      { to: "followup", label: "Follow Up", next: "Follow up for missing details" },
+      { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
+    ],
+    quote: [
+      { to: "sent", label: "Quote Sent", next: "Quote sent - wait for confirmation or add Odoo SO when confirmed" },
+      { to: "followup", label: "Follow Up", next: "Follow up before sending quote" },
+      { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
+    ],
+    sent: [
+      { to: "followup", label: "Follow Up", next: "Follow up on sent quote" },
+      { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
+    ],
+    followup: [
+      { to: "quote", label: "Needs Quote", next: "Prepare quote after follow-up" },
+      { to: "sent", label: "Quote Sent", next: "Quote sent - wait for confirmation or add Odoo SO when confirmed" },
+      { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
+    ],
+  };
+
+  return actions[statusKey] ?? [];
+}
+
+async function moveOpsInquiry(id, targetStatus) {
+  if (targetStatus === "won") return;
+
+  const current = opsInquiries.find((item) => item.id === id);
+  const action = current ? getOpsStatusActions(current.status).find((item) => item.to === targetStatus) : null;
+  if (!current || !opsStatus[targetStatus] || !action) return;
+
+  const updates = {
+    status: targetStatus,
+    next: action.next,
+    followUpDate: targetStatus === "followup" ? current.followUpDate || todayIsoDate() : current.followUpDate,
+  };
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      await updateOpsInquiryStatus(id, updates, adminAuthSession);
+      opsLoadState = opsLoadState === "empty" ? "success" : opsLoadState;
+      opsLoadError = "";
+    } catch (error) {
+      console.error("Unable to update Ops Board inquiry status.", error);
+      opsLoadState = "error";
+      opsLoadError = error.message;
+      return;
+    }
+  }
+
+  opsInquiries = opsInquiries.map((item) =>
+    item.id === id
+      ? {
+          ...item,
+          ...updates,
+        }
+      : item
+  );
+
+  if (opsSoDraft?.id === id && targetStatus !== "sent") {
+    opsSoDraft = null;
+  }
+}
+function todayIsoDate() {
+  return new Date().toISOString().slice(0, 10);
+}
+function renderOpsOdooAction(item) {
+  if (opsSoDraft?.id === item.id) {
+    const value = opsSoDraft.value ?? "";
+    return `<div class="ops-so-editor"><span>Customer confirmed? Enter the Odoo SO number</span><input class="ops-so-input" data-ops-so-input="${item.id}" value="${escapeHtml(value)}" placeholder="e.g. SO-2216" /><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${value.trim() ? "" : "disabled"}>Confirm - Move to Won</button><button class="ops-light-button mini" data-ops-cancel-so type="button">Cancel</button></div></div>`;
+  }
+  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">Add Odoo SO #</button>`;
+}
+
+function renderOpsProductionCard(item) {
+  return `<article class="ops-production-card"><div><span>${escapeHtml(item.name)}</span><strong>${item.jobs}</strong></div><p>${escapeHtml(item.note)}</p></article>`;
+}
+
+function formatOpsDue(iso) {
+  if (!iso) return "-";
+  const date = new Date(`${iso}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function renderOpsCardDate(item) {
+  if (item.followUpDate) return `Follow-up ${formatOpsDue(item.followUpDate)}`;
+  return `Due ${formatOpsDue(item.dueDate)}`;
+}
+
+function formatOpsValue(value) {
+  if (value === null || value === undefined || value === "") return "-";
+  const numberValue = Number(value);
+  if (Number.isFinite(numberValue)) {
+    return `PHP ${numberValue.toLocaleString("en-US")}`;
+  }
+  return escapeHtml(value);
+}
+function isOpsOverdue(item) {
+  if (item.status === "won" || item.status === "lost") return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const isPast = (iso) => Boolean(iso && new Date(`${iso}T00:00:00`) < today);
+  return isPast(item.dueDate) || isPast(item.followUpDate);
+}
+
+function detectOpsServiceType(text) {
+  if (/dtf\s*(per\s*)?meter|per\s*meter/i.test(text)) return "DTF Per Meter";
+  if (/embro|burda/i.test(text)) return "Embroidery";
+  if (/screen|silk/i.test(text)) return "Screen Printing";
+  if (/print\s*only/i.test(text)) return "Print Only";
+  if (/dtf/i.test(text)) return "DTF Printing";
+  return "";
+}
+function demoExtractOpsInquiry(text) {
+  const qtyMatch = text.match(/\d+\s*(pcs|pc|pieces|shirts|caps|uniforms)?/i);
+  const quantity = qtyMatch ? qtyMatch[0].trim() : "";
+  const serviceType = detectOpsServiceType(text);
+  const missing = [];
+  if (!quantity) missing.push("quantity");
+  if (!serviceType) missing.push("service type");
+  missing.push("sizes", "design file");
+  return { ...emptyOpsExtract, serviceType, quantity, summary: text.trim().slice(0, 90) + (text.trim().length > 90 ? "..." : ""), missingDetails: missing.join(", "), suggestedStatus: missing.length > 2 ? "Follow Up" : "Needs Quote", nextAction: missing.length > 2 ? "Follow up for missing details" : "Prepare quote and confirm requirements", suggestedReply: "Salamat sa inquiry! Para ma-review namo ug tarong, pwede mangayo sa design file ug sizes? I-send ra diri." };
+}
+
+async function saveOpsInquiry() {
+  if (!opsExtractFields) return;
+  const inquiry = buildOpsInquiryFromExtract();
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      const savedInquiry = await createOpsBoardInquiry(inquiry, adminAuthSession);
+      opsInquiries = [savedInquiry, ...opsInquiries];
+      opsLoadState = "success";
+      opsLoadError = "";
+    } catch (error) {
+      console.error("Unable to save Ops Board inquiry.", error);
+      opsLoadState = "error";
+      opsLoadError = error.message;
+      return;
+    }
+  } else {
+    opsInquiries = [inquiry, ...opsInquiries];
+  }
+
+  opsRawMessage = "";
+  opsExtractFields = null;
+  opsSavedNotice = true;
+}
+
+function createOpsInquiryId() {
+  const now = new Date();
+  const timestamp = [
+    now.getFullYear(),
+    String(now.getMonth() + 1).padStart(2, "0"),
+    String(now.getDate()).padStart(2, "0"),
+    String(now.getHours()).padStart(2, "0"),
+    String(now.getMinutes()).padStart(2, "0"),
+    String(now.getSeconds()).padStart(2, "0"),
+  ].join("");
+  return `TRY-${timestamp}`;
+}
+function buildOpsInquiryFromExtract() {
+  const status = opsStatusNameToKey[opsExtractFields.suggestedStatus] || "new";
+
+  return {
+    id: createOpsInquiryId(),
+    customer: opsExtractFields.businessName || opsExtractFields.customerName || "Unnamed inquiry",
+    contact: opsExtractFields.customerName || "",
+    source: opsSource[opsExtractFields.source] ? opsExtractFields.source : "FB",
+    message: opsRawMessage,
+    service: opsExtractFields.serviceType || "-",
+    qty: opsExtractFields.quantity || "-",
+    priority: "normal",
+    dueDate: normalizeOpsDate(opsExtractFields.neededDate),
+    followUpDate: null,
+    next: opsExtractFields.nextAction || "Review inquiry",
+    assigned: "Unassigned",
+    status,
+    odooSO: "",
+  };
+}
+function normalizeOpsDate(value) {
+  if (!value) return null;
+  const parsed = Date.parse(value);
+  return Number.isNaN(parsed) ? null : new Date(parsed).toISOString().slice(0, 10);
+}
+
+async function confirmOpsSO(id) {
+  const so = (opsSoDraft?.value || "").trim();
+  if (!so) return;
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      await updateOpsInquiryOdooSO(id, so, adminAuthSession);
+      opsLoadState = opsLoadState === "empty" ? "success" : opsLoadState;
+      opsLoadError = "";
+    } catch (error) {
+      console.error("Unable to save Ops Board Odoo SO.", error);
+      opsLoadState = "error";
+      opsLoadError = error.message;
+      return;
+    }
+  }
+
+  opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", odooSO: so, next: "Odoo Sales Order recorded" } : item);
+  opsSoDraft = null;
+}
 function renderOrdersPage(selectedOrder, filteredOrders) {
   return `
     <main class="orders-page">
       <div class="page-heading">
         <div>
-          <h1>Orders</h1>
-          <p class="subtitle">Manage incoming reorder requests from client portals.</p>
+          <h1>Client Reorder Requests</h1>
+          <p class="subtitle">Manage submitted reorder requests from approved client portals.</p>
+          <p class="page-helper-note">These are client portal requests. Review details before approving for production.</p>
         </div>
       </div>
 
-      <section class="status-grid" aria-label="Order status summary">
+      <section class="status-grid" aria-label="Client reorder request status summary">
         ${getOrderStatCards().map(renderStatusCard).join("")}
       </section>
 
@@ -427,7 +1275,7 @@ function renderClientsPage() {
                 <th>Saved Employees</th>
                 <th>Approved Products</th>
                 <th>Status</th>
-                <th>View</th>
+                <th>Review</th>
               </tr>
             </thead>
             <tbody>
@@ -458,7 +1306,7 @@ function renderClientsPage() {
               : `<div class="empty-state compact-empty"><strong>No clients found</strong><span>Try searching for Urban Coffee or the portal domain.</span></div>`
           }
         </article>
-        ${renderClientPanel()}
+        ${selectedClientId === clientProgram.id && clientMatches ? renderClientPanel() : renderEmptyDetailPanel("Select a client", "Profile details will appear here.")}
       </section>
       ${renderFeedback()}
       <p class="page-note">More client management tools will be connected to Supabase later.</p>
@@ -549,7 +1397,7 @@ function renderProductsPage(selectedProduct) {
               : ""
           }
         </article>
-        ${renderProductPanel(selectedProduct)}
+        ${visibleProducts.some((item) => item.code === selectedProduct.code) ? renderProductPanel(selectedProduct) : renderEmptyDetailPanel("Select a product", "Product details will appear here.")}
       </section>
     </main>
   `;
@@ -688,7 +1536,7 @@ function renderOrdersTable(filteredOrders) {
           <th>Fulfillment</th>
           <th>Needed Date</th>
           <th>Status</th>
-          <th>View</th>
+          <th>Review</th>
         </tr>
       </thead>
       <tbody>${rows}</tbody>
@@ -699,7 +1547,7 @@ function renderOrdersTable(filteredOrders) {
         : ""
     }
     <div class="table-footer">
-      <span>Showing ${filteredOrders.length} of ${orders.length} orders</span>
+      <span>Showing ${filteredOrders.length} of ${orders.length} reorder requests</span>
       <div class="pager">
         <button type="button" aria-label="Previous page"></button>
         <button class="active" type="button">1</button>
@@ -721,8 +1569,8 @@ function getOrdersEmptyState(filteredOrders) {
 
   if (orderLoadState === "error") {
     return {
-      title: "Unable to load Supabase orders.",
-      description: "Check Supabase network access, RLS policies, and table columns.",
+      title: "Unable to load client portal requests.",
+      description: "Check Supabase network access, RLS policies, and client portal request tables.",
     };
   }
 
@@ -766,8 +1614,8 @@ function renderOrderRow(order) {
       </td>
       <td>${renderStatusPill(order.status)}</td>
       <td>
-        <button class="view-button" data-order-id="${order.id}" aria-label="View ${order.id}" type="button">
-          ${renderIcon("eye", "view-icon")}
+        <button class="view-button" data-order-id="${order.id}" aria-label="Review ${order.id}" type="button">
+          <span class="review-action-label">Review</span>
         </button>
       </td>
     </tr>
@@ -801,9 +1649,9 @@ function renderOrderDetailPanel(order) {
   const fulfillmentDestination = getFulfillmentDestination(order);
 
   return `
-    <aside class="detail-panel" aria-label="Selected order details">
+    <aside class="detail-panel" aria-label="Selected reorder request details">
       <div class="panel-header">
-        <h2>Order ${order.id}</h2>
+        <h2>Selected Reorder Request Details</h2><span class="panel-kicker">Portal reorder ${order.id}</span>
         <button aria-label="Close order detail" class="close-panel" id="close-detail" type="button">x</button>
       </div>
 
@@ -860,7 +1708,7 @@ function renderOrderDetailPanel(order) {
       </section>
 
       <section class="status-editor">
-        <label for="status-select">Status</label>
+        <label for="status-select">Status Update</label>
         <select id="status-select">
           ${statusOptions
             .map(
@@ -896,12 +1744,12 @@ function isPickupFulfillment(value) {
   return String(value || "").toLowerCase().includes("pickup");
 }
 
-function renderEmptyDetailPanel() {
+function renderEmptyDetailPanel(title = "Select a reorder request", message = "Details will appear here.") {
   return `
     <aside class="detail-panel empty-panel">
       <div class="empty-state">
-        <strong>Select an order</strong>
-        <span>Order details and production controls will appear here.</span>
+        <strong>${escapeHtml(title)}</strong>
+        <span>${escapeHtml(message)}</span>
       </div>
     </aside>
   `;
@@ -1070,7 +1918,8 @@ function renderSidebar(currentRoute) {
   ];
 
   return `
-    <aside class="sidebar">
+    <aside class="sidebar ${isSidebarCollapsed ? "is-collapsed" : ""}">
+      <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
       <div class="brand-lockup">
         <strong>TRRY</strong>
         <span>APPAREL</span>
@@ -1079,9 +1928,9 @@ function renderSidebar(currentRoute) {
         ${navItems
           .map(
             (item) => `
-              <a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>
+              <a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Orders" ? "Client Reorders" : item.label}" aria-label="${item.label === "Orders" ? "Client Reorders" : item.label}">
                 ${renderIcon(getNavIcon(item.label), "nav-icon")}
-                ${item.label}
+                <span class="nav-label">${item.label === "Orders" ? "Reorders" : item.label}</span>
               </a>`
           )
           .join("")}
@@ -1097,11 +1946,26 @@ function renderSidebar(currentRoute) {
   `;
 }
 
+function getAdminInitials() {
+  const email = adminUser?.email || "TRRY Admin";
+  const [name] = email.split("@");
+  return name
+    .split(/[._\-\s]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "TA";
+}
+
+function formatAdminRole(role) {
+  if (!role) return "Admin";
+  return role.charAt(0).toUpperCase() + role.slice(1);
+}
 function renderTopHeader() {
   return `
     <header class="top-header">
       <div class="header-brand">
-        <button aria-label="Toggle navigation" class="menu-button" type="button">
+        <button aria-label="Toggle navigation" aria-pressed="${isSidebarCollapsed ? "true" : "false"}" class="menu-button" type="button">
           ${renderIcon("menu", "menu-icon")}
         </button>
         <strong><span>TRRY</span> Apparel Management</strong>
@@ -1118,12 +1982,12 @@ function renderTopHeader() {
           ${renderIcon("bell", "notification-icon")}
         </button>
         <div class="profile-area">
-          <div class="avatar">TA</div>
+          <div class="avatar">${getAdminInitials()}</div>
           <div>
-            <strong>TRRY Admin</strong>
-            <span>Mother Admin</span>
+            <strong>${escapeHtml(adminUser?.email ?? "TRRY Admin")}</strong>
+            <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
           </div>
-          ${renderIcon("chevron-down", "chevron")}
+          <button class="logout-button" type="button" data-admin-logout>Logout</button>
         </div>
       </div>
     </header>
@@ -1237,11 +2101,45 @@ function renderFeedback() {
   return feedbackMessage ? `<p class="copy-feedback">${feedbackMessage}</p>` : "";
 }
 
+function focusFieldAtEnd(id) {
+  const field = document.getElementById(id);
+  if (!field) return;
+  field.focus();
+  const length = field.value?.length ?? 0;
+  if (typeof field.setSelectionRange === "function") {
+    field.setSelectionRange(length, length);
+  }
+}
 function bindEvents() {
+  document.querySelectorAll("[data-admin-logout]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await logoutAdminUser();
+    });
+  });
+
+  document.querySelectorAll(".menu-button, .mobile-menu-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (window.matchMedia("(max-width: 768px)").matches) {
+        isMobileSidebarOpen = true;
+      } else {
+        setStoredSidebarCollapsed(!isSidebarCollapsed);
+      }
+      render();
+    });
+  });
+
+  document.querySelectorAll(".sidebar-backdrop, .sidebar-close-button").forEach((button) => {
+    button.addEventListener("click", () => {
+      isMobileSidebarOpen = false;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-route-link]").forEach((link) => {
     link.addEventListener("click", (event) => {
       event.preventDefault();
       navigateTo(link.getAttribute("href"));
+      isMobileSidebarOpen = false;
       render();
     });
   });
@@ -1260,6 +2158,8 @@ function bindEvents() {
       showFeedback(button.dataset.copyMessage);
     });
   });
+
+  bindOpsBoardEvents();
 
   document.querySelectorAll("[data-order-filter]").forEach((card) => {
     card.addEventListener("click", () => {
@@ -1386,7 +2286,7 @@ function bindEvents() {
     search.addEventListener("input", (event) => {
       query = event.target.value;
       render();
-      document.getElementById("order-search")?.focus();
+      focusFieldAtEnd("order-search");
     });
   }
 
@@ -1395,7 +2295,7 @@ function bindEvents() {
     clientSearch.addEventListener("input", (event) => {
       clientQuery = event.target.value;
       render();
-      document.getElementById("client-search")?.focus();
+      focusFieldAtEnd("client-search");
     });
   }
 
@@ -1404,7 +2304,7 @@ function bindEvents() {
     globalSearch.addEventListener("input", (event) => {
       globalSearchQuery = event.target.value;
       render();
-      document.getElementById("global-search")?.focus();
+      focusFieldAtEnd("global-search");
     });
     globalSearch.addEventListener("keydown", (event) => {
       if (event.key !== "Enter") return;
@@ -1420,7 +2320,7 @@ function bindEvents() {
     productSearch.addEventListener("input", (event) => {
       productQuery = event.target.value;
       render();
-      document.getElementById("product-search")?.focus();
+      focusFieldAtEnd("product-search");
     });
   }
 
@@ -1443,6 +2343,115 @@ function bindEvents() {
   });
 }
 
+function bindOpsBoardEvents() {
+  const rawMessage = document.getElementById("ops-raw-message");
+  if (rawMessage) {
+    rawMessage.addEventListener("input", (event) => {
+      opsRawMessage = event.target.value;
+      opsSavedNotice = false;
+      const extractButton = document.getElementById("ops-extract-inquiry");
+      if (extractButton) {
+        extractButton.disabled = !opsRawMessage.trim();
+      }
+      document.querySelector(".ops-save-notice")?.remove();
+    });
+  }
+
+  document.getElementById("ops-extract-inquiry")?.addEventListener("click", () => {
+    if (!opsRawMessage.trim()) return;
+    opsExtractFields = demoExtractOpsInquiry(opsRawMessage);
+    opsSavedNotice = false;
+    render();
+  });
+
+  document.querySelectorAll("[data-ops-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      if (!opsExtractFields) return;
+      opsExtractFields = { ...opsExtractFields, [field.dataset.opsField]: event.target.value };
+    });
+  });
+
+  document.getElementById("ops-save-inquiry")?.addEventListener("click", async () => {
+    await saveOpsInquiry();
+    render();
+  });
+
+  document.getElementById("ops-clear-inquiry")?.addEventListener("click", () => {
+    opsExtractFields = null;
+    opsRawMessage = "";
+    opsSavedNotice = false;
+    render();
+  });
+
+  document.querySelectorAll("[data-ops-view-artwork]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await openOpsArtwork(button.dataset.opsViewArtwork);
+    });
+  });
+  document.querySelectorAll("[data-ops-move-to]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await moveOpsInquiry(button.dataset.opsMoveId, button.dataset.opsMoveTo);
+      render();
+    });
+  });
+
+
+
+  document.querySelectorAll("[data-ops-priority-id]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.opsPriorityId;
+      if (!id) return;
+      expandedOpsInquiryId = id;
+      render();
+      requestAnimationFrame(() => {
+        document.querySelector(`[data-ops-card-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
+      });
+    });
+  });
+  document.querySelectorAll("[data-ops-toggle-details]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const id = button.dataset.opsToggleDetails;
+      expandedOpsInquiryId = expandedOpsInquiryId === id ? null : id;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-ops-close-details]").forEach((button) => {
+    button.addEventListener("click", () => {
+      expandedOpsInquiryId = null;
+      opsSoDraft = null;
+      opsArtworkRequests = {};
+      render();
+    });
+  });
+  document.querySelectorAll("[data-ops-add-so]").forEach((button) => {
+    button.addEventListener("click", () => {
+      opsSoDraft = { id: button.dataset.opsAddSo, value: "" };
+      render();
+      document.querySelector(`[data-ops-so-input="${button.dataset.opsAddSo}"]`)?.focus();
+    });
+  });
+
+  document.querySelectorAll("[data-ops-so-input]").forEach((input) => {
+    input.addEventListener("input", (event) => {
+      opsSoDraft = { id: input.dataset.opsSoInput, value: event.target.value };
+      render();
+      const soField = document.querySelector(`[data-ops-so-input="${input.dataset.opsSoInput}"]`); if (soField) { soField.focus(); soField.setSelectionRange?.(soField.value.length, soField.value.length); }
+    });
+  });
+
+  document.querySelectorAll("[data-ops-confirm-so]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await confirmOpsSO(button.dataset.opsConfirmSo);
+      render();
+    });
+  });
+
+  document.querySelector("[data-ops-cancel-so]")?.addEventListener("click", () => {
+    opsSoDraft = null;
+    render();
+  });
+}
 async function copyToClipboard(value) {
   if (navigator.clipboard?.writeText) {
     try {
@@ -1723,7 +2732,7 @@ function normalizeRoutePath(path) {
 }
 
 function escapeHtml(value) {
-  return value.replace(/[&<>"']/g, (character) => {
+  return String(value ?? "").replace(/[&<>"']/g, (character) => {
     const entities = {
       "&": "&amp;",
       "<": "&lt;",
@@ -1736,5 +2745,4 @@ function escapeHtml(value) {
   });
 }
 
-render();
-loadAdminOrders();
+initializeAdminAuth();

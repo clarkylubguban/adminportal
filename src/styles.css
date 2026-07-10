@@ -1,3 +1,4 @@
+@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap");
 :root {
   --orange: #ff5a00;
   --orange-dark: #a04100;
@@ -3333,4 +3334,4013 @@ td:nth-child(9) {
   .recent-table td {
     gap: 10px;
   }
+}
+/* TRRY Ops Board v2 - brutalist minimalist, scoped to Dashboard/Home */
+.ops-board-page {
+  --ops-ink: #111111;
+  --ops-paper: #f3f1ea;
+  --ops-white: #ffffff;
+  --ops-lime: #ddff4f;
+  --ops-muted: #8a887e;
+  --ops-secondary: #55534b;
+  --ops-red: #e23f32;
+  background: var(--ops-paper);
+  color: var(--ops-ink);
+  font-family: "Archivo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.ops-board-page * {
+  box-shadow: none !important;
+}
+
+.ops-shell {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding-bottom: 32px;
+}
+
+.ops-hero {
+  display: flex;
+  align-items: stretch;
+  justify-content: space-between;
+  gap: 18px;
+  margin-bottom: 16px;
+}
+
+.ops-hero > div:first-child,
+.ops-rule-card,
+.ops-kpi-card,
+.ops-card,
+.ops-priority-list,
+.ops-column,
+.ops-production-card {
+  background: var(--ops-white);
+  border: 3px solid var(--ops-ink);
+  border-radius: 0;
+}
+
+.ops-hero > div:first-child {
+  flex: 1;
+  padding: 18px;
+}
+
+.ops-hero h1,
+.ops-section-heading h2,
+.ops-production-section h2 {
+  color: var(--ops-ink);
+  font-family: "Archivo", system-ui, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.98;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.ops-hero h1 {
+  font-size: clamp(28px, 3vw, 42px);
+}
+
+.ops-date-line,
+.ops-review-label,
+.ops-kpi-card small,
+.ops-kpi-card span,
+.ops-section-heading p,
+.ops-section-heading span,
+.ops-review-box label span,
+.ops-row-number,
+.ops-mini-badge,
+.ops-source-badge,
+.ops-overdue-badge,
+.ops-status-badge,
+.ops-ticket-id,
+.ops-odoo-so,
+.ops-next-action span,
+.ops-card-actions > span,
+.ops-card-final,
+.ops-so-editor > span,
+.ops-production-card span,
+.ops-column header strong,
+.ops-column header small {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ops-date-line {
+  color: var(--ops-secondary);
+  font-size: 11px;
+  margin: 0 0 7px;
+}
+
+.ops-board-page .subtitle,
+.ops-section-heading p,
+.ops-section-heading span,
+.ops-rule-card span,
+.ops-kpi-card small,
+.ops-ticket-body p,
+.ops-ticket-body small,
+.ops-production-card p {
+  color: var(--ops-secondary);
+}
+
+.ops-rule-card {
+  width: 300px;
+  padding: 16px;
+}
+
+.ops-rule-card strong,
+.ops-rule-card span {
+  display: block;
+}
+
+.ops-rule-card strong {
+  color: var(--ops-ink);
+  font-size: 15px;
+  font-weight: 900;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.ops-rule-card span {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ops-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ops-kpi-card {
+  min-height: 108px;
+  padding: 15px;
+}
+
+.ops-kpi-card.gold,
+.ops-kpi-card:hover {
+  background: var(--ops-lime);
+}
+
+.ops-kpi-card strong,
+.ops-kpi-card span,
+.ops-kpi-card small {
+  display: block;
+}
+
+.ops-kpi-card strong {
+  color: var(--ops-ink);
+  font-size: 32px;
+  font-weight: 900;
+  line-height: 0.95;
+}
+
+.ops-kpi-card span {
+  color: var(--ops-ink);
+  font-size: 11px;
+  margin-top: 12px;
+}
+
+.ops-kpi-card small {
+  font-size: 10px;
+  margin-top: 5px;
+}
+
+.ops-card,
+.ops-priority-section,
+.ops-pipeline-section,
+.ops-production-section {
+  margin-bottom: 16px;
+}
+
+.ops-card {
+  padding: 18px;
+}
+
+.ops-section-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.ops-section-heading.split {
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ops-section-heading h2 {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 20px;
+}
+
+.ops-heading-icon,
+.ops-button-icon,
+.ops-notice-icon,
+.ops-chevron-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.ops-heading-icon,
+.ops-button-icon {
+  color: var(--ops-ink);
+}
+
+.ops-ai-card textarea,
+.ops-review-box input,
+.ops-review-box textarea,
+.ops-review-box select,
+.ops-so-input {
+  width: 100%;
+  border: 2px solid var(--ops-ink);
+  border-radius: 0;
+  background: var(--ops-white);
+  color: var(--ops-ink);
+  outline: 0;
+  padding: 13px 15px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.ops-ai-card textarea:focus,
+.ops-review-box input:focus,
+.ops-review-box textarea:focus,
+.ops-review-box select:focus,
+.ops-so-input:focus {
+  border-width: 3px;
+  padding: 12px 14px;
+}
+
+.ops-action-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.ops-dark-button,
+.ops-gold-button,
+.ops-light-button,
+.ops-add-so-button,
+.ops-move-button {
+  align-items: center;
+  background: var(--ops-white);
+  border: 2px solid var(--ops-ink);
+  border-radius: 0;
+  color: var(--ops-ink);
+  display: inline-flex;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 12px;
+  font-weight: 900;
+  gap: 7px;
+  justify-content: center;
+  letter-spacing: 0.06em;
+  min-height: 38px;
+  padding: 0 13px;
+  text-transform: uppercase;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ops-dark-button,
+.ops-gold-button,
+.ops-add-so-button {
+  background: var(--ops-ink);
+  color: var(--ops-paper);
+}
+
+.ops-gold-button,
+.ops-add-so-button {
+  background: var(--ops-lime);
+  color: var(--ops-ink);
+}
+
+.ops-dark-button:hover,
+.ops-gold-button:hover,
+.ops-add-so-button:hover,
+.ops-move-button:hover {
+  background: var(--ops-lime);
+  color: var(--ops-ink);
+}
+
+.ops-light-button:hover {
+  background: var(--ops-ink);
+  color: var(--ops-paper);
+}
+
+.ops-move-button.danger:hover,
+.ops-move-button.danger {
+  border-color: var(--ops-red);
+  color: var(--ops-red);
+}
+
+.ops-move-button.danger:hover {
+  background: var(--ops-red);
+  color: var(--ops-paper);
+}
+
+.ops-dark-button:disabled,
+.ops-gold-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.3;
+}
+
+.ops-save-notice {
+  align-items: center;
+  background: var(--ops-lime);
+  border: 2px solid var(--ops-ink);
+  color: var(--ops-ink);
+  display: inline-flex;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  gap: 6px;
+  letter-spacing: 0.06em;
+  padding: 8px 10px;
+  text-transform: uppercase;
+}
+
+.ops-review-box {
+  border: 3px solid var(--ops-ink);
+  border-radius: 0;
+  background: var(--ops-paper);
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.ops-review-label {
+  color: var(--ops-ink);
+  font-size: 11px;
+  margin: 0 0 12px;
+}
+
+.ops-review-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.ops-review-stack {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.ops-review-box label span {
+  color: var(--ops-secondary);
+  display: block;
+  font-size: 11px;
+  margin-bottom: 6px;
+}
+
+.ops-overdue-count {
+  background: #fff5f4;
+  border: 2px solid var(--ops-red);
+  color: var(--ops-red) !important;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  padding: 6px 9px;
+  text-transform: uppercase;
+}
+
+.ops-priority-list {
+  background: var(--ops-white);
+  border: 3px solid var(--ops-ink);
+}
+
+.ops-priority-row {
+  align-items: center;
+  background: var(--ops-white);
+  border: 0;
+  border-bottom: 2px solid var(--ops-ink);
+  display: flex;
+  gap: 12px;
+  min-height: 52px;
+  padding: 12px 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.ops-priority-row:last-child {
+  border-bottom: 0;
+}
+
+.ops-priority-row:hover {
+  background: rgba(221, 255, 79, 0.25);
+}
+
+.ops-row-number {
+  color: var(--ops-ink);
+  flex: 0 0 28px;
+  font-size: 11px;
+}
+
+.ops-priority-row.overdue .ops-row-number,
+.ops-priority-row.overdue .ops-priority-text {
+  color: var(--ops-red);
+}
+
+.ops-priority-text {
+  color: var(--ops-ink);
+  flex: 1;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ops-mini-badge,
+.ops-source-badge,
+.ops-overdue-badge,
+.ops-status-badge {
+  border: 1.5px solid var(--ops-ink);
+  color: var(--ops-ink);
+  font-size: 10px;
+  padding: 5px 7px;
+  white-space: nowrap;
+}
+
+.ops-overdue-badge {
+  background: #fff5f4;
+  border-color: var(--ops-red);
+  color: var(--ops-red);
+}
+
+.ops-kanban {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.ops-column {
+  background: var(--ops-paper);
+  flex: 0 0 265px;
+  padding: 10px;
+}
+
+.ops-column header {
+  align-items: center;
+  background: var(--ops-ink);
+  color: var(--ops-paper);
+  display: flex;
+  gap: 8px;
+  margin: -10px -10px 10px;
+  min-height: 42px;
+  padding: 0 10px;
+}
+
+.ops-column header span {
+  background: var(--ops-lime) !important;
+  border: 1.5px solid var(--ops-paper);
+  flex: 0 0 10px;
+  height: 10px;
+  width: 10px;
+}
+
+.ops-column header strong,
+.ops-column header small {
+  color: var(--ops-paper);
+  font-size: 11px;
+}
+
+.ops-column header small {
+  margin-left: auto;
+}
+
+.ops-column-list {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-empty-column {
+  border: 2px dashed var(--ops-ink);
+  color: var(--ops-muted);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 18px 8px;
+  text-align: center;
+  text-transform: uppercase;
+}
+
+.ops-ticket-card {
+  background: var(--ops-white);
+  border: 3px solid var(--ops-ink);
+  border-radius: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.ops-ticket-card.overdue {
+  background: #fff5f4;
+  border-color: var(--ops-red);
+}
+
+.ops-ticket-spine {
+  border-right: 3px solid var(--ops-ink);
+  flex: 0 0 8px;
+  width: 8px;
+}
+
+.ops-ticket-card.overdue .ops-ticket-spine {
+  border-color: var(--ops-red);
+}
+
+.ops-ticket-body {
+  min-width: 0;
+  padding: 12px;
+  width: 100%;
+}
+
+.ops-ticket-topline {
+  align-items: flex-start;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 9px;
+}
+
+.ops-ticket-id,
+.ops-odoo-so {
+  background: var(--ops-ink);
+  border: 1.5px solid var(--ops-ink);
+  color: var(--ops-paper);
+  font-size: 10px;
+  padding: 5px 7px;
+}
+
+.ops-ticket-body > strong {
+  color: var(--ops-ink);
+  display: block;
+  font-size: 15px;
+  font-weight: 900;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.ops-ticket-body p,
+.ops-ticket-body small {
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+  margin: 5px 0 0;
+}
+
+.ops-ticket-body small.danger {
+  color: var(--ops-red);
+  font-weight: 900;
+}
+
+.ops-odoo-so {
+  background: var(--ops-lime);
+  color: var(--ops-ink);
+  display: inline-flex;
+  margin-top: 8px;
+}
+
+.ops-next-action {
+  border: 2px solid var(--ops-ink);
+  background: var(--ops-paper);
+  margin-top: 10px;
+  padding: 9px;
+}
+
+.ops-next-action span,
+.ops-card-actions > span,
+.ops-card-final,
+.ops-so-editor > span {
+  color: var(--ops-secondary);
+  display: block;
+  font-size: 10px;
+  margin-bottom: 5px;
+}
+
+.ops-next-action strong {
+  color: var(--ops-ink);
+  display: block;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ops-card-actions {
+  border-top: 2px solid var(--ops-ink);
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.ops-card-actions > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.ops-card-final {
+  border: 2px solid var(--ops-ink);
+  margin-top: 10px;
+  padding: 9px;
+}
+
+.ops-so-editor {
+  background: var(--ops-lime);
+  border: 3px solid var(--ops-ink);
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.ops-so-editor > span {
+  color: var(--ops-ink);
+}
+
+.ops-so-editor > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 8px;
+}
+
+.ops-gold-button.mini,
+.ops-light-button.mini {
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.ops-add-so-button {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.ops-production-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 11px;
+}
+
+.ops-production-card {
+  padding: 14px;
+}
+
+.ops-production-card div {
+  align-items: baseline;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.ops-production-card span {
+  color: var(--ops-secondary);
+  font-size: 11px;
+}
+
+.ops-production-card strong {
+  color: var(--ops-ink);
+  font-size: 28px;
+  font-weight: 900;
+}
+
+.ops-production-card p {
+  font-size: 12px;
+  margin: 8px 0 0;
+}
+
+
+.ops-persistence-card {
+  background: var(--ops-white);
+  border: 3px solid var(--ops-ink);
+  color: var(--ops-ink);
+  margin: -4px 0 16px;
+  padding: 13px 15px;
+}
+
+.ops-persistence-card.error {
+  background: #fff5f4;
+  border-color: var(--ops-red);
+}
+
+.ops-persistence-card strong,
+.ops-persistence-card span {
+  display: block;
+}
+
+.ops-persistence-card strong,
+.ops-persistence-card summary {
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.ops-persistence-card span {
+  color: var(--ops-secondary);
+  font-size: 12px;
+  line-height: 1.45;
+  margin-top: 5px;
+}
+
+.ops-persistence-card details {
+  margin-top: 10px;
+}
+
+.ops-persistence-card summary {
+  cursor: pointer;
+}
+
+.ops-persistence-card pre {
+  background: var(--ops-ink);
+  color: var(--ops-lime);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+  margin: 10px 0 0;
+  max-height: 240px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+@media (max-width: 767px) {
+  .ops-board-page {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+
+  .ops-hero,
+  .ops-section-heading.split {
+    display: grid;
+  }
+
+  .ops-hero > div:first-child,
+  .ops-rule-card {
+    width: auto;
+  }
+
+  .ops-kpi-grid,
+  .ops-production-grid,
+  .ops-review-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ops-kpi-card {
+    min-height: 96px;
+  }
+
+  .ops-kanban {
+    display: grid;
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+
+  .ops-column {
+    flex-basis: auto;
+    width: 100%;
+  }
+
+  .ops-priority-row {
+    align-items: flex-start;
+  }
+
+  .ops-mini-badge,
+  .ops-chevron-icon {
+    display: none;
+  }
+
+  .ops-card-actions > div,
+  .ops-so-editor > div {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .ops-move-button,
+  .ops-gold-button.mini,
+  .ops-light-button.mini {
+    width: 100%;
+  }
+}
+/* Admin shell brutalist alignment */
+.app-shell {
+  background: #f3f1ea;
+  font-family: "Archivo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.sidebar {
+  background: #ffffff;
+  border-right: 3px solid #111111;
+  padding: 18px 14px;
+}
+
+.brand-lockup {
+  border: 3px solid #111111;
+  padding: 14px 14px 12px;
+  margin-bottom: 18px;
+}
+
+.brand-lockup strong {
+  color: var(--orange);
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 30px;
+  letter-spacing: 0.12em;
+}
+
+.brand-lockup span {
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.45em;
+}
+
+.sidebar nav {
+  gap: 9px;
+}
+
+.sidebar a {
+  border: 2px solid transparent;
+  border-radius: 0;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+  height: 42px;
+  letter-spacing: 0.03em;
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.sidebar a:hover {
+  border-color: #111111;
+  background: #f3f1ea;
+}
+
+.sidebar a.active {
+  background: #ddff4f;
+  border-color: #111111;
+  color: #111111;
+}
+
+.sidebar a.active::before {
+  display: none;
+}
+
+.nav-icon.lucide-icon {
+  width: 18px;
+  height: 18px;
+}
+
+.system-card {
+  border: 3px solid #111111;
+  border-radius: 0;
+  box-shadow: none;
+  min-height: 62px;
+  padding: 10px;
+}
+
+.system-card strong,
+.system-card p {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.system-card strong {
+  font-size: 10px;
+}
+
+.system-card p {
+  color: #111111;
+  font-size: 9px;
+}
+
+.system-card p span,
+.footer strong span {
+  background: #ddff4f;
+  border: 1px solid #111111;
+}
+
+.top-header {
+  background: #050505;
+  border-bottom: 3px solid #111111;
+  grid-template-columns: minmax(380px, 1fr) 380px 236px;
+  height: 62px;
+  padding: 0 24px;
+}
+
+.header-brand strong {
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+}
+
+.header-brand strong span {
+  color: var(--orange);
+}
+
+.menu-button,
+.notification-button {
+  border: 2px solid #ffffff;
+  border-radius: 0;
+  background: #050505;
+  color: #ffffff;
+}
+
+.menu-button {
+  display: grid;
+  height: 34px;
+  place-items: center;
+  width: 34px;
+}
+
+.menu-button:hover,
+.notification-button:hover {
+  background: #ddff4f;
+  color: #111111;
+}
+
+.global-search {
+  background: #050505;
+  border: 2px solid #ffffff;
+  border-radius: 0;
+  color: #ffffff;
+  height: 38px;
+  padding: 0 10px 0 12px;
+}
+
+.global-search:focus-within {
+  background: #111111;
+  border-color: #ddff4f;
+}
+
+.global-search input {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.global-search input::placeholder {
+  color: #d8d8d8;
+  text-transform: uppercase;
+}
+
+.search-suggestion {
+  border: 2px solid #111111;
+  border-radius: 0;
+  box-shadow: none;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-transform: uppercase;
+}
+
+.profile-area {
+  border-left: 2px solid #ffffff;
+  height: 40px;
+}
+
+.profile-area .avatar {
+  background: #ddff4f;
+  border: 2px solid #ffffff;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.profile-area strong,
+.profile-area span {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.profile-area strong {
+  font-size: 11px;
+}
+
+.profile-area span {
+  color: #d8d8d8;
+  font-size: 9px;
+}
+
+.profile-area .chevron.lucide-icon {
+  color: #ddff4f;
+}
+
+.workspace {
+  background: #f3f1ea;
+}
+
+@media (max-width: 768px) {
+  .mobile-top-bar {
+    border-bottom: 3px solid #111111;
+    background: #ffffff;
+    height: 52px;
+  }
+
+  .mobile-top-bar strong {
+    color: #111111;
+    font-family: "Archivo", system-ui, sans-serif;
+    font-weight: 900;
+  }
+
+  .mobile-menu-button,
+  .mobile-search-button {
+    border: 2px solid #111111;
+    color: #111111;
+    width: 32px;
+    height: 32px;
+  }
+
+  .mobile-menu-button:hover,
+  .mobile-search-button:hover {
+    background: #ddff4f;
+  }
+
+  .mobile-avatar {
+    background: #ddff4f;
+    border: 2px solid #111111;
+    color: #111111;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  }
+
+  .mobile-bottom-nav {
+    border-top: 3px solid #111111;
+    background: #ffffff;
+    box-shadow: none;
+  }
+
+  .mobile-bottom-nav a {
+    border-right: 2px solid #111111;
+    color: #111111;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    text-transform: uppercase;
+  }
+
+  .mobile-bottom-nav a:last-child {
+    border-right: 0;
+  }
+
+  .mobile-bottom-nav a.active {
+    background: #ddff4f;
+    color: #111111;
+  }
+}
+
+/* Admin pages brutalist component system */
+.orders-page:not(.ops-board-page),
+.orders-page:not(.ops-board-page) .subtitle,
+.orders-page:not(.ops-board-page) button,
+.orders-page:not(.ops-board-page) input,
+.orders-page:not(.ops-board-page) select,
+.orders-page:not(.ops-board-page) textarea {
+  font-family: "Archivo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+.orders-page:not(.ops-board-page) h1,
+.orders-page:not(.ops-board-page) h2,
+.orders-page:not(.ops-board-page) h3 {
+  color: #111111;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.orders-page:not(.ops-board-page) .subtitle,
+.page-note,
+.table-helper-text,
+.table-footer,
+.metric-pair span,
+.settings-row span,
+.detail-metrics span,
+.panel-stat-grid span,
+.section-title,
+.stacked-cell span,
+.client-cell > div span,
+th,
+.status-pill,
+.request-id,
+.portal-link,
+.copy-feedback {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+}
+
+.orders-page:not(.ops-board-page) .subtitle,
+.page-note,
+.table-helper-text {
+  color: #55534b;
+}
+
+.orders-page:not(.ops-board-page) .page-heading {
+  border: 3px solid #111111;
+  background: #ffffff;
+  margin-bottom: 16px;
+  padding: 16px 18px;
+}
+
+.orders-page:not(.ops-board-page) .page-heading h1 {
+  font-size: 28px;
+  line-height: 1;
+  margin-bottom: 8px;
+}
+
+.status-card,
+.orders-list-card,
+.detail-panel,
+.content-card,
+.settings-card,
+.dashboard-table-card,
+.activity-card,
+.placeholder-page,
+.settings-actions {
+  background: #ffffff;
+  border: 3px solid #111111;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.status-card {
+  align-items: stretch;
+  min-height: 94px;
+  padding: 14px;
+}
+
+.status-card.clickable-card:hover {
+  background: rgba(221, 255, 79, 0.22);
+  border-color: #111111;
+  transform: none;
+}
+
+.status-card.active {
+  background: #ddff4f;
+  border-color: #111111;
+}
+
+.status-card p,
+.status-card small {
+  color: #55534b;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+}
+
+.status-card p {
+  font-size: 10px;
+}
+
+.status-card strong {
+  color: #111111;
+  font-size: 30px;
+  font-weight: 900;
+}
+
+.status-card small span {
+  border: 0;
+  background: #111111;
+  width: 8px;
+  height: 8px;
+}
+
+.icon-mark {
+  background: #f3f1ea;
+  border: 2px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  width: 42px;
+  height: 42px;
+}
+
+.status-card.active .icon-mark {
+  background: #111111;
+  color: #ddff4f;
+}
+
+.toolbar,
+.inner-toolbar,
+.card-header,
+.table-footer {
+  background: #ffffff;
+  border-color: #111111;
+}
+
+.toolbar,
+.inner-toolbar {
+  border-bottom: 3px solid #111111;
+}
+
+.filter-tabs button,
+.filter-button,
+.search-field,
+.secondary-action,
+.disabled-action,
+.primary-button,
+.note-button,
+.quick-actions button,
+.quick-panel-actions a,
+.quick-panel-actions button,
+.product-actions button,
+.compact-button,
+.date-chip {
+  border: 2px solid #111111;
+  border-radius: 0;
+  box-shadow: none;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.filter-tabs button {
+  background: #ffffff;
+  color: #111111;
+  height: 34px;
+}
+
+.filter-tabs button:hover,
+.secondary-action:hover,
+.quick-actions button:hover:not(:disabled),
+.quick-panel-actions a:hover,
+.quick-panel-actions button:hover:not(:disabled),
+.product-actions button:hover:not(:disabled) {
+  background: rgba(221, 255, 79, 0.32);
+  border-color: #111111;
+  color: #111111;
+}
+
+.filter-tabs button.active {
+  background: #ddff4f;
+  border-color: #111111;
+  color: #111111;
+}
+
+.search-field {
+  background: #ffffff;
+  border-color: #111111;
+  color: #111111;
+  height: 38px;
+}
+
+.search-field:focus-within {
+  border-color: #111111;
+  box-shadow: inset 0 0 0 2px #ddff4f;
+}
+
+.search-field input,
+.search-field input::placeholder {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+}
+
+.search-field input::placeholder {
+  color: #6b675d;
+  text-transform: uppercase;
+}
+
+.filter-button {
+  background: #ffffff;
+  color: #111111;
+  height: 38px;
+  width: 38px;
+}
+
+.filter-button:hover,
+.view-button:hover,
+.close-panel:hover {
+  background: #ddff4f;
+  color: #111111;
+}
+
+thead th {
+  background: #111111;
+  border-bottom: 3px solid #111111;
+  color: #ffffff;
+}
+
+th {
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+td {
+  border-top: 2px solid #111111;
+  color: #111111;
+  font-size: 12px;
+}
+
+tbody tr:hover td,
+.recent-table tbody tr:hover td,
+.orders-table tbody tr:hover td,
+.products-table tbody tr:hover td {
+  background: rgba(221, 255, 79, 0.18);
+}
+
+tbody tr.selected td {
+  background: #ddff4f;
+  border-top: 2px solid #111111;
+  border-bottom: 2px solid #111111;
+}
+
+tbody tr.selected td:first-child,
+tbody tr.selected td:last-child {
+  border-color: #111111;
+  border-radius: 0;
+}
+
+tbody tr.selected td:first-child {
+  border-left: 2px solid #111111;
+}
+
+tbody tr.selected td:last-child {
+  border-right: 2px solid #111111;
+}
+
+.request-id,
+.client-cell strong,
+.stacked-cell strong {
+  color: #111111;
+  font-weight: 900;
+}
+
+.client-logo {
+  border: 2px solid #111111;
+  box-shadow: none;
+}
+
+.client-logo.urban-coffee,
+.client-logo.xl.urban-coffee {
+  background: #111111;
+  color: #ffffff;
+}
+
+.view-button {
+  border: 2px solid #111111;
+  border-radius: 0;
+  background: #ffffff;
+  color: #111111;
+}
+
+.status-pill {
+  background: #ffffff;
+  border: 2px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  min-height: 24px;
+  padding: 4px 8px;
+  text-transform: uppercase;
+}
+
+.status-pill.approved,
+.status-pill.completed,
+.status-pill.active,
+.status-pill.visible {
+  background: #ddff4f;
+  border-color: #111111;
+  color: #111111;
+}
+
+.status-pill.pending-review,
+.status-pill.in-production,
+.status-pill.ready,
+.status-pill.not-connected,
+.status-pill.draft {
+  background: #ffffff;
+  border-color: #111111;
+  color: #111111;
+}
+
+.status-pill.cancelled,
+.danger-card .status-pill,
+.status-pill.lost {
+  background: #fff5f4;
+  border-color: #e23f32;
+  color: #e23f32;
+}
+
+.detail-panel {
+  top: 78px;
+  padding: 0;
+}
+
+.panel-header {
+  align-items: center;
+  border-bottom: 3px solid #111111;
+  margin: 0;
+  min-height: 48px;
+  padding: 0 14px;
+}
+
+.panel-header h2,
+.panel-title-row h2 {
+  color: #111111;
+  font-size: 15px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.close-panel {
+  border: 2px solid #111111;
+  background: #ffffff;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 900;
+  height: 28px;
+  width: 28px;
+}
+
+.panel-section,
+.product-image-panel {
+  border-bottom: 2px solid #111111;
+  margin: 0;
+  padding: 14px;
+}
+
+.panel-section:last-child {
+  border-bottom: 0;
+}
+
+.section-title {
+  color: #55534b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.detail-metrics div,
+.panel-stat-grid div,
+.settings-row,
+.product-image-viewer,
+.image-angle-card,
+.product-image-management,
+.product-image-slot,
+.empty-state,
+.copy-feedback,
+.date-chip {
+  background: #ffffff;
+  border: 2px solid #111111;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+.detail-metrics span,
+.panel-stat-grid span,
+.settings-row span {
+  color: #55534b;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
+
+.detail-metrics strong,
+.panel-stat-grid strong,
+.settings-row strong {
+  color: #111111;
+  font-weight: 900;
+}
+
+.portal-link {
+  color: #111111;
+  font-weight: 800;
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+}
+
+.primary-button {
+  background: #ddff4f;
+  border-color: #111111;
+  color: #111111;
+}
+
+.note-button,
+.secondary-action,
+.quick-panel-actions a,
+.quick-panel-actions button,
+.product-actions button {
+  background: #ffffff;
+  color: #111111;
+}
+
+.primary-button:hover,
+.note-button:hover {
+  background: #111111;
+  color: #ddff4f;
+}
+
+.primary-button:disabled,
+.disabled-primary,
+.disabled-action,
+.quick-panel-actions button:disabled,
+.product-actions button:disabled {
+  background: #e5e2d8;
+  border-color: #111111;
+  color: #77736a;
+  cursor: not-allowed;
+}
+
+.settings-grid,
+.settings-grid-wide {
+  gap: 14px;
+}
+
+.settings-card {
+  padding: 16px;
+}
+
+.settings-card h2 {
+  color: #111111;
+  font-size: 16px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.settings-row {
+  border-width: 2px;
+  margin-top: 10px;
+  padding: 10px;
+}
+
+.danger-card {
+  background: #fff5f4;
+  border-color: #e23f32;
+}
+
+.danger-card h2 {
+  color: #e23f32;
+}
+
+.table-footer {
+  border-top: 3px solid #111111;
+  color: #55534b;
+}
+
+.empty-state {
+  color: #55534b;
+  margin: 14px;
+}
+
+.empty-state strong {
+  color: #111111;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 16px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.empty-state span {
+  color: #55534b;
+}
+
+.product-mock,
+.product-thumb,
+.image-angle-card img {
+  border: 2px solid #111111;
+  border-radius: 0;
+  background-color: #f3f1ea;
+}
+
+.image-angle-strip button,
+.image-slot-actions button,
+.product-image-actions button {
+  border: 2px solid #111111;
+  border-radius: 0;
+  background: #ffffff;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.image-angle-strip button.active,
+.image-angle-strip button:hover,
+.image-slot-actions button:hover,
+.product-image-actions button:hover {
+  background: #ddff4f;
+}
+
+@media (max-width: 768px) {
+  .orders-page:not(.ops-board-page) .page-heading,
+  .orders-list-card,
+  .content-card,
+  .detail-panel,
+  .settings-card,
+  .activity-card {
+    border-color: #111111;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .filter-tabs button {
+    border-radius: 0;
+  }
+
+  .search-field {
+    border-color: #111111;
+    border-radius: 0;
+  }
+
+  .orders-table tr,
+  .clients-table tr,
+  .products-table tr,
+  .recent-table tr {
+    border: 2px solid #111111;
+    border-radius: 0;
+    box-shadow: none;
+  }
+
+  .orders-table tr.selected,
+  .clients-table tr.selected,
+  .products-table tr.selected {
+    background: #ddff4f;
+    border-color: #111111;
+    box-shadow: none;
+  }
+
+  .orders-table td,
+  .clients-table td,
+  .products-table td,
+  .recent-table td {
+    border-top: 2px solid #111111;
+  }
+
+  .orders-table td::before,
+  .clients-table td::before,
+  .products-table td::before,
+  .recent-table td::before {
+    color: #55534b;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-weight: 800;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+}
+
+/* Temporary Admin Access Gate */
+.admin-access-page {
+  align-items: center;
+  background: #f3f1ea;
+  color: #111111;
+  display: grid;
+  font-family: "Archivo", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.admin-access-card {
+  background: #ffffff;
+  border: 4px solid #111111;
+  box-shadow: none;
+  margin: 0 auto;
+  max-width: 560px;
+  padding: 22px;
+  width: min(100%, 560px);
+}
+
+.admin-access-brand {
+  align-items: end;
+  border-bottom: 3px solid #111111;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin: -2px -2px 20px;
+  padding: 0 0 16px;
+}
+
+.admin-access-brand strong {
+  color: var(--orange);
+  display: block;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: clamp(34px, 8vw, 58px);
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  line-height: 0.9;
+}
+
+.admin-access-brand span {
+  color: #111111;
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.12em;
+  text-align: right;
+  text-transform: uppercase;
+}
+
+.admin-access-heading {
+  display: grid;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.admin-access-heading p,
+.admin-access-form label,
+.admin-access-error,
+.admin-access-note {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-access-heading p {
+  background: #ddff4f;
+  border: 2px solid #111111;
+  color: #111111;
+  display: inline-flex;
+  font-size: 11px;
+  margin: 0;
+  padding: 7px 9px;
+  width: fit-content;
+}
+
+.admin-access-heading h1 {
+  color: #111111;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: clamp(34px, 7vw, 54px);
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.92;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.admin-access-heading span {
+  color: #55534b;
+  display: block;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.admin-access-form {
+  border: 3px solid #111111;
+  display: grid;
+  gap: 10px;
+  padding: 16px;
+}
+
+.admin-access-form label {
+  color: #111111;
+  font-size: 11px;
+}
+
+.admin-access-form input {
+  background: #ffffff;
+  border: 3px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 18px;
+  font-weight: 800;
+  height: 48px;
+  outline: 0;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.admin-access-form input:focus {
+  box-shadow: inset 0 0 0 3px #ddff4f;
+}
+
+.admin-access-form input[aria-invalid="true"] {
+  border-color: #e23f32;
+}
+
+.admin-access-form button {
+  background: #ddff4f;
+  border: 3px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  cursor: pointer;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 900;
+  height: 48px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-access-form button:hover {
+  background: #111111;
+  color: #ddff4f;
+}
+
+.admin-access-error {
+  background: #fff5f4;
+  border: 2px solid #e23f32;
+  color: #e23f32;
+  font-size: 11px;
+  margin: 0;
+  padding: 9px;
+}
+
+.admin-access-note {
+  border: 2px solid #111111;
+  color: #55534b;
+  font-size: 10px;
+  line-height: 1.5;
+  margin: 16px 0 0;
+  padding: 10px;
+}
+
+@media (max-width: 520px) {
+  .admin-access-page {
+    align-items: stretch;
+    padding: 12px;
+  }
+
+  .admin-access-card {
+    padding: 16px;
+  }
+
+  .admin-access-brand {
+    align-items: flex-start;
+    display: grid;
+  }
+
+  .admin-access-brand span {
+    text-align: left;
+  }
+}
+
+/* Collapsible Admin Shell */
+.sidebar-backdrop,
+.sidebar-close-button {
+  display: none;
+}
+
+.app-shell {
+  transition: none;
+}
+
+.app-shell.sidebar-collapsed .sidebar,
+.sidebar.is-collapsed {
+  display: none;
+}
+
+.app-shell.sidebar-collapsed .workspace,
+.workspace.is-expanded {
+  flex: 1 1 100%;
+  width: 100%;
+}
+
+.app-shell.sidebar-collapsed .menu-button {
+  background: #ddff4f;
+  border-color: #ddff4f;
+  color: #111111;
+}
+
+.menu-button:focus-visible,
+.mobile-menu-button:focus-visible,
+.sidebar-close-button:focus-visible,
+.sidebar-backdrop:focus-visible {
+  outline: 3px solid #ddff4f;
+  outline-offset: 3px;
+}
+
+@media (max-width: 768px) {
+  .app-shell {
+    overflow-x: hidden;
+  }
+
+  .app-shell.sidebar-collapsed .sidebar,
+  .app-shell .sidebar {
+    background: #ffffff;
+    border-right: 4px solid #111111;
+    bottom: 0;
+    display: flex;
+    height: 100vh;
+    left: 0;
+    max-width: calc(100vw - 38px);
+    padding: 14px;
+    position: fixed;
+    top: 0;
+    transform: translateX(-105%);
+    transition: transform 160ms ease-out;
+    width: 286px;
+    z-index: 70;
+  }
+
+  .app-shell.mobile-sidebar-open .sidebar {
+    transform: translateX(0);
+  }
+
+  .sidebar-close-button {
+    align-items: center;
+    background: #ffffff;
+    border: 3px solid #111111;
+    border-radius: 0;
+    color: #111111;
+    display: grid;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 22px;
+    font-weight: 900;
+    height: 38px;
+    justify-content: center;
+    line-height: 1;
+    margin: 0 0 12px auto;
+    width: 38px;
+  }
+
+  .sidebar-close-button:hover {
+    background: #ddff4f;
+  }
+
+  .sidebar-backdrop {
+    background: rgba(17, 17, 17, 0.72);
+    border: 0;
+    bottom: 0;
+    cursor: pointer;
+    display: block;
+    left: 0;
+    opacity: 0;
+    pointer-events: none;
+    position: fixed;
+    right: 0;
+    top: 0;
+    transition: opacity 160ms ease-out;
+    z-index: 60;
+  }
+
+  .app-shell.mobile-sidebar-open .sidebar-backdrop {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .app-shell.mobile-sidebar-open .mobile-menu-button {
+    background: #ddff4f;
+    color: #111111;
+  }
+
+  .app-shell .sidebar .brand-lockup {
+    margin-bottom: 14px;
+  }
+
+  .app-shell .sidebar nav {
+    gap: 8px;
+  }
+
+  .app-shell .sidebar a {
+    min-height: 44px;
+  }
+
+  .app-shell .sidebar .system-card {
+    margin-top: auto;
+  }
+}
+
+/* Ops Board compact status grid */
+.ops-board-page {
+  overflow-x: hidden;
+}
+
+.ops-board-page .ops-kpi-grid {
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
+  gap: 9px;
+  margin-bottom: 12px;
+}
+
+.ops-board-page .ops-kpi-card {
+  min-height: 84px;
+  padding: 10px 11px;
+}
+
+.ops-board-page .ops-kpi-card strong {
+  font-size: 26px;
+}
+
+.ops-board-page .ops-kpi-card span {
+  font-size: 9px;
+  margin-top: 8px;
+}
+
+.ops-board-page .ops-kpi-card small {
+  font-size: 8px;
+  line-height: 1.25;
+  margin-top: 4px;
+}
+
+.ops-board-page .ops-pipeline-section {
+  overflow-x: hidden;
+}
+
+.ops-board-page .ops-kanban {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(6, minmax(112px, 1fr));
+  overflow: visible;
+  padding-bottom: 0;
+  width: 100%;
+}
+
+.ops-board-page .ops-column {
+  flex: initial;
+  min-width: 0;
+  padding: 8px;
+  width: auto;
+}
+
+.ops-board-page .ops-column header {
+  gap: 5px;
+  margin: -8px -8px 8px;
+  min-height: 38px;
+  padding: 7px 7px;
+}
+
+.ops-board-page .ops-column header span {
+  flex-basis: 8px;
+  height: 8px;
+  width: 8px;
+}
+
+.ops-board-page .ops-column header strong,
+.ops-board-page .ops-column header small {
+  font-size: 8px;
+  line-height: 1.15;
+}
+
+.ops-board-page .ops-column-list {
+  gap: 7px;
+}
+
+.ops-board-page .ops-ticket-card {
+  font-size: 11px;
+  min-width: 0;
+}
+
+.ops-board-page .ops-ticket-body {
+  min-width: 0;
+  padding: 9px 8px 9px 12px;
+}
+
+.ops-board-page .ops-ticket-topline {
+  gap: 4px;
+}
+
+.ops-board-page .ops-ticket-id,
+.ops-board-page .ops-status-badge,
+.ops-board-page .ops-overdue-badge,
+.ops-board-page .ops-source-badge {
+  font-size: 7px;
+  line-height: 1.15;
+  padding: 4px 5px;
+}
+
+.ops-board-page .ops-ticket-body strong,
+.ops-board-page .ops-ticket-body p,
+.ops-board-page .ops-ticket-body small,
+.ops-board-page .ops-next-action strong {
+  overflow-wrap: anywhere;
+}
+
+.ops-board-page .ops-ticket-body > strong {
+  font-size: 13px;
+  line-height: 1.12;
+}
+
+.ops-board-page .ops-ticket-body p,
+.ops-board-page .ops-ticket-body small {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.ops-board-page .ops-next-action {
+  padding: 7px;
+}
+
+.ops-board-page .ops-next-action span {
+  font-size: 8px;
+}
+
+.ops-board-page .ops-next-action strong {
+  font-size: 10px;
+  line-height: 1.25;
+}
+
+.ops-board-page .ops-card-actions > span,
+.ops-board-page .ops-so-editor > span {
+  font-size: 8px;
+}
+
+.ops-board-page .ops-card-actions div {
+  gap: 5px;
+}
+
+.ops-board-page .ops-move-button,
+.ops-board-page .ops-gold-button.mini,
+.ops-board-page .ops-light-button.mini {
+  font-size: 8px;
+  min-height: 28px;
+  padding: 6px 7px;
+}
+
+.ops-board-page .ops-empty-column {
+  font-size: 9px;
+  min-height: 46px;
+  padding: 8px;
+}
+
+@media (max-width: 1180px) and (min-width: 769px) {
+  .ops-board-page .ops-kanban {
+    gap: 7px;
+    grid-template-columns: repeat(6, minmax(96px, 1fr));
+  }
+
+  .ops-board-page .ops-column {
+    padding: 7px;
+  }
+
+  .ops-board-page .ops-column header {
+    margin: -7px -7px 7px;
+    padding: 6px;
+  }
+
+  .ops-board-page .ops-column header strong,
+  .ops-board-page .ops-column header small {
+    font-size: 7px;
+  }
+
+  .ops-board-page .ops-ticket-body {
+    padding: 8px 7px 8px 11px;
+  }
+}
+
+@media (max-width: 900px) and (min-width: 769px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .ops-board-page .ops-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow: visible;
+  }
+}
+
+@media (max-width: 430px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Compact shell header on laptop widths to prevent dashboard overflow */
+@media (max-width: 1280px) and (min-width: 769px) {
+  .top-header {
+    gap: 12px;
+    grid-template-columns: minmax(245px, 1fr) minmax(220px, 300px) minmax(168px, 196px);
+    padding: 0 16px;
+  }
+
+  .header-brand strong {
+    font-size: 14px;
+  }
+
+  .global-search {
+    min-width: 0;
+  }
+
+  .profile-area {
+    gap: 8px;
+    padding-left: 10px;
+  }
+
+  .profile-area strong {
+    font-size: 10px;
+  }
+
+  .profile-area span {
+    display: none;
+  }
+}
+
+/* Ops Board final compact stat pass */
+.ops-board-page .ops-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.ops-board-page .ops-kpi-card {
+  align-content: center;
+}
+
+@media (max-width: 1024px) and (min-width: 769px) {
+  .ops-board-page .ops-kpi-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .ops-board-page .ops-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .ops-board-page .ops-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Ops Board pipeline vertical compact polish */
+.ops-board-page .ops-pipeline-section {
+  margin-bottom: 12px;
+}
+
+.ops-board-page .ops-section-heading.split {
+  align-items: end;
+  margin-bottom: 8px;
+}
+
+.ops-board-page .ops-column {
+  align-self: start;
+  min-height: 0;
+  padding: 6px;
+}
+
+.ops-board-page .ops-column header {
+  margin: -6px -6px 6px;
+  min-height: 30px;
+  padding: 5px 6px;
+}
+
+.ops-board-page .ops-column header strong,
+.ops-board-page .ops-column header small {
+  font-size: 7.5px;
+  letter-spacing: 0.06em;
+}
+
+.ops-board-page .ops-column-list {
+  gap: 5px;
+}
+
+.ops-board-page .ops-empty-column {
+  align-items: center;
+  display: flex;
+  font-size: 8px;
+  justify-content: center;
+  line-height: 1.2;
+  min-height: 32px;
+  padding: 5px 6px;
+  text-align: center;
+}
+
+.ops-board-page .ops-ticket-card {
+  border-width: 2px;
+}
+
+.ops-board-page .ops-ticket-spine {
+  border-right-width: 2px;
+  flex-basis: 5px;
+}
+
+.ops-board-page .ops-ticket-body {
+  padding: 7px 7px 7px 9px;
+}
+
+.ops-board-page .ops-ticket-topline {
+  gap: 3px;
+  margin-bottom: 5px;
+}
+
+.ops-board-page .ops-ticket-id,
+.ops-board-page .ops-status-badge,
+.ops-board-page .ops-overdue-badge,
+.ops-board-page .ops-source-badge {
+  border-width: 1.5px;
+  font-size: 6.8px;
+  line-height: 1.1;
+  max-width: 100%;
+  padding: 3px 4px;
+}
+
+.ops-board-page .ops-ticket-body > strong {
+  font-size: 12px;
+  line-height: 1.08;
+  margin-bottom: 3px;
+}
+
+.ops-board-page .ops-ticket-body p,
+.ops-board-page .ops-ticket-body small {
+  font-size: 9px;
+  line-height: 1.18;
+  margin-top: 3px;
+}
+
+.ops-board-page .ops-odoo-so {
+  display: block;
+  font-size: 8px;
+  line-height: 1.2;
+  margin-top: 5px;
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  padding: 4px 5px;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.ops-board-page .ops-next-action {
+  margin-top: 6px;
+  padding: 5px 6px;
+}
+
+.ops-board-page .ops-next-action span,
+.ops-board-page .ops-card-actions > span,
+.ops-board-page .ops-card-final,
+.ops-board-page .ops-so-editor > span {
+  font-size: 7.5px;
+  margin-bottom: 3px;
+}
+
+.ops-board-page .ops-next-action strong {
+  font-size: 9px;
+  line-height: 1.18;
+}
+
+.ops-board-page .ops-card-actions {
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.ops-board-page .ops-card-actions > div {
+  gap: 4px;
+}
+
+.ops-board-page .ops-move-button,
+.ops-board-page .ops-gold-button.mini,
+.ops-board-page .ops-light-button.mini,
+.ops-board-page .ops-add-so-button {
+  border-width: 1.5px;
+  font-size: 7.5px;
+  line-height: 1.1;
+  min-height: 24px;
+  padding: 5px 6px;
+}
+
+.ops-board-page .ops-so-editor {
+  border-width: 2px;
+  margin-top: 6px;
+  padding: 6px;
+}
+
+.ops-board-page .ops-so-editor > div {
+  gap: 5px;
+  margin-top: 5px;
+}
+
+.ops-board-page .ops-so-input {
+  min-height: 30px;
+  padding: 5px 6px;
+}
+
+@media (max-width: 1180px) and (min-width: 769px) {
+  .ops-board-page .ops-ticket-body {
+    padding: 6px 6px 6px 8px;
+  }
+
+  .ops-board-page .ops-ticket-body > strong {
+    font-size: 11px;
+  }
+
+  .ops-board-page .ops-ticket-body p,
+  .ops-board-page .ops-ticket-body small,
+  .ops-board-page .ops-next-action strong {
+    font-size: 8.5px;
+  }
+}
+
+/* Ops Board won-card final density trim */
+.ops-board-page .ops-card-final {
+  border-top: 2px solid var(--ops-ink);
+  font-size: 7.5px;
+  margin-top: 6px;
+  padding-top: 6px;
+}
+
+.ops-board-page .ops-column .ops-ticket-card .ops-next-action + .ops-card-final {
+  margin-top: 5px;
+}
+
+.ops-board-page .ops-ticket-card:has(.ops-odoo-so) .ops-next-action {
+  margin-top: 5px;
+  padding: 4px 5px;
+}
+
+.ops-board-page .ops-ticket-card:has(.ops-odoo-so) .ops-next-action strong {
+  font-size: 8.5px;
+}
+
+/* Ops Board weighted pipeline columns: compact empty lanes, wider active Won lane */
+.ops-board-page .ops-kanban {
+  gap: 6px;
+  grid-template-columns:
+    minmax(92px, 0.82fr)
+    minmax(92px, 0.82fr)
+    minmax(92px, 0.82fr)
+    minmax(92px, 0.82fr)
+    minmax(190px, 1.9fr)
+    minmax(92px, 0.82fr);
+}
+
+.ops-board-page .ops-column:nth-child(5) .ops-ticket-body {
+  padding: 8px 9px 8px 11px;
+}
+
+.ops-board-page .ops-column:nth-child(5) .ops-ticket-body > strong {
+  font-size: 13px;
+}
+
+.ops-board-page .ops-column:nth-child(5) .ops-ticket-body p,
+.ops-board-page .ops-column:nth-child(5) .ops-ticket-body small,
+.ops-board-page .ops-column:nth-child(5) .ops-next-action strong {
+  font-size: 9.5px;
+}
+
+.ops-board-page .ops-column:nth-child(5) .ops-odoo-so {
+  font-size: 8.5px;
+}
+
+@media (max-width: 1180px) and (min-width: 901px) {
+  .ops-board-page .ops-kanban {
+    gap: 5px;
+    grid-template-columns:
+      minmax(76px, 0.78fr)
+      minmax(76px, 0.78fr)
+      minmax(76px, 0.78fr)
+      minmax(76px, 0.78fr)
+      minmax(172px, 2fr)
+      minmax(76px, 0.78fr);
+  }
+}
+
+@media (max-width: 900px) and (min-width: 769px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Ops Board expandable card details: balanced compact lanes */
+.ops-board-page .ops-kanban {
+  gap: 6px;
+  grid-template-columns: repeat(6, minmax(104px, 1fr));
+}
+
+.ops-board-page .ops-column:nth-child(5) .ops-ticket-body,
+.ops-board-page .ops-ticket-body {
+  padding: 7px 7px 7px 9px;
+}
+
+.ops-board-page .ops-column:nth-child(5) .ops-ticket-body > strong,
+.ops-board-page .ops-ticket-body > strong {
+  font-size: 11px;
+  line-height: 1.12;
+}
+
+.ops-board-page .ops-column:nth-child(5) .ops-ticket-body p,
+.ops-board-page .ops-column:nth-child(5) .ops-ticket-body small,
+.ops-board-page .ops-ticket-body p,
+.ops-board-page .ops-ticket-body small {
+  font-size: 8.5px;
+  line-height: 1.22;
+}
+
+.ops-board-page .ops-column:nth-child(5) .ops-odoo-so,
+.ops-board-page .ops-odoo-so {
+  font-size: 7.5px;
+  line-height: 1.18;
+  padding: 4px 5px;
+}
+
+.ops-board-page .ops-details-toggle {
+  align-items: center;
+  background: #ffffff;
+  border: 2px solid var(--ops-ink);
+  border-radius: 0;
+  color: var(--ops-ink);
+  display: inline-flex;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 7.5px;
+  font-weight: 900;
+  justify-content: center;
+  letter-spacing: 0.08em;
+  line-height: 1.1;
+  margin-top: 6px;
+  min-height: 24px;
+  padding: 4px 6px;
+  text-transform: uppercase;
+  width: 100%;
+}
+
+.ops-board-page .ops-details-toggle:hover,
+.ops-board-page .ops-details-toggle.active {
+  background: var(--ops-lime);
+  color: var(--ops-ink);
+}
+
+.ops-board-page .ops-ticket-details {
+  background: var(--ops-paper);
+  border: 2px solid var(--ops-ink);
+  display: grid;
+  gap: 5px;
+  margin-top: 6px;
+  padding: 6px;
+}
+
+.ops-board-page .ops-ticket-details div {
+  border-bottom: 1.5px solid var(--ops-ink);
+  min-width: 0;
+  padding-bottom: 5px;
+}
+
+.ops-board-page .ops-ticket-details div:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.ops-board-page .ops-ticket-details span {
+  color: var(--ops-secondary);
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 7px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-ticket-details strong,
+.ops-board-page .ops-ticket-details p {
+  color: var(--ops-ink);
+  display: block;
+  font-size: 8.5px;
+  font-weight: 800;
+  line-height: 1.25;
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+  word-break: break-word;
+}
+
+.ops-board-page .ops-ticket-details p {
+  font-weight: 700;
+}
+
+@media (max-width: 1180px) and (min-width: 901px) {
+  .ops-board-page .ops-kanban {
+    gap: 5px;
+    grid-template-columns: repeat(6, minmax(82px, 1fr));
+  }
+
+  .ops-board-page .ops-details-toggle {
+    font-size: 7px;
+    padding-inline: 4px;
+  }
+}
+
+@media (max-width: 900px) and (min-width: 769px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-board-page .ops-ticket-body > strong,
+  .ops-board-page .ops-ticket-details strong,
+  .ops-board-page .ops-ticket-details p {
+    font-size: 10px;
+  }
+}
+
+@media (max-width: 430px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Admin editable text direction safety */
+.app-shell input,
+.app-shell textarea,
+.app-shell select,
+.admin-access-page input,
+.admin-access-page textarea,
+.admin-access-page select {
+  direction: ltr !important;
+  unicode-bidi: plaintext !important;
+  text-align: left;
+  transform: none;
+  writing-mode: horizontal-tb;
+}
+
+.app-shell input::placeholder,
+.app-shell textarea::placeholder,
+.admin-access-page input::placeholder,
+.admin-access-page textarea::placeholder {
+  direction: ltr !important;
+  unicode-bidi: plaintext !important;
+  text-align: left;
+}
+
+/* Ops Board accordion pipeline cards */
+.ops-board-page .ops-kanban {
+  gap: 6px;
+  grid-template-columns: repeat(6, minmax(104px, 1fr));
+}
+
+.ops-board-page .ops-accordion-card {
+  background: transparent;
+  border: 0;
+  display: block;
+  overflow: visible;
+}
+
+.ops-board-page .ops-accordion-card.overdue {
+  background: transparent;
+  border-color: transparent;
+}
+
+.ops-board-page .ops-ticket-summary {
+  align-items: center;
+  background: var(--ops-ink);
+  border: 2px solid var(--ops-ink);
+  border-radius: 0;
+  color: var(--ops-white);
+  display: flex;
+  gap: 6px;
+  justify-content: space-between;
+  min-height: 34px;
+  padding: 6px 7px;
+  text-align: left;
+  width: 100%;
+}
+
+.ops-board-page .ops-accordion-card.overdue .ops-ticket-summary {
+  border-color: var(--ops-red);
+}
+
+.ops-board-page .ops-ticket-summary:hover,
+.ops-board-page .ops-ticket-summary.active {
+  background: var(--ops-lime);
+  color: var(--ops-ink);
+}
+
+.ops-board-page .ops-summary-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ops-board-page .ops-summary-text strong {
+  color: inherit;
+  display: block;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 9.5px;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  line-height: 1.05;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ops-board-page .ops-summary-text small {
+  color: inherit;
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 6.8px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  line-height: 1.1;
+  opacity: 0.88;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.ops-board-page .ops-summary-indicator {
+  align-items: center;
+  border: 1.5px solid currentColor;
+  display: inline-flex;
+  flex: 0 0 18px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 900;
+  height: 18px;
+  justify-content: center;
+  line-height: 1;
+  width: 18px;
+}
+
+.ops-board-page .ops-accordion-card .ops-ticket-body {
+  background: var(--ops-white);
+  border: 2px solid var(--ops-ink);
+  border-top: 0;
+  padding: 7px;
+}
+
+.ops-board-page .ops-accordion-card.overdue .ops-ticket-body {
+  border-color: var(--ops-red);
+}
+
+.ops-board-page .ops-accordion-card .ops-ticket-details {
+  margin-top: 0;
+}
+
+.ops-board-page .ops-ticket-details {
+  grid-template-columns: 1fr;
+}
+
+.ops-board-page .ops-ticket-details .wide {
+  grid-column: 1 / -1;
+}
+
+.ops-board-page .ops-card-actions,
+.ops-board-page .ops-card-final,
+.ops-board-page .ops-so-editor,
+.ops-board-page .ops-add-so-button {
+  margin-top: 6px;
+}
+
+@media (max-width: 1180px) and (min-width: 901px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(6, minmax(82px, 1fr));
+  }
+
+  .ops-board-page .ops-ticket-summary {
+    min-height: 32px;
+    padding: 5px 6px;
+  }
+
+  .ops-board-page .ops-summary-text strong {
+    font-size: 8.5px;
+  }
+
+  .ops-board-page .ops-summary-text small {
+    font-size: 6.2px;
+  }
+}
+
+@media (max-width: 900px) and (min-width: 769px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ops-board-page .ops-summary-text strong {
+    font-size: 11px;
+  }
+
+  .ops-board-page .ops-summary-text small {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 430px) {
+  .ops-board-page .ops-kanban {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Ops Board right-side inquiry detail drawer */
+.ops-board-page .ops-accordion-card .ops-ticket-body {
+  display: none;
+}
+
+.ops-board-page .ops-drawer-backdrop {
+  background: rgba(17, 17, 17, 0.42);
+  bottom: 0;
+  left: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  z-index: 80;
+}
+
+.ops-board-page .ops-detail-drawer {
+  background: var(--ops-white);
+  border-left: 4px solid var(--ops-ink);
+  bottom: 0;
+  color: var(--ops-ink);
+  display: flex;
+  flex-direction: column;
+  max-width: min(420px, calc(100vw - 28px));
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: 420px;
+  z-index: 90;
+}
+
+.ops-board-page .ops-detail-drawer header {
+  align-items: flex-start;
+  background: var(--ops-ink);
+  border-bottom: 4px solid var(--ops-ink);
+  color: var(--ops-white);
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.ops-board-page .ops-detail-drawer header span {
+  color: var(--ops-lime);
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-detail-drawer header h2 {
+  color: inherit;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 24px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 0.95;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-drawer-close {
+  background: var(--ops-lime);
+  border: 2px solid var(--ops-white);
+  border-radius: 0;
+  color: var(--ops-ink);
+  flex: 0 0 34px;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 900;
+  height: 34px;
+  line-height: 1;
+  width: 34px;
+}
+
+.ops-board-page .ops-drawer-content {
+  display: grid;
+  gap: 10px;
+  overflow-y: auto;
+  padding: 14px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-ticket-details {
+  border-width: 3px;
+  gap: 8px;
+  padding: 10px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-ticket-details div {
+  padding-bottom: 8px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-ticket-details span {
+  font-size: 9px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-ticket-details strong,
+.ops-board-page .ops-detail-drawer .ops-ticket-details p {
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.ops-board-page .ops-detail-drawer .ops-card-actions,
+.ops-board-page .ops-detail-drawer .ops-card-final,
+.ops-board-page .ops-detail-drawer .ops-so-editor,
+.ops-board-page .ops-detail-drawer .ops-add-so-button {
+  margin-top: 0;
+}
+
+.ops-board-page .ops-detail-drawer .ops-card-actions {
+  border: 3px solid var(--ops-ink);
+  padding: 10px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-card-actions > span,
+.ops-board-page .ops-detail-drawer .ops-card-final,
+.ops-board-page .ops-detail-drawer .ops-so-editor > span {
+  font-size: 9px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-card-actions > div {
+  gap: 7px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-move-button,
+.ops-board-page .ops-detail-drawer .ops-gold-button.mini,
+.ops-board-page .ops-detail-drawer .ops-light-button.mini,
+.ops-board-page .ops-detail-drawer .ops-add-so-button {
+  border-width: 2px;
+  font-size: 9px;
+  min-height: 34px;
+  padding: 7px 9px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-so-editor {
+  border-width: 3px;
+  padding: 10px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-so-input {
+  min-height: 38px;
+}
+
+@media (max-width: 768px) {
+  .ops-board-page .ops-detail-drawer {
+    border-left: 0;
+    border-top: 4px solid var(--ops-ink);
+    bottom: 0;
+    left: 0;
+    max-height: 86vh;
+    max-width: none;
+    top: auto;
+    width: 100%;
+  }
+}
+
+/* Ops Board command-center layout and lighter brutalist borders */
+.ops-board-page .ops-shell {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-board-page .ops-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.9fr);
+  gap: 10px;
+  margin-bottom: 0;
+}
+
+.ops-board-page .ops-hero > div:first-child,
+.ops-board-page .ops-rule-card,
+.ops-board-page .ops-kpi-card,
+.ops-board-page .ops-card,
+.ops-board-page .ops-priority-list,
+.ops-board-page .ops-column,
+.ops-board-page .ops-production-card {
+  border-width: 2px;
+}
+
+.ops-board-page .ops-hero > div:first-child {
+  padding: 12px 14px;
+}
+
+.ops-board-page .ops-hero h1 {
+  font-size: clamp(28px, 3.2vw, 40px);
+}
+
+.ops-board-page .ops-date-line {
+  font-size: 9px;
+  margin-bottom: 5px;
+}
+
+.ops-board-page .ops-rule-card {
+  padding: 12px 14px;
+  width: auto;
+}
+
+.ops-board-page .ops-rule-card strong {
+  font-size: 12px;
+  margin-bottom: 7px;
+}
+
+.ops-board-page .ops-rule-card span {
+  font-size: 10.5px;
+  line-height: 1.35;
+}
+
+.ops-board-page .ops-kpi-grid {
+  gap: 8px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  margin-bottom: 0;
+}
+
+.ops-board-page .ops-kpi-card {
+  min-height: 72px;
+  padding: 9px 10px;
+}
+
+.ops-board-page .ops-kpi-card strong {
+  font-size: 25px;
+}
+
+.ops-board-page .ops-kpi-card span {
+  font-size: 8px;
+  margin-top: 7px;
+}
+
+.ops-board-page .ops-kpi-card small {
+  font-size: 7px;
+  margin-top: 3px;
+}
+
+.ops-board-page .ops-middle-grid {
+  align-items: start;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(300px, 0.95fr);
+}
+
+.ops-board-page .ops-card,
+.ops-board-page .ops-priority-section,
+.ops-board-page .ops-pipeline-section,
+.ops-board-page .ops-production-section {
+  margin-bottom: 0;
+}
+
+.ops-board-page .ops-card {
+  padding: 12px;
+}
+
+.ops-board-page .ops-section-heading {
+  margin-bottom: 8px;
+}
+
+.ops-board-page .ops-section-heading h2 {
+  font-size: 15px;
+}
+
+.ops-board-page .ops-section-heading p,
+.ops-board-page .ops-section-heading span {
+  font-size: 10px;
+  line-height: 1.3;
+}
+
+.ops-board-page .ops-ai-card textarea {
+  min-height: 82px;
+  padding: 10px 11px;
+}
+
+.ops-board-page .ops-action-row {
+  margin-top: 8px;
+}
+
+.ops-board-page .ops-dark-button,
+.ops-board-page .ops-gold-button,
+.ops-board-page .ops-light-button,
+.ops-board-page .ops-add-so-button,
+.ops-board-page .ops-move-button {
+  min-height: 32px;
+  padding: 0 10px;
+}
+
+.ops-board-page .ops-priority-list {
+  border-width: 2px;
+}
+
+.ops-board-page .ops-priority-row {
+  border-bottom-width: 1px;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.ops-board-page .ops-priority-row.active {
+  background: var(--ops-lime);
+}
+
+.ops-board-page .ops-priority-row.no-link {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.ops-board-page .ops-row-number {
+  flex-basis: 22px;
+  font-size: 9px;
+}
+
+.ops-board-page .ops-priority-text {
+  font-size: 11px;
+  line-height: 1.25;
+}
+
+.ops-board-page .ops-mini-badge,
+.ops-board-page .ops-source-badge,
+.ops-board-page .ops-overdue-badge,
+.ops-board-page .ops-status-badge {
+  border-width: 1px;
+  font-size: 8px;
+  padding: 3px 5px;
+}
+
+.ops-board-page .ops-column {
+  padding: 6px;
+}
+
+.ops-board-page .ops-column header {
+  margin: -6px -6px 6px;
+}
+
+.ops-board-page .ops-ticket-summary {
+  border-width: 1.5px;
+}
+
+.ops-board-page .ops-empty-column {
+  border-width: 1.5px;
+}
+
+.ops-board-page .ops-detail-drawer {
+  border-left-width: 3px;
+}
+
+.ops-board-page .ops-detail-drawer header {
+  border-bottom-width: 3px;
+}
+
+.ops-board-page .ops-detail-drawer .ops-ticket-details,
+.ops-board-page .ops-detail-drawer .ops-card-actions,
+.ops-board-page .ops-detail-drawer .ops-so-editor {
+  border-width: 2px;
+}
+
+.ops-board-page .ops-ticket-details div {
+  border-bottom-width: 1px;
+}
+
+@media (max-width: 1180px) and (min-width: 769px) {
+  .ops-board-page .ops-middle-grid {
+    grid-template-columns: minmax(0, 1.2fr) minmax(280px, 0.9fr);
+  }
+}
+
+@media (max-width: 900px) {
+  .ops-board-page .ops-hero,
+  .ops-board-page .ops-middle-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .ops-board-page .ops-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 430px) {
+  .ops-board-page .ops-kpi-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Admin shell icon rail and client reorder clarity */
+@media (min-width: 769px) {
+  .sidebar {
+    background: #050505;
+    border-right: 4px solid #111111;
+    flex-basis: 82px;
+    padding: 16px 10px;
+    width: 82px;
+  }
+
+  .brand-lockup {
+    align-items: center;
+    border: 2px solid #ffffff;
+    display: grid;
+    height: 54px;
+    justify-items: center;
+    margin-bottom: 18px;
+    padding: 0;
+  }
+
+  .brand-lockup strong {
+    color: #ffffff;
+    font-size: 16px;
+    letter-spacing: 0.04em;
+  }
+
+  .brand-lockup span,
+  .sidebar .nav-label,
+  .system-card div {
+    display: none;
+  }
+
+  .sidebar nav {
+    align-items: center;
+    display: grid;
+    gap: 12px;
+    justify-items: center;
+  }
+
+  .sidebar a {
+    align-items: center;
+    background: #050505;
+    border: 2px solid transparent;
+    color: #ffffff;
+    display: grid;
+    height: 44px;
+    justify-content: center;
+    padding: 0;
+    position: relative;
+    width: 44px;
+  }
+
+  .sidebar a:hover,
+  .sidebar a:focus-visible {
+    border-color: #ffffff;
+    background: #111111;
+  }
+
+  .sidebar a.active {
+    background: #ddff4f;
+    border-color: #ddff4f;
+    color: #111111;
+  }
+
+  .sidebar a::after {
+    background: #111111;
+    border: 2px solid #ffffff;
+    color: #ffffff;
+    content: attr(aria-label);
+    display: none;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 900;
+    left: calc(100% + 10px);
+    letter-spacing: 0.08em;
+    padding: 7px 9px;
+    position: absolute;
+    text-transform: uppercase;
+    top: 50%;
+    transform: translateY(-50%);
+    white-space: nowrap;
+    z-index: 20;
+  }
+
+  .sidebar a:hover::after,
+  .sidebar a:focus-visible::after {
+    display: block;
+  }
+
+  .nav-icon.lucide-icon {
+    height: 22px;
+    width: 22px;
+  }
+
+  .system-card {
+    background: #050505;
+    border: 2px solid #ffffff;
+    display: grid;
+    height: 44px;
+    margin-top: auto;
+    min-height: 44px;
+    padding: 0;
+    place-items: center;
+  }
+
+  .system-card .shield-icon.lucide-icon {
+    color: #ddff4f;
+    height: 24px;
+    width: 24px;
+  }
+}
+
+.orders-page .page-helper-note {
+  border-left: 4px solid #ddff4f;
+  color: #55534b;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin: 10px 0 0;
+  padding: 7px 0 7px 10px;
+  text-transform: uppercase;
+}
+
+.orders-page .status-card:first-child small::after {
+  content: "Review before approving";
+  display: block;
+  margin-left: 0;
+}
+
+.orders-table tbody tr.selected td {
+  background: #ffffff;
+  border-bottom: 2px solid #111111;
+  border-top: 2px solid #111111;
+}
+
+.orders-table tbody tr.selected td:first-child {
+  border-left: 5px solid #ddff4f;
+}
+
+.orders-table tbody tr.selected td:not(:first-child) {
+  box-shadow: inset 0 2px 0 rgba(221, 255, 79, 0.28), inset 0 -2px 0 rgba(221, 255, 79, 0.28);
+}
+
+.review-action-label {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.detail-panel .panel-header {
+  align-items: flex-start;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px;
+  row-gap: 4px;
+}
+
+.detail-panel .panel-header .close-panel {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+}
+
+.panel-kicker {
+  color: #55534b;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Combined layout cleanup: vertical Ops Board flow and consistent master-detail pages */
+.ops-board-page .ops-shell {
+  gap: 12px;
+}
+
+.ops-board-page .ops-full-row,
+.ops-board-page .ops-priority-section,
+.ops-board-page .ops-ai-card,
+.ops-board-page .ops-pipeline-section,
+.ops-board-page .ops-production-section {
+  width: 100%;
+}
+
+.ops-board-page .ops-priority-section {
+  display: block;
+}
+
+.ops-board-page .ops-priority-list {
+  width: 100%;
+}
+
+.ops-board-page .ops-priority-row {
+  grid-template-columns: 38px minmax(0, 1fr) auto 28px;
+  min-height: 42px;
+  padding: 8px 12px;
+}
+
+.ops-board-page .ops-priority-text {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.ops-board-page .ops-ai-card {
+  padding: 14px;
+}
+
+.ops-board-page .ops-ai-card textarea {
+  min-height: 96px;
+}
+
+.ops-board-page .ops-middle-grid {
+  display: contents;
+}
+
+.ops-board-page .ops-pipeline-section,
+.ops-board-page .ops-production-section {
+  margin-top: 0;
+}
+
+.ops-board-page .ops-production-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.two-column-page,
+.orders-workbench.has-panel {
+  align-items: start;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(0, 1fr) minmax(300px, 340px);
+}
+
+.orders-list-card,
+.content-card.table-card,
+.detail-panel,
+.settings-card,
+.settings-actions {
+  border-color: #111111;
+  border-radius: 0;
+  border-width: 2px;
+  box-shadow: none;
+}
+
+.detail-panel {
+  align-self: start;
+  max-height: calc(100vh - 116px);
+  overflow-y: auto;
+}
+
+.detail-panel.empty-panel {
+  display: grid;
+  min-height: 220px;
+  place-items: center;
+}
+
+.detail-panel.empty-panel .empty-state {
+  border: 2px dashed #111111;
+  margin: 14px;
+  padding: 18px;
+  text-align: center;
+}
+
+.detail-panel.empty-panel .empty-state strong {
+  color: #111111;
+  display: block;
+  font-family: "Archivo", system-ui, sans-serif;
+  font-size: 18px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.detail-panel.empty-panel .empty-state span {
+  color: #55534b;
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  margin-top: 8px;
+  text-transform: uppercase;
+}
+
+.settings-grid,
+.settings-grid-wide {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 1180px) and (min-width: 769px) {
+  .ops-board-page .ops-production-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .two-column-page,
+  .orders-workbench.has-panel {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 320px);
+  }
+}
+
+@media (max-width: 900px) {
+  .ops-board-page .ops-hero,
+  .ops-board-page .ops-production-grid,
+  .two-column-page,
+  .orders-workbench.has-panel,
+  .settings-grid,
+  .settings-grid-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-panel {
+    max-height: none;
+  }
+}
+
+/* Final page rhythm audit: shared Admin Portal width, padding, and card cadence */
+.orders-page {
+  padding: 24px 28px 0;
+}
+
+.ops-board-page .ops-shell {
+  max-width: none;
+  margin: 0;
+  width: 100%;
+}
+
+.ops-board-page .ops-hero,
+.orders-page:not(.ops-board-page) .page-heading {
+  margin-bottom: 16px;
+  width: 100%;
+}
+
+.ops-board-page .ops-hero {
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(320px, 0.52fr);
+}
+
+.ops-board-page .ops-hero > div:first-child,
+.ops-board-page .ops-rule-card,
+.orders-page:not(.ops-board-page) .page-heading {
+  border: 2px solid #111111;
+  padding: 16px 18px;
+}
+
+.ops-board-page .ops-hero h1,
+.orders-page:not(.ops-board-page) .page-heading h1 {
+  font-size: clamp(28px, 2.5vw, 36px);
+  line-height: 0.98;
+  margin: 0 0 8px;
+}
+
+.ops-board-page .subtitle,
+.orders-page:not(.ops-board-page) .subtitle {
+  font-size: 14px;
+  line-height: 1.32;
+}
+
+.ops-board-page .ops-kpi-grid,
+.status-grid {
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.ops-board-page .ops-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.ops-board-page .ops-kpi-card,
+.status-card {
+  border-width: 2px;
+  min-height: 92px;
+  padding: 14px;
+}
+
+.ops-board-page .ops-kpi-card strong,
+.status-card strong {
+  font-size: 30px;
+  line-height: 1;
+}
+
+.ops-board-page .ops-kpi-card span,
+.status-card p {
+  font-size: 10px;
+  line-height: 1.2;
+}
+
+.ops-board-page .ops-kpi-card small,
+.status-card small {
+  font-size: 9px;
+  line-height: 1.25;
+}
+
+.ops-board-page .ops-card,
+.ops-board-page .ops-priority-list,
+.ops-board-page .ops-column,
+.ops-board-page .ops-production-card,
+.orders-list-card,
+.content-card.table-card,
+.detail-panel,
+.settings-card,
+.settings-actions {
+  border-width: 2px;
+}
+
+.ops-board-page .ops-priority-section,
+.ops-board-page .ops-ai-card,
+.ops-board-page .ops-pipeline-section,
+.ops-board-page .ops-production-section,
+.orders-workbench.has-panel,
+.two-column-page,
+.settings-grid,
+.settings-grid-wide {
+  margin-bottom: 0;
+  width: 100%;
+}
+
+.ops-board-page .ops-priority-row {
+  min-height: 40px;
+}
+
+.ops-board-page .ops-ai-card textarea {
+  min-height: 92px;
+}
+
+.orders-workbench.has-panel,
+.two-column-page {
+  gap: 16px;
+  grid-template-columns: minmax(0, 1fr) minmax(304px, 336px);
+}
+
+.detail-panel {
+  position: sticky;
+  top: 80px;
+}
+
+.settings-grid,
+.settings-grid-wide {
+  gap: 16px;
+}
+
+.settings-card {
+  min-height: 0;
+  padding: 16px;
+}
+
+@media (max-width: 1180px) and (min-width: 769px) {
+  .ops-board-page .ops-hero {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 0.46fr);
+  }
+
+  .orders-workbench.has-panel,
+  .two-column-page {
+    grid-template-columns: minmax(0, 1fr) minmax(280px, 316px);
+  }
+}
+
+@media (max-width: 900px) {
+  .ops-board-page .ops-hero,
+  .ops-board-page .ops-kpi-grid,
+  .status-grid,
+  .orders-workbench.has-panel,
+  .two-column-page,
+  .settings-grid,
+  .settings-grid-wide {
+    grid-template-columns: 1fr;
+  }
+
+  .detail-panel {
+    position: static;
+  }
+}
+
+/* Admin Auth Phase 1/2 login and role-check UI */
+.admin-login-card {
+  max-width: 520px;
+}
+
+.admin-access-form label + input + label {
+  margin-top: 12px;
+}
+
+.admin-logout-button,
+.logout-button {
+  background: #ddff4f;
+  border: 2px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  min-height: 32px;
+  padding: 0 10px;
+  text-transform: uppercase;
+}
+
+.logout-button {
+  align-self: center;
+  min-height: 30px;
+}
+
+.admin-logout-button:hover,
+.logout-button:hover {
+  background: #ffffff;
+}
+
+.admin-sql-handoff {
+  border: 2px solid #111111;
+  margin-top: 16px;
+  padding: 12px;
+}
+
+.admin-sql-handoff summary {
+  cursor: pointer;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.admin-sql-handoff pre {
+  background: #111111;
+  color: #ddff4f;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  line-height: 1.45;
+  margin: 12px 0 0;
+  max-height: 300px;
+  overflow: auto;
+  padding: 12px;
+  white-space: pre-wrap;
+}
+
+.profile-area {
+  min-width: 0;
+}
+
+.profile-area > div:not(.avatar) {
+  min-width: 0;
+}
+
+.profile-area strong,
+.profile-area span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+  .logout-button {
+    display: none;
+  }
+}
+
+.admin-access-error {
+  text-transform: none !important;
+}
+
+/* Admin UI cleanup pass: orders, clients, products */
+.orders-page:not(.ops-board-page) .status-card .icon-mark {
+  background: transparent;
+  border: 0;
+  border-radius: 0;
+  color: #111111;
+  flex: 0 0 34px;
+  height: 34px;
+  width: 34px;
+}
+
+.orders-page:not(.ops-board-page) .status-card.active .icon-mark {
+  background: transparent;
+  color: #111111;
+}
+
+.orders-page:not(.ops-board-page) .status-card .icon-mark.queue::after {
+  background: #ffffff;
+}
+
+.orders-table th:nth-child(9),
+.orders-table td:nth-child(9) {
+  min-width: 86px;
+  text-align: center;
+  width: 86px;
+}
+
+.orders-table .view-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 72px;
+  width: auto;
+  height: 32px;
+  padding: 0 12px;
+}
+
+.orders-table .review-action-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  height: auto;
+  width: auto;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.orders-table .review-action-label::before,
+.orders-table .review-action-label::after {
+  content: none;
+}
+
+.client-logo,
+.client-logo.large,
+.client-logo.xl {
+  align-items: center;
+  display: inline-grid;
+  justify-content: center;
+  line-height: 1;
+  overflow: hidden;
+  text-align: center;
+}
+
+.client-logo.large {
+  flex: 0 0 42px;
+  height: 42px;
+  width: 42px;
+  font-size: 13px;
+}
+
+.client-logo.xl {
+  flex: 0 0 58px;
+  height: 58px;
+  width: 58px;
+  font-size: 18px;
+}
+
+.client-profile {
+  align-items: center;
+}
+
+.centered-profile {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.client-detail-panel .quick-panel-actions {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.quick-panel-actions a,
+.quick-panel-actions button {
+  min-height: 40px;
+  height: auto;
+  line-height: 1.15;
+  padding: 8px 10px;
+  text-align: center;
+}
+
+.client-detail-panel .quick-panel-actions a:first-child {
+  grid-column: 1 / -1;
+  background: #ddff4f;
+  color: #111111;
+}
+
+.product-detail-panel {
+  overflow-x: hidden;
+}
+
+.product-detail-panel .panel-section,
+.product-detail-panel .product-image-panel {
+  padding: 16px;
+}
+
+.product-image-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.product-image-viewer {
+  min-height: 212px;
+  background-color: #f3f1ea;
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.product-image-viewer span {
+  border: 2px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  letter-spacing: 0.08em;
+}
+
+.image-angle-strip {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-top: 0;
+  overflow: visible;
+  padding-bottom: 0;
+}
+
+.image-angle-strip button {
+  min-height: 34px;
+  padding: 0 8px;
+  white-space: normal;
+}
+
+.image-manager-grid {
+  gap: 12px;
+}
+
+.image-slot {
+  border: 2px solid #111111;
+  border-radius: 0;
+  grid-template-columns: 64px minmax(0, 1fr);
+  gap: 10px;
+  padding: 10px;
+}
+
+.image-slot.main {
+  background: rgba(221, 255, 79, 0.18);
+  border-color: #111111;
+}
+
+.image-slot-preview {
+  border: 2px solid #111111;
+  border-radius: 0;
+  height: 54px;
+  width: 64px;
+  background-size: contain;
+}
+
+.image-slot-actions {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.image-action-button,
+.image-slot-actions button {
+  border: 2px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 900;
+  height: 32px;
+  min-width: 0;
+  padding: 0 4px;
+  text-transform: uppercase;
+}
+
+.image-action-button:hover,
+.image-slot-actions button:hover:not(:disabled) {
+  background: #ddff4f;
+  border-color: #111111;
+  color: #111111;
+}
+
+.product-actions {
+  gap: 10px;
+}
+
+.product-actions button {
+  min-height: 40px;
+  height: auto;
+  line-height: 1.15;
+  padding: 8px 10px;
+}
+
+@media (min-width: 901px) {
+  .orders-workbench.has-panel,
+  .two-column-page {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 372px);
+  }
+}
+
+@media (max-width: 900px) {
+  .image-angle-strip,
+  .client-detail-panel .quick-panel-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .client-detail-panel .quick-panel-actions a:first-child {
+    grid-column: auto;
+  }
+}
+
+.ops-board-page .ops-artwork-action {
+  background: var(--ops-paper);
+  border: 3px solid var(--ops-ink);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.ops-board-page .ops-artwork-action > span {
+  color: var(--ops-secondary);
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  line-height: 1.15;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-artwork-action > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+}
+
+.ops-board-page .ops-artwork-message {
+  color: var(--ops-ink);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  line-height: 1.35;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-artwork-message.error {
+  color: var(--ops-red);
 }
