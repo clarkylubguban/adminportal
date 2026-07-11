@@ -42,20 +42,13 @@ export default async function handler(request, response) {
       if (result.error) {
         throw result.error;
       }
-    } catch (error) {
-  console.error("Artwork auth verification failed.", {
-    tokenPresent: Boolean(token),
-    message: error?.message,
-    code: error?.code,
-    status: error?.status || error?.statusCode,
-  });
-
-  sendJson(response, 401, {
-    ok: false,
-    error: "admin session required",
-  });
-  return;
-}
+        } catch {
+      sendJson(response, 401, {
+        ok: false,
+        error: "admin session required",
+      });
+      return;
+    }
 
     if (!userData?.user) {
       sendJson(response, 401, {
