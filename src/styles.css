@@ -7344,3 +7344,342 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-artwork-message.error {
   color: var(--ops-red);
 }
+
+/* Admin Catalog Manager MVP */
+.catalog-page .catalog-heading {
+  align-items: center;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.catalog-add-button {
+  background: #ddff4f;
+  border: 3px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  flex: 0 0 auto;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  min-height: 48px;
+  padding: 0 18px;
+  text-transform: uppercase;
+}
+
+.catalog-add-button:disabled {
+  background: #f2f2f2;
+  color: #777777;
+  cursor: not-allowed;
+}
+
+.catalog-controls {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(360px, 1fr) minmax(220px, 300px) 190px;
+  margin-bottom: 12px;
+}
+
+.catalog-tabs {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.catalog-tabs button,
+.catalog-status-filter,
+.catalog-field input,
+.catalog-field select,
+.catalog-field textarea {
+  background: #ffffff;
+  border: 2px solid #111111;
+  border-radius: 0;
+  color: #111111;
+}
+
+.catalog-tabs button {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  min-height: 38px;
+  padding: 0 10px;
+  text-transform: uppercase;
+}
+
+.catalog-tabs button.active {
+  background: #111111;
+  color: #ddff4f;
+}
+
+.catalog-search {
+  border: 2px solid #111111;
+  border-radius: 0;
+  height: 38px;
+  width: 100%;
+}
+
+.catalog-status-filter {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  height: 38px;
+  padding: 0 10px;
+  text-transform: uppercase;
+}
+
+.catalog-notice {
+  background: #ffffff;
+  border: 2px solid #111111;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  text-transform: uppercase;
+}
+
+.catalog-notice.success {
+  background: #ddff4f;
+}
+
+.catalog-notice.error,
+.catalog-form-error {
+  background: #fff5f4;
+  color: #e23f32;
+}
+
+.catalog-table-card {
+  overflow: auto;
+}
+
+.catalog-table th:first-child,
+.catalog-table td:first-child {
+  width: 76px;
+}
+
+.catalog-product-image {
+  background: #f3f1ea;
+  border: 2px solid #111111;
+  display: block;
+  height: 44px;
+  width: 56px;
+}
+
+.catalog-product-image.has-image {
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: cover;
+}
+
+.catalog-edit-action {
+  border: 2px solid #111111;
+  border-radius: 0;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 900;
+  height: 30px;
+  min-width: 58px;
+  text-transform: uppercase;
+  width: auto;
+}
+
+.catalog-drawer-backdrop {
+  background: rgba(17, 17, 17, 0.28);
+  inset: 0;
+  position: fixed;
+  z-index: 35;
+}
+
+.catalog-drawer {
+  background: #fbf9f3;
+  border-left: 4px solid #111111;
+  bottom: 0;
+  max-width: min(540px, 100vw);
+  overflow-y: auto;
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: 540px;
+  z-index: 40;
+}
+
+.catalog-drawer header {
+  align-items: center;
+  background: #111111;
+  color: #ffffff;
+  display: flex;
+  justify-content: space-between;
+  padding: 18px;
+}
+
+.catalog-drawer header span {
+  color: #ddff4f;
+  display: block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  margin-bottom: 5px;
+}
+
+.catalog-drawer header h2 {
+  font-size: 24px;
+  line-height: 1;
+  margin: 0;
+}
+
+.catalog-drawer-close {
+  background: #ddff4f;
+  border: 2px solid #ffffff;
+  border-radius: 0;
+  color: #111111;
+  font-weight: 900;
+  height: 34px;
+  width: 34px;
+}
+
+.catalog-form {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.catalog-form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.catalog-field {
+  display: grid;
+  gap: 6px;
+}
+
+.catalog-field > span {
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.catalog-field input,
+.catalog-field select,
+.catalog-field textarea {
+  font-size: 13px;
+  min-height: 38px;
+  outline: 0;
+  padding: 9px 10px;
+  width: 100%;
+}
+
+.catalog-field textarea {
+  min-height: 82px;
+  resize: vertical;
+}
+
+.catalog-field input:focus,
+.catalog-field select:focus,
+.catalog-field textarea:focus {
+  box-shadow: 0 0 0 3px rgba(221, 255, 79, 0.65);
+}
+
+.catalog-toggle {
+  align-items: center;
+  border: 2px solid #111111;
+  display: flex;
+  gap: 8px;
+  min-height: 38px;
+  padding: 8px 10px;
+}
+
+.catalog-toggle input {
+  accent-color: #ddff4f;
+  height: 18px;
+  width: 18px;
+}
+
+.catalog-drawer-actions {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(0, 1fr) minmax(120px, 0.45fr);
+  margin-top: 4px;
+}
+
+.catalog-save-button {
+  background: #111111;
+  border-color: #111111;
+  border-radius: 0;
+  box-shadow: none;
+  color: #ddff4f;
+}
+
+.catalog-form-error {
+  border: 2px solid #e23f32;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  margin: 0;
+  padding: 9px 10px;
+  text-transform: uppercase;
+}
+
+.status-pill.published {
+  background: #ddff4f;
+  border: 1px solid #111111;
+  color: #111111;
+}
+
+.status-pill.hidden {
+  background: #ffffff;
+  border: 1px solid #111111;
+  color: #111111;
+}
+
+.status-pill.archived {
+  background: #ffe6e3;
+  border: 1px solid #e23f32;
+  color: #e23f32;
+}
+
+@media (max-width: 980px) {
+  .catalog-page .catalog-heading,
+  .catalog-controls,
+  .catalog-form-grid,
+  .catalog-drawer-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-page .catalog-heading {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .catalog-tabs {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .catalog-drawer {
+    border-left: 0;
+    width: 100vw;
+  }
+
+  .catalog-table th:first-child,
+  .catalog-table td:first-child {
+    width: auto;
+  }
+
+  .catalog-product-image {
+    height: 56px;
+    width: 72px;
+  }
+}

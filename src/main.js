@@ -9,6 +9,13 @@ import {
 } from "./services/opsBoard.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
+  catalogOptions,
+  catalogStatusOptions,
+  createAdminCatalogProduct,
+  getAdminCatalogProducts,
+  updateAdminCatalogProduct,
+} from "./services/adminCatalog.js";
+import {
   getCurrentAdminAuthSession,
   isSupabaseReady,
   signInAdminWithPassword,
@@ -58,6 +65,7 @@ function getNavIcon(label) {
     Orders: "clipboard-list",
     Clients: "users",
     Products: "shirt",
+    Catalog: "package",
     Settings: "settings",
   };
 
@@ -316,6 +324,7 @@ let selectedProductCode = products[0].code;
 let activeFilter = "All";
 let clientKpiFilter = "All";
 let productFilter = "All";
+let catalogStatusFilter = "active";
 let query = "";
 let draftStatus = orders[0]?.status ?? "Pending Review";
 let clientQuery = "";
@@ -327,8 +336,19 @@ let globalSearchQuery = "";
 let feedbackTimer = null;
 let hasLoadedAdminOrders = false;
 let hasLoadedAdminClients = false;
+let hasLoadedCatalogProducts = false;
 let orderLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 let clientLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
+let catalogProducts = [];
+let catalogLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
+let catalogLoadError = "";
+let activeCatalogKey = "trry_webapp";
+let selectedCatalogProductId = null;
+let catalogDrawerMode = "";
+let catalogDraft = null;
+let catalogValidationError = "";
+let catalogSaveState = "idle";
+let catalogSaveError = "";
 
 const routes = {
   "/": "Overview",
@@ -336,6 +356,7 @@ const routes = {
   "/overview": "Overview",
   "/clients": "Clients",
   "/products": "Products",
+  "/catalog": "Catalog",
   "/settings": "Settings",
 };
 
@@ -384,7 +405,9 @@ function render() {
                 ? renderClientsPage()
                 : currentRoute === "Products"
                   ? renderProductsPage(selectedProduct)
-                  : currentRoute === "Settings"
+                  : currentRoute === "Catalog"
+                    ? renderCatalogPage()
+                    : currentRoute === "Settings"
                     ? renderSettingsPage()
                     : renderOverviewPage()
         }
@@ -703,6 +726,7 @@ function startAdminDataLoading() {
   loadOpsBoardInquiries();
   loadAdminOrders();
   loadAdminClients();
+  loadCatalogProducts();
 }
 
 async function loadAdminOrders() {
@@ -728,6 +752,21 @@ async function loadAdminClients() {
   const result = await getAdminClientPrograms(clientProgram, adminAuthSession);
   Object.assign(clientProgram, result.clients[0] ?? clientProgram);
   clientLoadState = result.status;
+
+  render();
+}
+async function loadCatalogProducts() {
+  if (hasLoadedCatalogProducts) return;
+  hasLoadedCatalogProducts = true;
+
+  const result = await getAdminCatalogProducts(adminAuthSession);
+  catalogProducts = result.products;
+  catalogLoadState = result.status;
+  catalogLoadError = result.error?.message ?? "";
+
+  if (!catalogProducts.some((item) => item.id === selectedCatalogProductId)) {
+    selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+  }
 
   render();
 }
@@ -1401,6 +1440,261 @@ function renderProductsPage(selectedProduct) {
   `;
 }
 
+function renderCatalogPage() {
+  const visibleProducts = getVisibleCatalogProducts();
+  const selectedProduct = catalogProducts.find((item) => item.id === selectedCatalogProductId);
+  const canWrite = canWriteCatalogProducts();
+
+  return `
+    <main class="orders-page catalog-page">
+      <div class="page-heading catalog-heading">
+        <div>
+          <h1>CATALOG MANAGER</h1>
+          <p class="subtitle">Manage products across TRRY WebApp, Foghead, and TRRY Portal.</p>
+        </div>
+        <button class="catalog-add-button" data-catalog-add-product type="button" ${canWrite ? "" : "disabled title=\"Viewer role can read only.\""}>+ ADD PRODUCT</button>
+      </div>
+
+      <section class="catalog-controls" aria-label="Catalog controls">
+        <div class="catalog-tabs" aria-label="Catalog tabs">
+          ${catalogOptions.map((catalog) => `
+            <button class="${catalog.key === activeCatalogKey ? "active" : ""}" data-catalog-tab="${catalog.key}" type="button">
+              ${catalog.label}
+            </button>`).join("")}
+        </div>
+        <label class="search-field catalog-search">
+          ${renderIcon("search", "search-icon")}
+          <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search products" type="search" />
+        </label>
+        <select class="catalog-status-filter" id="catalog-status-filter" aria-label="Status filter">
+          ${getCatalogFilterOptions().map((option) => `<option value="${option.value}" ${option.value === catalogStatusFilter ? "selected" : ""}>${option.label}</option>`).join("")}
+        </select>
+      </section>
+
+      ${renderCatalogNotice()}
+
+      <article class="content-card table-card catalog-table-card">
+        <p class="table-helper-text">Select a product to view details.</p>
+        <table class="products-table catalog-table">
+          <thead>
+            <tr>
+              <th>Image</th>
+              <th>Product Name</th>
+              <th>Category</th>
+              <th>Price</th>
+              <th>Minimum Qty</th>
+              <th>Featured</th>
+              <th>Status</th>
+              <th>Edit</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visibleProducts.map(renderCatalogProductRow).join("")}
+          </tbody>
+        </table>
+        ${renderCatalogEmptyState(visibleProducts)}
+      </article>
+      ${catalogDrawerMode ? renderCatalogDrawer(selectedProduct) : ""}
+    </main>
+  `;
+}
+
+function getVisibleCatalogProducts() {
+  const normalizedQuery = productQuery.trim().toLowerCase();
+
+  return catalogProducts.filter((item) => {
+    const matchesCatalog = item.catalogKey === activeCatalogKey;
+    const matchesStatus =
+      catalogStatusFilter === "active"
+        ? item.status !== "archived"
+        : catalogStatusFilter === "all"
+          ? true
+          : item.status === catalogStatusFilter;
+    const matchesQuery =
+      !normalizedQuery ||
+      [item.name, item.slug, item.category, item.description, item.priceLabel]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+
+    return matchesCatalog && matchesStatus && matchesQuery;
+  });
+}
+
+function renderCatalogNotice() {
+  if (catalogSaveState === "success") {
+    return `<div class="catalog-notice success">Product saved successfully.</div>`;
+  }
+
+  if (catalogLoadState === "loading") {
+    return `<div class="catalog-notice">Loading catalog products...</div>`;
+  }
+
+  if (catalogLoadState === "error") {
+    return `<div class="catalog-notice error">Unable to load catalog products. ${escapeHtml(catalogLoadError || "Check Supabase access and RLS policies.")}</div>`;
+  }
+
+  if (!canWriteCatalogProducts()) {
+    return `<div class="catalog-notice">Viewer access: catalog products are read-only.</div>`;
+  }
+
+  return "";
+}
+
+function renderCatalogEmptyState(visibleProducts) {
+  if (visibleProducts.length > 0) return "";
+
+  if (catalogLoadState === "loading") {
+    return `<div class="empty-state compact-empty"><strong>Loading catalog...</strong><span>Checking Supabase catalog products.</span></div>`;
+  }
+
+  const catalogLabel = getCatalogLabel(activeCatalogKey);
+  if (!catalogProducts.some((item) => item.catalogKey === activeCatalogKey)) {
+    return `<div class="empty-state compact-empty"><strong>Empty catalog</strong><span>${catalogLabel} has no products yet. Add the first product when ready.</span></div>`;
+  }
+
+  return `<div class="empty-state compact-empty"><strong>No search results</strong><span>Try another search term or status filter.</span></div>`;
+}
+
+function renderCatalogProductRow(item) {
+  return `
+    <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}">
+      <td><span class="catalog-product-image ${item.imageUrl ? "has-image" : ""}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')"` : ""}></span></td>
+      <td><div class="stacked-cell"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.slug)}</span></div></td>
+      <td>${escapeHtml(item.category || "-")}</td>
+      <td>${escapeHtml(formatCatalogPrice(item))}</td>
+      <td>${escapeHtml(item.minimumQuantity)}</td>
+      <td>${item.isFeatured ? `<span class="status-pill visible">Yes</span>` : `<span class="status-pill draft">No</span>`}</td>
+      <td>${renderStatusPill(item.status)}</td>
+      <td><button class="view-button catalog-edit-action" data-catalog-edit-product="${item.id}" aria-label="Edit ${escapeHtml(item.name)}" type="button">Edit</button></td>
+    </tr>
+  `;
+}
+
+function renderCatalogDrawer(selectedProduct) {
+  const draft = catalogDraft ?? createCatalogDraft(selectedProduct);
+  const isSaving = catalogSaveState === "saving";
+  const canWrite = canWriteCatalogProducts();
+  const title = catalogDrawerMode === "edit" ? "EDIT PRODUCT" : "ADD PRODUCT";
+
+  return `
+    <div class="catalog-drawer-backdrop" data-catalog-close-drawer></div>
+    <aside class="catalog-drawer" aria-label="${title}">
+      <header>
+        <div><span>${escapeHtml(getCatalogLabel(draft.catalogKey))}</span><h2>${title}</h2></div>
+        <button class="catalog-drawer-close" data-catalog-close-drawer type="button" aria-label="Close catalog drawer">X</button>
+      </header>
+      <form class="catalog-form" id="catalog-product-form">
+        ${catalogValidationError ? `<p class="catalog-form-error">${escapeHtml(catalogValidationError)}</p>` : ""}
+        ${catalogSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogSaveError)}</p>` : ""}
+        ${renderCatalogField("catalog", "Catalog", renderCatalogSelect(draft))}
+        ${renderCatalogInput("name", "Product name", draft.name, "text", true)}
+        ${renderCatalogInput("slug", "Slug", draft.slug, "text", true)}
+        ${renderCatalogInput("category", "Category", draft.category)}
+        ${renderCatalogTextarea("description", "Description", draft.description)}
+        ${renderCatalogInput("imageUrl", "Main image URL", draft.imageUrl, "url")}
+        <div class="catalog-form-grid">
+          ${renderCatalogInput("startingPrice", "Starting price", draft.startingPrice, "number")}
+          ${renderCatalogInput("priceLabel", "Price label", draft.priceLabel)}
+        </div>
+        <div class="catalog-form-grid">
+          ${renderCatalogInput("minimumQuantity", "Minimum quantity", draft.minimumQuantity, "number", true)}
+          ${renderCatalogInput("sortOrder", "Sort order", draft.sortOrder, "number")}
+        </div>
+        ${renderCatalogInput("availableSizesText", "Available sizes", draft.availableSizesText)}
+        ${renderCatalogInput("availableColorsText", "Available colors", draft.availableColorsText)}
+        ${renderCatalogInput("printMethodsText", "Print methods", draft.printMethodsText)}
+        <div class="catalog-form-grid">
+          ${renderCatalogField("featured", "Featured", `<label class="catalog-toggle"><input data-catalog-field="isFeatured" type="checkbox" ${draft.isFeatured ? "checked" : ""} /><span>Featured product</span></label>`)}
+          ${renderCatalogField("status", "Status", renderCatalogStatusSelect(draft))}
+        </div>
+        <div class="catalog-drawer-actions">
+          <button class="primary-button catalog-save-button" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : "Save Product"}</button>
+          <button class="note-button" data-catalog-close-drawer type="button">Cancel</button>
+        </div>
+      </form>
+    </aside>
+  `;
+}
+
+function renderCatalogSelect(draft) {
+  return `<select data-catalog-field="catalogKey">${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
+}
+
+function renderCatalogStatusSelect(draft) {
+  return `<select data-catalog-field="status">${catalogStatusOptions.map((status) => `<option value="${status}" ${status === draft.status ? "selected" : ""}>${status}</option>`).join("")}</select>`;
+}
+
+function renderCatalogField(id, label, control) {
+  return `<label class="catalog-field" for="catalog-${id}"><span>${label}</span>${control}</label>`;
+}
+
+function renderCatalogInput(field, label, value, type = "text", required = false) {
+  return renderCatalogField(field, label, `<input id="catalog-${field}" data-catalog-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} />`);
+}
+
+function renderCatalogTextarea(field, label, value) {
+  return renderCatalogField(field, label, `<textarea id="catalog-${field}" data-catalog-field="${field}" rows="3">${escapeHtml(value ?? "")}</textarea>`);
+}
+
+function getCatalogFilterOptions() {
+  return [
+    { value: "active", label: "All active" },
+    { value: "published", label: "Published" },
+    { value: "draft", label: "Draft" },
+    { value: "hidden", label: "Hidden" },
+    { value: "archived", label: "Archived" },
+    { value: "all", label: "All statuses" },
+  ];
+}
+
+function getCatalogLabel(key) {
+  return catalogOptions.find((catalog) => catalog.key === key)?.label ?? "TRRY WEBAPP";
+}
+
+function formatCatalogPrice(item) {
+  if (item.priceLabel) return item.priceLabel;
+  if (item.startingPrice !== "" && item.startingPrice !== null && item.startingPrice !== undefined) {
+    return `PHP ${Number(item.startingPrice).toLocaleString("en-US")}`;
+  }
+  return "-";
+}
+
+function canWriteCatalogProducts() {
+  return ["admin", "staff"].includes(adminUser?.role);
+}
+
+function createCatalogDraft(product = null) {
+  if (product) {
+    return {
+      ...product,
+      availableSizesText: product.availableSizes.join(", "),
+      availableColorsText: product.availableColors.join(", "),
+      printMethodsText: product.printMethods.join(", "),
+    };
+  }
+
+  return {
+    catalogKey: activeCatalogKey,
+    name: "",
+    slug: "",
+    category: "",
+    description: "",
+    imageUrl: "",
+    startingPrice: "",
+    priceLabel: "",
+    minimumQuantity: 1,
+    availableSizes: [],
+    availableColors: [],
+    printMethods: [],
+    availableSizesText: "",
+    availableColorsText: "",
+    printMethodsText: "",
+    sortOrder: 0,
+    isFeatured: false,
+    status: "draft",
+  };
+}
 function renderSettingsPage() {
   const sections = [
     {
@@ -1912,6 +2206,7 @@ function renderSidebar(currentRoute) {
     { label: "Orders", path: "/orders" },
     { label: "Clients", path: "/clients" },
     { label: "Products", path: "/products" },
+    { label: "Catalog", path: "/catalog" },
     { label: "Settings", path: "/settings" },
   ];
 
@@ -2013,6 +2308,7 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Orders", path: "/orders" },
     { label: "Clients", path: "/clients" },
     { label: "Products", path: "/products" },
+    { label: "Catalog", path: "/catalog" },
     { label: "Settings", path: "/settings" },
   ];
 
@@ -2108,6 +2404,142 @@ function focusFieldAtEnd(id) {
     field.setSelectionRange(length, length);
   }
 }
+function openCatalogDrawer(mode, productId = null) {
+  if (!canWriteCatalogProducts()) return;
+  const product = catalogProducts.find((item) => item.id === productId) ?? null;
+  catalogDrawerMode = mode;
+  selectedCatalogProductId = product?.id ?? selectedCatalogProductId;
+  catalogDraft = createCatalogDraft(product);
+  catalogValidationError = "";
+  catalogSaveError = "";
+  catalogSaveState = "idle";
+  render();
+}
+
+function closeCatalogDrawer() {
+  catalogDrawerMode = "";
+  catalogDraft = null;
+  catalogValidationError = "";
+  catalogSaveError = "";
+  catalogSaveState = "idle";
+  render();
+}
+
+function updateCatalogDraftField(field, value, inputType = "text") {
+  if (!catalogDraft) return;
+  const nextValue = inputType === "checkbox" ? Boolean(value) : value;
+  const shouldCreateSlug = field === "name" && (!catalogDraft.slug || catalogDraft.slug === slugify(catalogDraft.name));
+
+  catalogDraft = {
+    ...catalogDraft,
+    [field]: nextValue,
+  };
+
+  if (shouldCreateSlug) {
+    catalogDraft.slug = slugify(nextValue);
+  }
+
+  catalogValidationError = "";
+  catalogSaveError = "";
+}
+
+async function saveCatalogDraft() {
+  if (!canWriteCatalogProducts() || !catalogDraft) return;
+
+  const product = normalizeCatalogDraft(catalogDraft);
+  const validationError = validateCatalogProduct(product);
+  if (validationError) {
+    catalogValidationError = validationError;
+    render();
+    return;
+  }
+
+  catalogSaveState = "saving";
+  catalogSaveError = "";
+  render();
+
+  try {
+    const savedProduct = catalogDrawerMode === "edit" && catalogDraft.id
+      ? await updateAdminCatalogProduct(catalogDraft.id, product, adminAuthSession)
+      : await createAdminCatalogProduct(product, adminAuthSession);
+
+    if (savedProduct) {
+      catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
+      selectedCatalogProductId = savedProduct.id;
+      activeCatalogKey = savedProduct.catalogKey;
+    }
+
+    catalogDrawerMode = "";
+    catalogDraft = null;
+    catalogSaveState = "success";
+    window.setTimeout(() => {
+      if (catalogSaveState === "success") {
+        catalogSaveState = "idle";
+        render();
+      }
+    }, 1800);
+    render();
+  } catch (error) {
+    console.error("Unable to save catalog product.", error);
+    catalogSaveState = "idle";
+    catalogSaveError = error.message || "Save failed. Check RLS and catalog product fields.";
+    render();
+  }
+}
+
+function normalizeCatalogDraft(draft) {
+  return {
+    ...draft,
+    name: String(draft.name || "").trim(),
+    slug: slugify(draft.slug || draft.name),
+    category: String(draft.category || "").trim(),
+    description: String(draft.description || "").trim(),
+    imageUrl: String(draft.imageUrl || "").trim(),
+    startingPrice: draft.startingPrice === "" ? "" : Number(draft.startingPrice),
+    priceLabel: String(draft.priceLabel || "").trim(),
+    minimumQuantity: Number(draft.minimumQuantity || 1),
+    availableSizes: splitCatalogList(draft.availableSizesText),
+    availableColors: splitCatalogList(draft.availableColorsText),
+    printMethods: splitCatalogList(draft.printMethodsText),
+    sortOrder: Number(draft.sortOrder || 0),
+    isFeatured: draft.isFeatured === true,
+    status: draft.status || "draft",
+  };
+}
+
+function validateCatalogProduct(product) {
+  if (!catalogOptions.some((catalog) => catalog.key === product.catalogKey)) return "Choose a valid catalog.";
+  if (!product.name) return "Product name is required.";
+  if (!product.slug) return "Slug is required.";
+  if (!catalogStatusOptions.includes(product.status)) return "Choose a valid status.";
+  if (!Number.isFinite(product.minimumQuantity) || product.minimumQuantity < 1) return "Minimum quantity must be at least 1.";
+  if (product.startingPrice !== "" && (!Number.isFinite(product.startingPrice) || product.startingPrice < 0)) return "Starting price cannot be negative.";
+  if (!Number.isFinite(product.sortOrder) || product.sortOrder < 0) return "Sort order cannot be negative.";
+  return "";
+}
+
+function upsertCatalogProduct(items, product) {
+  const nextItems = items.some((item) => item.id === product.id)
+    ? items.map((item) => item.id === product.id ? product : item)
+    : [...items, product];
+
+  return nextItems.sort((a, b) => a.catalogKey.localeCompare(b.catalogKey) || a.sortOrder - b.sortOrder || a.name.localeCompare(b.name));
+}
+
+function splitCatalogList(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function slugify(value) {
+  return String(value || "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
 function bindEvents() {
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -2158,6 +2590,55 @@ function bindEvents() {
   });
 
   bindOpsBoardEvents();
+  document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeCatalogKey = button.dataset.catalogTab;
+      catalogStatusFilter = catalogStatusFilter || "active";
+      selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+      catalogDrawerMode = "";
+      catalogDraft = null;
+      render();
+    });
+  });
+
+  document.getElementById("catalog-status-filter")?.addEventListener("change", (event) => {
+    catalogStatusFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-catalog-add-product]")?.addEventListener("click", () => {
+    openCatalogDrawer("create");
+  });
+
+  document.querySelectorAll("[data-catalog-edit-product]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openCatalogDrawer("edit", element.dataset.catalogEditProduct);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-close-drawer]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeCatalogDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-field]").forEach((field) => {
+    const eventName = field.type === "checkbox" ? "change" : "input";
+    field.addEventListener(eventName, (event) => {
+      updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
+      if (field.dataset.catalogField === "name") {
+        const slugInput = document.getElementById("catalog-slug");
+        if (slugInput && catalogDraft?.slug) slugInput.value = catalogDraft.slug;
+      }
+    });
+  });
+
+  document.getElementById("catalog-product-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveCatalogDraft();
+  });
 
   document.querySelectorAll("[data-order-filter]").forEach((card) => {
     card.addEventListener("click", () => {
