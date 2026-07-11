@@ -998,9 +998,9 @@ function getOpsStatusActions(statusKey) {
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
     ],
     followup: [
-      { to: "quote", label: "Needs Quote", next: "Prepare quote after follow-up" },
-      { to: "sent", label: "Quote Sent", next: "Quote sent - wait for confirmation or add Odoo SO when confirmed" },
+      { to: "won", label: "Won", next: "Customer confirmed - move to Odoo sales order" },
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
+      { to: "quote", label: "Back to Needs Quote", next: "Prepare quote after follow-up" },
     ],
   };
 
@@ -1008,8 +1008,6 @@ function getOpsStatusActions(statusKey) {
 }
 
 async function moveOpsInquiry(id, targetStatus) {
-  if (targetStatus === "won") return;
-
   const current = opsInquiries.find((item) => item.id === id);
   const action = current ? getOpsStatusActions(current.status).find((item) => item.to === targetStatus) : null;
   if (!current || !opsStatus[targetStatus] || !action) return;
@@ -1017,7 +1015,7 @@ async function moveOpsInquiry(id, targetStatus) {
   const updates = {
     status: targetStatus,
     next: action.next,
-    followUpDate: targetStatus === "followup" ? current.followUpDate || todayIsoDate() : current.followUpDate,
+    followUpDate: targetStatus === "followup" ? current.followUpDate || todayIsoDate() : null,
   };
 
   if (shouldLoadSupabaseOps) {
