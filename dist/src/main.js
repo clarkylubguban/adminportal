@@ -3,7 +3,7 @@ import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
   createOpsBoardInquiry,
   getOpsBoardInquiries,
-
+  updateOpsInquiryFields,
   updateOpsInquiryOdooSO,
   updateOpsInquiryStatus,
 } from "./services/opsBoard.js";
@@ -1125,21 +1125,31 @@ async function saveOpsCustomerTracking(id) {
     trackingNote: noteField?.value?.trim() || null,
     trackingUpdatedAt: new Date().toISOString(),
   };
+  let savedInquiry = null;
 
   if (shouldLoadSupabaseOps) {
     try {
-      await updateOpsInquiryFields(id, updates, adminAuthSession);
+      savedInquiry = await updateOpsInquiryFields(
+        id,
+        updates,
+        adminAuthSession
+      );
+
+      if (!savedInquiry) {
+        throw new Error("Customer tracking update returned no saved inquiry.");
+      }
+
       opsLoadState = opsLoadState === "empty" ? "success" : opsLoadState;
       opsLoadError = "";
     } catch (error) {
       console.error("Unable to update customer tracking.", error);
-      opsLoadState = "error";
-      opsLoadError = error.message;
       return;
     }
   }
 
-  opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...updates } : item);
+  opsInquiries = opsInquiries.map((item) =>
+    item.id === id ? { ...item, ...(savedInquiry || updates) } : item
+  );
 }
 async function moveOpsInquiry(id, targetStatus) {
   const current = opsInquiries.find((item) => item.id === id);
@@ -1741,7 +1751,7 @@ function renderCatalogImageField(draft, canWrite, isSaving) {
         <span>${filename ? escapeHtml(filename) : "No file selected"}</span>
         ${canWrite ? `<button data-catalog-remove-image type="button" ${disabled || (!hasImage && !draft.imageFile && !draft.imageUrl) ? "disabled" : ""}>REMOVE IMAGE</button>` : ""}
       </div>
-      <p>SQUARE IMAGE REQUIRED · 1200 × 1200 RECOMMENDED · MINIMUM 800 × 800 · MAXIMUM 5 MB</p>
+      <p>SQUARE IMAGE REQUIRED ï¿½ 1200 ï¿½ 1200 RECOMMENDED ï¿½ MINIMUM 800 ï¿½ 800 ï¿½ MAXIMUM 5 MB</p>
       ${draft.imageError ? `<p class="catalog-image-error">${escapeHtml(draft.imageError)}</p>` : ""}
     </section>
   `;
