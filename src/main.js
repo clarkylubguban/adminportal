@@ -16,6 +16,12 @@ import {
   updateAdminCatalogProduct,
 } from "./services/adminCatalog.js";
 import {
+  deleteCatalogImageByUrl,
+  deleteCatalogImagePath,
+  uploadCatalogImage,
+  validateCatalogImageFileWithDimensions,
+} from "./services/adminCatalogImages.js";
+import {
   getCurrentAdminAuthSession,
   isSupabaseReady,
   signInAdminWithPassword,
@@ -1474,7 +1480,7 @@ function renderCatalogPage() {
       ${renderCatalogNotice()}
 
       <article class="content-card table-card catalog-table-card">
-        <p class="table-helper-text">Select a product to view details.</p>
+        <p class="table-helper-text catalog-count-label">${visibleProducts.length} ${visibleProducts.length === 1 ? "PRODUCT" : "PRODUCTS"}</p>
         <table class="products-table catalog-table">
           <thead>
             <tr>
@@ -1559,21 +1565,21 @@ function renderCatalogEmptyState(visibleProducts) {
 function renderCatalogProductRow(item) {
   return `
     <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}">
-      <td><span class="catalog-product-image ${item.imageUrl ? "has-image" : ""}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')"` : ""}></span></td>
-      <td><div class="stacked-cell"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.slug)}</span></div></td>
-      <td>${escapeHtml(item.category || "-")}</td>
-      <td>${escapeHtml(formatCatalogPrice(item))}</td>
-      <td>${escapeHtml(item.minimumQuantity)}</td>
-      <td>${item.isFeatured ? `<span class="status-pill visible">Yes</span>` : `<span class="status-pill draft">No</span>`}</td>
-      <td>${renderStatusPill(item.status)}</td>
-      <td><button class="view-button catalog-edit-action" data-catalog-edit-product="${item.id}" aria-label="Edit ${escapeHtml(item.name)}" type="button">Edit</button></td>
+      <td class="catalog-image-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : ""}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')"` : ""}></span></td>
+      <td class="catalog-name-cell"><div class="stacked-cell"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.slug)}</span></div></td>
+      <td class="catalog-category-cell">${escapeHtml(item.category || "-")}</td>
+      <td class="catalog-price-cell">${escapeHtml(formatCatalogPrice(item))}</td>
+      <td class="catalog-moq-cell">${escapeHtml(item.minimumQuantity)}</td>
+      <td class="catalog-featured-cell">${item.isFeatured ? `<span class="status-pill visible"><span class="desktop-featured-label">Yes</span><span class="mobile-featured-label">Featured</span></span>` : `<span class="status-pill draft"><span class="desktop-featured-label">No</span><span class="mobile-featured-label">Not featured</span></span>`}</td>
+      <td class="catalog-status-cell">${renderStatusPill(item.status)}</td>
+      <td class="catalog-action-cell"><button class="view-button catalog-edit-action" data-catalog-edit-product="${item.id}" aria-label="Edit ${escapeHtml(item.name)}" type="button">Edit</button></td>
     </tr>
   `;
 }
 
 function renderCatalogDrawer(selectedProduct) {
   const draft = catalogDraft ?? createCatalogDraft(selectedProduct);
-  const isSaving = catalogSaveState === "saving";
+  const isSaving = catalogSaveState === "saving" || catalogSaveState === "uploading";
   const canWrite = canWriteCatalogProducts();
   const title = catalogDrawerMode === "edit" ? "EDIT PRODUCT" : "ADD PRODUCT";
 
@@ -1591,8 +1597,8 @@ function renderCatalogDrawer(selectedProduct) {
         ${renderCatalogInput("name", "Product name", draft.name, "text", true)}
         ${renderCatalogInput("slug", "Slug", draft.slug, "text", true)}
         ${renderCatalogInput("category", "Category", draft.category)}
+        ${renderCatalogImageField(draft, canWrite, isSaving)}
         ${renderCatalogTextarea("description", "Description", draft.description)}
-        ${renderCatalogInput("imageUrl", "Main image URL", draft.imageUrl, "url")}
         <div class="catalog-form-grid">
           ${renderCatalogInput("startingPrice", "Starting price", draft.startingPrice, "number")}
           ${renderCatalogInput("priceLabel", "Price label", draft.priceLabel)}
@@ -1609,7 +1615,7 @@ function renderCatalogDrawer(selectedProduct) {
           ${renderCatalogField("status", "Status", renderCatalogStatusSelect(draft))}
         </div>
         <div class="catalog-drawer-actions">
-          <button class="primary-button catalog-save-button" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : "Save Product"}</button>
+          <button class="primary-button catalog-save-button" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${catalogSaveState === "uploading" ? "Uploading..." : isSaving ? "Saving..." : "Save Product"}</button>
           <button class="note-button" data-catalog-close-drawer type="button">Cancel</button>
         </div>
       </form>
@@ -1617,6 +1623,57 @@ function renderCatalogDrawer(selectedProduct) {
   `;
 }
 
+function renderCatalogImageField(draft, canWrite, isSaving) {
+  const displayUrl = draft.imageFilePreviewUrl || (!draft.removeImage ? draft.imageUrl : "");
+  const hasImage = Boolean(displayUrl);
+  const filename = draft.removeImage ? "" : draft.imageFile?.name || getCatalogImageFilename(draft.imageUrl);
+  const imageState = getCatalogImageState(draft);
+  const actionLabel = hasImage ? "REPLACE IMAGE" : "UPLOAD IMAGE";
+  const disabled = !canWrite || isSaving;
+  const preview = hasImage
+    ? `<img src="${escapeHtml(displayUrl)}" alt="${escapeHtml(draft.name || "Catalog product image")}" />`
+    : `<span>NO IMAGE</span>`;
+  const pickerControl = canWrite
+    ? `<label class="catalog-image-picker ${disabled ? "disabled" : ""}">
+        <span class="catalog-image-preview ${hasImage ? "has-image" : "empty"}">${preview}</span>
+        <span class="catalog-image-pick-text">${actionLabel}</span>
+        <input data-catalog-image-file type="file" accept="image/jpeg,image/png,image/webp,image/avif" ${disabled ? "disabled" : ""} />
+      </label>`
+    : `<div class="catalog-image-picker disabled"><span class="catalog-image-preview ${hasImage ? "has-image" : "empty"}">${preview}</span><span class="catalog-image-pick-text">PREVIEW ONLY</span></div>`;
+
+  return `
+    <section class="catalog-image-field" aria-label="Product image">
+      <div class="catalog-image-heading">
+        <span>PRODUCT IMAGE</span>
+        <strong class="${imageState === "UPLOAD FAILED" ? "error" : ""}">${imageState}</strong>
+      </div>
+      ${pickerControl}
+      <div class="catalog-image-meta">
+        <span>${filename ? escapeHtml(filename) : "No file selected"}</span>
+        ${canWrite ? `<button data-catalog-remove-image type="button" ${disabled || (!hasImage && !draft.imageFile && !draft.imageUrl) ? "disabled" : ""}>REMOVE IMAGE</button>` : ""}
+      </div>
+      <p>SQUARE IMAGE REQUIRED · 1200 × 1200 RECOMMENDED · MINIMUM 800 × 800 · MAXIMUM 5 MB</p>
+      ${draft.imageError ? `<p class="catalog-image-error">${escapeHtml(draft.imageError)}</p>` : ""}
+    </section>
+  `;
+}
+
+function getCatalogImageState(draft) {
+  if (catalogSaveState === "uploading") return "UPLOADING";
+  if (draft.imageError) return "UPLOAD FAILED";
+  if (draft.imageFile) return "FILE SELECTED";
+  if (draft.removeImage || !draft.imageUrl) return "NO IMAGE";
+  return "IMAGE SAVED";
+}
+
+function getCatalogImageFilename(url) {
+  try {
+    const pathname = new URL(url).pathname;
+    return decodeURIComponent(pathname.split("/").filter(Boolean).pop() || "");
+  } catch {
+    return "";
+  }
+}
 function renderCatalogSelect(draft) {
   return `<select data-catalog-field="catalogKey">${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
 }
@@ -1668,6 +1725,11 @@ function createCatalogDraft(product = null) {
   if (product) {
     return {
       ...product,
+      imageDraftId: product.id,
+      imageFile: null,
+      imageFilePreviewUrl: "",
+      imageError: "",
+      removeImage: false,
       availableSizesText: product.availableSizes.join(", "),
       availableColorsText: product.availableColors.join(", "),
       printMethodsText: product.printMethods.join(", "),
@@ -1675,12 +1737,17 @@ function createCatalogDraft(product = null) {
   }
 
   return {
+    imageDraftId: createDraftImageId(),
     catalogKey: activeCatalogKey,
     name: "",
     slug: "",
     category: "",
     description: "",
     imageUrl: "",
+    imageFile: null,
+    imageFilePreviewUrl: "",
+    imageError: "",
+    removeImage: false,
     startingPrice: "",
     priceLabel: "",
     minimumQuantity: 1,
@@ -1694,6 +1761,10 @@ function createCatalogDraft(product = null) {
     isFeatured: false,
     status: "draft",
   };
+}
+function createDraftImageId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
 function renderSettingsPage() {
   const sections = [
@@ -2309,7 +2380,6 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Clients", path: "/clients" },
     { label: "Products", path: "/products" },
     { label: "Catalog", path: "/catalog" },
-    { label: "Settings", path: "/settings" },
   ];
 
   return `
@@ -2407,6 +2477,7 @@ function focusFieldAtEnd(id) {
 function openCatalogDrawer(mode, productId = null) {
   if (!canWriteCatalogProducts()) return;
   const product = catalogProducts.find((item) => item.id === productId) ?? null;
+  clearCatalogImagePreview();
   catalogDrawerMode = mode;
   selectedCatalogProductId = product?.id ?? selectedCatalogProductId;
   catalogDraft = createCatalogDraft(product);
@@ -2417,6 +2488,7 @@ function openCatalogDrawer(mode, productId = null) {
 }
 
 function closeCatalogDrawer() {
+  clearCatalogImagePreview();
   catalogDrawerMode = "";
   catalogDraft = null;
   catalogValidationError = "";
@@ -2425,6 +2497,53 @@ function closeCatalogDrawer() {
   render();
 }
 
+function clearCatalogImagePreview() {
+  if (catalogDraft?.imageFilePreviewUrl) {
+    URL.revokeObjectURL(catalogDraft.imageFilePreviewUrl);
+  }
+}
+
+async function updateCatalogImageFile(file) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+
+  clearCatalogImagePreview();
+  const validationError = await validateCatalogImageFileWithDimensions(file);
+  if (validationError) {
+    catalogDraft = {
+      ...catalogDraft,
+      imageFile: null,
+      imageFilePreviewUrl: "",
+      imageError: validationError,
+    };
+    render();
+    return;
+  }
+
+  catalogDraft = {
+    ...catalogDraft,
+    imageFile: file,
+    imageFilePreviewUrl: URL.createObjectURL(file),
+    imageError: "",
+    removeImage: false,
+  };
+  catalogSaveError = "";
+  render();
+}
+
+function removeCatalogImageFromDraft() {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+
+  clearCatalogImagePreview();
+  catalogDraft = {
+    ...catalogDraft,
+    imageFile: null,
+    imageFilePreviewUrl: "",
+    imageError: "",
+    removeImage: true,
+  };
+  catalogSaveError = "";
+  render();
+}
 function updateCatalogDraftField(field, value, inputType = "text") {
   if (!catalogDraft) return;
   const nextValue = inputType === "checkbox" ? Boolean(value) : value;
@@ -2444,9 +2563,11 @@ function updateCatalogDraftField(field, value, inputType = "text") {
 }
 
 async function saveCatalogDraft() {
-  if (!canWriteCatalogProducts() || !catalogDraft) return;
+  if (!canWriteCatalogProducts() || !catalogDraft || catalogSaveState === "saving" || catalogSaveState === "uploading") return;
 
-  const product = normalizeCatalogDraft(catalogDraft);
+  const draft = catalogDraft;
+  const previousImageUrl = String(draft.imageUrl || "").trim();
+  const product = normalizeCatalogDraft(draft);
   const validationError = validateCatalogProduct(product);
   if (validationError) {
     catalogValidationError = validationError;
@@ -2454,13 +2575,37 @@ async function saveCatalogDraft() {
     return;
   }
 
-  catalogSaveState = "saving";
+  if (draft.imageFile) {
+    const imageValidationError = await validateCatalogImageFileWithDimensions(draft.imageFile);
+    if (imageValidationError) {
+      catalogDraft = { ...draft, imageError: imageValidationError };
+      render();
+      return;
+    }
+  }
+
+  let uploadedImage = null;
+  let failedPhase = "save";
+  catalogSaveState = draft.imageFile ? "uploading" : "saving";
   catalogSaveError = "";
+  catalogValidationError = "";
+  catalogDraft = { ...draft, imageError: "" };
   render();
 
   try {
-    const savedProduct = catalogDrawerMode === "edit" && catalogDraft.id
-      ? await updateAdminCatalogProduct(catalogDraft.id, product, adminAuthSession)
+    if (draft.imageFile) {
+      failedPhase = "upload";
+      uploadedImage = await uploadCatalogImage(draft.imageFile, product, adminAuthSession);
+      product.imageUrl = uploadedImage.publicUrl;
+      failedPhase = "save";
+      catalogSaveState = "saving";
+      render();
+    } else if (draft.removeImage) {
+      product.imageUrl = "";
+    }
+
+    const savedProduct = catalogDrawerMode === "edit" && draft.id
+      ? await updateAdminCatalogProduct(draft.id, product, adminAuthSession)
       : await createAdminCatalogProduct(product, adminAuthSession);
 
     if (savedProduct) {
@@ -2469,6 +2614,14 @@ async function saveCatalogDraft() {
       activeCatalogKey = savedProduct.catalogKey;
     }
 
+    const shouldDeletePreviousImage = Boolean(
+      savedProduct &&
+      previousImageUrl &&
+      previousImageUrl !== savedProduct.imageUrl &&
+      (uploadedImage || draft.removeImage)
+    );
+
+    clearCatalogImagePreview();
     catalogDrawerMode = "";
     catalogDraft = null;
     catalogSaveState = "success";
@@ -2479,10 +2632,30 @@ async function saveCatalogDraft() {
       }
     }, 1800);
     render();
+
+    if (shouldDeletePreviousImage) {
+      deleteCatalogImageByUrl(previousImageUrl, adminAuthSession).catch((error) => {
+        console.warn("Unable to remove replaced catalog image.", error);
+      });
+    }
   } catch (error) {
+    if (uploadedImage?.path) {
+      try {
+        await deleteCatalogImagePath(uploadedImage.path, adminAuthSession);
+      } catch (cleanupError) {
+        console.warn("Unable to clean up uploaded catalog image after failed save.", cleanupError);
+      }
+    }
+
     console.error("Unable to save catalog product.", error);
     catalogSaveState = "idle";
     catalogSaveError = error.message || "Save failed. Check RLS and catalog product fields.";
+    if (catalogDraft) {
+      catalogDraft = {
+        ...catalogDraft,
+        imageError: failedPhase === "upload" ? catalogSaveError : catalogDraft.imageError,
+      };
+    }
     render();
   }
 }
@@ -2494,7 +2667,7 @@ function normalizeCatalogDraft(draft) {
     slug: slugify(draft.slug || draft.name),
     category: String(draft.category || "").trim(),
     description: String(draft.description || "").trim(),
-    imageUrl: String(draft.imageUrl || "").trim(),
+    imageUrl: draft.removeImage ? "" : String(draft.imageUrl || "").trim(),
     startingPrice: draft.startingPrice === "" ? "" : Number(draft.startingPrice),
     priceLabel: String(draft.priceLabel || "").trim(),
     minimumQuantity: Number(draft.minimumQuantity || 1),
@@ -2595,6 +2768,7 @@ function bindEvents() {
       activeCatalogKey = button.dataset.catalogTab;
       catalogStatusFilter = catalogStatusFilter || "active";
       selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+      clearCatalogImagePreview();
       catalogDrawerMode = "";
       catalogDraft = null;
       render();
@@ -2635,6 +2809,14 @@ function bindEvents() {
     });
   });
 
+  document.querySelector("[data-catalog-image-file]")?.addEventListener("change", async (event) => {
+    const file = event.target.files?.[0] ?? null;
+    if (file) await updateCatalogImageFile(file);
+  });
+
+  document.querySelector("[data-catalog-remove-image]")?.addEventListener("click", () => {
+    removeCatalogImageFromDraft();
+  });
   document.getElementById("catalog-product-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await saveCatalogDraft();

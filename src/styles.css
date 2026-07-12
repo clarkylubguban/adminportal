@@ -3029,10 +3029,12 @@ td:nth-child(9) {
     bottom: 0;
     display: grid;
     grid-template-columns: repeat(5, minmax(0, 1fr));
+    height: calc(62px + env(safe-area-inset-bottom));
     min-height: 62px;
     border-top: 1px solid #e2bfb0;
     background: #ffffff;
     box-shadow: 0 -8px 24px rgba(17, 24, 39, 0.08);
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .mobile-bottom-nav a {
@@ -3318,6 +3320,27 @@ td:nth-child(9) {
 }
 
 @media (max-width: 420px) {
+  .catalog-image-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .catalog-image-preview {
+    aspect-ratio: 1;
+    border-bottom: 2px solid #111111;
+    border-right: 0;
+    height: auto;
+    width: 100%;
+  }
+
+  .catalog-image-meta {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .catalog-image-meta button {
+    width: 100%;
+  }
+
   .quick-actions,
   .panel-stat-grid,
   .detail-metrics {
@@ -4384,6 +4407,12 @@ td:nth-child(9) {
   .mobile-bottom-nav a.active {
     background: #ddff4f;
     color: #111111;
+  }
+
+  .mobile-bottom-nav small {
+    overflow: hidden;
+    text-overflow: clip;
+    white-space: nowrap;
   }
 }
 
@@ -7476,6 +7505,10 @@ tbody tr.selected td:last-child {
   background-size: cover;
 }
 
+
+.mobile-featured-label {
+  display: none;
+}
 .catalog-edit-action {
   border: 2px solid #111111;
   border-radius: 0;
@@ -7549,6 +7582,154 @@ tbody tr.selected td:last-child {
   padding: 16px;
 }
 
+.catalog-image-field {
+  border: 2px solid #111111;
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.catalog-image-heading,
+.catalog-image-meta {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  justify-content: space-between;
+  min-width: 0;
+}
+
+.catalog-image-heading span,
+.catalog-image-heading strong,
+.catalog-image-meta,
+.catalog-image-field p,
+.catalog-image-pick-text,
+.catalog-image-meta button {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  text-transform: uppercase;
+}
+
+.catalog-image-heading span,
+.catalog-image-heading strong {
+  color: #111111;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.catalog-image-heading strong {
+  background: #f3f1ea;
+  border: 1px solid #111111;
+  padding: 4px 7px;
+  white-space: nowrap;
+}
+
+.catalog-image-heading strong.error,
+.catalog-image-error {
+  color: #e23f32;
+}
+
+.catalog-image-picker {
+  align-items: stretch;
+  background: #ffffff;
+  border: 2px solid #111111;
+  color: #111111;
+  cursor: pointer;
+  display: grid;
+  gap: 0;
+  grid-template-columns: 112px minmax(0, 1fr);
+  min-height: 112px;
+  text-decoration: none;
+}
+
+.catalog-image-picker.disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.catalog-image-picker input {
+  height: 1px;
+  opacity: 0;
+  overflow: hidden;
+  position: absolute;
+  width: 1px;
+}
+
+.catalog-image-preview {
+  align-items: center;
+  background: #f3f1ea;
+  border-right: 2px solid #111111;
+  display: flex;
+  height: 112px;
+  justify-content: center;
+  width: 112px;
+}
+
+.catalog-image-preview img {
+  display: block;
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.catalog-image-preview span,
+.catalog-image-pick-text {
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.06em;
+}
+
+.catalog-image-pick-text {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px;
+  text-align: center;
+}
+
+.catalog-image-meta {
+  color: #111111;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.catalog-image-meta span {
+  line-height: 1.35;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.catalog-image-meta button {
+  background: #ffffff;
+  border: 2px solid #111111;
+  border-radius: 0;
+  color: #111111;
+  flex: 0 0 auto;
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 0 10px;
+}
+
+.catalog-image-meta button:disabled {
+  background: #f2f2f2;
+  color: #777777;
+  cursor: not-allowed;
+}
+
+.catalog-image-field p {
+  color: #55534b;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.catalog-image-field .catalog-image-error {
+  color: #e23f32;
+}
 .catalog-form-grid {
   display: grid;
   gap: 12px;
@@ -7668,6 +7849,192 @@ tbody tr.selected td:last-child {
 }
 
 @media (max-width: 768px) {
+  .catalog-table-card {
+    border-radius: 0;
+    box-shadow: none;
+    overflow: visible;
+  }
+
+  .catalog-count-label {
+    color: #111111;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.08em;
+    padding: 9px 10px;
+    text-transform: uppercase;
+  }
+
+  .catalog-table tbody {
+    gap: 8px;
+    padding: 8px;
+  }
+
+  .catalog-table tr,
+  .catalog-table tr:hover {
+    background: #ffffff;
+    border: 2px solid #111111;
+    border-radius: 0;
+    box-shadow: none;
+    cursor: pointer;
+    display: grid;
+    gap: 0 10px;
+    grid-template-areas:
+      "image name name"
+      "image category category"
+      "price price moq"
+      "status featured edit";
+    grid-template-columns: 84px minmax(0, 1fr) minmax(86px, auto);
+    min-height: 172px;
+    overflow: hidden;
+    padding: 10px;
+  }
+
+  .catalog-table tr.selected {
+    background: #ffffff;
+    border-color: #111111;
+    box-shadow: inset 4px 0 0 #ddff4f;
+  }
+
+  .catalog-table td,
+  .catalog-table td:first-child {
+    align-items: center;
+    border: 0;
+    display: flex;
+    gap: 6px;
+    justify-content: flex-start;
+    min-height: 0;
+    padding: 0;
+    text-align: left;
+    width: auto;
+  }
+
+  .catalog-table td::before {
+    content: none !important;
+  }
+
+  .catalog-image-cell {
+    align-self: start;
+    grid-area: image;
+  }
+
+  .catalog-name-cell {
+    align-self: end;
+    grid-area: name;
+    min-width: 0;
+  }
+
+  .catalog-name-cell .stacked-cell {
+    text-align: left;
+  }
+
+  .catalog-name-cell .stacked-cell strong {
+    color: #111111;
+    display: -webkit-box;
+    font-size: 14px;
+    font-weight: 900;
+    line-height: 1.12;
+    overflow: hidden;
+    text-transform: uppercase;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .catalog-name-cell .stacked-cell span {
+    display: none;
+  }
+
+  .catalog-category-cell {
+    align-self: start;
+    color: #6b6760;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 10px;
+    font-weight: 800;
+    grid-area: category;
+    line-height: 1.2;
+    margin-top: 4px;
+    min-width: 0;
+    text-transform: uppercase;
+  }
+
+  .catalog-price-cell,
+  .catalog-moq-cell {
+    align-self: center;
+    border-top: 1px solid #111111;
+    color: #111111;
+    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-size: 12px;
+    font-weight: 900;
+    margin-top: 10px;
+    padding-top: 10px;
+    text-transform: uppercase;
+  }
+
+  .catalog-price-cell {
+    grid-area: price;
+  }
+
+  .catalog-moq-cell {
+    grid-area: moq;
+    justify-content: flex-end;
+    white-space: nowrap;
+  }
+
+  .catalog-moq-cell::before {
+    content: "MOQ ";
+  }
+
+  .catalog-status-cell,
+  .catalog-featured-cell,
+  .catalog-action-cell {
+    align-self: end;
+    margin-top: 10px;
+  }
+
+  .catalog-status-cell {
+    grid-area: status;
+  }
+
+  .catalog-featured-cell {
+    grid-area: featured;
+  }
+
+  .catalog-action-cell {
+    grid-area: edit;
+    justify-content: flex-end;
+  }
+
+  .catalog-product-image {
+    background: #f3f1ea;
+    height: 84px;
+    width: 84px;
+  }
+
+  .catalog-table .status-pill {
+    border-radius: 0;
+    font-size: 9px;
+    line-height: 1;
+    padding: 5px 7px;
+    white-space: nowrap;
+  }
+
+  .catalog-featured-cell .desktop-featured-label {
+    display: none;
+  }
+
+  .catalog-featured-cell .mobile-featured-label {
+    display: inline;
+  }
+
+  .catalog-edit-action {
+    align-items: center;
+    display: inline-flex;
+    height: 44px;
+    justify-content: center;
+    margin-left: 0;
+    min-width: 58px;
+    padding: 0 10px;
+  }
   .catalog-drawer {
     border-left: 0;
     width: 100vw;
@@ -7677,9 +8044,8 @@ tbody tr.selected td:last-child {
   .catalog-table td:first-child {
     width: auto;
   }
-
   .catalog-product-image {
-    height: 56px;
-    width: 72px;
+    height: 84px;
+    width: 84px;
   }
 }
