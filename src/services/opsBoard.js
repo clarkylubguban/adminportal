@@ -211,6 +211,13 @@ export function mapOpsRowToInquiry(row) {
     dueDate: normalizeDate(
       getFirstValue(row, ["due_date", "dueDate"])
     ),
+    fulfillmentMethod: getFirstValue(row, ["fulfillment_method", "fulfillmentMethod"]),
+    deliveryCity: getFirstValue(row, ["delivery_city", "deliveryCity"]),
+    deliveryAddress: getFirstValue(row, ["delivery_address", "deliveryAddress"]),
+    deliveryLandmark: getFirstValue(row, ["delivery_landmark", "deliveryLandmark"]),
+    trackingSubstatus: getFirstValue(row, ["tracking_substatus", "trackingSubstatus"]),
+    trackingNote: getFirstValue(row, ["tracking_note", "trackingNote"]),
+    trackingUpdatedAt: getFirstValue(row, ["tracking_updated_at", "trackingUpdatedAt"]),
     followUpDate: normalizeDate(
       getFirstValue(row, [
         "follow_up_date",
@@ -244,6 +251,13 @@ export function mapInquiryToOpsRow(inquiry) {
     status: normalizeOpsStatus(inquiry.status),
     next_action: inquiry.next,
     due_date: normalizeDate(inquiry.dueDate),
+    fulfillment_method: inquiry.fulfillmentMethod,
+    delivery_city: inquiry.deliveryCity,
+    delivery_address: inquiry.deliveryAddress,
+    delivery_landmark: inquiry.deliveryLandmark,
+    tracking_substatus: inquiry.trackingSubstatus,
+    tracking_note: inquiry.trackingNote,
+    tracking_updated_at: inquiry.trackingUpdatedAt,
     follow_up_date: normalizeDate(
       inquiry.followUpDate
     ),
@@ -270,6 +284,13 @@ function mapInquiryUpdatesToOpsRow(updates) {
       updates.dueDate === undefined
         ? undefined
         : normalizeDate(updates.dueDate),
+    fulfillment_method: updates.fulfillmentMethod,
+    delivery_city: updates.deliveryCity,
+    delivery_address: updates.deliveryAddress,
+    delivery_landmark: updates.deliveryLandmark,
+    tracking_substatus: updates.trackingSubstatus,
+    tracking_note: updates.trackingNote,
+    tracking_updated_at: updates.trackingUpdatedAt,
     follow_up_date:
       updates.followUpDate === undefined
         ? undefined

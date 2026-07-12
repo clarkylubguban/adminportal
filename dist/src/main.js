@@ -1,4 +1,4 @@
-import { getAdminClientPrograms } from "./services/adminClients.js";
+﻿import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
   createOpsBoardInquiry,
@@ -951,10 +951,68 @@ function renderOpsInquiryDrawer() {
   const source = opsSource[item.source] ?? opsSource.FB;
   const overdue = isOpsOverdue(item);
 
-  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content">${renderOpsInquiryDetails(item, source, status, overdue)}${renderOpsArtworkAction(item)}${item.status === "sent" ? renderOpsOdooAction(item) : ""}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content">${renderOpsInquiryDetails(item, source, status, overdue)}${renderOpsCustomerTracking(item)}${renderOpsArtworkAction(item)}${item.status === "sent" ? renderOpsOdooAction(item) : ""}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+}
+const opsTrackingSubstatus = {
+  ready_for_pickup: { label: "Ready for Pickup", methods: ["pickup"] },
+  out_for_delivery: { label: "Out for Delivery", methods: ["delivery"] },
+  delivered: { label: "Delivered", methods: ["delivery"] },
+  completed: { label: "Completed", methods: ["pickup", "delivery"] },
+};
+
+function getOpsCustomerTrackingStep(item) {
+  const status = String(item.status || "").trim().toLowerCase();
+  if (["lost", "cancelled", "canceled"].includes(status)) return "Closed";
+  if (["production", "in_production", "ready", "pickup", "delivery", "delivered", "completed", "won"].includes(status)) return "5 / Pickup or Delivery";
+  if (["approved", "proof_approval", "proof_approved"].includes(status)) return "3 / Proof Approval";
+  if (["quote", "sent", "followup"].includes(status)) return "2 / Quote and Review";
+  return "1 / Inquiry Received";
+}
+
+function canEditOpsCustomerTracking(item) {
+  const method = String(item.fulfillmentMethod || "").trim().toLowerCase();
+  const status = String(item.status || "").trim().toLowerCase();
+  return ["pickup", "delivery"].includes(method) && ["production", "in_production", "ready", "pickup", "delivery", "delivered", "completed", "won"].includes(status);
+}
+
+function getOpsTrackingOptions(item) {
+  const method = String(item.fulfillmentMethod || "").trim().toLowerCase();
+  return Object.entries(opsTrackingSubstatus).filter(([, config]) => config.methods.includes(method));
+}
+
+function formatOpsTrackingDate(value) {
+  if (!value) return "Not updated";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString([], { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+}
+
+function renderOpsCustomerTracking(item) {
+  const canEdit = canEditOpsCustomerTracking(item);
+  const options = getOpsTrackingOptions(item);
+  const currentLabel = opsTrackingSubstatus[item.trackingSubstatus]?.label || "Not set";
+  const optionHtml = options.map(([value, config]) => `<option value="${value}" ${item.trackingSubstatus === value ? "selected" : ""}>${config.label}</option>`).join("");
+  const controls = canEdit
+    ? `<label><span>Sub-status</span><select data-ops-tracking-substatus="${escapeHtml(item.id)}"><option value="">Select sub-status</option>${optionHtml}</select></label><label class="wide"><span>Customer note</span><textarea data-ops-tracking-note="${escapeHtml(item.id)}" rows="2" placeholder="Optional note shown to customer">${escapeHtml(item.trackingNote || "")}</textarea></label><button class="ops-gold-button mini" data-ops-save-tracking="${escapeHtml(item.id)}" type="button">Save Customer Tracking</button>`
+    : `<p class="ops-tracking-disabled">Customer tracking controls unlock at Production or later for Pickup/Delivery inquiries.</p>`;
+
+  return `<section class="ops-customer-tracking"><h3>CUSTOMER TRACKING</h3><div class="ops-ticket-details"><div><span>Main step</span><strong>${escapeHtml(getOpsCustomerTrackingStep(item))}</strong></div><div><span>Fulfillment</span><strong>${escapeHtml(getOpsFulfillmentLabel(item))}</strong></div><div><span>Sub-status</span><strong>${escapeHtml(currentLabel)}</strong></div><div><span>Last update</span><strong>${escapeHtml(formatOpsTrackingDate(item.trackingUpdatedAt))}</strong></div>${item.trackingNote ? `<div class="wide"><span>Customer note</span><p>${escapeHtml(item.trackingNote)}</p></div>` : ""}</div><div class="ops-tracking-controls">${controls}</div></section>`;
+}
+function getOpsFulfillmentLabel(item) {
+  const method = String(item.fulfillmentMethod || "").trim().toLowerCase();
+  if (method === "pickup") return "Pickup";
+  if (method === "delivery") return "Delivery";
+  return "-";
+}
+
+function renderOpsDeliveryDetail(item) {
+  if (String(item.fulfillmentMethod || "").trim().toLowerCase() !== "delivery") return "";
+  const address = [item.deliveryAddress, item.deliveryCity].filter(Boolean).join(" / ") || "-";
+  const landmark = item.deliveryLandmark ? `<div class="wide"><span>Delivery landmark</span><strong>${escapeHtml(item.deliveryLandmark)}</strong></div>` : "";
+  return `<div class="wide"><span>Delivery address</span><strong>${escapeHtml(address)}</strong></div>${landmark}`;
 }
 function renderOpsInquiryDetails(item, source, status, overdue) {
-  return `<div class="ops-ticket-details"><div><span>Inquiry ID</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Status</span><strong>${escapeHtml(status.label)}${overdue ? " / Overdue" : ""}</strong></div><div><span>Source</span><strong>${escapeHtml(source.label)}</strong></div><div><span>Product</span><strong>${escapeHtml(item.service || "-")}</strong></div><div><span>Quantity</span><strong>${escapeHtml(item.qty || "-")}</strong></div><div><span>Date</span><strong>${renderOpsCardDate(item)}</strong></div><div><span>Contact</span><strong>${escapeHtml(item.contact || "-")}</strong></div><div><span>Assigned staff</span><strong>${escapeHtml(item.assigned || "Unassigned")}</strong></div><div class="wide"><span>Full inquiry / message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div><div class="wide"><span>Next action</span><strong>${escapeHtml(item.next || "Review inquiry")}</strong></div><div><span>Estimated value</span><strong>${formatOpsValue(item.estimatedValue)}</strong></div><div><span>Odoo SO:</span><strong>${escapeHtml(item.odooSO || "Not created yet")}</strong></div></div>`;
+  return `<div class="ops-ticket-details"><div><span>Inquiry ID</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Status</span><strong>${escapeHtml(status.label)}${overdue ? " / Overdue" : ""}</strong></div><div><span>Source</span><strong>${escapeHtml(source.label)}</strong></div><div><span>Product</span><strong>${escapeHtml(item.service || "-")}</strong></div><div><span>Quantity</span><strong>${escapeHtml(item.qty || "-")}</strong></div><div><span>Date</span><strong>${renderOpsCardDate(item)}</strong></div><div><span>Contact</span><strong>${escapeHtml(item.contact || "-")}</strong></div><div><span>Fulfillment</span><strong>${escapeHtml(getOpsFulfillmentLabel(item))}</strong></div>${renderOpsDeliveryDetail(item)}<div><span>Assigned staff</span><strong>${escapeHtml(item.assigned || "Unassigned")}</strong></div><div class="wide"><span>Full inquiry / message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div><div class="wide"><span>Next action</span><strong>${escapeHtml(item.next || "Review inquiry")}</strong></div><div><span>Estimated value</span><strong>${formatOpsValue(item.estimatedValue)}</strong></div><div><span>Odoo SO:</span><strong>${escapeHtml(item.odooSO || "Not created yet")}</strong></div></div>`;
 }
 function renderOpsArtworkAction(item) {
   const request = opsArtworkRequests[item.id] ?? {};
@@ -1052,6 +1110,37 @@ function getOpsStatusActions(statusKey) {
   return actions[statusKey] ?? [];
 }
 
+async function saveOpsCustomerTracking(id) {
+  const current = opsInquiries.find((item) => item.id === id);
+  if (!current || !canEditOpsCustomerTracking(current)) return;
+
+  const select = document.querySelector(`[data-ops-tracking-substatus="${CSS.escape(id)}"]`);
+  const noteField = document.querySelector(`[data-ops-tracking-note="${CSS.escape(id)}"]`);
+  const nextSubstatus = select?.value || "";
+  const allowed = getOpsTrackingOptions(current).some(([value]) => value === nextSubstatus);
+  if (nextSubstatus && !allowed) return;
+
+  const updates = {
+    trackingSubstatus: nextSubstatus || null,
+    trackingNote: noteField?.value?.trim() || null,
+    trackingUpdatedAt: new Date().toISOString(),
+  };
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      await updateOpsInquiryFields(id, updates, adminAuthSession);
+      opsLoadState = opsLoadState === "empty" ? "success" : opsLoadState;
+      opsLoadError = "";
+    } catch (error) {
+      console.error("Unable to update customer tracking.", error);
+      opsLoadState = "error";
+      opsLoadError = error.message;
+      return;
+    }
+  }
+
+  opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...updates } : item);
+}
 async function moveOpsInquiry(id, targetStatus) {
   const current = opsInquiries.find((item) => item.id === id);
   const action = current ? getOpsStatusActions(current.status).find((item) => item.to === targetStatus) : null;
@@ -3058,6 +3147,13 @@ function bindOpsBoardEvents() {
 
 
 
+
+  document.querySelectorAll("[data-ops-save-tracking]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await saveOpsCustomerTracking(button.dataset.opsSaveTracking);
+      render();
+    });
+  });
   document.querySelectorAll("[data-ops-priority-id]").forEach((button) => {
     button.addEventListener("click", () => {
       const id = button.dataset.opsPriorityId;

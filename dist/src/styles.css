@@ -8049,3 +8049,59 @@ tbody tr.selected td:last-child {
     width: 84px;
   }
 }
+
+.ops-board-page .ops-customer-tracking {
+  border: 2px solid var(--ops-ink);
+  display: grid;
+  gap: 10px;
+  padding: 10px;
+}
+
+.ops-board-page .ops-customer-tracking h3 {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 10px;
+  font-weight: 950;
+  letter-spacing: 0.12em;
+  margin: 0;
+}
+
+.ops-board-page .ops-tracking-controls {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-board-page .ops-tracking-controls label {
+  display: grid;
+  gap: 5px;
+}
+
+.ops-board-page .ops-tracking-controls label span,
+.ops-board-page .ops-tracking-disabled {
+  color: var(--ops-muted);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-tracking-controls select,
+.ops-board-page .ops-tracking-controls textarea {
+  border: 2px solid var(--ops-ink);
+  border-radius: 0;
+  color: var(--ops-ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 8px;
+}
+
+.ops-board-page .ops-tracking-controls textarea {
+  min-height: 58px;
+  resize: vertical;
+}
+
+.ops-board-page .ops-tracking-disabled {
+  margin: 0;
+}
