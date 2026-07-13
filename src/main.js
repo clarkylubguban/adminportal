@@ -1,4 +1,4 @@
-﻿import { getAdminClientPrograms } from "./services/adminClients.js";
+import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
   createOpsBoardInquiry,
@@ -229,6 +229,7 @@ const shouldLoadSupabaseOps = isSupabaseReady();
 let opsInquiries = shouldLoadSupabaseOps ? [] : [...localOpsInquiries];
 let opsLoadState = shouldLoadSupabaseOps ? "loading" : "local";
 let opsLoadError = "";
+let opsItemsLoadError = "";
 let hasLoadedOpsInquiries = false;
 
 const opsProduction = [
@@ -806,6 +807,7 @@ async function loadOpsBoardInquiries() {
   opsInquiries = result.inquiries;
   opsLoadState = result.status;
   opsLoadError = result.error?.message ?? "";
+  opsItemsLoadError = result.itemsError?.message ?? "";
 
   render();
 }
@@ -851,7 +853,7 @@ function renderOverviewPage() {
 
 
 function renderOpsPersistenceNotice() {
-  if (opsLoadState === "success") return "";
+if (opsLoadState === "success") return opsItemsLoadError ? `<section class="ops-persistence-card error"><strong>Request items could not be loaded</strong><span>Inquiry cards remain available with legacy summaries. Refresh after the inquiry_items migration and policies are ready.</span></section>` : "";
 
   if (opsLoadState === "loading") {
     return `<section class="ops-persistence-card"><strong>Loading Ops Board inquiries</strong><span>Reading from Supabase...</span></section>`;
@@ -962,7 +964,7 @@ function renderOpsInquiryCard(item, statusKey) {
   const status = opsStatus[statusKey];
   const overdue = isOpsOverdue(item);
   const isSelected = expandedOpsInquiryId === item.id;
-  return `<article class="ops-ticket-card ops-accordion-card ${overdue ? "overdue" : ""} ${isSelected ? "is-expanded" : ""}"><button class="ops-ticket-summary ${isSelected ? "active" : ""}" data-ops-card-id="${escapeHtml(item.id)}" data-ops-toggle-details="${escapeHtml(item.id)}" type="button" aria-expanded="${isSelected ? "true" : "false"}" aria-label="${isSelected ? "Close" : "Open"} inquiry ${escapeHtml(item.id)} details"><span class="ops-summary-text"><strong>${escapeHtml(item.customer)}</strong><small>${escapeHtml(item.qty)} / ${status.label}</small></span><span class="ops-summary-indicator">${isSelected ? "x" : "+"}</span></button></article>`;
+  return `<article class="ops-ticket-card ops-accordion-card ${overdue ? "overdue" : ""} ${isSelected ? "is-expanded" : ""}"><button class="ops-ticket-summary ${isSelected ? "active" : ""}" data-ops-card-id="${escapeHtml(item.id)}" data-ops-toggle-details="${escapeHtml(item.id)}" type="button" aria-expanded="${isSelected ? "true" : "false"}" aria-label="${isSelected ? "Close" : "Open"} inquiry ${escapeHtml(item.id)} details"><span class="ops-summary-text"><strong>${escapeHtml(item.customer)}</strong><small>${escapeHtml(String(item.itemCount || 1) + " ITEMS / " + (item.service || "-") + " / " + (item.qty || "-"))}</small></span><span class="ops-summary-indicator">${isSelected ? "x" : "+"}</span></button></article>`;
 }
 
 function renderOpsInquiryDrawer() {
@@ -973,7 +975,7 @@ function renderOpsInquiryDrawer() {
   const source = opsSource[item.source] ?? opsSource.FB;
   const overdue = isOpsOverdue(item);
 
-  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content">${renderOpsInquiryDetails(item, source, status, overdue)}${renderOpsCustomerTracking(item)}${renderOpsArtworkAction(item)}${item.status === "sent" ? renderOpsOdooAction(item) : ""}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content">${renderOpsInquiryDetails(item, source, status, overdue)}${renderOpsRequestItems(item)}${renderOpsCustomerTracking(item)}${renderOpsArtworkAction(item)}${item.status === "sent" ? renderOpsOdooAction(item) : ""}${renderOpsStaffActions(item, item.status)}</div></aside>`;
 }
 const opsTrackingSubstatus = {
   ready_for_pickup: { label: "Ready for Pickup", methods: ["pickup"] },
@@ -1032,6 +1034,24 @@ function renderOpsDeliveryDetail(item) {
   const address = [item.deliveryAddress, item.deliveryCity].filter(Boolean).join(" / ") || "-";
   const landmark = item.deliveryLandmark ? `<div class="wide"><span>Delivery landmark</span><strong>${escapeHtml(item.deliveryLandmark)}</strong></div>` : "";
   return `<div class="wide"><span>Delivery address</span><strong>${escapeHtml(address)}</strong></div>${landmark}`;
+}
+function formatOpsItemSizes(sizeBreakdown) {
+  if (!sizeBreakdown || typeof sizeBreakdown !== "object") return "";
+  return Object.entries(sizeBreakdown)
+    .filter(([, quantity]) => Number(quantity) > 0)
+    .map(([size, quantity]) => size + ": " + quantity)
+    .join(", ");
+}
+
+function renderOpsRequestItems(item) {
+  const items = Array.isArray(item.items) ? item.items : [];
+  if (!items.length) return "";
+
+  return `<section class="ops-request-items"><h3>REQUEST ITEMS · ${items.length}</h3>${items.map((requestItem, index) => {
+    const details = [requestItem.color, formatOpsItemSizes(requestItem.sizeBreakdown), requestItem.printMethod, requestItem.quantity ? "Qty " + requestItem.quantity : ""].filter(Boolean).join(" / ");
+    const artwork = requestItem.artworkUrls?.length ? `<small>Artwork: ${requestItem.artworkUrls.map((url) => escapeHtml(String(url).split("/").pop() || url)).join(", ")}</small>` : "";
+    return `<article><span>ITEM ${String(index + 1).padStart(2, "0")}</span><strong>${escapeHtml(requestItem.productName || "TRRY Item")}</strong><p>${escapeHtml(details || "Details in inquiry message")}</p>${artwork}${requestItem.notes ? `<small>Note: ${escapeHtml(requestItem.notes)}</small>` : ""}</article>`;
+  }).join("")}</section>`;
 }
 function renderOpsInquiryDetails(item, source, status, overdue) {
   return `<div class="ops-ticket-details"><div><span>Inquiry ID</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Status</span><strong>${escapeHtml(status.label)}${overdue ? " / Overdue" : ""}</strong></div><div><span>Source</span><strong>${escapeHtml(source.label)}</strong></div><div><span>Product</span><strong>${escapeHtml(item.service || "-")}</strong></div><div><span>Quantity</span><strong>${escapeHtml(item.qty || "-")}</strong></div><div><span>Date</span><strong>${renderOpsCardDate(item)}</strong></div><div><span>Contact</span><strong>${escapeHtml(item.contact || "-")}</strong></div><div><span>Fulfillment</span><strong>${escapeHtml(getOpsFulfillmentLabel(item))}</strong></div>${renderOpsDeliveryDetail(item)}<div><span>Assigned staff</span><strong>${escapeHtml(item.assigned || "Unassigned")}</strong></div><div class="wide"><span>Full inquiry / message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div><div class="wide"><span>Next action</span><strong>${escapeHtml(item.next || "Review inquiry")}</strong></div><div><span>Estimated value</span><strong>${formatOpsValue(item.estimatedValue)}</strong></div><div><span>Odoo SO:</span><strong>${escapeHtml(item.odooSO || "Not created yet")}</strong></div></div>`;
@@ -1551,7 +1571,7 @@ function renderOrderDashboardCard(item) {
   return `<button class="order-dashboard-card ${selected ? "selected" : ""} ${dueState}" data-order-dashboard-open="${escapeHtml(item.id)}" type="button">
     <span class="order-dashboard-id">${escapeHtml(item.id)}</span>
     <strong>${escapeHtml(item.customer || "Unnamed customer")}</strong>
-    <small>${escapeHtml(item.service || "-")} / ${escapeHtml(item.qty || "-")}</small>
+    <small>${escapeHtml(String(item.itemCount || 1) + " ITEMS / " + (item.service || "-") + " / " + (item.qty || "-"))}</small>
     <div class="order-dashboard-meta"><span>${escapeHtml(getOrderProductionStageLabel(stage))}</span><span>${escapeHtml(getOpsFulfillmentLabel(item))}</span><span>${escapeHtml(getOrderDueLabel(item))}</span></div>
     <div class="order-dashboard-meta"><span>Staff: ${escapeHtml(getOrderAssignedStaff(item))}</span><span>Odoo: ${escapeHtml(item.odooSO || "-")}</span></div>
   </button>`;
@@ -1581,6 +1601,7 @@ function renderOrderDashboardDrawer(item) {
       <div><span>Production</span><strong>${escapeHtml(getOrderProductionStageLabel(stage))}</strong></div>
       <div class="wide"><span>Customer Message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div>
     </div>
+    ${renderOpsRequestItems(item)}
     ${renderOrderProductionEditor(item)}
     ${renderOpsCustomerTracking(item)}
   </aside>`;

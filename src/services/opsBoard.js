@@ -6,6 +6,7 @@ import {
 } from "../lib/supabaseClient.js";
 
 export const OPS_INQUIRIES_TABLE = "ops_inquiries";
+export const INQUIRY_ITEMS_TABLE = "inquiry_items";
 
 // Database schema and RLS policies must be managed in Supabase,
 // not embedded inside the Admin Portal frontend.
@@ -35,13 +36,45 @@ export async function getOpsBoardInquiries(
       getAccessToken(authSession)
     );
 
+    const inquiries = Array.isArray(rows) ? rows.map(mapOpsRowToInquiry) : [];
+    let itemsError = null;
+
+    if (inquiries.length) {
+      try {
+        const inquiryIds = inquiries.map((item) => item.id).filter(Boolean);
+        const itemRows = await readSupabaseTableWithAuth(
+          INQUIRY_ITEMS_TABLE,
+          {
+            select: "*",
+            inquiry_id: "in.(" + inquiryIds.join(",") + ")",
+            order: "sort_order.asc,created_at.asc",
+          },
+          getAccessToken(authSession)
+        );
+        const groupedItems = groupInquiryItems(Array.isArray(itemRows) ? itemRows : []);
+
+        inquiries.forEach((inquiry) => {
+          const items = groupedItems.get(inquiry.id) || [];
+          inquiry.items = items.length ? items : [synthesizeLegacyInquiryItem(inquiry)];
+          inquiry.itemCount = inquiry.items.length;
+          inquiry.totalItemQuantity = inquiry.items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+        });
+      } catch (error) {
+        itemsError = error;
+        inquiries.forEach((inquiry) => {
+          inquiry.items = [synthesizeLegacyInquiryItem(inquiry)];
+          inquiry.itemCount = 1;
+          inquiry.totalItemQuantity = parseQuantityNumber(inquiry.qty);
+        });
+      }
+    }
+
     return {
-      inquiries: Array.isArray(rows)
-        ? rows.map(mapOpsRowToInquiry)
-        : [],
+      inquiries,
       status: rows?.length ? "success" : "empty",
       source: "supabase",
       error: null,
+      itemsError,
       sql: null,
     };
   } catch (error) {
@@ -176,6 +209,61 @@ export async function updateOpsInquiryFields(
     : null;
 }
 
+function mapInquiryItemRow(row) {
+  const snapshot = row?.product_snapshot && typeof row.product_snapshot === "object" ? row.product_snapshot : {};
+  const configuration = row?.configuration && typeof row.configuration === "object" ? row.configuration : {};
+  return {
+    id: getFirstValue(row, ["id"]),
+    inquiryId: getFirstValue(row, ["inquiry_id", "inquiryId"]),
+    productId: getFirstValue(row, ["product_id", "productId"]),
+    productName: getFirstValue(row, ["product_name", "productName"]) || "TRRY Item",
+    productImage: getFirstValue(snapshot, ["imageUrl", "image_url"]),
+    printMethod: getFirstValue(row, ["print_method", "printMethod"]),
+    color: getFirstValue(row, ["color"]),
+    sizeBreakdown: row?.size_breakdown && typeof row.size_breakdown === "object" ? row.size_breakdown : {},
+    quantity: Number(row?.quantity || 0),
+    artworkUrls: Array.isArray(row?.artwork_urls) ? row.artwork_urls : [],
+    notes: getFirstValue(row, ["notes"]),
+    configuration,
+    sortOrder: Number(row?.sort_order || 0),
+    legacy: false,
+  };
+}
+
+function groupInquiryItems(rows) {
+  return rows.reduce((groups, row) => {
+    const item = mapInquiryItemRow(row);
+    if (!item.inquiryId) return groups;
+    const current = groups.get(item.inquiryId) || [];
+    current.push(item);
+    groups.set(item.inquiryId, current);
+    return groups;
+  }, new Map());
+}
+
+function parseQuantityNumber(value) {
+  const match = String(value || "").match(/\d+/);
+  return match ? Number(match[0]) : 0;
+}
+
+function synthesizeLegacyInquiryItem(inquiry) {
+  return {
+    id: "legacy-" + inquiry.id,
+    inquiryId: inquiry.id,
+    productId: "",
+    productName: inquiry.service || "TRRY Item",
+    productImage: "",
+    printMethod: "",
+    color: "",
+    sizeBreakdown: {},
+    quantity: parseQuantityNumber(inquiry.qty),
+    artworkUrls: [],
+    notes: inquiry.message || "",
+    configuration: { legacy: true, quantityLabel: inquiry.qty },
+    sortOrder: 0,
+    legacy: true,
+  };
+}
 export function mapOpsRowToInquiry(row) {
   return {
     id: getFirstValue(row, ["id"]),
@@ -243,6 +331,9 @@ export function mapOpsRowToInquiry(row) {
       getFirstValue(row, ["production_note", "productionNote"]),
     productionUpdatedAt:
       getFirstValue(row, ["production_updated_at", "productionUpdatedAt"]),
+    items: [],
+    itemCount: 0,
+    totalItemQuantity: 0,
     productionFieldsReady:
       ["assigned_staff", "production_stage", "production_note", "production_updated_at"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
   };

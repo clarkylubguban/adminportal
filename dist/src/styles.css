@@ -8378,3 +8378,43 @@ tbody tr.selected td:last-child {
 .order-production-editor.schema-missing button {
   opacity: 0.65;
 }
+
+/* Multi-item inquiry details */
+.ops-request-items {
+  display: grid;
+  gap: 0;
+  border: 1px solid var(--ink, #111);
+  background: #fffdf8;
+}
+
+.ops-request-items h3 {
+  margin: 0;
+  padding: 12px 14px;
+  border-bottom: 1px solid currentColor;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.72rem;
+  letter-spacing: 0.08em;
+}
+
+.ops-request-items article {
+  display: grid;
+  gap: 5px;
+  padding: 12px 14px;
+  border-top: 1px solid rgba(17, 17, 17, 0.28);
+}
+
+.ops-request-items article:first-of-type {
+  border-top: 0;
+}
+
+.ops-request-items article > span,
+.ops-request-items article small {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.7rem;
+}
+
+.ops-request-items article p,
+.ops-request-items article small {
+  margin: 0;
+  color: #5f5f5f;
+}
