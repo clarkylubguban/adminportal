@@ -233,8 +233,18 @@ export function mapOpsRowToInquiry(row) {
       "estimatedValue",
     ]),
     assigned:
-      getFirstValue(row, ["assigned"]) ||
+      getFirstValue(row, ["assigned_staff", "assignedStaff", "assigned"]) ||
       "Unassigned",
+    assignedStaff:
+      getFirstValue(row, ["assigned_staff", "assignedStaff"]),
+    productionStage:
+      getFirstValue(row, ["production_stage", "productionStage"]),
+    productionNote:
+      getFirstValue(row, ["production_note", "productionNote"]),
+    productionUpdatedAt:
+      getFirstValue(row, ["production_updated_at", "productionUpdatedAt"]),
+    productionFieldsReady:
+      ["assigned_staff", "production_stage", "production_note", "production_updated_at"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
   };
 }
 
@@ -263,6 +273,10 @@ export function mapInquiryToOpsRow(inquiry) {
     ),
     odoo_so: inquiry.odooSO,
     estimated_value: inquiry.estimatedValue,
+    assigned_staff: inquiry.assignedStaff,
+    production_stage: inquiry.productionStage,
+    production_note: inquiry.productionNote,
+    production_updated_at: inquiry.productionUpdatedAt,
   });
 }
 
@@ -297,6 +311,10 @@ function mapInquiryUpdatesToOpsRow(updates) {
         : normalizeDate(updates.followUpDate),
     odoo_so: updates.odooSO,
     estimated_value: updates.estimatedValue,
+    assigned_staff: updates.assignedStaff,
+    production_stage: updates.productionStage,
+    production_note: updates.productionNote,
+    production_updated_at: updates.productionUpdatedAt,
   });
 }
 

@@ -68,7 +68,9 @@ function renderIcon(name, className = "") {
 function getNavIcon(label) {
   const icons = {
     Overview: "layout-dashboard",
-    Orders: "clipboard-list",
+    Orders: "factory",
+    Reorders: "clipboard-list",
+    "Order Dashboard": "factory",
     Clients: "users",
     Products: "shirt",
     Catalog: "package",
@@ -249,6 +251,23 @@ let opsSavedNotice = false;
 let opsSoDraft = null;
 let opsArtworkRequests = {};
 let expandedOpsInquiryId = null;
+let selectedOrderDashboardId = null;
+let orderDashboardSaveError = "";
+let orderDashboardFilters = {
+  search: "",
+  stage: "all",
+  staff: "all",
+  fulfillment: "all",
+  due: "all",
+};
+
+const orderProductionStages = [
+  { value: "queued", label: "Queued" },
+  { value: "in_production", label: "In Production" },
+  { value: "qc_finishing", label: "QC / Finishing" },
+  { value: "ready_for_fulfillment", label: "Ready for Fulfillment" },
+  { value: "completed", label: "Completed" },
+];
 const localOrders = [
   {
     id: "TRRY-UC-0003",
@@ -358,6 +377,7 @@ let catalogSaveError = "";
 
 const routes = {
   "/": "Overview",
+  "/order-dashboard": "Order Dashboard",
   "/orders": "Orders",
   "/overview": "Overview",
   "/clients": "Clients",
@@ -403,19 +423,21 @@ function render() {
       <section class="workspace ${isSidebarCollapsed ? "is-expanded" : ""}">
         ${renderTopHeader()}
         ${
-          currentRoute === "Orders"
-            ? renderOrdersPage(selectedOrder, filteredOrders)
-            : currentRoute === "Overview"
-              ? renderOverviewPage()
-              : currentRoute === "Clients"
-                ? renderClientsPage()
-                : currentRoute === "Products"
-                  ? renderProductsPage(selectedProduct)
-                  : currentRoute === "Catalog"
-                    ? renderCatalogPage()
-                    : currentRoute === "Settings"
-                    ? renderSettingsPage()
-                    : renderOverviewPage()
+          currentRoute === "Order Dashboard"
+            ? renderOrderDashboardPage()
+            : currentRoute === "Orders"
+              ? renderOrdersPage(selectedOrder, filteredOrders)
+              : currentRoute === "Overview"
+                ? renderOverviewPage()
+                : currentRoute === "Clients"
+                  ? renderClientsPage()
+                  : currentRoute === "Products"
+                    ? renderProductsPage(selectedProduct)
+                    : currentRoute === "Catalog"
+                      ? renderCatalogPage()
+                      : currentRoute === "Settings"
+                        ? renderSettingsPage()
+                        : renderOverviewPage()
         }
         ${renderFooter()}
       </section>
@@ -1332,6 +1354,285 @@ async function confirmOpsSO(id) {
 
   opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", odooSO: so, next: "Odoo Sales Order recorded" } : item);
   opsSoDraft = null;
+}
+function getOrderProductionStage(item) {
+  const stage = String(item.productionStage || "").trim().toLowerCase();
+  if (orderProductionStages.some((option) => option.value === stage)) return stage;
+  return "queued";
+}
+
+function getOrderProductionStageLabel(value) {
+  if (!value || value === "queued") return "Queued / Not Yet Assigned";
+  return orderProductionStages.find((stage) => stage.value === value)?.label || "Queued / Not Yet Assigned";
+}
+
+function getOrderAssignedStaff(item) {
+  return item.assignedStaff || item.assigned || "Not Yet Assigned";
+}
+
+function isConfirmedOpsOrder(item) {
+  const status = String(item.status || "").trim().toLowerCase();
+  if (["lost", "cancelled", "canceled"].includes(status)) return false;
+  return status === "won" || Boolean(String(item.odooSO || "").trim());
+}
+
+function isOrderDashboardCompleted(item) {
+  return getOrderProductionStage(item) === "completed";
+}
+
+function getOrderDueState(item) {
+  if (isOrderDashboardCompleted(item)) return "completed";
+  if (!item.dueDate) return "none";
+  const today = new Date(todayIsoDate() + "T00:00:00");
+  const due = new Date(item.dueDate + "T00:00:00");
+  if (Number.isNaN(due.getTime())) return "none";
+  const diffDays = Math.round((due - today) / 86400000);
+  if (diffDays < 0) return "overdue";
+  if (diffDays === 0) return "today";
+  if (diffDays <= 3) return "soon";
+  return "future";
+}
+
+function getOrderDueLabel(item) {
+  const state = getOrderDueState(item);
+  const due = formatOpsDue(item.dueDate);
+  if (state === "overdue") return `Overdue / ${due}`;
+  if (state === "today") return `Due today / ${due}`;
+  if (state === "soon") return `Due soon / ${due}`;
+  if (state === "completed") return "Completed";
+  return due === "-" ? "No needed date" : `Due ${due}`;
+}
+
+function getConfirmedOrderDashboardOrders() {
+  return opsInquiries.filter(isConfirmedOpsOrder);
+}
+
+function getOrderDashboardStaffOptions() {
+  return [...new Set(getConfirmedOrderDashboardOrders().map(getOrderAssignedStaff).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+}
+
+function getFilteredOrderDashboardOrders() {
+  const search = orderDashboardFilters.search.trim().toLowerCase();
+  return getConfirmedOrderDashboardOrders().filter((item) => {
+    const stage = getOrderProductionStage(item);
+    const completed = isOrderDashboardCompleted(item);
+    const dueState = getOrderDueState(item);
+    const fulfillment = String(item.fulfillmentMethod || "").trim().toLowerCase() || "unset";
+    const staff = getOrderAssignedStaff(item);
+    const searchText = [item.id, item.customer, item.contact, item.service, item.qty, item.odooSO, staff].join(" ").toLowerCase();
+
+    if (search && !searchText.includes(search)) return false;
+    if (orderDashboardFilters.stage === "active" && completed) return false;
+    if (orderDashboardFilters.stage === "completed" && !completed) return false;
+    if (orderDashboardFilters.stage !== "all" && !["active", "completed"].includes(orderDashboardFilters.stage) && stage !== orderDashboardFilters.stage) return false;
+    if (orderDashboardFilters.staff !== "all" && staff !== orderDashboardFilters.staff) return false;
+    if (orderDashboardFilters.fulfillment !== "all" && fulfillment !== orderDashboardFilters.fulfillment) return false;
+    if (orderDashboardFilters.due !== "all" && dueState !== orderDashboardFilters.due) return false;
+    return true;
+  });
+}
+
+function getOrderDashboardCounts() {
+  const confirmed = getConfirmedOrderDashboardOrders();
+  return {
+    active: confirmed.filter((item) => !isOrderDashboardCompleted(item)).length,
+    dueSoon: confirmed.filter((item) => ["overdue", "today", "soon"].includes(getOrderDueState(item))).length,
+    inProduction: confirmed.filter((item) => getOrderProductionStage(item) === "in_production").length,
+    ready: confirmed.filter((item) => getOrderProductionStage(item) === "ready_for_fulfillment" || ["ready_for_pickup", "out_for_delivery", "delivered"].includes(item.trackingSubstatus)).length,
+    completed: confirmed.filter(isOrderDashboardCompleted).length,
+  };
+}
+
+function renderOrderDashboardPage() {
+  const filtered = getFilteredOrderDashboardOrders();
+  const selected = getConfirmedOrderDashboardOrders().find((item) => item.id === selectedOrderDashboardId);
+  const counts = getOrderDashboardCounts();
+
+  return `
+    <main class="orders-page ops-board-page order-dashboard-page">
+      <div class="ops-shell order-dashboard-shell">
+        <header class="ops-hero order-dashboard-hero">
+          <div>
+            <p class="ops-date-line">ORDER DASHBOARD</p>
+            <h1>Confirmed Orders</h1>
+            <p class="subtitle">Internal production view for Won inquiries and Odoo sales orders only.</p>
+          </div>
+          <div class="ops-rule-card">
+            <strong>Odoo stays source of truth</strong>
+            <span>Accounting, payment, inventory, costing, and invoicing remain outside this dashboard.</span>
+          </div>
+        </header>
+        ${renderOpsPersistenceNotice()}
+        ${renderOrderDashboardSchemaNotice()}
+        ${orderDashboardSaveError ? `<section class="ops-persistence-card error"><strong>Order Dashboard save failed</strong><span>${escapeHtml(orderDashboardSaveError)}</span></section>` : ""}
+        <section class="ops-kpi-grid order-dashboard-summary" aria-label="Order dashboard summary">
+          ${renderOpsSummaryCard({ value: counts.active, label: "Active Orders", hint: "confirmed, not completed" })}
+          ${renderOpsSummaryCard({ value: counts.dueSoon, label: "Due Soon", hint: "overdue, today, or 3 days" })}
+          ${renderOpsSummaryCard({ value: counts.inProduction, label: "In Production", hint: "internal production stage" })}
+          ${renderOpsSummaryCard({ value: counts.ready, label: "Ready for Fulfillment", hint: "pickup or delivery queue", gold: true })}
+          ${renderOpsSummaryCard({ value: counts.completed, label: "Completed", hint: "archived orders" })}
+        </section>
+        ${renderOrderDashboardFilters()}
+        <section class="order-dashboard-layout">
+          <div class="order-dashboard-main">
+            ${renderOrderDashboardActiveOrders(filtered)}
+            ${renderOrderFulfillmentQueue(filtered)}
+            ${renderOrderCompletedArchive(filtered)}
+          </div>
+          ${renderOrderDashboardDrawer(selected)}
+        </section>
+      </div>
+    </main>`;
+}
+
+function areOrderDashboardFieldsReady() {
+  const confirmed = getConfirmedOrderDashboardOrders();
+  return confirmed.length > 0 && confirmed.some((item) => item.productionFieldsReady);
+}
+
+function renderOrderDashboardSchemaNotice() {
+  if (!shouldLoadSupabaseOps) return "";
+  const confirmed = getConfirmedOrderDashboardOrders();
+  if (!confirmed.length || areOrderDashboardFieldsReady()) return "";
+  return `<section class="ops-persistence-card"><strong>Order Dashboard fields not ready</strong><span>Run the pending migration before saving assigned staff, production stage, or production notes. Confirmed orders still load read-only.</span></section>`;
+}
+function renderOrderDashboardFilters() {
+  const staffOptions = getOrderDashboardStaffOptions();
+  const stageOptions = [
+    { value: "active", label: "Active" },
+    { value: "all", label: "All Confirmed" },
+    ...orderProductionStages,
+    { value: "completed", label: "Completed Archive" },
+  ];
+  const fulfillmentOptions = [
+    { value: "all", label: "All Fulfillment" },
+    { value: "pickup", label: "Pickup" },
+    { value: "delivery", label: "Delivery" },
+    { value: "unset", label: "Unset" },
+  ];
+  const dueOptions = [
+    { value: "all", label: "All Dates" },
+    { value: "overdue", label: "Overdue" },
+    { value: "today", label: "Due Today" },
+    { value: "soon", label: "Due Soon" },
+    { value: "future", label: "Future" },
+    { value: "none", label: "No Date" },
+  ];
+
+  return `<section class="order-dashboard-filters" aria-label="Order dashboard filters">
+    <label class="order-dashboard-search">${renderIcon("search", "search-icon")}<input id="order-dashboard-search" value="${escapeHtml(orderDashboardFilters.search)}" placeholder="Search order, customer, Odoo SO..." type="search" /></label>
+    <select data-order-dashboard-filter="stage">${stageOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.stage === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
+    <select data-order-dashboard-filter="staff"><option value="all">All Staff</option>${staffOptions.map((staff) => `<option value="${escapeHtml(staff)}" ${orderDashboardFilters.staff === staff ? "selected" : ""}>${escapeHtml(staff)}</option>`).join("")}</select>
+    <select data-order-dashboard-filter="fulfillment">${fulfillmentOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.fulfillment === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
+    <select data-order-dashboard-filter="due">${dueOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.due === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
+  </section>`;
+}
+
+function renderOrderDashboardActiveOrders(items) {
+  const active = items.filter((item) => !isOrderDashboardCompleted(item));
+  return `<section class="order-dashboard-section"><div class="ops-section-heading split"><h2>Active Orders</h2><span>${active.length} shown</span></div><div class="order-dashboard-list">${active.length ? active.map(renderOrderDashboardCard).join("") : `<div class="ops-empty-column">No active confirmed orders match the filters.</div>`}</div></section>`;
+}
+
+function renderOrderFulfillmentQueue(items) {
+  const pickup = items.filter((item) => item.fulfillmentMethod === "pickup" && item.trackingSubstatus === "ready_for_pickup" && !isOrderDashboardCompleted(item));
+  const delivery = items.filter((item) => item.fulfillmentMethod === "delivery" && ["out_for_delivery", "delivered"].includes(item.trackingSubstatus) && !isOrderDashboardCompleted(item));
+  return `<section class="order-dashboard-section"><div class="ops-section-heading split"><h2>Fulfillment Queue</h2><span>${pickup.length + delivery.length} ready</span></div><div class="order-fulfillment-grid"><div><h3>Pickup</h3>${pickup.length ? pickup.map(renderOrderDashboardMiniCard).join("") : `<p class="order-dashboard-empty-note">No ready pickup orders.</p>`}</div><div><h3>Delivery</h3>${delivery.length ? delivery.map(renderOrderDashboardMiniCard).join("") : `<p class="order-dashboard-empty-note">No delivery orders out right now.</p>`}</div></div></section>`;
+}
+
+function renderOrderCompletedArchive(items) {
+  const completed = items.filter(isOrderDashboardCompleted);
+  return `<section class="order-dashboard-section"><div class="ops-section-heading split"><h2>Completed Archive</h2><span>${completed.length} completed</span></div><div class="order-dashboard-list compact">${completed.length ? completed.map(renderOrderDashboardCard).join("") : `<div class="ops-empty-column">No completed orders match the filters.</div>`}</div></section>`;
+}
+
+function renderOrderDashboardCard(item) {
+  const stage = getOrderProductionStage(item);
+  const selected = selectedOrderDashboardId === item.id;
+  const dueState = getOrderDueState(item);
+  return `<button class="order-dashboard-card ${selected ? "selected" : ""} ${dueState}" data-order-dashboard-open="${escapeHtml(item.id)}" type="button">
+    <span class="order-dashboard-id">${escapeHtml(item.id)}</span>
+    <strong>${escapeHtml(item.customer || "Unnamed customer")}</strong>
+    <small>${escapeHtml(item.service || "-")} / ${escapeHtml(item.qty || "-")}</small>
+    <div class="order-dashboard-meta"><span>${escapeHtml(getOrderProductionStageLabel(stage))}</span><span>${escapeHtml(getOpsFulfillmentLabel(item))}</span><span>${escapeHtml(getOrderDueLabel(item))}</span></div>
+    <div class="order-dashboard-meta"><span>Staff: ${escapeHtml(getOrderAssignedStaff(item))}</span><span>Odoo: ${escapeHtml(item.odooSO || "-")}</span></div>
+  </button>`;
+}
+
+function renderOrderDashboardMiniCard(item) {
+  return `<button class="order-dashboard-mini-card" data-order-dashboard-open="${escapeHtml(item.id)}" type="button"><strong>${escapeHtml(item.customer || item.id)}</strong><span>${escapeHtml(item.id)} / ${escapeHtml(opsTrackingSubstatus[item.trackingSubstatus]?.label || "Not set")}</span></button>`;
+}
+
+function renderOrderDashboardDrawer(item) {
+  if (!item) {
+    return `<aside class="order-dashboard-drawer empty"><h2>Order Details</h2><p>Select a confirmed order to review production and customer tracking.</p></aside>`;
+  }
+
+  const stage = getOrderProductionStage(item);
+  const trackingLabel = opsTrackingSubstatus[item.trackingSubstatus]?.label || "Not set";
+  return `<aside class="order-dashboard-drawer" aria-label="Order details drawer">
+    <header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer || "Order")}</h2></div><button class="ops-drawer-close" data-order-dashboard-close type="button" aria-label="Close order details">X</button></header>
+    <div class="ops-ticket-details">
+      <div><span>Status</span><strong>${escapeHtml(opsStatus[item.status]?.label || item.status || "Won")}</strong></div>
+      <div><span>Odoo SO</span><strong>${escapeHtml(item.odooSO || "-")}</strong></div>
+      <div><span>Product</span><strong>${escapeHtml(item.service || "-")}</strong></div>
+      <div><span>Quantity</span><strong>${escapeHtml(item.qty || "-")}</strong></div>
+      <div><span>Needed Date</span><strong>${escapeHtml(getOrderDueLabel(item))}</strong></div>
+      <div><span>Fulfillment</span><strong>${escapeHtml(getOpsFulfillmentLabel(item))}</strong></div>
+      <div><span>Tracking</span><strong>${escapeHtml(trackingLabel)}</strong></div>
+      <div><span>Production</span><strong>${escapeHtml(getOrderProductionStageLabel(stage))}</strong></div>
+      <div class="wide"><span>Customer Message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div>
+    </div>
+    ${renderOrderProductionEditor(item)}
+    ${renderOpsCustomerTracking(item)}
+  </aside>`;
+}
+
+function renderOrderProductionEditor(item) {
+  const stage = getOrderProductionStage(item);
+  const fieldsReady = !shouldLoadSupabaseOps || item.productionFieldsReady;
+  const disabled = fieldsReady ? "" : "disabled";
+  const notice = fieldsReady ? "" : `<p class="order-dashboard-schema-warning">DATABASE FIELDS NOT READY. Apply the pending migration before saving internal production fields.</p>`;
+  return `<section class="order-production-editor ${fieldsReady ? "" : "schema-missing"}"><h3>Internal Production</h3>${notice}<div class="order-production-grid">
+    <label><span>Assigned staff</span><input data-order-dashboard-assigned="${escapeHtml(item.id)}" value="${escapeHtml(["Unassigned", "Not Yet Assigned"].includes(getOrderAssignedStaff(item)) ? "" : getOrderAssignedStaff(item))}" placeholder="Unassigned" ${disabled} /></label>
+    <label><span>Production stage</span><select data-order-dashboard-stage="${escapeHtml(item.id)}" ${disabled}>${orderProductionStages.map((option) => `<option value="${option.value}" ${stage === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select></label>
+    <label class="wide"><span>Production note</span><textarea data-order-dashboard-note="${escapeHtml(item.id)}" rows="3" placeholder="Internal note only" ${disabled}>${escapeHtml(item.productionNote || "")}</textarea></label>
+  </div><div class="order-production-footer"><span>Last production update: ${escapeHtml(formatOpsTrackingDate(item.productionUpdatedAt))}</span><button class="ops-gold-button mini" data-order-dashboard-save="${escapeHtml(item.id)}" type="button" ${disabled}>Save Production</button></div></section>`;
+}
+
+async function saveOrderDashboardProduction(id) {
+  const current = opsInquiries.find((item) => item.id === id);
+  if (!current || !isConfirmedOpsOrder(current)) return;
+  if (shouldLoadSupabaseOps && !current.productionFieldsReady) {
+    orderDashboardSaveError = "Order Dashboard fields are not ready. Apply the pending migration before saving production fields.";
+    return;
+  }
+
+  const assignedInput = document.querySelector(`[data-order-dashboard-assigned="${CSS.escape(id)}"]`);
+  const stageSelect = document.querySelector(`[data-order-dashboard-stage="${CSS.escape(id)}"]`);
+  const noteInput = document.querySelector(`[data-order-dashboard-note="${CSS.escape(id)}"]`);
+  const nextStage = stageSelect?.value || getOrderProductionStage(current);
+  if (!orderProductionStages.some((stage) => stage.value === nextStage)) return;
+
+  const updates = {
+    assignedStaff: assignedInput?.value?.trim() || null,
+    productionStage: nextStage,
+    productionNote: noteInput?.value?.trim() || null,
+    productionUpdatedAt: new Date().toISOString(),
+  };
+  let savedInquiry = null;
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      savedInquiry = await updateOpsInquiryFields(id, updates, adminAuthSession);
+      if (!savedInquiry) throw new Error("Order Dashboard update returned no saved inquiry.");
+      orderDashboardSaveError = "";
+    } catch (error) {
+      console.error("Unable to update Order Dashboard production fields.", error);
+      orderDashboardSaveError = error.message || "Unable to save production fields.";
+      return;
+    }
+  }
+
+  opsInquiries = opsInquiries.map((item) => (item.id === id ? { ...item, ...(savedInquiry || updates) } : item));
 }
 function renderOrdersPage(selectedOrder, filteredOrders) {
   return `
@@ -2373,7 +2674,8 @@ function renderProductImageManager(product) {
 function renderSidebar(currentRoute) {
   const navItems = [
     { label: "Overview", path: "/overview" },
-    { label: "Orders", path: "/orders" },
+    { label: "Orders", path: "/order-dashboard", activeRoute: "Order Dashboard", icon: "factory" },
+    { label: "Reorders", path: "/orders", activeRoute: "Orders", icon: "clipboard-list" },
     { label: "Clients", path: "/clients" },
     { label: "Products", path: "/products" },
     { label: "Catalog", path: "/catalog" },
@@ -2391,9 +2693,9 @@ function renderSidebar(currentRoute) {
         ${navItems
           .map(
             (item) => `
-              <a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Orders" ? "Client Reorders" : item.label}" aria-label="${item.label === "Orders" ? "Client Reorders" : item.label}">
-                ${renderIcon(getNavIcon(item.label), "nav-icon")}
-                <span class="nav-label">${item.label === "Orders" ? "Reorders" : item.label}</span>
+              <a class="${(item.activeRoute || item.label) === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}">
+                ${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}
+                <span class="nav-label">${item.label}</span>
               </a>`
           )
           .join("")}
@@ -2475,7 +2777,7 @@ function renderMobileTopBar() {
 function renderMobileBottomNav(currentRoute) {
   const navItems = [
     { label: "Overview", path: "/overview" },
-    { label: "Orders", path: "/orders" },
+    { label: "Orders", path: "/order-dashboard", activeRoute: "Order Dashboard", icon: "factory" },
     { label: "Clients", path: "/clients" },
     { label: "Products", path: "/products" },
     { label: "Catalog", path: "/catalog" },
@@ -2486,8 +2788,8 @@ function renderMobileBottomNav(currentRoute) {
       ${navItems
         .map(
           (item) => `
-            <a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>
-              ${renderIcon(getNavIcon(item.label), "nav-icon")}
+            <a class="${(item.activeRoute || item.label) === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>
+              ${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}
               <small>${item.label}</small>
             </a>`
         )
@@ -2862,6 +3164,7 @@ function bindEvents() {
   });
 
   bindOpsBoardEvents();
+  bindOrderDashboardEvents();
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCatalogKey = button.dataset.catalogTab;
@@ -3103,6 +3406,41 @@ function bindEvents() {
   });
 }
 
+function bindOrderDashboardEvents() {
+  const search = document.getElementById("order-dashboard-search");
+  search?.addEventListener("input", (event) => {
+    orderDashboardFilters = { ...orderDashboardFilters, search: event.target.value };
+    render();
+    focusFieldAtEnd("order-dashboard-search");
+  });
+
+  document.querySelectorAll("[data-order-dashboard-filter]").forEach((field) => {
+    field.addEventListener("change", (event) => {
+      orderDashboardFilters = { ...orderDashboardFilters, [field.dataset.orderDashboardFilter]: event.target.value };
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-order-dashboard-open]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedOrderDashboardId = button.dataset.orderDashboardOpen;
+      orderDashboardSaveError = "";
+      render();
+    });
+  });
+
+  document.querySelector("[data-order-dashboard-close]")?.addEventListener("click", () => {
+    selectedOrderDashboardId = null;
+    render();
+  });
+
+  document.querySelectorAll("[data-order-dashboard-save]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await saveOrderDashboardProduction(button.dataset.orderDashboardSave);
+      render();
+    });
+  });
+}
 function bindOpsBoardEvents() {
   const rawMessage = document.getElementById("ops-raw-message");
   if (rawMessage) {
