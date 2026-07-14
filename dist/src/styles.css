@@ -8574,3 +8574,258 @@ tbody tr.selected td:last-child {
     width: 100%;
   }
 }
+
+/* Simplified Ops inquiry drawer workflow */
+.ops-board-page .ops-detail-drawer {
+  max-width: min(560px, calc(100vw - 28px));
+  width: 548px;
+}
+
+.ops-board-page .ops-detail-drawer header {
+  padding: 14px 16px;
+}
+
+.ops-board-page .ops-detail-drawer header mark {
+  background: var(--ops-lime);
+  color: var(--ops-ink);
+  display: inline-block;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 950;
+  margin-top: 8px;
+  padding: 4px 6px;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-drawer-content {
+  gap: 9px;
+  padding: 12px;
+}
+
+.ops-board-page .ops-next-task-card {
+  background: var(--ops-lime);
+  border: 3px solid var(--ops-ink);
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+}
+
+.ops-board-page .ops-next-task-card span,
+.ops-board-page .ops-stage-section-heading span,
+.ops-board-page .ops-stage-overview span,
+.ops-board-page .ops-summary-grid span,
+.ops-board-page .ops-submission-details summary,
+.ops-board-page .ops-more-actions summary,
+.ops-board-page .ops-proof-upload summary {
+  color: var(--ops-secondary);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 950;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-next-task-card strong {
+  color: var(--ops-ink);
+  font-size: 18px;
+  font-weight: 950;
+  line-height: 1.05;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-inquiry-summary,
+.ops-board-page .ops-stage-section,
+.ops-board-page .ops-card-actions.compact,
+.ops-board-page .ops-card-final {
+  background: var(--ops-white);
+  border: 2px solid var(--ops-ink);
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+}
+
+.ops-board-page .ops-summary-grid,
+.ops-board-page .ops-stage-mini-grid {
+  display: grid;
+  gap: 7px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ops-board-page .ops-summary-grid div,
+.ops-board-page .ops-stage-mini-grid div {
+  border-bottom: 1px solid rgba(17, 17, 17, 0.18);
+  display: grid;
+  gap: 2px;
+  padding-bottom: 6px;
+}
+
+.ops-board-page .ops-summary-grid strong,
+.ops-board-page .ops-stage-mini-grid strong,
+.ops-board-page .ops-submission-details p,
+.ops-board-page .ops-stage-muted,
+.ops-board-page .ops-stage-complete {
+  color: var(--ops-ink);
+  font-size: 12px;
+  font-weight: 850;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.ops-board-page .ops-submission-details {
+  border-top: 1px solid rgba(17, 17, 17, 0.24);
+  padding-top: 7px;
+}
+
+.ops-board-page .ops-submission-details summary,
+.ops-board-page .ops-more-actions summary,
+.ops-board-page .ops-proof-upload summary,
+.ops-board-page .ops-quote-editor summary {
+  cursor: pointer;
+}
+
+.ops-board-page .ops-submission-details p {
+  margin-top: 8px;
+  white-space: pre-wrap;
+}
+
+.ops-board-page .ops-stage-overview {
+  display: grid;
+  gap: 5px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.ops-board-page .ops-stage-overview div {
+  background: var(--ops-paper);
+  border: 1px solid var(--ops-ink);
+  display: grid;
+  gap: 3px;
+  padding: 6px;
+}
+
+.ops-board-page .ops-stage-overview strong {
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-stage-overview .current {
+  background: var(--ops-lime);
+}
+
+.ops-board-page .ops-stage-overview .locked {
+  opacity: 0.58;
+}
+
+.ops-board-page .ops-stage-sections {
+  display: grid;
+  gap: 8px;
+}
+
+.ops-board-page .ops-stage-section {
+  border-width: 1px 1px 1px 4px;
+}
+
+.ops-board-page .ops-stage-section.current {
+  border-left-color: var(--ops-lime);
+  border-left-width: 8px;
+}
+
+.ops-board-page .ops-stage-section.locked {
+  opacity: 0.76;
+}
+
+.ops-board-page .ops-stage-section-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.ops-board-page .ops-stage-section-heading strong {
+  color: var(--ops-ink);
+  display: block;
+  font-size: 13px;
+  font-weight: 950;
+  text-transform: uppercase;
+}
+
+.ops-board-page .ops-stage-section-heading mark {
+  background: var(--ops-lime);
+  color: var(--ops-ink);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 8px;
+  font-weight: 950;
+  padding: 3px 5px;
+}
+
+.ops-board-page .ops-stage-muted,
+.ops-board-page .ops-stage-complete {
+  background: var(--ops-paper);
+  border: 1px solid rgba(17, 17, 17, 0.28);
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+}
+
+.ops-board-page .ops-stage-complete {
+  background: #f2ffe0;
+}
+
+.ops-board-page .ops-stage-actions,
+.ops-board-page .ops-card-actions.compact > div,
+.ops-board-page .ops-more-actions div {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.ops-board-page .ops-more-actions {
+  border-top: 1px solid rgba(17, 17, 17, 0.24);
+  padding-top: 7px;
+}
+
+.ops-board-page .ops-more-actions div {
+  margin-top: 7px;
+}
+
+.ops-board-page .ops-customer-action-form.compact {
+  grid-template-columns: 1fr;
+}
+
+.ops-board-page .ops-quote-editor,
+.ops-board-page .ops-proof-upload {
+  border: 1px solid rgba(17, 17, 17, 0.3);
+  display: grid;
+  gap: 8px;
+  padding: 8px;
+}
+
+.ops-board-page .ops-quote-editor .ops-customer-action-form,
+.ops-board-page .ops-proof-upload label {
+  margin-top: 8px;
+}
+
+.ops-board-page .ops-customer-action-alert,
+.ops-board-page .ops-customer-action-message {
+  margin: 0;
+}
+
+.ops-board-page .ops-card-actions.compact {
+  border-left-width: 4px;
+}
+
+@media (max-width: 768px) {
+  .ops-board-page .ops-detail-drawer {
+    width: 100%;
+  }
+
+  .ops-board-page .ops-summary-grid,
+  .ops-board-page .ops-stage-mini-grid,
+  .ops-board-page .ops-stage-overview,
+  .ops-board-page .ops-stage-actions,
+  .ops-board-page .ops-card-actions.compact > div,
+  .ops-board-page .ops-more-actions div {
+    grid-template-columns: 1fr;
+  }
+}

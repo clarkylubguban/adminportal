@@ -972,10 +972,106 @@ function renderOpsInquiryDrawer() {
   if (!item) return "";
 
   const status = opsStatus[item.status] ?? opsStatus.new;
-  const source = opsSource[item.source] ?? opsSource.FB;
-  const overdue = isOpsOverdue(item);
+  const currentTask = getOpsInquiryCurrentTask(item);
 
-  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content">${renderOpsInquiryDetails(item, source, status, overdue)}${renderOpsCustomerTracking(item)}${renderOpsArtworkAction(item)}${renderOpsCustomerActions(item)}${item.status === "sent" ? renderOpsOdooAction(item) : ""}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2><mark>${escapeHtml(status.label)}</mark></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content"><section class="ops-next-task-card"><span>NEXT ACTION</span><strong>${escapeHtml(currentTask.text)}</strong></section>${renderOpsInquiryDetails(item)}${renderOpsStageOverview(item)}${renderOpsCurrentStageSections(item)}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+}
+
+function getOpsNormalizedCustomerState(item) {
+  return {
+    artwork: item.artworkStatus || "missing",
+    quote: item.quoteStatus || "pending",
+    payment: item.paymentStatus || "not_required",
+    status: String(item.status || "").trim().toLowerCase(),
+    production: String(item.productionStage || "").trim().toLowerCase(),
+  };
+}
+
+function isOpsQuotePublished(item) {
+  return Boolean(item.quotePublishedAt) || ["ready", "approved", "changes_requested"].includes(String(item.quoteStatus || ""));
+}
+
+function hasOpsFinalProof(item) {
+  return Boolean(item.artworkUrl && String(item.artworkUrl).includes("/proofs/"));
+}
+
+function canOpsPrepareProof(item) {
+  const state = getOpsNormalizedCustomerState(item);
+  return state.quote === "approved" && !["approval_required", "approved"].includes(state.artwork);
+}
+
+function canOpsRequestPayment(item) {
+  const state = getOpsNormalizedCustomerState(item);
+  return state.quote === "approved" && state.artwork === "approved" && state.payment !== "confirmed";
+}
+
+function getOpsInquiryCurrentTask(item) {
+  const state = getOpsNormalizedCustomerState(item);
+  if (["submitted", "under_review", "revision_requested"].includes(state.artwork)) return { stage: "artwork", text: state.artwork === "revision_requested" ? "Review requested artwork changes" : "Review uploaded artwork" };
+  if (state.artwork === "missing") return { stage: "artwork", text: "Request customer artwork" };
+  if (state.quote === "changes_requested" || item.quoteChangeRequest) return { stage: "quote", text: "Review requested quote changes" };
+  if (!isOpsQuotePublished(item) || state.quote === "pending") return { stage: "quote", text: "Prepare and send quotation" };
+  if (state.quote === "ready") return { stage: "quote", text: "Waiting for customer quote approval" };
+  if (canOpsPrepareProof(item) && !hasOpsFinalProof(item)) return { stage: "artwork", text: "Upload final artwork proof" };
+  if (canOpsPrepareProof(item) && hasOpsFinalProof(item)) return { stage: "artwork", text: "Send proof for customer approval" };
+  if (state.artwork === "approval_required") return { stage: "artwork", text: "Waiting for customer artwork approval" };
+  if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment proof" };
+  if (canOpsRequestPayment(item)) return { stage: "payment", text: "Request payment" };
+  if (state.payment === "confirmed" && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
+  if (canEditOpsCustomerTracking(item)) return { stage: "fulfillment", text: "Update customer tracking" };
+  return { stage: "inquiry", text: item.next || "Review inquiry" };
+}
+
+function getOpsInquiryStages(item) {
+  const task = getOpsInquiryCurrentTask(item);
+  const state = getOpsNormalizedCustomerState(item);
+  const quoteComplete = ["ready", "approved"].includes(state.quote) || Boolean(item.quotePublishedAt);
+  const artworkComplete = state.artwork === "approved";
+  const paymentComplete = state.payment === "confirmed";
+  const productionActive = ["in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(state.production) || state.status === "won";
+  const fulfillmentActive = canEditOpsCustomerTracking(item) || ["ready_for_pickup", "out_for_delivery", "delivered", "completed"].includes(item.trackingSubstatus);
+  const stageState = (key, complete, unlocked) => {
+    if (complete) return "Complete";
+    if (task.stage === key) return "Current";
+    if (!unlocked) return "Locked";
+    return "Waiting";
+  };
+
+  return [
+    { number: 1, key: "inquiry", label: "Inquiry", state: stageState("inquiry", Boolean(item.customer), true) },
+    { number: 2, key: "artwork", label: "Artwork", state: stageState("artwork", artworkComplete, true) },
+    { number: 3, key: "quote", label: "Quote", state: stageState("quote", quoteComplete && state.quote === "approved", state.artwork !== "missing") },
+    { number: 4, key: "payment", label: "Payment", state: stageState("payment", paymentComplete, state.quote === "approved" && artworkComplete) },
+    { number: 5, key: "production", label: "Production", state: stageState("production", state.production === "completed", paymentComplete || productionActive) },
+    { number: 6, key: "fulfillment", label: "Fulfillment", state: stageState("fulfillment", item.trackingSubstatus === "completed", fulfillmentActive) },
+  ];
+}
+
+function renderOpsStageOverview(item) {
+  return `<section class="ops-stage-overview" aria-label="Inquiry stage overview">${getOpsInquiryStages(item).map((stage) => `<div class="${stage.state.toLowerCase()}"><span>${stage.number}. ${escapeHtml(stage.label)}</span><strong>${stage.state}</strong></div>`).join("")}</section>`;
+}
+
+function renderOpsCurrentStageSections(item) {
+  return `${renderOpsCustomerFeedback(item)}<div class="ops-stage-sections">${renderOpsArtworkStage(item)}${renderOpsQuoteStage(item)}${renderOpsPaymentStage(item)}${renderOpsProductionStage(item)}${renderOpsCustomerTracking(item)}</div>`;
+}
+
+function renderOpsMoreActions(actions) {
+  const enabled = actions.filter(Boolean);
+  if (!enabled.length) return "";
+  return `<details class="ops-more-actions"><summary>MORE ACTIONS</summary><div>${enabled.join("")}</div></details>`;
+}
+
+function renderOpsActionButton({ label, action, id, tone = "", primary = false, disabled = false }) {
+  const buttonClass = primary ? "ops-gold-button mini" : `ops-move-button ${tone}`.trim();
+  return `<button class="${buttonClass}" data-ops-customer-action="${escapeHtml(action)}" data-ops-customer-id="${escapeHtml(id)}" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+}
+
+function renderOpsAssetButton({ label, asset, id, disabled = false }) {
+  return `<button class="ops-dark-button mini" data-ops-customer-asset="${escapeHtml(asset)}" data-ops-customer-id="${escapeHtml(id)}" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+}
+
+function renderOpsStageShell({ key, title, status, current, locked = false, body }) {
+  return `<section class="ops-stage-section ${current ? "current" : ""} ${locked ? "locked" : ""}" data-ops-stage="${escapeHtml(key)}"><div class="ops-stage-section-heading"><div><span>${escapeHtml(title)}</span>${status ? `<strong>${escapeHtml(status)}</strong>` : ""}</div>${current ? `<mark>CURRENT</mark>` : ""}</div>${body}</section>`;
 }
 const opsTrackingSubstatus = {
   ready_for_pickup: { label: "Ready for Pickup", methods: ["pickup"] },
@@ -1016,11 +1112,27 @@ function renderOpsCustomerTracking(item) {
   const options = getOpsTrackingOptions(item);
   const currentLabel = opsTrackingSubstatus[item.trackingSubstatus]?.label || "Not set";
   const optionHtml = options.map(([value, config]) => `<option value="${value}" ${item.trackingSubstatus === value ? "selected" : ""}>${config.label}</option>`).join("");
-  const controls = canEdit
-    ? `<label><span>Sub-status</span><select data-ops-tracking-substatus="${escapeHtml(item.id)}"><option value="">Select sub-status</option>${optionHtml}</select></label><label class="wide"><span>Customer note</span><textarea data-ops-tracking-note="${escapeHtml(item.id)}" rows="2" placeholder="Optional note shown to customer">${escapeHtml(item.trackingNote || "")}</textarea></label><button class="ops-gold-button mini" data-ops-save-tracking="${escapeHtml(item.id)}" type="button">Save Customer Tracking</button>`
-    : `<p class="ops-tracking-disabled">Customer tracking controls unlock at Production or later for Pickup/Delivery inquiries.</p>`;
 
-  return `<section class="ops-customer-tracking"><h3>CUSTOMER TRACKING</h3><div class="ops-ticket-details"><div><span>Main step</span><strong>${escapeHtml(getOpsCustomerTrackingStep(item))}</strong></div><div><span>Fulfillment</span><strong>${escapeHtml(getOpsFulfillmentLabel(item))}</strong></div><div><span>Sub-status</span><strong>${escapeHtml(currentLabel)}</strong></div><div><span>Last update</span><strong>${escapeHtml(formatOpsTrackingDate(item.trackingUpdatedAt))}</strong></div>${item.trackingNote ? `<div class="wide"><span>Customer note</span><p>${escapeHtml(item.trackingNote)}</p></div>` : ""}</div><div class="ops-tracking-controls">${controls}</div></section>`;
+  if (!canEdit) {
+    return renderOpsStageShell({
+      key: "tracking",
+      title: "Customer Tracking",
+      status: "Locked",
+      locked: true,
+      current: getOpsInquiryCurrentTask(item).stage === "fulfillment",
+      body: `<p class="ops-stage-muted">Available once this inquiry enters production.</p>`,
+    });
+  }
+
+  const body = `<div class="ops-tracking-compact"><div class="ops-stage-mini-grid"><div><span>Sub-status</span><strong>${escapeHtml(currentLabel)}</strong></div><div><span>Last update</span><strong>${escapeHtml(formatOpsTrackingDate(item.trackingUpdatedAt))}</strong></div></div><div class="ops-tracking-controls"><label><span>Sub-status</span><select data-ops-tracking-substatus="${escapeHtml(item.id)}"><option value="">Select sub-status</option>${optionHtml}</select></label><label class="wide"><span>Customer note</span><textarea data-ops-tracking-note="${escapeHtml(item.id)}" rows="2" placeholder="Optional note shown to customer">${escapeHtml(item.trackingNote || "")}</textarea></label><button class="ops-gold-button mini" data-ops-save-tracking="${escapeHtml(item.id)}" type="button">Save Customer Tracking</button></div></div>`;
+
+  return renderOpsStageShell({
+    key: "tracking",
+    title: "Customer Tracking",
+    status: currentLabel,
+    current: getOpsInquiryCurrentTask(item).stage === "fulfillment",
+    body,
+  });
 }
 function getOpsFulfillmentLabel(item) {
   const method = String(item.fulfillmentMethod || "").trim().toLowerCase();
@@ -1035,8 +1147,19 @@ function renderOpsDeliveryDetail(item) {
   const landmark = item.deliveryLandmark ? `<div class="wide"><span>Delivery landmark</span><strong>${escapeHtml(item.deliveryLandmark)}</strong></div>` : "";
   return `<div class="wide"><span>Delivery address</span><strong>${escapeHtml(address)}</strong></div>${landmark}`;
 }
-function renderOpsInquiryDetails(item, source, status, overdue) {
-  return `<div class="ops-ticket-details"><div><span>Inquiry ID</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Status</span><strong>${escapeHtml(status.label)}${overdue ? " / Overdue" : ""}</strong></div><div><span>Source</span><strong>${escapeHtml(source.label)}</strong></div><div><span>Product</span><strong>${escapeHtml(item.service || "-")}</strong></div><div><span>Quantity</span><strong>${escapeHtml(item.qty || "-")}</strong></div><div><span>Date</span><strong>${renderOpsCardDate(item)}</strong></div><div><span>Contact</span><strong>${escapeHtml(item.contact || "-")}</strong></div><div><span>Fulfillment</span><strong>${escapeHtml(getOpsFulfillmentLabel(item))}</strong></div>${renderOpsDeliveryDetail(item)}<div><span>Assigned staff</span><strong>${escapeHtml(item.assigned || "Unassigned")}</strong></div><div class="wide"><span>Full inquiry / message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div><div class="wide"><span>Next action</span><strong>${escapeHtml(item.next || "Review inquiry")}</strong></div><div><span>Estimated value</span><strong>${formatOpsValue(item.estimatedValue)}</strong></div><div><span>Odoo SO:</span><strong>${escapeHtml(item.odooSO || "Not created yet")}</strong></div></div>`;
+function renderOpsInquiryDetails(item) {
+  const rows = [
+    ["Contact", item.contact],
+    ["Product / Service", item.service],
+    ["Quantity", item.qty],
+    ["Needed date", renderOpsCardDate(item)],
+    ["Fulfillment", getOpsFulfillmentLabel(item)],
+    ["Assigned staff", item.assigned || "Not assigned"],
+    ["Estimated value", formatOpsValue(item.estimatedValue)],
+    ["Odoo SO:", item.odooSO || "Not created"],
+  ].filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "" && String(value).trim() !== "-");
+
+  return `<section class="ops-inquiry-summary"><div class="ops-summary-grid">${rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${label === "Estimated value" ? value : escapeHtml(value)}</strong></div>`).join("")}</div><details class="ops-submission-details"><summary>CUSTOMER SUBMISSION</summary><p>${escapeHtml(item.message || "No message saved.")}</p></details></section>`;
 }
 function renderOpsArtworkAction(item) {
   const request = opsArtworkRequests[item.id] ?? {};
@@ -1124,94 +1247,134 @@ function getOpsCustomerActionLabel(group, value) {
 }
 
 function renderOpsCustomerActions(item) {
-  const request = opsCustomerActionRequests[item.id] || {};
-  const isLoading = request.status === "loading";
-  const feedback = request.message
-    ? `<p class="ops-customer-action-message ${request.status === "error" ? "error" : ""}">${escapeHtml(request.message)}</p>`
-    : "";
-  const quoteChange = item.quoteChangeRequest
-    ? `<p class="ops-customer-action-alert"><strong>CUSTOMER REQUESTED QUOTE CHANGES</strong>${escapeHtml(item.quoteChangeRequest)}</p>`
-    : "";
-  const artworkRevision = item.artworkRevisionRequest
-    ? `<p class="ops-customer-action-alert"><strong>CUSTOMER REQUESTED ARTWORK REVISION</strong>${escapeHtml(item.artworkRevisionRequest)}</p>`
-    : "";
-  const paymentProofAction = item.paymentProofPath
-    ? `<button class="ops-dark-button mini" data-ops-customer-asset="payment-proof" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>VIEW PAYMENT PROOF</button>`
-    : `<span class="ops-customer-empty">No payment proof uploaded.</span>`;
-  const artworkProofAction = item.artworkUrl && String(item.artworkUrl).includes("/proofs/")
-    ? `<button class="ops-dark-button mini" data-ops-customer-asset="artwork-proof" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>VIEW FINAL PROOF</button>`
-    : `<span class="ops-customer-empty">No final proof uploaded.</span>`;
-
-  return `<section class="ops-customer-actions">
-    <header><div><span>CUSTOMER ACTIONS</span><h3>QUOTE / ARTWORK / PAYMENT</h3></div><small>Same inquiry record: ${escapeHtml(item.id)}</small></header>
-    ${feedback}
-    <div class="ops-customer-action-block">
-      <div class="ops-customer-action-heading"><strong>ARTWORK</strong><mark>${escapeHtml(getOpsCustomerActionLabel("artwork", item.artworkStatus))}</mark></div>
-      ${artworkRevision}
-      <div class="ops-customer-action-meta">
-        <span>Customer notes</span><p>${escapeHtml(item.message || "No customer note saved.")}</p>
-        <span>Upload date</span><p>${escapeHtml(request.artworkUploadedAt ? formatOpsTrackingDate(request.artworkUploadedAt) : "Open artwork to verify file date")}</p>
-      </div>
-      <div class="ops-customer-action-controls">
-        <button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>VIEW CUSTOMER ARTWORK</button>
-        <button class="ops-move-button" data-ops-customer-action="mark_artwork_under_review" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>MARK UNDER REVIEW</button>
-        <button class="ops-move-button positive" data-ops-customer-action="mark_artwork_usable" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>MARK ARTWORK USABLE</button>
-        <button class="ops-move-button danger" data-ops-customer-action="request_new_artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REQUEST NEW ARTWORK</button>
-      </div>
-      <div class="ops-proof-upload">
-        <label><span>Final artwork proof (PNG, JPG, PDF / 10 MB)</span><input accept=".png,.jpg,.jpeg,.pdf" data-ops-final-proof-file="${escapeHtml(item.id)}" type="file" ${isLoading ? "disabled" : ""} /></label>
-        ${artworkProofAction}
-        <button class="ops-gold-button mini" data-ops-customer-action="publish_artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading || !item.artworkUrl || !String(item.artworkUrl).includes("/proofs/") ? "disabled" : ""}>PUBLISH FOR CUSTOMER APPROVAL</button>
-      </div>
-    </div>
-
-    <div class="ops-customer-action-block">
-      <div class="ops-customer-action-heading"><strong>QUOTE</strong><mark>${escapeHtml(getOpsCustomerActionLabel("quote", item.quoteStatus))}</mark></div>
-      ${item.quotePublishedAt ? `<p class="ops-customer-confirmed">PUBLISHED ${escapeHtml(formatOpsTrackingDate(item.quotePublishedAt))}</p>` : ""}
-      ${quoteChange}
-      <div class="ops-customer-action-form">
-        <label><span>Quoted amount</span><input data-ops-customer-field="quotedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? "")}" /></label>
-        <label><span>Amount due</span><input data-ops-customer-field="amountDue" min="0" step="0.01" type="number" value="${escapeHtml(item.amountDue ?? "")}" /></label>
-        <label class="wide"><span>Price breakdown</span><textarea data-ops-customer-field="quoteBreakdown" rows="3">${escapeHtml(item.quoteBreakdown || "")}</textarea></label>
-        <label class="wide"><span>Quote notes</span><textarea data-ops-customer-field="quoteNotes" rows="2">${escapeHtml(item.quoteNotes || "")}</textarea></label>
-        <label><span>Valid until</span><input data-ops-customer-field="quoteValidUntil" type="date" value="${escapeHtml(item.quoteValidUntil || "")}" /></label>
-        <label><span>Deposit / payment label</span><input data-ops-customer-field="paymentLabel" value="${escapeHtml(item.paymentLabel || "")}" /></label>
-        <label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label>
-      </div>
-      <div class="ops-customer-action-controls">
-        <button class="ops-move-button" data-ops-customer-action="save_quote_draft" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SAVE DRAFT QUOTE</button>
-        <button class="ops-gold-button mini" data-ops-customer-action="publish_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>PUBLISH QUOTE</button>
-        <button class="ops-move-button" data-ops-customer-action="revise_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REVISE QUOTE</button>
-        <button class="ops-move-button" data-ops-customer-action="mark_quote_pending" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>MARK QUOTE PENDING</button>
-      </div>
-    </div>
-
-    <div class="ops-customer-action-block">
-      <div class="ops-customer-action-heading"><strong>PAYMENT</strong><mark>${escapeHtml(getOpsCustomerActionLabel("payment", item.paymentStatus))}</mark></div>
-      <div class="ops-customer-action-meta split">
-        <div><span>Customer</span><p>${escapeHtml(item.customer || "-")}</p></div>
-        <div><span>Contact</span><p>${escapeHtml(item.contact || "-")}</p></div>
-        <div><span>Amount due</span><p>${formatOpsValue(item.amountDue)}</p></div>
-        <div><span>Proof submitted</span><p>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</p></div>
-      </div>
-      <div class="ops-customer-action-form">
-        <label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label>
-        <label class="wide"><span>Payment review / replacement note</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label>
-      </div>
-      ${item.paymentRejectedAt ? `<p class="ops-customer-action-alert"><strong>NEW PAYMENT PROOF REQUESTED</strong>${escapeHtml(item.paymentReviewNote || "Replacement proof requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>` : ""}
-      <div class="ops-customer-action-controls">
-        ${paymentProofAction}
-        <button class="ops-move-button" data-ops-customer-action="require_payment" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REQUEST PAYMENT</button>
-        <button class="ops-move-button" data-ops-customer-action="mark_payment_under_review" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading || !item.paymentProofPath ? "disabled" : ""}>MARK UNDER REVIEW</button>
-        <button class="ops-gold-button mini" data-ops-customer-action="confirm_payment" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading || !item.paymentProofPath ? "disabled" : ""}>CONFIRM PAYMENT</button>
-        <button class="ops-move-button danger" data-ops-customer-action="request_new_payment_proof" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REQUEST NEW PROOF</button>
-      </div>
-      ${item.paymentConfirmedAt ? `<p class="ops-customer-confirmed">CONFIRMED ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))} / ${formatOpsValue(item.paymentConfirmedAmount)}</p>` : ""}
-    </div>
-    <p class="ops-customer-action-guard">These controls do not change the sales pipeline, production stage, or Odoo Sales Order.</p>
-  </section>`;
+  return `${renderOpsArtworkStage(item)}${renderOpsQuoteStage(item)}${renderOpsPaymentStage(item)}`;
 }
 
+function renderOpsCustomerFeedback(item) {
+  const request = opsCustomerActionRequests[item.id] || {};
+  if (!request.message) return "";
+  return `<p class="ops-customer-action-message ${request.status === "error" ? "error" : ""}">${escapeHtml(request.message)}</p>`;
+}
+
+function renderOpsArtworkStage(item) {
+  const request = opsCustomerActionRequests[item.id] || {};
+  const isLoading = request.status === "loading";
+  const status = item.artworkStatus || "missing";
+  const current = getOpsInquiryCurrentTask(item).stage === "artwork";
+  const revision = item.artworkRevisionRequest ? `<p class="ops-customer-action-alert"><strong>CUSTOMER REQUESTED ARTWORK REVISION</strong>${escapeHtml(item.artworkRevisionRequest)}</p>` : "";
+  const openArtwork = renderOpsAssetButton({ label: "OPEN ARTWORK", asset: "customer-artwork", id: item.id, disabled: isLoading });
+  const finalProofAvailable = hasOpsFinalProof(item);
+  const finalProofButton = finalProofAvailable ? renderOpsAssetButton({ label: "VIEW FINAL PROOF", asset: "artwork-proof", id: item.id, disabled: isLoading }) : "";
+  let body = revision;
+
+  if (status === "missing") {
+    body += `<p class="ops-stage-muted"><strong>Status: Artwork needed</strong>No customer artwork uploaded.</p>`;
+  } else if (["submitted", "under_review", "revision_requested"].includes(status)) {
+    body += `<div class="ops-stage-actions">${openArtwork}${renderOpsActionButton({ label: "APPROVE ARTWORK", action: "mark_artwork_usable", id: item.id, primary: true, disabled: isLoading })}</div>${renderOpsMoreActions([
+      renderOpsActionButton({ label: "Mark under review", action: "mark_artwork_under_review", id: item.id, disabled: isLoading }),
+      renderOpsActionButton({ label: "REQUEST REPLACEMENT", action: "request_new_artwork", id: item.id, tone: "danger", disabled: isLoading }),
+    ])}`;
+  } else if (status === "approval_required") {
+    body += `<p class="ops-stage-muted"><strong>Waiting for customer approval</strong>The final proof is published for customer review.</p>${finalProofButton ? `<div class="ops-stage-actions">${finalProofButton}</div>` : ""}`;
+  } else if (status === "approved") {
+    body += `<p class="ops-stage-complete">Artwork approved${item.artworkApprovedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.artworkApprovedAt))}` : ""}</p>${finalProofButton ? `<div class="ops-stage-actions">${finalProofButton}</div>` : ""}`;
+  }
+
+  if (canOpsPrepareProof(item)) {
+    const publishDisabled = isLoading || !finalProofAvailable;
+    body += `<details class="ops-proof-upload" ${current ? "open" : ""}><summary>FINAL PROOF</summary><label><span>Final artwork proof (PNG, JPG, PDF / 10 MB)</span><input accept=".png,.jpg,.jpeg,.pdf" data-ops-final-proof-file="${escapeHtml(item.id)}" type="file" ${isLoading ? "disabled" : ""} /></label>${finalProofButton}<div class="ops-stage-actions"><button class="ops-gold-button mini" data-ops-customer-action="publish_artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${publishDisabled ? "disabled" : ""}>SEND PROOF FOR APPROVAL</button></div></details>`;
+  }
+
+  return renderOpsStageShell({ key: "artwork", title: "Artwork", status: getOpsCustomerActionLabel("artwork", status), current, body });
+}
+
+function renderOpsQuoteHiddenFields(item) {
+  return `<input data-ops-customer-field="quotedAmount" type="hidden" value="${escapeHtml(item.quotedAmount ?? "")}" /><input data-ops-customer-field="amountDue" type="hidden" value="${escapeHtml(item.amountDue ?? "")}" /><input data-ops-customer-field="quoteBreakdown" type="hidden" value="${escapeHtml(item.quoteBreakdown || "")}" /><input data-ops-customer-field="quoteNotes" type="hidden" value="${escapeHtml(item.quoteNotes || "")}" /><input data-ops-customer-field="quoteValidUntil" type="hidden" value="${escapeHtml(item.quoteValidUntil || "")}" /><input data-ops-customer-field="paymentLabel" type="hidden" value="${escapeHtml(item.paymentLabel || "")}" /><input data-ops-customer-field="paymentInstructions" type="hidden" value="${escapeHtml(item.paymentInstructions || "")}" />`;
+}
+
+function renderOpsQuoteForm(item, isLoading, open = false) {
+  const overflowActions = isOpsQuotePublished(item)
+    ? [
+      renderOpsActionButton({ label: "REVISE QUOTE", action: "revise_quote", id: item.id, disabled: isLoading }),
+      renderOpsActionButton({ label: "mark quote pending", action: "mark_quote_pending", id: item.id, disabled: isLoading }),
+    ]
+    : [];
+
+  return `<details class="ops-quote-editor" ${open ? "open" : ""}><summary>${isOpsQuotePublished(item) ? "REVISE QUOTE" : "CREATE QUOTE"}</summary><div class="ops-customer-action-form"><label><span>Quoted amount</span><input data-ops-customer-field="quotedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? "")}" /></label><label><span>Amount due</span><input data-ops-customer-field="amountDue" min="0" step="0.01" type="number" value="${escapeHtml(item.amountDue ?? "")}" /></label><label class="wide"><span>Price breakdown</span><textarea data-ops-customer-field="quoteBreakdown" rows="3">${escapeHtml(item.quoteBreakdown || "")}</textarea></label><label class="wide"><span>Quote notes</span><textarea data-ops-customer-field="quoteNotes" rows="2">${escapeHtml(item.quoteNotes || "")}</textarea></label><label><span>Valid until</span><input data-ops-customer-field="quoteValidUntil" type="date" value="${escapeHtml(item.quoteValidUntil || "")}" /></label><label><span>Deposit / payment label</span><input data-ops-customer-field="paymentLabel" value="${escapeHtml(item.paymentLabel || "")}" /></label><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions"><button class="ops-move-button" data-ops-customer-action="save_quote_draft" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SAVE DRAFT</button><button class="ops-gold-button mini" data-ops-customer-action="publish_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SEND QUOTE</button></div>${renderOpsMoreActions(overflowActions)}</details>`;
+}
+
+function renderOpsQuoteStage(item) {
+  const request = opsCustomerActionRequests[item.id] || {};
+  const isLoading = request.status === "loading";
+  const current = getOpsInquiryCurrentTask(item).stage === "quote";
+  const status = item.quoteStatus || "pending";
+  const quoteChange = item.quoteChangeRequest ? `<p class="ops-customer-action-alert"><strong>CUSTOMER REQUESTED QUOTE CHANGES</strong>${escapeHtml(item.quoteChangeRequest)}</p>` : "";
+  let body = quoteChange;
+
+  if (!isOpsQuotePublished(item) || current) {
+    body += !isOpsQuotePublished(item) ? `<p class="ops-stage-muted">No quote created yet.</p>` : "";
+    body += renderOpsQuoteForm(item, isLoading, current);
+  } else {
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Valid until</span><strong>${escapeHtml(item.quoteValidUntil || "Not set")}</strong></div><div><span>Published</span><strong>${escapeHtml(formatOpsTrackingDate(item.quotePublishedAt))}</strong></div></div>${renderOpsQuoteForm(item, isLoading, false)}`;
+  }
+
+  return renderOpsStageShell({ key: "quote", title: "Quote", status: getOpsCustomerActionLabel("quote", status), current, body });
+}
+
+function renderOpsPaymentStage(item) {
+  const request = opsCustomerActionRequests[item.id] || {};
+  const isLoading = request.status === "loading";
+  const current = getOpsInquiryCurrentTask(item).stage === "payment";
+  const status = item.paymentStatus || "not_required";
+  let body = renderOpsQuoteHiddenFields(item);
+
+  if (status === "confirmed") {
+    body += `<p class="ops-stage-complete">Payment confirmed / ${formatOpsValue(item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
+  } else if (!canOpsRequestPayment(item)) {
+    body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
+  } else if (["proof_submitted", "under_review"].includes(status)) {
+    const proof = item.paymentProofPath ? renderOpsAssetButton({ label: "VIEW PAYMENT PROOF", asset: "payment-proof", id: item.id, disabled: isLoading }) : `<span class="ops-customer-empty">No payment proof uploaded.</span>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Proof submitted</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Payment review / replacement note</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div><div class="ops-stage-actions">${proof}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}</div>${renderOpsMoreActions([
+      renderOpsActionButton({ label: "Mark under review", action: "mark_payment_under_review", id: item.id, disabled: isLoading || !item.paymentProofPath }),
+      renderOpsActionButton({ label: "REQUEST NEW PROOF", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading }),
+    ])}`;
+  } else {
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment note</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
+  }
+
+  if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW PAYMENT PROOF REQUESTED</strong>${escapeHtml(item.paymentReviewNote || "Replacement proof requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
+
+  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && status !== "confirmed", body });
+}
+function renderOpsProductionStage(item) {
+  const current = getOpsInquiryCurrentTask(item).stage === "production";
+  if (item.status === "sent") {
+    return renderOpsStageShell({
+      key: "production",
+      title: "Production / Odoo",
+      status: item.odooSO ? "Odoo created" : "Sales order needed",
+      current,
+      body: renderOpsOdooAction(item),
+    });
+  }
+  if (item.odooSO) {
+    return renderOpsStageShell({
+      key: "production",
+      title: "Production / Odoo",
+      status: "Odoo created",
+      current,
+      body: `<p class="ops-stage-complete">Sales Order ${escapeHtml(item.odooSO)} is recorded.</p>`,
+    });
+  }
+  return renderOpsStageShell({
+    key: "production",
+    title: "Production / Odoo",
+    status: "Locked",
+    locked: true,
+    current,
+    body: `<p class="ops-stage-muted">Available after quote, artwork, and payment are ready.</p>`,
+  });
+}
 function getOpsCustomerActionFormPayload(action) {
   const fieldValue = (name) => document.querySelector(`[data-ops-customer-field="${name}"]`)?.value ?? "";
 
@@ -1390,11 +1553,10 @@ function renderOpsStaffActions(item, statusKey) {
     return `<div class="ops-card-final">${finalText}</div>`;
   }
 
-  return `<div class="ops-card-actions"><span>Staff actions</span><div>${actions
-    .map((action) => `<button class="ops-move-button ${action.tone || ""}" data-ops-move-id="${item.id}" data-ops-move-to="${action.to}" type="button">${action.label}</button>`)
-    .join("")}</div></div>`;
+  const [primary, secondary, ...more] = actions;
+  const renderMove = (action) => `<button class="ops-move-button ${action.tone || ""}" data-ops-move-id="${item.id}" data-ops-move-to="${action.to}" type="button">${action.label}</button>`;
+  return `<div class="ops-card-actions compact"><span>Pipeline actions</span><div>${renderMove(primary)}${secondary ? renderMove(secondary) : ""}</div>${renderOpsMoreActions(more.map(renderMove))}</div>`;
 }
-
 function getOpsStatusActions(statusKey) {
   const actions = {
     new: [
@@ -2341,7 +2503,7 @@ function renderCatalogImageField(draft, canWrite, isSaving) {
         <span>${filename ? escapeHtml(filename) : "No file selected"}</span>
         ${canWrite ? `<button data-catalog-remove-image type="button" ${disabled || (!hasImage && !draft.imageFile && !draft.imageUrl) ? "disabled" : ""}>REMOVE IMAGE</button>` : ""}
       </div>
-      <p>SQUARE IMAGE REQUIRED � 1200 � 1200 RECOMMENDED � MINIMUM 800 � 800 � MAXIMUM 5 MB</p>
+      <p>SQUARE IMAGE REQUIRED · 1200 × 1200 RECOMMENDED · MINIMUM 800 × 800 · MAXIMUM 5 MB</p>
       ${draft.imageError ? `<p class="catalog-image-error">${escapeHtml(draft.imageError)}</p>` : ""}
     </section>
   `;
