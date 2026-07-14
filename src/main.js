@@ -1167,6 +1167,7 @@ function renderOpsCustomerActions(item) {
 
     <div class="ops-customer-action-block">
       <div class="ops-customer-action-heading"><strong>QUOTE</strong><mark>${escapeHtml(getOpsCustomerActionLabel("quote", item.quoteStatus))}</mark></div>
+      ${item.quotePublishedAt ? `<p class="ops-customer-confirmed">PUBLISHED ${escapeHtml(formatOpsTrackingDate(item.quotePublishedAt))}</p>` : ""}
       ${quoteChange}
       <div class="ops-customer-action-form">
         <label><span>Quoted amount</span><input data-ops-customer-field="quotedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? "")}" /></label>
@@ -1195,7 +1196,9 @@ function renderOpsCustomerActions(item) {
       </div>
       <div class="ops-customer-action-form">
         <label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label>
+        <label class="wide"><span>Payment review / replacement note</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label>
       </div>
+      ${item.paymentRejectedAt ? `<p class="ops-customer-action-alert"><strong>NEW PAYMENT PROOF REQUESTED</strong>${escapeHtml(item.paymentReviewNote || "Replacement proof requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>` : ""}
       <div class="ops-customer-action-controls">
         ${paymentProofAction}
         <button class="ops-move-button" data-ops-customer-action="require_payment" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REQUEST PAYMENT</button>
@@ -1222,6 +1225,7 @@ function getOpsCustomerActionFormPayload(action) {
     paymentLabel: fieldValue("paymentLabel"),
     paymentInstructions: fieldValue("paymentInstructions"),
     confirmedAmount: fieldValue("confirmedAmount"),
+    paymentReviewNote: fieldValue("paymentReviewNote"),
   };
 }
 
@@ -1293,7 +1297,7 @@ async function uploadOpsFinalArtworkProof(inquiryId, file) {
 
     const supabaseConfig = getSupabaseConfig();
     const uploadResponse = await fetch(prepared.upload.signedUrl, {
-      method: "POST",
+      method: "PUT",
       headers: {
         "x-upsert": "false",
         ...(supabaseConfig.anonKey ? { apikey: supabaseConfig.anonKey } : {}),

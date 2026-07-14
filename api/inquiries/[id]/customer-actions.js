@@ -16,6 +16,7 @@ const CUSTOMER_ACTION_SELECT = [
   "amount_due",
   "quote_status",
   "quote_approved_at",
+  "quote_published_at",
   "quote_change_request",
   "quote_breakdown",
   "quote_notes",
@@ -31,6 +32,8 @@ const CUSTOMER_ACTION_SELECT = [
   "payment_proof_submitted_at",
   "payment_confirmed_at",
   "payment_confirmed_amount",
+  "payment_review_note",
+  "payment_rejected_at",
 ].join(",");
 
 export default async function handler(request, response) {
@@ -148,7 +151,7 @@ export default async function handler(request, response) {
       status: error?.status || error?.statusCode,
     });
 
-    const schemaMissing = /quoted_amount|quote_status|artwork_status|payment_status|schema cache|could not find/i.test(String(error?.message || ""));
+    const schemaMissing = /quoted_amount|quote_status|quote_published_at|artwork_status|payment_status|payment_review_note|payment_rejected_at|schema cache|could not find/i.test(String(error?.message || ""));
     sendJson(response, schemaMissing ? 503 : 500, {
       ok: false,
       error: schemaMissing
@@ -178,6 +181,7 @@ function buildUpdates(action, body, inquiry, now) {
   const quoteValues = getQuoteValues(body);
   const proofPath = cleanText(body.proofPath, 500);
   const confirmedAmount = getMoney(body.confirmedAmount);
+  const paymentReviewNote = cleanText(body.paymentReviewNote, 1000);
 
   if (action === "mark_artwork_under_review") {
     if (!["submitted", "under_review", "revision_requested"].includes(String(inquiry.artwork_status || ""))) return null;
@@ -210,18 +214,21 @@ function buildUpdates(action, body, inquiry, now) {
     return {
       ...quoteValues,
       quote_status: action === "publish_quote" ? "ready" : "pending",
+      quote_published_at: action === "publish_quote" ? now : null,
       quote_change_request: action === "publish_quote" ? null : inquiry.quote_change_request,
     };
   }
 
   if (action === "require_payment") {
     if (inquiry.quote_status !== "approved" || inquiry.artwork_status !== "approved" || !quoteValues || quoteValues.amount_due <= 0) return null;
-    return { ...quoteValues, payment_status: "required" };
+    return { ...quoteValues, payment_status: "required", payment_review_note: null, payment_rejected_at: null };
   }
 
   if (action === "mark_payment_under_review") {
     if (!inquiry.payment_proof_path || !["proof_submitted", "under_review"].includes(String(inquiry.payment_status || ""))) return null;
-    return { payment_status: "under_review" };
+    return paymentReviewNote
+      ? { payment_status: "under_review", payment_review_note: paymentReviewNote }
+      : { payment_status: "under_review" };
   }
 
   if (action === "request_new_payment_proof") {
@@ -230,7 +237,8 @@ function buildUpdates(action, body, inquiry, now) {
       || inquiry.artwork_status !== "approved"
       || !["required", "proof_submitted", "under_review"].includes(String(inquiry.payment_status || ""))
     ) return null;
-    return { payment_status: "required" };
+    if (paymentReviewNote.length < 5) return null;
+    return { payment_status: "required", payment_review_note: paymentReviewNote, payment_rejected_at: now };
   }
 
   if (action === "confirm_payment") {
@@ -360,6 +368,7 @@ function getSafeInquiry(row) {
     amountDue: numberOrNull(row.amount_due),
     quoteStatus: cleanText(row.quote_status, 80),
     quoteApprovedAt: cleanText(row.quote_approved_at, 80),
+    quotePublishedAt: cleanText(row.quote_published_at, 80),
     quoteChangeRequest: cleanText(row.quote_change_request, 1000),
     quoteBreakdown: cleanText(row.quote_breakdown, 5000),
     quoteNotes: cleanText(row.quote_notes, 2000),
@@ -373,6 +382,8 @@ function getSafeInquiry(row) {
     paymentProofSubmittedAt: cleanText(row.payment_proof_submitted_at, 80),
     paymentConfirmedAt: cleanText(row.payment_confirmed_at, 80),
     paymentConfirmedAmount: numberOrNull(row.payment_confirmed_amount),
+    paymentReviewNote: cleanText(row.payment_review_note, 1000),
+    paymentRejectedAt: cleanText(row.payment_rejected_at, 80),
   };
 }
 

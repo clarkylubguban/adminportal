@@ -247,6 +247,7 @@ export function mapOpsRowToInquiry(row) {
     amountDue: getNullableNumber(row, ["amount_due", "amountDue"]),
     quoteStatus: getFirstValue(row, ["quote_status", "quoteStatus"]),
     quoteApprovedAt: getFirstValue(row, ["quote_approved_at", "quoteApprovedAt"]),
+    quotePublishedAt: getFirstValue(row, ["quote_published_at", "quotePublishedAt"]),
     quoteChangeRequest: getFirstValue(row, ["quote_change_request", "quoteChangeRequest"]),
     quoteBreakdown: getFirstValue(row, ["quote_breakdown", "quoteBreakdown"]),
     quoteNotes: getFirstValue(row, ["quote_notes", "quoteNotes"]),
@@ -262,6 +263,8 @@ export function mapOpsRowToInquiry(row) {
     paymentProofSubmittedAt: getFirstValue(row, ["payment_proof_submitted_at", "paymentProofSubmittedAt"]),
     paymentConfirmedAt: getFirstValue(row, ["payment_confirmed_at", "paymentConfirmedAt"]),
     paymentConfirmedAmount: getNullableNumber(row, ["payment_confirmed_amount", "paymentConfirmedAmount"]),
+    paymentReviewNote: getFirstValue(row, ["payment_review_note", "paymentReviewNote"]),
+    paymentRejectedAt: getFirstValue(row, ["payment_rejected_at", "paymentRejectedAt"]),
     productionFieldsReady:
       ["assigned_staff", "production_stage", "production_note", "production_updated_at"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
   };
