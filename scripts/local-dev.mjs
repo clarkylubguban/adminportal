@@ -30,6 +30,12 @@ async function handleRequest(request, response) {
     const pathname = decodeURIComponent(url.pathname);
     const routePath = normalizeRoutePath(pathname);
 
+    if (/^\/api\/inquiries\/[^/]+\/customer-actions\/?$/.test(routePath)) {
+      const { default: handleCustomerActionsRequest } = await import("../api/inquiries/[id]/customer-actions.js");
+      await handleCustomerActionsRequest(request, response);
+      return;
+    }
+
     if (/^\/api\/inquiries\/[^/]+\/artwork\/?$/.test(routePath)) {
       const { default: handleArtworkRequest } = await import("../api/inquiries/[id]/artwork.js");
       await handleArtworkRequest(request, response);

@@ -23,6 +23,7 @@ import {
 } from "./services/adminCatalogImages.js";
 import {
   getCurrentAdminAuthSession,
+  getSupabaseConfig,
   isSupabaseReady,
   signInAdminWithPassword,
   signOutAdmin,
@@ -250,6 +251,7 @@ let opsExtractFields = null;
 let opsSavedNotice = false;
 let opsSoDraft = null;
 let opsArtworkRequests = {};
+let opsCustomerActionRequests = {};
 let expandedOpsInquiryId = null;
 let selectedOrderDashboardId = null;
 let orderDashboardSaveError = "";
@@ -973,7 +975,7 @@ function renderOpsInquiryDrawer() {
   const source = opsSource[item.source] ?? opsSource.FB;
   const overdue = isOpsOverdue(item);
 
-  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content">${renderOpsInquiryDetails(item, source, status, overdue)}${renderOpsCustomerTracking(item)}${renderOpsArtworkAction(item)}${item.status === "sent" ? renderOpsOdooAction(item) : ""}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content">${renderOpsInquiryDetails(item, source, status, overdue)}${renderOpsCustomerTracking(item)}${renderOpsArtworkAction(item)}${renderOpsCustomerActions(item)}${item.status === "sent" ? renderOpsOdooAction(item) : ""}${renderOpsStaffActions(item, item.status)}</div></aside>`;
 }
 const opsTrackingSubstatus = {
   ready_for_pickup: { label: "Ready for Pickup", methods: ["pickup"] },
@@ -1093,6 +1095,289 @@ function getOpsArtworkErrorMessage(status, error) {
   if (status === 404) return "INQUIRY NOT FOUND";
   return "ARTWORK LINK FAILED. TRY AGAIN.";
 }
+const opsCustomerActionLabels = {
+  quote: {
+    pending: "Pending",
+    ready: "Ready for Customer",
+    approved: "Customer Approved",
+    changes_requested: "Changes Requested",
+  },
+  artwork: {
+    missing: "Artwork Needed",
+    submitted: "Artwork Usable",
+    under_review: "Under Review",
+    approval_required: "Waiting for Customer Approval",
+    approved: "Customer Approved",
+    revision_requested: "Revision Requested",
+  },
+  payment: {
+    not_required: "Not Required",
+    required: "Payment Required",
+    proof_submitted: "Proof Submitted",
+    under_review: "Under Review",
+    confirmed: "Confirmed",
+  },
+};
+
+function getOpsCustomerActionLabel(group, value) {
+  return opsCustomerActionLabels[group]?.[value] || "Not set";
+}
+
+function renderOpsCustomerActions(item) {
+  const request = opsCustomerActionRequests[item.id] || {};
+  const isLoading = request.status === "loading";
+  const feedback = request.message
+    ? `<p class="ops-customer-action-message ${request.status === "error" ? "error" : ""}">${escapeHtml(request.message)}</p>`
+    : "";
+  const quoteChange = item.quoteChangeRequest
+    ? `<p class="ops-customer-action-alert"><strong>CUSTOMER REQUESTED QUOTE CHANGES</strong>${escapeHtml(item.quoteChangeRequest)}</p>`
+    : "";
+  const artworkRevision = item.artworkRevisionRequest
+    ? `<p class="ops-customer-action-alert"><strong>CUSTOMER REQUESTED ARTWORK REVISION</strong>${escapeHtml(item.artworkRevisionRequest)}</p>`
+    : "";
+  const paymentProofAction = item.paymentProofPath
+    ? `<button class="ops-dark-button mini" data-ops-customer-asset="payment-proof" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>VIEW PAYMENT PROOF</button>`
+    : `<span class="ops-customer-empty">No payment proof uploaded.</span>`;
+  const artworkProofAction = item.artworkUrl && String(item.artworkUrl).includes("/proofs/")
+    ? `<button class="ops-dark-button mini" data-ops-customer-asset="artwork-proof" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>VIEW FINAL PROOF</button>`
+    : `<span class="ops-customer-empty">No final proof uploaded.</span>`;
+
+  return `<section class="ops-customer-actions">
+    <header><div><span>CUSTOMER ACTIONS</span><h3>QUOTE / ARTWORK / PAYMENT</h3></div><small>Same inquiry record: ${escapeHtml(item.id)}</small></header>
+    ${feedback}
+    <div class="ops-customer-action-block">
+      <div class="ops-customer-action-heading"><strong>ARTWORK</strong><mark>${escapeHtml(getOpsCustomerActionLabel("artwork", item.artworkStatus))}</mark></div>
+      ${artworkRevision}
+      <div class="ops-customer-action-meta">
+        <span>Customer notes</span><p>${escapeHtml(item.message || "No customer note saved.")}</p>
+        <span>Upload date</span><p>${escapeHtml(request.artworkUploadedAt ? formatOpsTrackingDate(request.artworkUploadedAt) : "Open artwork to verify file date")}</p>
+      </div>
+      <div class="ops-customer-action-controls">
+        <button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>VIEW CUSTOMER ARTWORK</button>
+        <button class="ops-move-button" data-ops-customer-action="mark_artwork_under_review" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>MARK UNDER REVIEW</button>
+        <button class="ops-move-button positive" data-ops-customer-action="mark_artwork_usable" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>MARK ARTWORK USABLE</button>
+        <button class="ops-move-button danger" data-ops-customer-action="request_new_artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REQUEST NEW ARTWORK</button>
+      </div>
+      <div class="ops-proof-upload">
+        <label><span>Final artwork proof (PNG, JPG, PDF / 10 MB)</span><input accept=".png,.jpg,.jpeg,.pdf" data-ops-final-proof-file="${escapeHtml(item.id)}" type="file" ${isLoading ? "disabled" : ""} /></label>
+        ${artworkProofAction}
+        <button class="ops-gold-button mini" data-ops-customer-action="publish_artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading || !item.artworkUrl || !String(item.artworkUrl).includes("/proofs/") ? "disabled" : ""}>PUBLISH FOR CUSTOMER APPROVAL</button>
+      </div>
+    </div>
+
+    <div class="ops-customer-action-block">
+      <div class="ops-customer-action-heading"><strong>QUOTE</strong><mark>${escapeHtml(getOpsCustomerActionLabel("quote", item.quoteStatus))}</mark></div>
+      ${quoteChange}
+      <div class="ops-customer-action-form">
+        <label><span>Quoted amount</span><input data-ops-customer-field="quotedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? "")}" /></label>
+        <label><span>Amount due</span><input data-ops-customer-field="amountDue" min="0" step="0.01" type="number" value="${escapeHtml(item.amountDue ?? "")}" /></label>
+        <label class="wide"><span>Price breakdown</span><textarea data-ops-customer-field="quoteBreakdown" rows="3">${escapeHtml(item.quoteBreakdown || "")}</textarea></label>
+        <label class="wide"><span>Quote notes</span><textarea data-ops-customer-field="quoteNotes" rows="2">${escapeHtml(item.quoteNotes || "")}</textarea></label>
+        <label><span>Valid until</span><input data-ops-customer-field="quoteValidUntil" type="date" value="${escapeHtml(item.quoteValidUntil || "")}" /></label>
+        <label><span>Deposit / payment label</span><input data-ops-customer-field="paymentLabel" value="${escapeHtml(item.paymentLabel || "")}" /></label>
+        <label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label>
+      </div>
+      <div class="ops-customer-action-controls">
+        <button class="ops-move-button" data-ops-customer-action="save_quote_draft" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SAVE DRAFT QUOTE</button>
+        <button class="ops-gold-button mini" data-ops-customer-action="publish_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>PUBLISH QUOTE</button>
+        <button class="ops-move-button" data-ops-customer-action="revise_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REVISE QUOTE</button>
+        <button class="ops-move-button" data-ops-customer-action="mark_quote_pending" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>MARK QUOTE PENDING</button>
+      </div>
+    </div>
+
+    <div class="ops-customer-action-block">
+      <div class="ops-customer-action-heading"><strong>PAYMENT</strong><mark>${escapeHtml(getOpsCustomerActionLabel("payment", item.paymentStatus))}</mark></div>
+      <div class="ops-customer-action-meta split">
+        <div><span>Customer</span><p>${escapeHtml(item.customer || "-")}</p></div>
+        <div><span>Contact</span><p>${escapeHtml(item.contact || "-")}</p></div>
+        <div><span>Amount due</span><p>${formatOpsValue(item.amountDue)}</p></div>
+        <div><span>Proof submitted</span><p>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</p></div>
+      </div>
+      <div class="ops-customer-action-form">
+        <label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label>
+      </div>
+      <div class="ops-customer-action-controls">
+        ${paymentProofAction}
+        <button class="ops-move-button" data-ops-customer-action="require_payment" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REQUEST PAYMENT</button>
+        <button class="ops-move-button" data-ops-customer-action="mark_payment_under_review" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading || !item.paymentProofPath ? "disabled" : ""}>MARK UNDER REVIEW</button>
+        <button class="ops-gold-button mini" data-ops-customer-action="confirm_payment" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading || !item.paymentProofPath ? "disabled" : ""}>CONFIRM PAYMENT</button>
+        <button class="ops-move-button danger" data-ops-customer-action="request_new_payment_proof" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>REQUEST NEW PROOF</button>
+      </div>
+      ${item.paymentConfirmedAt ? `<p class="ops-customer-confirmed">CONFIRMED ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))} / ${formatOpsValue(item.paymentConfirmedAmount)}</p>` : ""}
+    </div>
+    <p class="ops-customer-action-guard">These controls do not change the sales pipeline, production stage, or Odoo Sales Order.</p>
+  </section>`;
+}
+
+function getOpsCustomerActionFormPayload(action) {
+  const fieldValue = (name) => document.querySelector(`[data-ops-customer-field="${name}"]`)?.value ?? "";
+
+  return {
+    action,
+    quotedAmount: fieldValue("quotedAmount"),
+    amountDue: fieldValue("amountDue"),
+    quoteBreakdown: fieldValue("quoteBreakdown"),
+    quoteNotes: fieldValue("quoteNotes"),
+    quoteValidUntil: fieldValue("quoteValidUntil"),
+    paymentLabel: fieldValue("paymentLabel"),
+    paymentInstructions: fieldValue("paymentInstructions"),
+    confirmedAmount: fieldValue("confirmedAmount"),
+  };
+}
+
+async function requestOpsCustomerAction(inquiryId, body) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+
+  if (!response.ok || !payload?.ok) {
+    throw new Error(getOpsCustomerActionError(response.status, payload?.error));
+  }
+
+  return payload;
+}
+
+async function saveOpsCustomerAction(inquiryId, action) {
+  if (!inquiryId || !action) return;
+
+  const body = getOpsCustomerActionFormPayload(action);
+  opsCustomerActionRequests = {
+    ...opsCustomerActionRequests,
+    [inquiryId]: { status: "loading", message: "SAVING CUSTOMER ACTION..." },
+  };
+  render();
+
+  try {
+    await requestOpsCustomerAction(inquiryId, body);
+    opsCustomerActionRequests = {
+      ...opsCustomerActionRequests,
+      [inquiryId]: { status: "success", message: "CUSTOMER ACTION SAVED." },
+    };
+    hasLoadedOpsInquiries = false;
+    await loadOpsBoardInquiries();
+  } catch (error) {
+    opsCustomerActionRequests = {
+      ...opsCustomerActionRequests,
+      [inquiryId]: { status: "error", message: error.message || "CUSTOMER ACTION FAILED." },
+    };
+    render();
+  }
+}
+
+async function uploadOpsFinalArtworkProof(inquiryId, file) {
+  if (!inquiryId || !file) return;
+
+  opsCustomerActionRequests = {
+    ...opsCustomerActionRequests,
+    [inquiryId]: { status: "loading", message: "UPLOADING FINAL ARTWORK PROOF..." },
+  };
+  render();
+
+  try {
+    const prepared = await requestOpsCustomerAction(inquiryId, {
+      action: "prepare_artwork_proof_upload",
+      filename: file.name,
+      fileSize: file.size,
+      contentType: file.type,
+    });
+
+    const uploadForm = new FormData();
+    uploadForm.append("cacheControl", "3600");
+    uploadForm.append("", file);
+
+    const supabaseConfig = getSupabaseConfig();
+    const uploadResponse = await fetch(prepared.upload.signedUrl, {
+      method: "POST",
+      headers: {
+        "x-upsert": "false",
+        ...(supabaseConfig.anonKey ? { apikey: supabaseConfig.anonKey } : {}),
+        ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+      },
+      body: uploadForm,
+    });
+
+    if (!uploadResponse.ok) throw new Error("FINAL ARTWORK PROOF UPLOAD FAILED.");
+
+    await requestOpsCustomerAction(inquiryId, {
+      action: "finalize_artwork_proof_upload",
+      proofPath: prepared.upload.path,
+    });
+
+    opsCustomerActionRequests = {
+      ...opsCustomerActionRequests,
+      [inquiryId]: { status: "success", message: "FINAL PROOF UPLOADED. PUBLISH WHEN READY." },
+    };
+    hasLoadedOpsInquiries = false;
+    await loadOpsBoardInquiries();
+  } catch (error) {
+    opsCustomerActionRequests = {
+      ...opsCustomerActionRequests,
+      [inquiryId]: { status: "error", message: error.message || "FINAL ARTWORK PROOF UPLOAD FAILED." },
+    };
+    render();
+  }
+}
+
+async function openOpsCustomerAsset(inquiryId, asset) {
+  if (!inquiryId || !asset) return;
+
+  const popup = window.open("about:blank", "_blank");
+  if (popup) popup.opener = null;
+  opsCustomerActionRequests = {
+    ...opsCustomerActionRequests,
+    [inquiryId]: { status: "loading", message: "OPENING PRIVATE FILE..." },
+  };
+  render();
+
+  try {
+    const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions?asset=${encodeURIComponent(asset)}`, {
+      headers: adminAuthSession?.access_token
+        ? { Authorization: `Bearer ${adminAuthSession.access_token}` }
+        : {},
+    });
+    const payload = await response.json().catch(() => ({}));
+
+    if (!response.ok || !payload?.ok || !payload?.signedUrl) {
+      throw new Error(getOpsCustomerActionError(response.status, payload?.error));
+    }
+
+    if (popup) popup.location.href = payload.signedUrl;
+    else window.open(payload.signedUrl, "_blank", "noopener,noreferrer");
+
+    opsCustomerActionRequests = {
+      ...opsCustomerActionRequests,
+      [inquiryId]: {
+        status: "success",
+        message: "PRIVATE FILE OPENED.",
+        artworkUploadedAt: asset === "customer-artwork" ? payload.uploadedAt || "" : "",
+      },
+    };
+    render();
+  } catch (error) {
+    popup?.close();
+    opsCustomerActionRequests = {
+      ...opsCustomerActionRequests,
+      [inquiryId]: { status: "error", message: error.message || "PRIVATE FILE COULD NOT BE OPENED." },
+    };
+    render();
+  }
+}
+
+function getOpsCustomerActionError(status, error) {
+  if (status === 401) return "ADMIN SESSION REQUIRED.";
+  if (status === 403) return "ADMIN WRITE ACCESS REQUIRED.";
+  if (status === 404) return "INQUIRY OR FILE NOT FOUND.";
+  if (status === 503) return "CUSTOMER ACTION DATABASE FIELDS ARE NOT READY.";
+  if (status === 400 && error) return String(error).toUpperCase();
+  return "CUSTOMER ACTION FAILED. TRY AGAIN.";
+}
+
 function renderOpsStaffActions(item, statusKey) {
   const actions = getOpsStatusActions(statusKey);
 
@@ -3486,6 +3771,26 @@ function bindOpsBoardEvents() {
       await openOpsArtwork(button.dataset.opsViewArtwork);
     });
   });
+
+  document.querySelectorAll("[data-ops-customer-action]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await saveOpsCustomerAction(button.dataset.opsCustomerId, button.dataset.opsCustomerAction);
+    });
+  });
+
+  document.querySelectorAll("[data-ops-customer-asset]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await openOpsCustomerAsset(button.dataset.opsCustomerId, button.dataset.opsCustomerAsset);
+    });
+  });
+
+  document.querySelectorAll("[data-ops-final-proof-file]").forEach((input) => {
+    input.addEventListener("change", async (event) => {
+      const file = event.target.files?.[0];
+      if (file) await uploadOpsFinalArtworkProof(input.dataset.opsFinalProofFile, file);
+    });
+  });
+
   document.querySelectorAll("[data-ops-move-to]").forEach((button) => {
     button.addEventListener("click", async () => {
       await moveOpsInquiry(button.dataset.opsMoveId, button.dataset.opsMoveTo);
@@ -3526,6 +3831,7 @@ function bindOpsBoardEvents() {
       expandedOpsInquiryId = null;
       opsSoDraft = null;
       opsArtworkRequests = {};
+      opsCustomerActionRequests = {};
       render();
     });
   });

@@ -243,6 +243,25 @@ export function mapOpsRowToInquiry(row) {
       getFirstValue(row, ["production_note", "productionNote"]),
     productionUpdatedAt:
       getFirstValue(row, ["production_updated_at", "productionUpdatedAt"]),
+    quotedAmount: getNullableNumber(row, ["quoted_amount", "quotedAmount"]),
+    amountDue: getNullableNumber(row, ["amount_due", "amountDue"]),
+    quoteStatus: getFirstValue(row, ["quote_status", "quoteStatus"]),
+    quoteApprovedAt: getFirstValue(row, ["quote_approved_at", "quoteApprovedAt"]),
+    quoteChangeRequest: getFirstValue(row, ["quote_change_request", "quoteChangeRequest"]),
+    quoteBreakdown: getFirstValue(row, ["quote_breakdown", "quoteBreakdown"]),
+    quoteNotes: getFirstValue(row, ["quote_notes", "quoteNotes"]),
+    quoteValidUntil: normalizeDate(getFirstValue(row, ["quote_valid_until", "quoteValidUntil"])),
+    artworkStatus: getFirstValue(row, ["artwork_status", "artworkStatus"]),
+    artworkUrl: getFirstValue(row, ["artwork_url", "artworkUrl"]),
+    artworkApprovedAt: getFirstValue(row, ["artwork_approved_at", "artworkApprovedAt"]),
+    artworkRevisionRequest: getFirstValue(row, ["artwork_revision_request", "artworkRevisionRequest"]),
+    paymentStatus: getFirstValue(row, ["payment_status", "paymentStatus"]),
+    paymentLabel: getFirstValue(row, ["payment_label", "paymentLabel"]),
+    paymentInstructions: getFirstValue(row, ["payment_instructions", "paymentInstructions"]),
+    paymentProofPath: getFirstValue(row, ["payment_proof_path", "paymentProofPath"]),
+    paymentProofSubmittedAt: getFirstValue(row, ["payment_proof_submitted_at", "paymentProofSubmittedAt"]),
+    paymentConfirmedAt: getFirstValue(row, ["payment_confirmed_at", "paymentConfirmedAt"]),
+    paymentConfirmedAmount: getNullableNumber(row, ["payment_confirmed_amount", "paymentConfirmedAmount"]),
     productionFieldsReady:
       ["assigned_staff", "production_stage", "production_note", "production_updated_at"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
   };
@@ -381,6 +400,16 @@ function getFirstValue(record, keys) {
   }
 
   return "";
+}
+
+function getNullableNumber(record, keys) {
+  for (const key of keys) {
+    const value = record?.[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  }
+
+  return null;
 }
 
 function normalizeDate(value) {

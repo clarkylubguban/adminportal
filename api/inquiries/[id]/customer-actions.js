@@ -1,0 +1,455 @@
+import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
+
+const ARTWORK_BUCKET = "inquiry-artworks";
+const SIGNED_URL_EXPIRES_IN_SECONDS = 300;
+const MAX_PROOF_SIZE = 10 * 1024 * 1024;
+const PROOF_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
+const WRITE_ROLES = new Set(["admin", "staff"]);
+const READ_ROLES = new Set(["admin", "staff", "viewer"]);
+const CUSTOMER_ACTION_SELECT = [
+  "id",
+  "contact",
+  "status",
+  "production_stage",
+  "odoo_so",
+  "quoted_amount",
+  "amount_due",
+  "quote_status",
+  "quote_approved_at",
+  "quote_change_request",
+  "quote_breakdown",
+  "quote_notes",
+  "quote_valid_until",
+  "artwork_status",
+  "artwork_url",
+  "artwork_approved_at",
+  "artwork_revision_request",
+  "payment_status",
+  "payment_label",
+  "payment_instructions",
+  "payment_proof_path",
+  "payment_proof_submitted_at",
+  "payment_confirmed_at",
+  "payment_confirmed_amount",
+].join(",");
+
+export default async function handler(request, response) {
+  const inquiryReference = getInquiryReference(request);
+
+  if (!isValidInquiryReference(inquiryReference)) {
+    sendJson(response, 400, { ok: false, error: "invalid inquiry reference" });
+    return;
+  }
+
+  const token = getBearerToken(request);
+  if (!token) {
+    sendJson(response, 401, { ok: false, error: "admin session required" });
+    return;
+  }
+
+  try {
+    const supabase = createServerSupabaseClient();
+    const adminUser = await getAuthorizedAdmin(supabase, token);
+
+    if (!adminUser || !READ_ROLES.has(adminUser.role)) {
+      sendJson(response, adminUser ? 403 : 401, {
+        ok: false,
+        error: adminUser ? "admin access required" : "admin session required",
+      });
+      return;
+    }
+
+    if (request.method === "GET") {
+      await handleAssetRequest(request, response, supabase, inquiryReference);
+      return;
+    }
+
+    if (request.method !== "PATCH") {
+      sendJson(response, 405, { ok: false, error: "method not allowed" });
+      return;
+    }
+
+    if (!WRITE_ROLES.has(adminUser.role)) {
+      sendJson(response, 403, { ok: false, error: "write access required" });
+      return;
+    }
+
+    const body = await readJsonBody(request);
+    const action = cleanText(body.action, 80);
+    const { data: inquiry, error: lookupError } = await supabase
+      .from("ops_inquiries")
+      .select(CUSTOMER_ACTION_SELECT)
+      .eq("id", inquiryReference)
+      .maybeSingle();
+
+    if (lookupError) throw lookupError;
+    if (!inquiry) {
+      sendJson(response, 404, { ok: false, error: "inquiry not found" });
+      return;
+    }
+
+    if (action === "prepare_artwork_proof_upload") {
+      const filename = sanitizeFilename(cleanText(body.filename, 180));
+      const fileSize = Number(body.fileSize);
+      const contentType = cleanText(body.contentType, 120) || "application/octet-stream";
+
+      if (!filename || !PROOF_EXTENSIONS.has(getExtension(filename))) {
+        sendJson(response, 400, { ok: false, error: "upload PNG, JPG, or PDF artwork proof" });
+        return;
+      }
+      if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > MAX_PROOF_SIZE) {
+        sendJson(response, 400, { ok: false, error: "artwork proof must be between 1 byte and 10 MB" });
+        return;
+      }
+
+      const proofPath = `${inquiryReference}/proofs/${crypto.randomUUID()}-${filename}`;
+      const { data: signed, error: signedError } = await supabase.storage
+        .from(ARTWORK_BUCKET)
+        .createSignedUploadUrl(proofPath, { upsert: false });
+
+      if (signedError || !signed?.signedUrl) throw signedError || new Error("Signed upload URL missing.");
+
+      sendJson(response, 200, {
+        ok: true,
+        upload: {
+          signedUrl: signed.signedUrl,
+          path: proofPath,
+          contentType,
+        },
+      });
+      return;
+    }
+
+    const now = new Date().toISOString();
+    const updates = buildUpdates(action, body, inquiry, now);
+
+    if (!updates) {
+      sendJson(response, 400, { ok: false, error: "invalid customer action update" });
+      return;
+    }
+
+    const { data: updated, error: updateError } = await supabase
+      .from("ops_inquiries")
+      .update({ ...updates, updated_at: now })
+      .eq("id", inquiryReference)
+      .select(CUSTOMER_ACTION_SELECT)
+      .single();
+
+    if (updateError) throw updateError;
+
+    sendJson(response, 200, {
+      ok: true,
+      inquiry: getSafeInquiry(updated),
+    });
+  } catch (error) {
+    console.error("Admin customer action failed.", {
+      message: error?.message,
+      code: error?.code,
+      status: error?.status || error?.statusCode,
+    });
+
+    const schemaMissing = /quoted_amount|quote_status|artwork_status|payment_status|schema cache|could not find/i.test(String(error?.message || ""));
+    sendJson(response, schemaMissing ? 503 : 500, {
+      ok: false,
+      error: schemaMissing
+        ? "customer action fields are not ready"
+        : "customer action update failed",
+    });
+  }
+}
+
+async function getAuthorizedAdmin(supabase, token) {
+  const { data: userData, error: userError } = await supabase.auth.getUser(token);
+  if (userError || !userData?.user) return null;
+
+  const { data: adminUser, error: adminError } = await supabase
+    .from("admin_users")
+    .select("id,role")
+    .eq("user_id", userData.user.id)
+    .maybeSingle();
+
+  if (adminError) throw adminError;
+  return adminUser || null;
+}
+
+function buildUpdates(action, body, inquiry, now) {
+  if (isProductionActive(inquiry.production_stage)) return null;
+
+  const quoteValues = getQuoteValues(body);
+  const proofPath = cleanText(body.proofPath, 500);
+  const confirmedAmount = getMoney(body.confirmedAmount);
+
+  if (action === "mark_artwork_under_review") {
+    if (!["submitted", "under_review", "revision_requested"].includes(String(inquiry.artwork_status || ""))) return null;
+    return { artwork_status: "under_review" };
+  }
+
+  if (action === "mark_artwork_usable") {
+    if (!["submitted", "under_review", "revision_requested"].includes(String(inquiry.artwork_status || ""))) return null;
+    return { artwork_status: "submitted", artwork_revision_request: null };
+  }
+
+  if (action === "request_new_artwork") {
+    return { artwork_status: "missing" };
+  }
+
+  if (action === "finalize_artwork_proof_upload") {
+    if (!isValidProofPath(proofPath, inquiry.id)) return null;
+    return { artwork_url: proofPath, artwork_status: "under_review" };
+  }
+
+  if (action === "publish_artwork") {
+    if (inquiry.quote_status !== "approved" || !isValidProofPath(String(inquiry.artwork_url || ""), inquiry.id)) return null;
+    return { artwork_status: "approval_required", artwork_revision_request: null };
+  }
+
+  if (["save_quote_draft", "revise_quote", "mark_quote_pending", "publish_quote"].includes(action)) {
+    if (!quoteValues) return null;
+    if (action === "publish_quote" && (quoteValues.quoted_amount <= 0 || inquiry.artwork_status === "missing")) return null;
+
+    return {
+      ...quoteValues,
+      quote_status: action === "publish_quote" ? "ready" : "pending",
+      quote_change_request: action === "publish_quote" ? null : inquiry.quote_change_request,
+    };
+  }
+
+  if (action === "require_payment") {
+    if (inquiry.quote_status !== "approved" || inquiry.artwork_status !== "approved" || !quoteValues || quoteValues.amount_due <= 0) return null;
+    return { ...quoteValues, payment_status: "required" };
+  }
+
+  if (action === "mark_payment_under_review") {
+    if (!inquiry.payment_proof_path || !["proof_submitted", "under_review"].includes(String(inquiry.payment_status || ""))) return null;
+    return { payment_status: "under_review" };
+  }
+
+  if (action === "request_new_payment_proof") {
+    if (
+      inquiry.quote_status !== "approved"
+      || inquiry.artwork_status !== "approved"
+      || !["required", "proof_submitted", "under_review"].includes(String(inquiry.payment_status || ""))
+    ) return null;
+    return { payment_status: "required" };
+  }
+
+  if (action === "confirm_payment") {
+    if (
+      inquiry.quote_status !== "approved"
+      || inquiry.artwork_status !== "approved"
+      || !inquiry.payment_proof_path
+      || !["proof_submitted", "under_review"].includes(String(inquiry.payment_status || ""))
+      || !Number.isFinite(confirmedAmount)
+      || confirmedAmount <= 0
+    ) return null;
+
+    return {
+      payment_status: "confirmed",
+      payment_confirmed_amount: confirmedAmount,
+      payment_confirmed_at: now,
+    };
+  }
+
+  return null;
+}
+
+function isProductionActive(value) {
+  return ["in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(String(value || ""));
+}
+
+function getQuoteValues(body) {
+  const quotedAmount = getMoney(body.quotedAmount);
+  const amountDue = getMoney(body.amountDue);
+  const quoteBreakdown = cleanText(body.quoteBreakdown, 5000);
+  const quoteNotes = cleanText(body.quoteNotes, 2000);
+  const quoteValidUntil = cleanDate(body.quoteValidUntil);
+  const paymentLabel = cleanText(body.paymentLabel, 120);
+  const paymentInstructions = cleanText(body.paymentInstructions, 2000);
+
+  if (!Number.isFinite(quotedAmount) || quotedAmount < 0 || !Number.isFinite(amountDue) || amountDue < 0) return null;
+
+  return {
+    quoted_amount: quotedAmount,
+    amount_due: amountDue,
+    quote_breakdown: quoteBreakdown || null,
+    quote_notes: quoteNotes || null,
+    quote_valid_until: quoteValidUntil,
+    payment_label: paymentLabel || null,
+    payment_instructions: paymentInstructions || null,
+  };
+}
+
+async function handleAssetRequest(request, response, supabase, inquiryReference) {
+  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  const asset = String(url.searchParams.get("asset") || "");
+  const { data: inquiry, error } = await supabase
+    .from("ops_inquiries")
+    .select("id,artwork_status,artwork_url,payment_proof_path")
+    .eq("id", inquiryReference)
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!inquiry) {
+    sendJson(response, 404, { ok: false, error: "inquiry not found" });
+    return;
+  }
+
+  let path = "";
+  let uploadedAt = "";
+  if (asset === "artwork-proof") {
+    path = String(inquiry.artwork_url || "");
+  } else if (asset === "payment-proof") {
+    path = String(inquiry.payment_proof_path || "");
+  } else if (asset === "customer-artwork") {
+    const customerArtwork = await findCustomerArtworkPath(supabase, inquiry);
+    path = customerArtwork.path;
+    uploadedAt = customerArtwork.uploadedAt;
+  } else {
+    sendJson(response, 400, { ok: false, error: "invalid asset request" });
+    return;
+  }
+
+  if (!path) {
+    sendJson(response, 404, { ok: false, error: "file not available" });
+    return;
+  }
+
+  if (/^https:\/\//i.test(path)) {
+    sendJson(response, 200, { ok: true, signedUrl: path, uploadedAt });
+    return;
+  }
+
+  const { data: signed, error: signedError } = await supabase.storage
+    .from(ARTWORK_BUCKET)
+    .createSignedUrl(path, SIGNED_URL_EXPIRES_IN_SECONDS);
+
+  if (signedError || !signed?.signedUrl) throw signedError || new Error("Signed URL missing.");
+  sendJson(response, 200, { ok: true, signedUrl: signed.signedUrl, uploadedAt });
+}
+
+async function findCustomerArtworkPath(supabase, inquiry) {
+  const currentPath = String(inquiry.artwork_url || "");
+  if (/^https:\/\//i.test(currentPath) && !currentPath.includes("/proofs/")) {
+    return { path: currentPath, uploadedAt: "" };
+  }
+
+  const { data: files, error } = await supabase.storage
+    .from(ARTWORK_BUCKET)
+    .list(inquiry.id, { limit: 100 });
+
+  if (error) throw error;
+
+  const availableFiles = (Array.isArray(files) ? files : [])
+    .filter((file) => file?.id && file?.name)
+    .sort((a, b) => getFileTime(b) - getFileTime(a));
+  const currentName = currentPath ? currentPath.split("/").pop() : "";
+  const selected = availableFiles.find((file) => file.name === currentName) || availableFiles[0];
+
+  return selected
+    ? {
+        path: currentPath && !currentPath.includes("/proofs/") ? currentPath : `${inquiry.id}/${selected.name}`,
+        uploadedAt: selected.updated_at || selected.created_at || selected.last_accessed_at || "",
+      }
+    : { path: "", uploadedAt: "" };
+}
+
+function getSafeInquiry(row) {
+  return {
+    id: row.id,
+    quotedAmount: numberOrNull(row.quoted_amount),
+    amountDue: numberOrNull(row.amount_due),
+    quoteStatus: cleanText(row.quote_status, 80),
+    quoteApprovedAt: cleanText(row.quote_approved_at, 80),
+    quoteChangeRequest: cleanText(row.quote_change_request, 1000),
+    quoteBreakdown: cleanText(row.quote_breakdown, 5000),
+    quoteNotes: cleanText(row.quote_notes, 2000),
+    quoteValidUntil: cleanText(row.quote_valid_until, 40),
+    artworkStatus: cleanText(row.artwork_status, 80),
+    artworkApprovedAt: cleanText(row.artwork_approved_at, 80),
+    artworkRevisionRequest: cleanText(row.artwork_revision_request, 1000),
+    paymentStatus: cleanText(row.payment_status, 80),
+    paymentLabel: cleanText(row.payment_label, 120),
+    paymentInstructions: cleanText(row.payment_instructions, 2000),
+    paymentProofSubmittedAt: cleanText(row.payment_proof_submitted_at, 80),
+    paymentConfirmedAt: cleanText(row.payment_confirmed_at, 80),
+    paymentConfirmedAmount: numberOrNull(row.payment_confirmed_amount),
+  };
+}
+
+async function readJsonBody(request) {
+  if (request.body && typeof request.body === "object" && !Buffer.isBuffer(request.body)) return request.body;
+
+  const chunks = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  if (!chunks.length) return {};
+
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function getInquiryReference(request) {
+  const queryId = Array.isArray(request.query?.id) ? request.query.id[0] : request.query?.id;
+  if (queryId) return String(queryId).trim().toUpperCase();
+
+  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  const match = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/customer-actions\/?$/);
+  return match ? decodeURIComponent(match[1]).trim().toUpperCase() : "";
+}
+
+function getBearerToken(request) {
+  const authorization = request.headers.authorization || request.headers.Authorization || "";
+  const match = String(authorization).match(/^Bearer\s+(.+)$/i);
+  return match ? match[1].trim() : "";
+}
+
+function isValidInquiryReference(value) {
+  return /^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(value);
+}
+
+function getMoney(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  return NaN;
+}
+
+function numberOrNull(value) {
+  const number = getMoney(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function cleanDate(value) {
+  const text = cleanText(value, 20);
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+function cleanText(value, maxLength) {
+  return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
+}
+
+function sanitizeFilename(filename) {
+  const normalized = filename.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+  return normalized.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "artwork-proof";
+}
+
+function getExtension(filename) {
+  const match = filename.toLowerCase().match(/\.([a-z0-9]+)$/);
+  return match ? match[1] : "";
+}
+
+function isValidProofPath(path, inquiryReference) {
+  return path.startsWith(`${inquiryReference}/proofs/`) && PROOF_EXTENSIONS.has(getExtension(path));
+}
+
+function getFileTime(file) {
+  return Date.parse(file.updated_at || file.created_at || file.last_accessed_at || "") || 0;
+}
+
+function sendJson(response, statusCode, payload) {
+  response.statusCode = statusCode;
+  response.setHeader("Content-Type", "application/json; charset=utf-8");
+  response.setHeader("Cache-Control", "no-store");
+  response.end(JSON.stringify(payload));
+}
