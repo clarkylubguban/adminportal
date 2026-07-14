@@ -8829,3 +8829,6 @@ tbody tr.selected td:last-child {
     grid-template-columns: 1fr;
   }
 }
+.ops-board-page .ops-customer-action-message {
+  white-space: pre-line;
+}

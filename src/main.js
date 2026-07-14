@@ -1,4 +1,4 @@
-﻿import { getAdminClientPrograms } from "./services/adminClients.js";
+import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
   createOpsBoardInquiry,
@@ -1300,7 +1300,7 @@ function renderOpsQuoteForm(item, isLoading, open = false) {
     ]
     : [];
 
-  return `<details class="ops-quote-editor" ${open ? "open" : ""}><summary>${isOpsQuotePublished(item) ? "REVISE QUOTE" : "CREATE QUOTE"}</summary><div class="ops-customer-action-form"><label><span>Quoted amount</span><input data-ops-customer-field="quotedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? "")}" /></label><label><span>Amount due</span><input data-ops-customer-field="amountDue" min="0" step="0.01" type="number" value="${escapeHtml(item.amountDue ?? "")}" /></label><label class="wide"><span>Price breakdown</span><textarea data-ops-customer-field="quoteBreakdown" rows="3">${escapeHtml(item.quoteBreakdown || "")}</textarea></label><label class="wide"><span>Quote notes</span><textarea data-ops-customer-field="quoteNotes" rows="2">${escapeHtml(item.quoteNotes || "")}</textarea></label><label><span>Valid until</span><input data-ops-customer-field="quoteValidUntil" type="date" value="${escapeHtml(item.quoteValidUntil || "")}" /></label><label><span>Deposit / payment label</span><input data-ops-customer-field="paymentLabel" value="${escapeHtml(item.paymentLabel || "")}" /></label><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions"><button class="ops-move-button" data-ops-customer-action="save_quote_draft" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SAVE DRAFT</button><button class="ops-gold-button mini" data-ops-customer-action="publish_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SEND QUOTE</button></div>${renderOpsMoreActions(overflowActions)}</details>`;
+  return `<details class="ops-quote-editor" ${open ? "open" : ""}><summary>${isOpsQuotePublished(item) ? "REVISE QUOTE" : "CREATE QUOTE"}</summary><div class="ops-customer-action-form"><label><span>Quoted amount</span><input data-ops-customer-field="quotedAmount" inputmode="decimal" type="text" value="${escapeHtml(item.quotedAmount ?? "")}" /></label><label><span>Amount due</span><input data-ops-customer-field="amountDue" inputmode="decimal" type="text" value="${escapeHtml(item.amountDue ?? "")}" /></label><label class="wide"><span>Price breakdown</span><textarea data-ops-customer-field="quoteBreakdown" rows="3">${escapeHtml(item.quoteBreakdown || "")}</textarea></label><label class="wide"><span>Quote notes</span><textarea data-ops-customer-field="quoteNotes" rows="2">${escapeHtml(item.quoteNotes || "")}</textarea></label><label><span>Valid until</span><input data-ops-customer-field="quoteValidUntil" type="date" value="${escapeHtml(item.quoteValidUntil || "")}" /></label><label><span>Deposit / payment label</span><input data-ops-customer-field="paymentLabel" value="${escapeHtml(item.paymentLabel || "")}" /></label><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions"><button class="ops-move-button" data-ops-customer-action="save_quote_draft" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SAVE DRAFT</button><button class="ops-gold-button mini" data-ops-customer-action="publish_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SEND QUOTE</button></div>${renderOpsMoreActions(overflowActions)}</details>`;
 }
 
 function renderOpsQuoteStage(item) {
@@ -1375,8 +1375,18 @@ function renderOpsProductionStage(item) {
     body: `<p class="ops-stage-muted">Available after quote, artwork, and payment are ready.</p>`,
   });
 }
-function getOpsCustomerActionFormPayload(action) {
-  const fieldValue = (name) => document.querySelector(`[data-ops-customer-field="${name}"]`)?.value ?? "";
+function getOpsCustomerActionFormPayload(action, sourceElement) {
+  const quoteEditor = sourceElement?.closest?.(".ops-quote-editor");
+  const stageSection = sourceElement?.closest?.(".ops-stage-section");
+  const drawer = sourceElement?.closest?.(".ops-detail-drawer");
+  const fieldValue = (name) => {
+    const selector = `[data-ops-customer-field="${name}"]`;
+    return quoteEditor?.querySelector(selector)?.value
+      ?? stageSection?.querySelector(selector)?.value
+      ?? drawer?.querySelector(selector)?.value
+      ?? document.querySelector(selector)?.value
+      ?? "";
+  };
 
   return {
     action,
@@ -1392,6 +1402,76 @@ function getOpsCustomerActionFormPayload(action) {
   };
 }
 
+function parseOpsQuoteMoney(value) {
+  const text = String(value ?? "").trim().replace(/,/g, "");
+  if (!text) return NaN;
+  return Number(text);
+}
+
+function getOpsQuoteValidationMessage(action, body) {
+  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "require_payment"].includes(action)) return "";
+
+  const quotedAmountText = String(body.quotedAmount ?? "").trim();
+  const amountDueText = String(body.amountDue ?? "").trim();
+  const quotedAmount = parseOpsQuoteMoney(quotedAmountText);
+  const amountDue = amountDueText ? parseOpsQuoteMoney(amountDueText) : quotedAmount;
+  const validUntil = String(body.quoteValidUntil || "").trim();
+
+  if (["publish_quote", "require_payment"].includes(action) && (!Number.isFinite(quotedAmount) || quotedAmount <= 0)) {
+    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ₱0 before sending the quote.";
+  }
+
+  if (quotedAmountText && (!Number.isFinite(quotedAmount) || quotedAmount < 0)) {
+    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ₱0 before sending the quote.";
+  }
+
+  if (amountDueText && (!Number.isFinite(amountDue) || amountDue < 0)) {
+    return "ENTER A VALID AMOUNT DUE\nAmount due must be zero or greater.";
+  }
+
+  if (validUntil) {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const expiry = new Date(`${validUntil}T00:00:00`);
+    if (!Number.isFinite(expiry.getTime()) || expiry < today) {
+      return "QUOTE VALIDITY DATE HAS EXPIRED\nChoose today or a future date before sending the quote.";
+    }
+  }
+
+  if (action === "require_payment" && !String(body.paymentInstructions || "").trim()) {
+    return "ENTER PAYMENT INSTRUCTIONS\nPayment instructions are required before requesting payment.";
+  }
+
+  return "";
+}
+
+function setOpsCustomerActionInlineMessage(sourceElement, message, status = "error") {
+  const stageSection = sourceElement?.closest?.(".ops-stage-section");
+  if (!stageSection) return;
+
+  let messageElement = stageSection.querySelector("[data-ops-customer-inline-message]");
+  if (!messageElement) {
+    messageElement = document.createElement("p");
+    messageElement.dataset.opsCustomerInlineMessage = "true";
+    stageSection.insertBefore(messageElement, stageSection.children[1] || null);
+  }
+
+  messageElement.className = `ops-customer-action-message ${status === "error" ? "error" : ""}`.trim();
+  messageElement.textContent = message;
+}
+
+function setOpsActionButtonLoading(button, isLoading) {
+  if (!button) return;
+  if (isLoading) {
+    button.dataset.opsOriginalText = button.textContent || "";
+    button.disabled = true;
+    button.textContent = "SAVING...";
+  } else {
+    button.disabled = false;
+    if (button.dataset.opsOriginalText) button.textContent = button.dataset.opsOriginalText;
+    delete button.dataset.opsOriginalText;
+  }
+}
 async function requestOpsCustomerAction(inquiryId, body) {
   const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions`, {
     method: "PATCH",
@@ -1410,33 +1490,32 @@ async function requestOpsCustomerAction(inquiryId, body) {
   return payload;
 }
 
-async function saveOpsCustomerAction(inquiryId, action) {
+async function saveOpsCustomerAction(inquiryId, action, sourceElement) {
   if (!inquiryId || !action) return;
 
-  const body = getOpsCustomerActionFormPayload(action);
-  opsCustomerActionRequests = {
-    ...opsCustomerActionRequests,
-    [inquiryId]: { status: "loading", message: "SAVING CUSTOMER ACTION..." },
-  };
-  render();
+  const body = getOpsCustomerActionFormPayload(action, sourceElement);
+  const validationMessage = getOpsQuoteValidationMessage(action, body);
+  if (validationMessage) {
+    setOpsCustomerActionInlineMessage(sourceElement, validationMessage, "error");
+    return;
+  }
+
+  setOpsCustomerActionInlineMessage(sourceElement, "SAVING CUSTOMER ACTION...", "loading");
+  setOpsActionButtonLoading(sourceElement, true);
 
   try {
     await requestOpsCustomerAction(inquiryId, body);
     opsCustomerActionRequests = {
       ...opsCustomerActionRequests,
-      [inquiryId]: { status: "success", message: "CUSTOMER ACTION SAVED." },
+      [inquiryId]: { status: "success", message: action === "save_quote_draft" ? "QUOTE DRAFT SAVED." : "CUSTOMER ACTION SAVED." },
     };
     hasLoadedOpsInquiries = false;
     await loadOpsBoardInquiries();
   } catch (error) {
-    opsCustomerActionRequests = {
-      ...opsCustomerActionRequests,
-      [inquiryId]: { status: "error", message: error.message || "CUSTOMER ACTION FAILED." },
-    };
-    render();
+    setOpsActionButtonLoading(sourceElement, false);
+    setOpsCustomerActionInlineMessage(sourceElement, error.message || "CUSTOMER ACTION FAILED. CHECK YOUR CONNECTION AND TRY AGAIN.", "error");
   }
 }
-
 async function uploadOpsFinalArtworkProof(inquiryId, file) {
   if (!inquiryId || !file) return;
 
@@ -1537,14 +1616,19 @@ async function openOpsCustomerAsset(inquiryId, asset) {
 }
 
 function getOpsCustomerActionError(status, error) {
+  const normalized = String(error || "").trim().toLowerCase();
   if (status === 401) return "ADMIN SESSION REQUIRED.";
   if (status === 403) return "ADMIN WRITE ACCESS REQUIRED.";
   if (status === 404) return "INQUIRY OR FILE NOT FOUND.";
   if (status === 503) return "CUSTOMER ACTION DATABASE FIELDS ARE NOT READY.";
+  if (status === 400 && normalized === "enter a valid quoted amount") return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ₱0 before sending the quote.";
+  if (status === 400 && normalized === "enter a valid amount due") return "ENTER A VALID AMOUNT DUE\nAmount due must be zero or greater.";
+  if (status === 400 && ["enter a valid quote validity date", "quote validity date has expired"].includes(normalized)) return "QUOTE VALIDITY DATE HAS EXPIRED\nChoose today or a future date before sending the quote.";
+  if (status === 400 && normalized === "enter payment instructions") return "ENTER PAYMENT INSTRUCTIONS\nPayment instructions are required before requesting payment.";
+  if (status === 400 && normalized === "artwork must be uploaded before sending quote") return "ARTWORK IS REQUIRED BEFORE SENDING THE QUOTE.";
   if (status === 400 && error) return String(error).toUpperCase();
-  return "CUSTOMER ACTION FAILED. TRY AGAIN.";
+  return "CUSTOMER ACTION FAILED. CHECK YOUR CONNECTION AND TRY AGAIN.";
 }
-
 function renderOpsStaffActions(item, statusKey) {
   const actions = getOpsStatusActions(statusKey);
 
@@ -3940,7 +4024,7 @@ function bindOpsBoardEvents() {
 
   document.querySelectorAll("[data-ops-customer-action]").forEach((button) => {
     button.addEventListener("click", async () => {
-      await saveOpsCustomerAction(button.dataset.opsCustomerId, button.dataset.opsCustomerAction);
+      await saveOpsCustomerAction(button.dataset.opsCustomerId, button.dataset.opsCustomerAction, button);
     });
   });
 

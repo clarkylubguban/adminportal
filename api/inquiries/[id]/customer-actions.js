@@ -126,6 +126,11 @@ export default async function handler(request, response) {
     const now = new Date().toISOString();
     const updates = buildUpdates(action, body, inquiry, now);
 
+    if (updates?.error) {
+      sendJson(response, 400, { ok: false, error: updates.error });
+      return;
+    }
+
     if (!updates) {
       sendJson(response, 400, { ok: false, error: "invalid customer action update" });
       return;
@@ -208,18 +213,21 @@ function buildUpdates(action, body, inquiry, now) {
   }
 
   if (["save_quote_draft", "revise_quote", "mark_quote_pending", "publish_quote"].includes(action)) {
-    if (!quoteValues) return null;
-    if (action === "publish_quote" && (quoteValues.quoted_amount <= 0 || inquiry.artwork_status === "missing")) return null;
+    const quoteError = getQuoteValidationError(action, body, inquiry);
+    if (quoteError) return { error: quoteError };
+
+    const currentQuoteValues = getQuoteValues(body, { allowAmountDueFallback: true });
+    if (!currentQuoteValues) return { error: "enter a valid quoted amount" };
 
     return {
-      ...quoteValues,
+      ...currentQuoteValues,
       quote_status: action === "publish_quote" ? "ready" : "pending",
       quote_published_at: action === "publish_quote" ? now : null,
       quote_change_request: action === "publish_quote" ? null : inquiry.quote_change_request,
     };
   }
-
   if (action === "require_payment") {
+    if (!cleanText(body.paymentInstructions, 2000)) return { error: "enter payment instructions" };
     if (inquiry.quote_status !== "approved" || inquiry.artwork_status !== "approved" || !quoteValues || quoteValues.amount_due <= 0) return null;
     return { ...quoteValues, payment_status: "required", payment_review_note: null, payment_rejected_at: null };
   }
@@ -265,9 +273,12 @@ function isProductionActive(value) {
   return ["in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(String(value || ""));
 }
 
-function getQuoteValues(body) {
+function getQuoteValues(body, options = {}) {
   const quotedAmount = getMoney(body.quotedAmount);
-  const amountDue = getMoney(body.amountDue);
+  const amountDueText = String(body.amountDue ?? "").trim();
+  const amountDue = amountDueText || !options.allowAmountDueFallback
+    ? getMoney(body.amountDue)
+    : quotedAmount;
   const quoteBreakdown = cleanText(body.quoteBreakdown, 5000);
   const quoteNotes = cleanText(body.quoteNotes, 2000);
   const quoteValidUntil = cleanDate(body.quoteValidUntil);
@@ -287,6 +298,46 @@ function getQuoteValues(body) {
   };
 }
 
+function getQuoteValidationError(action, body, inquiry) {
+  const quotedAmountText = String(body.quotedAmount ?? "").trim();
+  const amountDueText = String(body.amountDue ?? "").trim();
+  const quotedAmount = getMoney(quotedAmountText);
+  const amountDue = amountDueText ? getMoney(amountDueText) : quotedAmount;
+  const quoteValidUntil = cleanDate(body.quoteValidUntil);
+
+  if (["publish_quote"].includes(action) && (!Number.isFinite(quotedAmount) || quotedAmount <= 0)) {
+    return "enter a valid quoted amount";
+  }
+
+  if (quotedAmountText && (!Number.isFinite(quotedAmount) || quotedAmount < 0)) {
+    return "enter a valid quoted amount";
+  }
+
+  if (amountDueText && (!Number.isFinite(amountDue) || amountDue < 0)) {
+    return "enter a valid amount due";
+  }
+
+  if (String(body.quoteValidUntil || "").trim() && !quoteValidUntil) {
+    return "enter a valid quote validity date";
+  }
+
+  if (quoteValidUntil && isPastDate(quoteValidUntil)) {
+    return "quote validity date has expired";
+  }
+
+  if (action === "publish_quote" && inquiry.artwork_status === "missing") {
+    return "artwork must be uploaded before sending quote";
+  }
+
+  return "";
+}
+
+function isPastDate(dateText) {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const date = new Date(`${dateText}T00:00:00`);
+  return !Number.isFinite(date.getTime()) || date < today;
+}
 async function handleAssetRequest(request, response, supabase, inquiryReference) {
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
   const asset = String(url.searchParams.get("asset") || "");
@@ -422,10 +473,12 @@ function isValidInquiryReference(value) {
 
 function getMoney(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
-  if (typeof value === "string" && value.trim() && Number.isFinite(Number(value))) return Number(value);
+  if (typeof value === "string") {
+    const normalized = value.trim().replace(/,/g, "");
+    if (normalized && Number.isFinite(Number(normalized))) return Number(normalized);
+  }
   return NaN;
 }
-
 function numberOrNull(value) {
   const number = getMoney(value);
   return Number.isFinite(number) ? number : null;
