@@ -1012,10 +1012,10 @@ function getOpsInquiryCurrentTask(item) {
   if (state.quote === "changes_requested" || item.quoteChangeRequest) return { stage: "quote", text: "Review requested quote changes" };
   if (!isOpsQuotePublished(item) || state.quote === "pending") return { stage: "quote", text: "Prepare and send quotation" };
   if (state.quote === "ready") return { stage: "quote", text: "Waiting for customer quote approval" };
-  if (canOpsPrepareProof(item) && !hasOpsFinalProof(item)) return { stage: "artwork", text: "Upload final artwork proof" };
-  if (canOpsPrepareProof(item) && hasOpsFinalProof(item)) return { stage: "artwork", text: "Send proof for customer approval" };
+  if (canOpsPrepareProof(item) && !hasOpsFinalProof(item)) return { stage: "artwork", text: "Upload approved design" };
+  if (canOpsPrepareProof(item) && hasOpsFinalProof(item)) return { stage: "artwork", text: "Send approved design" };
   if (state.artwork === "approval_required") return { stage: "artwork", text: "Waiting for customer artwork approval" };
-  if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment proof" };
+  if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment receipt" };
   if (canOpsRequestPayment(item)) return { stage: "payment", text: "Request payment" };
   if (state.payment === "confirmed" && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
   if (canEditOpsCustomerTracking(item)) return { stage: "fulfillment", text: "Update customer tracking" };
@@ -1084,7 +1084,7 @@ function getOpsCustomerTrackingStep(item) {
   const status = String(item.status || "").trim().toLowerCase();
   if (["lost", "cancelled", "canceled"].includes(status)) return "Closed";
   if (["production", "in_production", "ready", "pickup", "delivery", "delivered", "completed", "won"].includes(status)) return "5 / Pickup or Delivery";
-  if (["approved", "proof_approval", "proof_approved"].includes(status)) return "3 / Proof Approval";
+  if (["approved", "proof_approval", "proof_approved"].includes(status)) return "3 / Approved Design";
   if (["quote", "sent", "followup"].includes(status)) return "2 / Quote and Review";
   return "1 / Inquiry Received";
 }
@@ -1249,9 +1249,9 @@ const opsCustomerActionLabels = {
   payment: {
     not_required: "Not Yet Requested",
     required: "Payment Requested",
-    proof_submitted: "Proof Submitted",
-    under_review: "Under Review",
-    confirmed: "Confirmed",
+    proof_submitted: "Receipt Received",
+    under_review: "Receipt Under Review",
+    confirmed: "Payment Confirmed",
   },
 };
 
@@ -1277,7 +1277,7 @@ function renderOpsArtworkStage(item) {
   const revision = item.artworkRevisionRequest ? `<p class="ops-customer-action-alert"><strong>CUSTOMER REQUESTED ARTWORK REVISION</strong>${escapeHtml(item.artworkRevisionRequest)}</p>` : "";
   const openArtwork = renderOpsAssetButton({ label: "OPEN ARTWORK", asset: "customer-artwork", id: item.id, disabled: isLoading });
   const finalProofAvailable = hasOpsFinalProof(item);
-  const finalProofButton = finalProofAvailable ? renderOpsAssetButton({ label: "VIEW FINAL PROOF", asset: "artwork-proof", id: item.id, disabled: isLoading }) : "";
+  const finalProofButton = finalProofAvailable ? renderOpsAssetButton({ label: "VIEW APPROVED DESIGN", asset: "artwork-proof", id: item.id, disabled: isLoading }) : "";
   let body = revision;
 
   if (status === "missing") {
@@ -1288,14 +1288,14 @@ function renderOpsArtworkStage(item) {
       renderOpsActionButton({ label: "REQUEST REPLACEMENT", action: "request_new_artwork", id: item.id, tone: "danger", disabled: isLoading }),
     ])}`;
   } else if (status === "approval_required") {
-    body += `<p class="ops-stage-muted"><strong>Waiting for customer approval</strong>The final proof is published for customer review.</p>${finalProofButton ? `<div class="ops-stage-actions">${finalProofButton}</div>` : ""}`;
+    body += `<p class="ops-stage-muted"><strong>Waiting for customer approval</strong>The approved design is published for customer review.</p>${finalProofButton ? `<div class="ops-stage-actions">${finalProofButton}</div>` : ""}`;
   } else if (status === "approved") {
     body += `<p class="ops-stage-complete">Artwork approved${item.artworkApprovedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.artworkApprovedAt))}` : ""}</p>${finalProofButton ? `<div class="ops-stage-actions">${finalProofButton}</div>` : ""}`;
   }
 
   if (canOpsPrepareProof(item)) {
     const publishDisabled = isLoading || !finalProofAvailable;
-    body += `<details class="ops-proof-upload" ${current ? "open" : ""}><summary>FINAL PROOF</summary><label><span>Final artwork proof (PNG, JPG, PDF / 10 MB)</span><input accept=".png,.jpg,.jpeg,.pdf" data-ops-final-proof-file="${escapeHtml(item.id)}" type="file" ${isLoading ? "disabled" : ""} /></label>${finalProofButton}<div class="ops-stage-actions"><button class="ops-gold-button mini" data-ops-customer-action="publish_artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${publishDisabled ? "disabled" : ""}>SEND PROOF FOR APPROVAL</button></div></details>`;
+    body += `<details class="ops-proof-upload" ${current ? "open" : ""}><summary>APPROVED DESIGN</summary><label><span>Approved design file (PNG, JPG, PDF / 10 MB)</span><input accept=".png,.jpg,.jpeg,.pdf" data-ops-final-proof-file="${escapeHtml(item.id)}" type="file" ${isLoading ? "disabled" : ""} /></label>${finalProofButton}<div class="ops-stage-actions"><button class="ops-gold-button mini" data-ops-customer-action="publish_artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${publishDisabled ? "disabled" : ""}>SEND APPROVED DESIGN</button></div></details>`;
   }
 
   return renderOpsStageShell({ key: "artwork", title: "Artwork", status: getOpsCustomerActionLabel("artwork", status), current, body });
@@ -1337,27 +1337,29 @@ function renderOpsQuoteStage(item) {
 function renderOpsPaymentStage(item) {
   const request = opsCustomerActionRequests[item.id] || {};
   const isLoading = request.status === "loading";
+  const isReceiptLoading = isLoading && request.asset === "payment-proof";
+  const receiptOpened = request.status === "success" && request.asset === "payment-proof" && request.signedUrl;
+  const receiptUnavailable = request.status === "error" && request.asset === "payment-proof";
   const current = getOpsInquiryCurrentTask(item).stage === "payment";
   const status = item.paymentStatus || "not_required";
   let body = renderOpsQuoteHiddenFields(item);
 
   if (status === "confirmed") {
-    body += `<p class="ops-stage-complete">Payment confirmed / ${formatOpsValue(item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
+    body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
   } else if (!canOpsRequestPayment(item)) {
     body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
   } else if (status === "required") {
-    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Requested</span><strong>${escapeHtml(formatOpsTrackingDate(item.updatedAt))}</strong></div></div><p class="ops-stage-muted"><strong>PAYMENT REQUESTED &#10003;</strong>Awaiting customer payment proof.</p>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>PAYMENT REQUESTED</strong></div></div><p class="ops-stage-muted"><strong>${item.paymentRejectedAt ? "NEW RECEIPT NEEDED" : "PAYMENT REQUESTED"}</strong>Awaiting receipt.</p>`;
   } else if (["proof_submitted", "under_review"].includes(status)) {
-    const proof = item.paymentProofPath ? renderOpsAssetButton({ label: "VIEW PAYMENT PROOF", asset: "payment-proof", id: item.id, disabled: isLoading }) : `<span class="ops-customer-empty">No payment proof uploaded.</span>`;
-    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Proof submitted</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Payment review / replacement note</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div><div class="ops-stage-actions">${proof}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}</div>${renderOpsMoreActions([
-      renderOpsActionButton({ label: "Mark under review", action: "mark_payment_under_review", id: item.id, disabled: isLoading || !item.paymentProofPath }),
-      renderOpsActionButton({ label: "REQUEST NEW PROOF", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading }),
-    ])}`;
+    const receipt = item.paymentProofPath ? renderOpsAssetButton({ label: isReceiptLoading ? "LOADING..." : receiptUnavailable ? "TRY AGAIN" : "REVIEW RECEIPT", asset: "payment-proof", id: item.id, disabled: isReceiptLoading }) : `<span class="ops-customer-empty">No receipt uploaded.</span>`;
+    const receiptPreview = receiptOpened ? `<figure class="ops-payment-receipt-preview"><img alt="Uploaded payment receipt for ${escapeHtml(item.id)}" src="${escapeHtml(request.signedUrl)}" /><figcaption>Receipt opened for ${escapeHtml(item.id)}</figcaption></figure>` : "";
+    const receiptError = receiptUnavailable ? `<p class="ops-customer-action-message error">RECEIPT UNAVAILABLE</p>` : "";
+    body += `<div class="ops-stage-mini-grid"><div><span>Inquiry reference</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>RECEIPT RECEIVED</strong></div><div><span>Uploaded</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div><div><span>Receipt file</span><strong>${escapeHtml(item.paymentProofPath || "-")}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Reason for new receipt</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div>${receiptPreview}${receiptError}<div class="ops-stage-actions">${receipt}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}${renderOpsActionButton({ label: "REQUEST NEW RECEIPT", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading })}</div>`;
   } else {
     body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "proof_submitted", "under_review", "confirmed"].includes(status) })}</div>`;
   }
 
-  if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW PAYMENT PROOF REQUESTED</strong>${escapeHtml(item.paymentReviewNote || "Replacement proof requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
+  if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW RECEIPT NEEDED</strong>${escapeHtml(item.paymentReviewNote || "Replacement receipt requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
 
   return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && status !== "confirmed", body });
 }
@@ -1424,7 +1426,7 @@ function parseOpsQuoteMoney(value) {
 }
 
 function getOpsQuoteValidationMessage(action, body) {
-  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "require_payment"].includes(action)) return "";
+  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "require_payment", "request_new_payment_proof"].includes(action)) return "";
 
   const quotedAmountText = String(body.quotedAmount ?? "").trim();
   const amountDueText = String(body.amountDue ?? "").trim();
@@ -1461,9 +1463,12 @@ function getOpsQuoteValidationMessage(action, body) {
     return "ENTER PAYMENT INSTRUCTIONS\nPayment instructions are required before requesting payment.";
   }
 
+  if (action === "request_new_payment_proof" && String(body.paymentReviewNote || "").trim().length < 5) {
+    return "ENTER A RECEIPT REQUEST REASON\nAdd a short reason before requesting a new receipt.";
+  }
+
   return "";
 }
-
 function updateOpsCustomerActionInlineValidation(event) {
   const field = event.target;
   const stageSection = field?.closest?.(".ops-stage-section");
@@ -1496,12 +1501,34 @@ function setOpsCustomerActionInlineMessage(sourceElement, message, status = "err
   messageElement.textContent = message;
 }
 
+function getOpsActionLoadingLabel(action) {
+  if (action === "require_payment") return "REQUESTING...";
+  if (action === "confirm_payment") return "CONFIRMING...";
+  if (action === "request_new_payment_proof") return "REQUESTING...";
+  return "SAVING...";
+}
+
+function getOpsActionSavingMessage(action) {
+  if (action === "require_payment") return "REQUESTING PAYMENT...";
+  if (action === "confirm_payment") return "CONFIRMING PAYMENT...";
+  if (action === "request_new_payment_proof") return "REQUESTING NEW RECEIPT...";
+  return "SAVING CUSTOMER ACTION...";
+}
+
+function getOpsActionSuccessMessage(action) {
+  if (action === "save_quote_draft") return "QUOTE DRAFT SAVED.";
+  if (action === "require_payment") return "PAYMENT REQUESTED.";
+  if (action === "confirm_payment") return "PAYMENT CONFIRMED.";
+  if (action === "request_new_payment_proof") return "NEW RECEIPT NEEDED.";
+  return "CUSTOMER ACTION SAVED.";
+}
+
 function setOpsActionButtonLoading(button, isLoading) {
   if (!button) return;
   if (isLoading) {
     button.dataset.opsOriginalText = button.textContent || "";
     button.disabled = true;
-    button.textContent = button.dataset.opsCustomerAction === "require_payment" ? "REQUESTING..." : "SAVING...";
+    button.textContent = getOpsActionLoadingLabel(button.dataset.opsCustomerAction);
   } else {
     button.disabled = false;
     if (button.dataset.opsOriginalText) button.textContent = button.dataset.opsOriginalText;
@@ -1536,14 +1563,14 @@ async function saveOpsCustomerAction(inquiryId, action, sourceElement) {
     return;
   }
 
-  setOpsCustomerActionInlineMessage(sourceElement, action === "require_payment" ? "REQUESTING PAYMENT..." : "SAVING CUSTOMER ACTION...", "loading");
+  setOpsCustomerActionInlineMessage(sourceElement, getOpsActionSavingMessage(action), "loading");
   setOpsActionButtonLoading(sourceElement, true);
 
   try {
     await requestOpsCustomerAction(inquiryId, body);
     opsCustomerActionRequests = {
       ...opsCustomerActionRequests,
-      [inquiryId]: { status: "success", message: action === "save_quote_draft" ? "QUOTE DRAFT SAVED." : action === "require_payment" ? "PAYMENT REQUESTED." : "CUSTOMER ACTION SAVED." },
+      [inquiryId]: { status: "success", message: getOpsActionSuccessMessage(action) },
     };
     hasLoadedOpsInquiries = false;
     await loadOpsBoardInquiries();
@@ -1557,7 +1584,7 @@ async function uploadOpsFinalArtworkProof(inquiryId, file) {
 
   opsCustomerActionRequests = {
     ...opsCustomerActionRequests,
-    [inquiryId]: { status: "loading", message: "UPLOADING FINAL ARTWORK PROOF..." },
+    [inquiryId]: { status: "loading", message: "UPLOADING APPROVED DESIGN..." },
   };
   render();
 
@@ -1584,7 +1611,7 @@ async function uploadOpsFinalArtworkProof(inquiryId, file) {
       body: uploadForm,
     });
 
-    if (!uploadResponse.ok) throw new Error("FINAL ARTWORK PROOF UPLOAD FAILED.");
+    if (!uploadResponse.ok) throw new Error("APPROVED DESIGN UPLOAD FAILED.");
 
     await requestOpsCustomerAction(inquiryId, {
       action: "finalize_artwork_proof_upload",
@@ -1593,14 +1620,14 @@ async function uploadOpsFinalArtworkProof(inquiryId, file) {
 
     opsCustomerActionRequests = {
       ...opsCustomerActionRequests,
-      [inquiryId]: { status: "success", message: "FINAL PROOF UPLOADED. PUBLISH WHEN READY." },
+      [inquiryId]: { status: "success", message: "APPROVED DESIGN UPLOADED. PUBLISH WHEN READY." },
     };
     hasLoadedOpsInquiries = false;
     await loadOpsBoardInquiries();
   } catch (error) {
     opsCustomerActionRequests = {
       ...opsCustomerActionRequests,
-      [inquiryId]: { status: "error", message: error.message || "FINAL ARTWORK PROOF UPLOAD FAILED." },
+      [inquiryId]: { status: "error", message: error.message || "APPROVED DESIGN UPLOAD FAILED." },
     };
     render();
   }
@@ -1609,11 +1636,12 @@ async function uploadOpsFinalArtworkProof(inquiryId, file) {
 async function openOpsCustomerAsset(inquiryId, asset) {
   if (!inquiryId || !asset) return;
 
-  const popup = window.open("about:blank", "_blank");
+  const isPaymentReceipt = asset === "payment-proof";
+  const popup = isPaymentReceipt ? null : window.open("about:blank", "_blank");
   if (popup) popup.opener = null;
   opsCustomerActionRequests = {
     ...opsCustomerActionRequests,
-    [inquiryId]: { status: "loading", message: "OPENING PRIVATE FILE..." },
+    [inquiryId]: { status: "loading", message: isPaymentReceipt ? "LOADING..." : "OPENING PRIVATE FILE...", asset },
   };
   render();
 
@@ -1629,6 +1657,20 @@ async function openOpsCustomerAsset(inquiryId, asset) {
       throw new Error(getOpsCustomerActionError(response.status, payload?.error));
     }
 
+    if (isPaymentReceipt) {
+      opsCustomerActionRequests = {
+        ...opsCustomerActionRequests,
+        [inquiryId]: {
+          status: "success",
+          message: "RECEIPT OPENED.",
+          asset,
+          signedUrl: payload.signedUrl,
+        },
+      };
+      render();
+      return;
+    }
+
     if (popup) popup.location.href = payload.signedUrl;
     else window.open(payload.signedUrl, "_blank", "noopener,noreferrer");
 
@@ -1637,6 +1679,7 @@ async function openOpsCustomerAsset(inquiryId, asset) {
       [inquiryId]: {
         status: "success",
         message: "PRIVATE FILE OPENED.",
+        asset,
         artworkUploadedAt: asset === "customer-artwork" ? payload.uploadedAt || "" : "",
       },
     };
@@ -1645,12 +1688,15 @@ async function openOpsCustomerAsset(inquiryId, asset) {
     popup?.close();
     opsCustomerActionRequests = {
       ...opsCustomerActionRequests,
-      [inquiryId]: { status: "error", message: error.message || "PRIVATE FILE COULD NOT BE OPENED." },
+      [inquiryId]: {
+        status: "error",
+        message: isPaymentReceipt ? "RECEIPT UNAVAILABLE" : error.message || "PRIVATE FILE COULD NOT BE OPENED.",
+        asset,
+      },
     };
     render();
   }
 }
-
 function getOpsCustomerActionError(status, error) {
   const normalized = String(error || "").trim().toLowerCase();
   if (status === 401) return "ADMIN SESSION REQUIRED.";
@@ -1661,6 +1707,7 @@ function getOpsCustomerActionError(status, error) {
   if (status === 400 && normalized === "enter a valid amount due") return "ENTER A VALID AMOUNT DUE\nAmount due must be zero or greater.";
   if (status === 400 && ["enter a valid quote validity date", "quote validity date has expired"].includes(normalized)) return "QUOTE VALIDITY DATE HAS EXPIRED\nChoose today or a future date before sending the quote.";
   if (status === 400 && normalized === "enter payment instructions") return "ENTER PAYMENT INSTRUCTIONS\nPayment instructions are required before requesting payment.";
+  if (status === 400 && normalized === "receipt request reason required") return "ENTER A RECEIPT REQUEST REASON\nAdd a short reason before requesting a new receipt.";
   if (status === 400 && normalized === "artwork must be uploaded before sending quote") return "ARTWORK IS REQUIRED BEFORE SENDING THE QUOTE.";
   if (status === 400 && error) return String(error).toUpperCase();
   return "CUSTOMER ACTION FAILED. CHECK YOUR CONNECTION AND TRY AGAIN.";

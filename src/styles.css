@@ -8556,6 +8556,33 @@ tbody tr.selected td:last-child {
   color: var(--ops-red);
 }
 
+.ops-board-page .ops-payment-receipt-preview {
+  background: #ffffff;
+  border: 2px solid var(--ops-ink);
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 8px;
+}
+
+.ops-board-page .ops-payment-receipt-preview img {
+  background: var(--ops-bone);
+  border: 1px solid rgba(17, 17, 17, 0.22);
+  display: block;
+  max-height: min(420px, 60vh);
+  object-fit: contain;
+  width: 100%;
+}
+
+.ops-board-page .ops-payment-receipt-preview figcaption {
+  color: var(--ops-secondary);
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 9px;
+  font-weight: 900;
+  margin: 0;
+  text-transform: uppercase;
+}
+
 .ops-board-page .ops-customer-action-guard {
   border-top: 1px solid var(--ops-ink);
   color: var(--ops-secondary);

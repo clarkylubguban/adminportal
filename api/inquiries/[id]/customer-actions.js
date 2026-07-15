@@ -248,7 +248,7 @@ function buildUpdates(action, body, inquiry, now) {
       || inquiry.artwork_status !== "approved"
       || !["required", "proof_submitted", "under_review"].includes(String(inquiry.payment_status || ""))
     ) return null;
-    if (paymentReviewNote.length < 5) return null;
+    if (paymentReviewNote.length < 5) return { error: "receipt request reason required" };
     return { payment_status: "required", payment_review_note: paymentReviewNote, payment_rejected_at: now };
   }
 
