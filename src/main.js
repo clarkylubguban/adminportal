@@ -1247,8 +1247,8 @@ const opsCustomerActionLabels = {
     revision_requested: "Revision Requested",
   },
   payment: {
-    not_required: "Not Required",
-    required: "Payment Required",
+    not_required: "Not Yet Requested",
+    required: "Payment Requested",
     proof_submitted: "Proof Submitted",
     under_review: "Under Review",
     confirmed: "Confirmed",
@@ -1345,6 +1345,8 @@ function renderOpsPaymentStage(item) {
     body += `<p class="ops-stage-complete">Payment confirmed / ${formatOpsValue(item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
   } else if (!canOpsRequestPayment(item)) {
     body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
+  } else if (status === "required") {
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Requested</span><strong>${escapeHtml(formatOpsTrackingDate(item.updatedAt))}</strong></div></div><p class="ops-stage-muted"><strong>PAYMENT REQUESTED &#10003;</strong>Awaiting customer payment proof.</p>`;
   } else if (["proof_submitted", "under_review"].includes(status)) {
     const proof = item.paymentProofPath ? renderOpsAssetButton({ label: "VIEW PAYMENT PROOF", asset: "payment-proof", id: item.id, disabled: isLoading }) : `<span class="ops-customer-empty">No payment proof uploaded.</span>`;
     body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Proof submitted</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Payment review / replacement note</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div><div class="ops-stage-actions">${proof}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}</div>${renderOpsMoreActions([
@@ -1352,7 +1354,7 @@ function renderOpsPaymentStage(item) {
       renderOpsActionButton({ label: "REQUEST NEW PROOF", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading }),
     ])}`;
   } else {
-    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment note</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "proof_submitted", "under_review", "confirmed"].includes(status) })}</div>`;
   }
 
   if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW PAYMENT PROOF REQUESTED</strong>${escapeHtml(item.paymentReviewNote || "Replacement proof requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
@@ -1430,12 +1432,16 @@ function getOpsQuoteValidationMessage(action, body) {
   const amountDue = amountDueText ? parseOpsQuoteMoney(amountDueText) : quotedAmount;
   const validUntil = String(body.quoteValidUntil || "").trim();
 
-  if (["publish_quote", "require_payment"].includes(action) && (!Number.isFinite(quotedAmount) || quotedAmount <= 0)) {
-    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â±0 before sending the quote.";
+  if (action === "publish_quote" && (!Number.isFinite(quotedAmount) || quotedAmount <= 0)) {
+    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than 0 before sending the quote.";
+  }
+
+  if (action === "require_payment" && (!Number.isFinite(amountDue) || amountDue <= 0)) {
+    return "ENTER A VALID AMOUNT DUE\nAmount due must be greater than 0 before requesting payment.";
   }
 
   if (quotedAmountText && (!Number.isFinite(quotedAmount) || quotedAmount < 0)) {
-    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â±0 before sending the quote.";
+    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than 0 before sending the quote.";
   }
 
   if (amountDueText && (!Number.isFinite(amountDue) || amountDue < 0)) {
@@ -1458,6 +1464,23 @@ function getOpsQuoteValidationMessage(action, body) {
   return "";
 }
 
+function updateOpsCustomerActionInlineValidation(event) {
+  const field = event.target;
+  const stageSection = field?.closest?.(".ops-stage-section");
+  if (!stageSection) return;
+
+  const messageElement = stageSection.querySelector("[data-ops-customer-inline-message]");
+  if (!messageElement?.classList.contains("error")) return;
+
+  const requestButton = stageSection.querySelector('[data-ops-customer-action="require_payment"]');
+  if (!requestButton) return;
+
+  const body = getOpsCustomerActionFormPayload("require_payment", requestButton);
+  if (!getOpsQuoteValidationMessage("require_payment", body)) {
+    messageElement.remove();
+  }
+}
+
 function setOpsCustomerActionInlineMessage(sourceElement, message, status = "error") {
   const stageSection = sourceElement?.closest?.(".ops-stage-section");
   if (!stageSection) return;
@@ -1478,7 +1501,7 @@ function setOpsActionButtonLoading(button, isLoading) {
   if (isLoading) {
     button.dataset.opsOriginalText = button.textContent || "";
     button.disabled = true;
-    button.textContent = "SAVING...";
+    button.textContent = button.dataset.opsCustomerAction === "require_payment" ? "REQUESTING..." : "SAVING...";
   } else {
     button.disabled = false;
     if (button.dataset.opsOriginalText) button.textContent = button.dataset.opsOriginalText;
@@ -1504,7 +1527,7 @@ async function requestOpsCustomerAction(inquiryId, body) {
 }
 
 async function saveOpsCustomerAction(inquiryId, action, sourceElement) {
-  if (!inquiryId || !action) return;
+  if (!inquiryId || !action || sourceElement?.disabled) return;
 
   const body = getOpsCustomerActionFormPayload(action, sourceElement);
   const validationMessage = getOpsQuoteValidationMessage(action, body);
@@ -1513,14 +1536,14 @@ async function saveOpsCustomerAction(inquiryId, action, sourceElement) {
     return;
   }
 
-  setOpsCustomerActionInlineMessage(sourceElement, "SAVING CUSTOMER ACTION...", "loading");
+  setOpsCustomerActionInlineMessage(sourceElement, action === "require_payment" ? "REQUESTING PAYMENT..." : "SAVING CUSTOMER ACTION...", "loading");
   setOpsActionButtonLoading(sourceElement, true);
 
   try {
     await requestOpsCustomerAction(inquiryId, body);
     opsCustomerActionRequests = {
       ...opsCustomerActionRequests,
-      [inquiryId]: { status: "success", message: action === "save_quote_draft" ? "QUOTE DRAFT SAVED." : "CUSTOMER ACTION SAVED." },
+      [inquiryId]: { status: "success", message: action === "save_quote_draft" ? "QUOTE DRAFT SAVED." : action === "require_payment" ? "PAYMENT REQUESTED." : "CUSTOMER ACTION SAVED." },
     };
     hasLoadedOpsInquiries = false;
     await loadOpsBoardInquiries();
@@ -1634,7 +1657,7 @@ function getOpsCustomerActionError(status, error) {
   if (status === 403) return "ADMIN WRITE ACCESS REQUIRED.";
   if (status === 404) return "INQUIRY OR FILE NOT FOUND.";
   if (status === 503) return "CUSTOMER ACTION DATABASE FIELDS ARE NOT READY.";
-  if (status === 400 && normalized === "enter a valid quoted amount") return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â±0 before sending the quote.";
+  if (status === 400 && normalized === "enter a valid quoted amount") return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than 0 before sending the quote.";
   if (status === 400 && normalized === "enter a valid amount due") return "ENTER A VALID AMOUNT DUE\nAmount due must be zero or greater.";
   if (status === 400 && ["enter a valid quote validity date", "quote validity date has expired"].includes(normalized)) return "QUOTE VALIDITY DATE HAS EXPIRED\nChoose today or a future date before sending the quote.";
   if (status === 400 && normalized === "enter payment instructions") return "ENTER PAYMENT INSTRUCTIONS\nPayment instructions are required before requesting payment.";
@@ -4033,6 +4056,10 @@ function bindOpsBoardEvents() {
     button.addEventListener("click", async () => {
       await openOpsArtwork(button.dataset.opsViewArtwork);
     });
+  });
+
+  document.querySelectorAll("[data-ops-customer-field]").forEach((field) => {
+    field.addEventListener("input", updateOpsCustomerActionInlineValidation);
   });
 
   document.querySelectorAll("[data-ops-customer-action]").forEach((button) => {

@@ -227,9 +227,12 @@ function buildUpdates(action, body, inquiry, now) {
     };
   }
   if (action === "require_payment") {
-    if (!cleanText(body.paymentInstructions, 2000)) return { error: "enter payment instructions" };
-    if (inquiry.quote_status !== "approved" || inquiry.artwork_status !== "approved" || !quoteValues || quoteValues.amount_due <= 0) return null;
-    return { ...quoteValues, payment_status: "required", payment_review_note: null, payment_rejected_at: null };
+    const amountDue = getMoney(body.amountDue);
+    const paymentInstructions = cleanText(body.paymentInstructions, 2000);
+    const paymentLabel = cleanText(body.paymentLabel, 120);
+    if (!paymentInstructions) return { error: "enter payment instructions" };
+    if (inquiry.quote_status !== "approved" || inquiry.artwork_status !== "approved" || !Number.isFinite(amountDue) || amountDue <= 0 || ["required", "proof_submitted", "under_review", "confirmed"].includes(String(inquiry.payment_status || ""))) return null;
+    return { amount_due: amountDue, payment_label: paymentLabel || null, payment_instructions: paymentInstructions, payment_status: "required", payment_review_note: null, payment_rejected_at: null, updated_at: now };
   }
 
   if (action === "mark_payment_under_review") {

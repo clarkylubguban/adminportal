@@ -218,6 +218,7 @@ export function mapOpsRowToInquiry(row) {
     deliveryLandmark: getFirstValue(row, ["delivery_landmark", "deliveryLandmark"]),
     trackingSubstatus: getFirstValue(row, ["tracking_substatus", "trackingSubstatus"]),
     trackingNote: getFirstValue(row, ["tracking_note", "trackingNote"]),
+    updatedAt: getFirstValue(row, ["updated_at", "updatedAt"]),
     trackingUpdatedAt: getFirstValue(row, ["tracking_updated_at", "trackingUpdatedAt"]),
     followUpDate: normalizeDate(
       getFirstValue(row, [
