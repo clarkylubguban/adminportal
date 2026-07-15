@@ -8670,6 +8670,25 @@ tbody tr.selected td:last-child {
   line-height: 1.35;
   margin: 0;
 }
+.ops-board-page .ops-summary-odoo-notes-row {
+  display: grid;
+  gap: 7px;
+  grid-column: 1 / -1;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+
+.ops-board-page .ops-summary-odoo-notes-row.wide {
+  grid-template-columns: 1fr;
+}
+
+.ops-board-page .ops-summary-customer-notes strong {
+  background: var(--ops-bone);
+  border: 1px solid rgba(17, 17, 17, 0.22);
+  display: block;
+  padding: 7px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 
 .ops-board-page .ops-submission-details {
   border-top: 1px solid rgba(17, 17, 17, 0.24);

@@ -1147,7 +1147,19 @@ function renderOpsDeliveryDetail(item) {
   const landmark = item.deliveryLandmark ? `<div class="wide"><span>Delivery landmark</span><strong>${escapeHtml(item.deliveryLandmark)}</strong></div>` : "";
   return `<div class="wide"><span>Delivery address</span><strong>${escapeHtml(address)}</strong></div>${landmark}`;
 }
+function getOpsCustomerSubmittedNotes(item) {
+  const directNotes = String(item.notes || item.customerNotes || "").trim();
+  if (directNotes) return directNotes;
+
+  const message = String(item.message || "");
+  const match = message.match(/^Notes:\s*([\s\S]*?)(?=\nCustomer-side submitted at:\s|$)/m);
+  const extracted = match ? match[1].trim() : "";
+  if (!extracted || extracted.toLowerCase() === "none") return "";
+  return extracted;
+}
 function renderOpsInquiryDetails(item) {
+  const customerNotes = getOpsCustomerSubmittedNotes(item) || "No notes provided.";
+  const notesAreLong = customerNotes.length > 140 || /\n/.test(customerNotes);
   const rows = [
     ["Contact", item.contact],
     ["Product / Service", item.service],
@@ -1156,10 +1168,11 @@ function renderOpsInquiryDetails(item) {
     ["Fulfillment", getOpsFulfillmentLabel(item)],
     ["Assigned staff", item.assigned || "Not assigned"],
     ["Estimated value", formatOpsValue(item.estimatedValue)],
-    ["Odoo SO:", item.odooSO || "Not created"],
   ].filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "" && String(value).trim() !== "-");
 
-  return `<section class="ops-inquiry-summary"><div class="ops-summary-grid">${rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${label === "Estimated value" ? value : escapeHtml(value)}</strong></div>`).join("")}</div><details class="ops-submission-details"><summary>CUSTOMER SUBMISSION</summary><p>${escapeHtml(item.message || "No message saved.")}</p></details></section>`;
+  const summaryRows = rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${label === "Estimated value" ? value : escapeHtml(value)}</strong></div>`).join("");
+  const notesPair = `<div class="ops-summary-odoo-notes-row ${notesAreLong ? "wide" : ""}"><div><span>Odoo SO:</span><strong>${escapeHtml(item.odooSO || "Not created")}</strong></div><div class="ops-summary-customer-notes"><span>CUSTOMER NOTES</span><strong>${escapeHtml(customerNotes)}</strong></div></div>`;
+  return `<section class="ops-inquiry-summary"><div class="ops-summary-grid">${summaryRows}${notesPair}</div><details class="ops-submission-details"><summary>CUSTOMER SUBMISSION</summary><p>${escapeHtml(item.message || "No message saved.")}</p></details></section>`;
 }
 function renderOpsArtworkAction(item) {
   const request = opsArtworkRequests[item.id] ?? {};
@@ -1418,11 +1431,11 @@ function getOpsQuoteValidationMessage(action, body) {
   const validUntil = String(body.quoteValidUntil || "").trim();
 
   if (["publish_quote", "require_payment"].includes(action) && (!Number.isFinite(quotedAmount) || quotedAmount <= 0)) {
-    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ₱0 before sending the quote.";
+    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â±0 before sending the quote.";
   }
 
   if (quotedAmountText && (!Number.isFinite(quotedAmount) || quotedAmount < 0)) {
-    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ₱0 before sending the quote.";
+    return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â±0 before sending the quote.";
   }
 
   if (amountDueText && (!Number.isFinite(amountDue) || amountDue < 0)) {
@@ -1621,7 +1634,7 @@ function getOpsCustomerActionError(status, error) {
   if (status === 403) return "ADMIN WRITE ACCESS REQUIRED.";
   if (status === 404) return "INQUIRY OR FILE NOT FOUND.";
   if (status === 503) return "CUSTOMER ACTION DATABASE FIELDS ARE NOT READY.";
-  if (status === 400 && normalized === "enter a valid quoted amount") return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ₱0 before sending the quote.";
+  if (status === 400 && normalized === "enter a valid quoted amount") return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â±0 before sending the quote.";
   if (status === 400 && normalized === "enter a valid amount due") return "ENTER A VALID AMOUNT DUE\nAmount due must be zero or greater.";
   if (status === 400 && ["enter a valid quote validity date", "quote validity date has expired"].includes(normalized)) return "QUOTE VALIDITY DATE HAS EXPIRED\nChoose today or a future date before sending the quote.";
   if (status === 400 && normalized === "enter payment instructions") return "ENTER PAYMENT INSTRUCTIONS\nPayment instructions are required before requesting payment.";
@@ -2587,7 +2600,7 @@ function renderCatalogImageField(draft, canWrite, isSaving) {
         <span>${filename ? escapeHtml(filename) : "No file selected"}</span>
         ${canWrite ? `<button data-catalog-remove-image type="button" ${disabled || (!hasImage && !draft.imageFile && !draft.imageUrl) ? "disabled" : ""}>REMOVE IMAGE</button>` : ""}
       </div>
-      <p>SQUARE IMAGE REQUIRED · 1200 × 1200 RECOMMENDED · MINIMUM 800 × 800 · MAXIMUM 5 MB</p>
+      <p>SQUARE IMAGE REQUIRED Ãƒâ€šÃ‚Â· 1200 ÃƒÆ’Ã¢â‚¬â€ 1200 RECOMMENDED Ãƒâ€šÃ‚Â· MINIMUM 800 ÃƒÆ’Ã¢â‚¬â€ 800 Ãƒâ€šÃ‚Â· MAXIMUM 5 MB</p>
       ${draft.imageError ? `<p class="catalog-image-error">${escapeHtml(draft.imageError)}</p>` : ""}
     </section>
   `;

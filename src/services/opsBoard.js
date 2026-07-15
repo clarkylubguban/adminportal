@@ -187,6 +187,7 @@ export function mapOpsRowToInquiry(row) {
     source:
       getFirstValue(row, ["source"]) || "FB",
     message: getFirstValue(row, ["message"]),
+    notes: getFirstValue(row, ["notes", "customer_notes", "customerNotes"]),
     service:
       getFirstValue(row, [
         "product",
