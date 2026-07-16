@@ -49,6 +49,7 @@ const lucideIcons = {
   user: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle>',
   "file-text": '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"></path><path d="M14 2v4a2 2 0 0 0 2 2h4"></path><path d="M10 9H8"></path><path d="M16 13H8"></path><path d="M16 17H8"></path>',
   "external-link": '<path d="M15 3h6v6"></path><path d="M10 14 21 3"></path><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>',
+  copy: '<rect width="14" height="14" x="8" y="8" rx="2"></rect><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"></path>',
   "circle-check": '<circle cx="12" cy="12" r="10"></circle><path d="m9 12 2 2 4-4"></path>',
   factory: '<path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V8l-7 5V8l-7 5V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z"></path><path d="M17 18h1"></path><path d="M12 18h1"></path><path d="M7 18h1"></path>',
   package: '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="m7.5 4.27 9 5.15"></path>',
@@ -255,6 +256,8 @@ let opsCustomerActionRequests = {};
 let expandedOpsInquiryId = null;
 let selectedOrderDashboardId = null;
 let orderDashboardSaveError = "";
+let orderDashboardReturnFocusId = null;
+const orderDashboardCopyTimers = new Map();
 let orderDashboardFilters = {
   search: "",
   stage: "all",
@@ -2148,9 +2151,78 @@ function renderOrderDashboardFilters() {
 
 function renderOrderDashboardActiveOrders(items) {
   const active = items.filter((item) => !isOrderDashboardCompleted(item));
-  return `<section class="order-dashboard-section"><div class="ops-section-heading split"><h2>Active Orders</h2><span>${active.length} shown</span></div><div class="order-dashboard-list">${active.length ? active.map(renderOrderDashboardCard).join("") : `<div class="ops-empty-column">No active confirmed orders match the filters.</div>`}</div></section>`;
+  const header = `<div class="order-dashboard-row order-dashboard-row-head" role="row">
+    <span role="columnheader">Code</span>
+    <span role="columnheader">Customer</span>
+    <span class="order-dashboard-col-phone" role="columnheader">Phone</span>
+    <span class="order-dashboard-col-product" role="columnheader">Inquiry / Item</span>
+    <span role="columnheader">Service</span>
+    <span role="columnheader">Qty</span>
+    <span role="columnheader">Artwork</span>
+    <span role="columnheader">Needed Date</span>
+    <span role="columnheader">Action</span>
+  </div>`;
+  return `<section class="order-dashboard-section order-dashboard-active-section"><div class="ops-section-heading split"><h2>Active Orders</h2><span>${active.length} shown</span></div><div class="order-dashboard-table-scroll"><div class="order-dashboard-table" role="table" aria-label="Active orders">${active.length ? `${header}<div class="order-dashboard-table-body" role="rowgroup">${active.map(renderOrderDashboardRow).join("")}</div>` : `<div class="ops-empty-column">No active confirmed orders match the filters.</div>`}</div></div></section>`;
 }
 
+function getOrderDashboardMessageValue(item, labels) {
+  const message = String(item.message || "");
+  for (const label of labels) {
+    const match = message.match(new RegExp(`^${label}:\\s*(.+)$`, "im"));
+    if (match?.[1]?.trim()) return match[1].trim();
+  }
+  return "";
+}
+
+function getOrderDashboardProductLabel(item) {
+  return getOrderDashboardMessageValue(item, ["Product", "Garment", "Item", "Inquiry \\/ Product"]) || String(item.service || "-").trim() || "-";
+}
+
+function getOrderDashboardServiceLabel(item) {
+  return getOrderDashboardMessageValue(item, ["Print Method", "Service Type", "Type of Service", "Service"]) || String(item.service || "-").trim() || "-";
+}
+
+function getOrderDashboardArtworkLabel(item) {
+  const status = String(item.artworkStatus || "").trim().toLowerCase();
+  if (status === "approved") return "Approved";
+  if (status === "approval_required") return "For Approval";
+  if (["submitted", "under_review"].includes(status)) return "For Review";
+  if (status === "revision_requested") return "Revision";
+  if (["usable", "ready"].includes(status)) return "Ready";
+  return "No Artwork";
+}
+
+function normalizeOrderDashboardPhone(value) {
+  return String(value || "").replace(/\D/g, "");
+}
+
+function renderOrderDashboardCopyButton({ value, copyValue, field, id, label }) {
+  if (!copyValue) return `<span class="order-dashboard-missing">${escapeHtml(value)}</span>`;
+  return `<button class="order-dashboard-copy" data-order-dashboard-copy="${escapeHtml(copyValue)}" data-order-dashboard-copy-key="${escapeHtml(`${id}-${field}`)}" type="button" aria-label="Copy ${escapeHtml(label)} ${escapeHtml(value)}" title="Copy ${escapeHtml(value)}"><span class="order-dashboard-copy-value">${escapeHtml(value)}</span>${renderIcon("copy", "order-dashboard-copy-icon")}<span class="order-dashboard-copy-feedback" aria-live="polite"></span></button>`;
+}
+
+function renderOrderDashboardRow(item) {
+  const selected = selectedOrderDashboardId === item.id;
+  const dueState = getOrderDueState(item);
+  const phone = String(item.contact || "").trim();
+  const normalizedPhone = normalizeOrderDashboardPhone(phone);
+  const product = getOrderDashboardProductLabel(item);
+  const service = getOrderDashboardServiceLabel(item);
+  const artwork = getOrderDashboardArtworkLabel(item);
+  const artworkTone = String(item.artworkStatus || "missing").trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+  const rowLabel = `${item.id}, ${item.customer || "Unnamed customer"}, ${service}, ${item.qty || "quantity not set"}, ${artwork}, ${getOrderDueLabel(item)}`;
+  return `<div class="order-dashboard-row order-dashboard-order-row ${selected ? "selected" : ""} ${dueState}" data-order-dashboard-row="${escapeHtml(item.id)}" role="row" tabindex="0" aria-label="Open order ${escapeHtml(rowLabel)}">
+    <span class="order-dashboard-cell order-dashboard-id" role="cell">${renderOrderDashboardCopyButton({ value: item.id, copyValue: item.id, field: "code", id: item.id, label: "inquiry code" })}</span>
+    <strong class="order-dashboard-cell order-dashboard-customer" role="cell" title="${escapeHtml(item.customer || "Unnamed customer")}">${escapeHtml(item.customer || "Unnamed customer")}</strong>
+    <span class="order-dashboard-cell order-dashboard-col-phone" role="cell">${renderOrderDashboardCopyButton({ value: phone || "No phone", copyValue: normalizedPhone, field: "phone", id: item.id, label: "phone number" })}</span>
+    <span class="order-dashboard-cell order-dashboard-col-product" role="cell" title="${escapeHtml(product)}">${escapeHtml(product)}</span>
+    <span class="order-dashboard-cell" role="cell" title="${escapeHtml(service)}">${escapeHtml(service)}</span>
+    <span class="order-dashboard-cell" role="cell" title="${escapeHtml(item.qty || "-")}">${escapeHtml(item.qty || "-")}</span>
+    <span class="order-dashboard-cell order-dashboard-artwork ${artworkTone}" role="cell" title="Artwork: ${escapeHtml(artwork)}"><span class="order-dashboard-artwork-badge">${escapeHtml(artwork)}</span></span>
+    <span class="order-dashboard-cell order-dashboard-due ${dueState}" role="cell" title="${escapeHtml(getOrderDueLabel(item))}">${escapeHtml(getOrderDueLabel(item))}</span>
+    <span class="order-dashboard-cell order-dashboard-action" role="cell"><button class="order-dashboard-show-more" data-order-dashboard-open="${escapeHtml(item.id)}" type="button" aria-label="Show more details for ${escapeHtml(item.id)}">Show More</button></span>
+  </div>`;
+}
 function renderOrderFulfillmentQueue(items) {
   const pickup = items.filter((item) => item.fulfillmentMethod === "pickup" && item.trackingSubstatus === "ready_for_pickup" && !isOrderDashboardCompleted(item));
   const delivery = items.filter((item) => item.fulfillmentMethod === "delivery" && ["out_for_delivery", "delivered"].includes(item.trackingSubstatus) && !isOrderDashboardCompleted(item));
@@ -4039,19 +4111,57 @@ function bindOrderDashboardEvents() {
     });
   });
 
+  const openOrderDrawer = (id) => {
+    if (!id || (selectedOrderDashboardId === id && document.querySelector("[data-order-dashboard-close]"))) return;
+    selectedOrderDashboardId = id;
+    orderDashboardReturnFocusId = id;
+    orderDashboardSaveError = "";
+    render();
+    document.querySelector("[data-order-dashboard-close]")?.focus();
+  };
+
+  document.querySelectorAll("[data-order-dashboard-row]").forEach((row) => {
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea")) return;
+      openOrderDrawer(row.dataset.orderDashboardRow);
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.target !== row || !["Enter", " "].includes(event.key)) return;
+      event.preventDefault();
+      openOrderDrawer(row.dataset.orderDashboardRow);
+    });
+  });
+
   document.querySelectorAll("[data-order-dashboard-open]").forEach((button) => {
-    button.addEventListener("click", () => {
-      selectedOrderDashboardId = button.dataset.orderDashboardOpen;
-      orderDashboardSaveError = "";
-      render();
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openOrderDrawer(button.dataset.orderDashboardOpen);
+    });
+  });
+
+  document.querySelectorAll("[data-order-dashboard-copy]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      const key = button.dataset.orderDashboardCopyKey;
+      const feedback = button.querySelector(".order-dashboard-copy-feedback");
+      await copyToClipboard(button.dataset.orderDashboardCopy);
+      if (feedback) feedback.textContent = "Copied";
+      button.classList.add("copied");
+      if (orderDashboardCopyTimers.has(key)) window.clearTimeout(orderDashboardCopyTimers.get(key));
+      orderDashboardCopyTimers.set(key, window.setTimeout(() => {
+        button.classList.remove("copied");
+        if (feedback) feedback.textContent = "";
+        orderDashboardCopyTimers.delete(key);
+      }, 1300));
     });
   });
 
   document.querySelector("[data-order-dashboard-close]")?.addEventListener("click", () => {
+    const returnFocusId = orderDashboardReturnFocusId || selectedOrderDashboardId;
     selectedOrderDashboardId = null;
     render();
+    document.querySelector(`[data-order-dashboard-row="${CSS.escape(returnFocusId || "")}"]`)?.focus();
   });
-
   document.querySelectorAll("[data-order-dashboard-save]").forEach((button) => {
     button.addEventListener("click", async () => {
       await saveOrderDashboardProduction(button.dataset.orderDashboardSave);
