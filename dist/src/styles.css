@@ -8245,6 +8245,7 @@ tbody tr.selected td:last-child {
   cursor: pointer;
   min-height: 52px;
   outline: 0;
+  position: relative;
 }
 
 .order-dashboard-order-row:last-child {
@@ -8257,12 +8258,23 @@ tbody tr.selected td:last-child {
 }
 
 .order-dashboard-order-row:focus-visible {
-  box-shadow: inset 0 0 0 2px var(--order-border);
+  outline: 2px solid var(--order-border);
+  outline-offset: -2px;
 }
 
 .order-dashboard-order-row.selected {
   background: var(--order-white);
-  box-shadow: inset 4px 0 0 var(--order-lime);
+}
+
+.order-dashboard-order-row.selected::before {
+  background: var(--order-lime);
+  bottom: 0;
+  content: "";
+  left: 0;
+  pointer-events: none;
+  position: absolute;
+  top: 0;
+  width: 4px;
 }
 
 .order-dashboard-cell {
