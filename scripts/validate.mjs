@@ -3,13 +3,16 @@ import { access, readFile } from "node:fs/promises";
 const requiredFiles = [
   "index.html",
   "src/main.js",
+  "src/mvpDashboard.js",
+  "api/_lib/opsWorkflow.js",
+  "api/inquiries/[id]/workflow.js",
   "src/styles.css",
   "vercel.json",
 ];
 
 await Promise.all(requiredFiles.map((file) => access(file)));
 
-const appCode = await readFile("src/main.js", "utf8");
+const appCode = `${await readFile("src/main.js", "utf8")}\n${await readFile("src/mvpDashboard.js", "utf8")}`;
 const html = await readFile("index.html", "utf8");
 const requiredCopy = [
   "TRRY Admin",
@@ -23,13 +26,15 @@ const requiredCopy = [
   "Embroidered Staff Cap",
   "admin.trryapparel.com",
   "Pending Review",
-  "Today's Operations",
-  "AI Capture Inquiry",
   "Save Inquiry",
   "Inquiry Pipeline",
-  "Won = Odoo Sales Order created",
-  "Add Odoo SO #",
-  "Odoo SO:",
+  "Confirmed Orders",
+  "Production Dashboard",
+  "What needs attention today",
+  "NO QUOTATION / NO WORK",
+  "NO CONFIRMED ORDER / DO NOT PRINT",
+  "NO ODOO RECORD / NO PRODUCTION",
+  "Confirm Odoo SO &amp; Create Order",
   "Production Snapshot",
   "Search clients by name, slug, or domain...",
   "Add New Client",

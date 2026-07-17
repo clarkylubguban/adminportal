@@ -273,7 +273,7 @@ function buildUpdates(action, body, inquiry, now) {
 }
 
 function isProductionActive(value) {
-  return ["in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(String(value || ""));
+  return ["printing", "embroidery", "screen_printing", "qc", "ready", "in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(String(value || ""));
 }
 
 function getQuoteValues(body, options = {}) {

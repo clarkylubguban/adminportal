@@ -16,7 +16,11 @@ const contentTypes = {
 
 const appRoutes = new Set([
   "/",
+  "/inquiries",
   "/orders",
+  "/order-dashboard",
+  "/production",
+  "/reorders",
   "/overview",
   "/clients",
   "/products",
@@ -33,6 +37,12 @@ async function handleRequest(request, response) {
     if (/^\/api\/inquiries\/[^/]+\/customer-actions\/?$/.test(routePath)) {
       const { default: handleCustomerActionsRequest } = await import("../api/inquiries/[id]/customer-actions.js");
       await handleCustomerActionsRequest(request, response);
+      return;
+    }
+
+    if (/^\/api\/inquiries\/[^/]+\/workflow\/?$/.test(routePath)) {
+      const { default: handleWorkflowRequest } = await import("../api/inquiries/[id]/workflow.js");
+      await handleWorkflowRequest(request, response);
       return;
     }
 

@@ -1,10 +1,10 @@
+import { createMvpDashboard } from "./mvpDashboard.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
   createOpsBoardInquiry,
   getOpsBoardInquiries,
   updateOpsInquiryFields,
-  updateOpsInquiryOdooSO,
   updateOpsInquiryStatus,
 } from "./services/opsBoard.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
@@ -28,6 +28,8 @@ import {
   signInAdminWithPassword,
   signOutAdmin,
 } from "./lib/supabaseClient.js";
+
+const mvpDashboard = createMvpDashboard();
 
 const lucideIcons = {
   "layout-dashboard": '<rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect>',
@@ -266,11 +268,18 @@ let orderDashboardFilters = {
   due: "all",
 };
 
+let mvpInquiryFilters = { stage: "all", owner: "all", service: "all", due: "all", search: "" };
+let mvpProductionFilters = { stage: "all", staff: "all", due: "all", search: "" };
+let selectedMvpInquiryId = null;
+let selectedMvpProductionId = null;
+
 const orderProductionStages = [
   { value: "queued", label: "Queued" },
-  { value: "in_production", label: "In Production" },
-  { value: "qc_finishing", label: "QC / Finishing" },
-  { value: "ready_for_fulfillment", label: "Ready for Fulfillment" },
+  { value: "printing", label: "Printing" },
+  { value: "embroidery", label: "Embroidery" },
+  { value: "screen_printing", label: "Screen Printing" },
+  { value: "qc", label: "QC" },
+  { value: "ready", label: "Ready" },
   { value: "completed", label: "Completed" },
 ];
 const localOrders = [
@@ -382,8 +391,11 @@ let catalogSaveError = "";
 
 const routes = {
   "/": "Overview",
-  "/order-dashboard": "Order Dashboard",
+  "/inquiries": "Inquiries",
+  "/order-dashboard": "Orders",
   "/orders": "Orders",
+  "/production": "Production",
+  "/reorders": "Reorders",
   "/overview": "Overview",
   "/clients": "Clients",
   "/products": "Products",
@@ -428,11 +440,15 @@ function render() {
       <section class="workspace ${isSidebarCollapsed ? "is-expanded" : ""}">
         ${renderTopHeader()}
         ${
-          currentRoute === "Order Dashboard"
-            ? renderOrderDashboardPage()
-            : currentRoute === "Orders"
+          currentRoute === "Orders"
+            ? renderMvpOrdersPage()
+            : currentRoute === "Reorders"
               ? renderOrdersPage(selectedOrder, filteredOrders)
-              : currentRoute === "Overview"
+              : currentRoute === "Inquiries"
+                ? renderMvpInquiriesPage()
+                : currentRoute === "Production"
+                  ? renderMvpProductionPage()
+                  : currentRoute === "Overview"
                 ? renderOverviewPage()
                 : currentRoute === "Clients"
                   ? renderClientsPage()
@@ -814,46 +830,46 @@ async function loadOpsBoardInquiries() {
 
   render();
 }
-function renderOverviewPage() {
-  const overdueList = opsInquiries.filter(isOpsOverdue);
-  const counts = getOpsCounts();
-  const summaryCards = [
-    { label: "New Inquiries", value: counts.newToday, hint: "came in today" },
-    { label: "Quotes Due", value: counts.quotesDue, hint: "waiting on us" },
-    { label: "Follow-ups", value: counts.followUps, hint: "needs staff check" },
-    { label: "Production Today", value: counts.prodToday, hint: "jobs on the floor" },
-    { label: "Converted to Odoo", value: counts.converted, hint: "official SOs", gold: true },
-  ];
-  const columns = ["new", "quote", "sent", "followup", "won", "lost"];
-
-  return `
-    <main class="orders-page ops-board-page">
-      <div class="ops-shell">
-        <header class="ops-hero">
-          <div>
-            <p class="ops-date-line">Wed / Jul 8, 2026 / Iligan City</p>
-            <h1>Today's Operations</h1>
-            <p class="subtitle">See inquiries, follow-ups, production, and AI actions in one view.</p>
-          </div>
-          <div class="ops-rule-card">
-            <strong>Iron rules</strong>
-            <span>No quote before review / no production without approval / no production without Odoo.</span>
-          </div>
-        </header>
-        <section class="ops-kpi-grid" aria-label="Ops board summary">${summaryCards.map(renderOpsSummaryCard).join("")}</section>${renderOpsPersistenceNotice()}
-        <section class="ops-priority-section ops-full-row"><div class="ops-section-heading"><h2>Today's Priority</h2>${overdueList.length ? `<span class="ops-overdue-count">${overdueList.length} overdue</span>` : ""}</div><div class="ops-priority-list">${getOpsPriorityItems().map(renderOpsPriorityRow).join("")}</div></section>
-        <section class="ops-card ops-ai-card ops-full-row">
-          <div class="ops-section-heading compact"><div><h2>${renderIcon("sparkles", "ops-heading-icon")} AI Capture Inquiry</h2><p>I-paste ang message. AI reads it, you review, you save. No auto-save.</p></div></div>
-          <textarea id="ops-raw-message" rows="3" placeholder="Paste Facebook / Messenger inquiry here...">${escapeHtml(opsRawMessage)}</textarea>
-          <div class="ops-action-row"><button class="ops-dark-button" id="ops-extract-inquiry" type="button" ${opsRawMessage.trim() ? "" : "disabled"}>${renderIcon("sparkles", "ops-button-icon")} Extract Inquiry</button>${opsSavedNotice ? `<span class="ops-save-notice">${renderIcon("circle-check", "ops-notice-icon")} Inquiry saved to pipeline</span>` : ""}</div>
-          ${opsExtractFields ? renderOpsReviewForm() : ""}
-        </section>
-        <section class="ops-pipeline-section"><div class="ops-section-heading split"><h2>Inquiry Pipeline</h2><span>Won = Odoo Sales Order created</span></div><div class="ops-kanban" aria-label="Inquiry pipeline">${columns.map(renderOpsColumn).join("")}</div></section>${renderOpsInquiryDrawer()}
-        <section class="ops-production-section"><h2>Production Snapshot</h2><div class="ops-production-grid">${opsProduction.map(renderOpsProductionCard).join("")}</div></section>
-      </div>
-    </main>`;
+function getMvpDashboardItems() {
+  return opsInquiries.map((item) => ({
+    ...item,
+    requiresProductionMigration: shouldLoadSupabaseOps && !item.productionFieldsReady,
+  }));
 }
 
+function renderOverviewPage() {
+  return mvpDashboard.renderOverview({
+    items: getMvpDashboardItems(),
+    notices: renderOpsPersistenceNotice(),
+  });
+}
+
+function renderMvpInquiriesPage() {
+  return mvpDashboard.renderInquiries({
+    items: getMvpDashboardItems(),
+    notices: renderOpsPersistenceNotice(),
+    renderQuote: renderOpsQuoteStage,
+    renderOdoo: renderOpsOdooAction,
+  });
+}
+
+function renderMvpOrdersPage() {
+  return mvpDashboard.renderOrders({
+    items: getMvpDashboardItems(),
+    notices: renderOpsPersistenceNotice(),
+    schemaNotice: renderOrderDashboardSchemaNotice(),
+    renderPayment: renderOpsPaymentStage,
+    renderTracking: renderOpsCustomerTracking,
+  });
+}
+
+function renderMvpProductionPage() {
+  return mvpDashboard.renderProduction({
+    items: getMvpDashboardItems(),
+    notices: renderOpsPersistenceNotice(),
+    schemaNotice: renderOrderDashboardSchemaNotice(),
+  });
+}
 
 function renderOpsPersistenceNotice() {
   if (opsLoadState === "success") return "";
@@ -1031,7 +1047,7 @@ function getOpsInquiryStages(item) {
   const quoteComplete = ["ready", "approved"].includes(state.quote) || Boolean(item.quotePublishedAt);
   const artworkComplete = state.artwork === "approved";
   const paymentComplete = state.payment === "confirmed";
-  const productionActive = ["in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(state.production) || state.status === "won";
+  const productionActive = ["printing", "embroidery", "screen_printing", "qc", "ready", "in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(state.production) || state.status === "won";
   const fulfillmentActive = canEditOpsCustomerTracking(item) || ["ready_for_pickup", "out_for_delivery", "delivered", "completed"].includes(item.trackingSubstatus);
   const stageState = (key, complete, unlocked) => {
     if (complete) return "Complete";
@@ -1837,9 +1853,9 @@ function todayIsoDate() {
 function renderOpsOdooAction(item) {
   if (opsSoDraft?.id === item.id) {
     const value = opsSoDraft.value ?? "";
-    return `<div class="ops-so-editor"><span>Customer confirmed? Enter the Odoo SO number</span><input class="ops-so-input" data-ops-so-input="${item.id}" value="${escapeHtml(value)}" placeholder="e.g. SO-2216" /><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${value.trim() ? "" : "disabled"}>Confirm - Move to Won</button><button class="ops-light-button mini" data-ops-cancel-so type="button">Cancel</button></div></div>`;
+    return `<div class="ops-so-editor"><span>Customer confirmed? Enter the Odoo SO number</span><input class="ops-so-input" data-ops-so-input="${item.id}" value="${escapeHtml(value)}" placeholder="e.g. SO-2216" /><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${value.trim() ? "" : "disabled"}>Confirm Odoo SO & Create Order</button><button class="ops-light-button mini" data-ops-cancel-so type="button">Cancel</button></div></div>`;
   }
-  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">Add Odoo SO #</button>`;
+  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">Confirm Odoo SO &amp; Create Order</button>`;
 }
 
 function renderOpsProductionCard(item) {
@@ -1958,11 +1974,15 @@ function normalizeOpsDate(value) {
 
 async function confirmOpsSO(id) {
   const so = (opsSoDraft?.value || "").trim();
-  if (!so) return;
+  const current = opsInquiries.find((item) => item.id === id);
+  if (!so || !current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
 
   if (shouldLoadSupabaseOps) {
     try {
-      await updateOpsInquiryOdooSO(id, so, adminAuthSession);
+      const payload = await requestOpsWorkflowAction(id, { action: "confirm_order", odooSO: so });
+      const savedInquiry = payload.inquiry;
+      if (!savedInquiry) throw new Error("Order conversion returned no saved inquiry.");
+      opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...savedInquiry } : item);
       opsLoadState = opsLoadState === "empty" ? "success" : opsLoadState;
       opsLoadError = "";
     } catch (error) {
@@ -1973,12 +1993,36 @@ async function confirmOpsSO(id) {
     }
   }
 
-  opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", odooSO: so, next: "Odoo Sales Order recorded" } : item);
+  if (!shouldLoadSupabaseOps) {
+    opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", odooSO: so, next: "Odoo Sales Order recorded" } : item);
+  }
   opsSoDraft = null;
+}
+
+async function requestOpsWorkflowAction(inquiryId, body) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/workflow`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Workflow update failed.");
+  return payload;
 }
 function getOrderProductionStage(item) {
   const stage = String(item.productionStage || "").trim().toLowerCase();
   if (orderProductionStages.some((option) => option.value === stage)) return stage;
+  if (stage === "qc_finishing") return "qc";
+  if (stage === "ready_for_fulfillment") return "ready";
+  if (stage === "in_production") {
+    const service = String(item.service || "").toLowerCase();
+    if (service.includes("embro")) return "embroidery";
+    if (service.includes("screen")) return "screen_printing";
+    return "printing";
+  }
   return "queued";
 }
 
@@ -1992,9 +2036,7 @@ function getOrderAssignedStaff(item) {
 }
 
 function isConfirmedOpsOrder(item) {
-  const status = String(item.status || "").trim().toLowerCase();
-  if (["lost", "cancelled", "canceled"].includes(status)) return false;
-  return status === "won" || Boolean(String(item.odooSO || "").trim());
+  return mvpDashboard.helpers.confirmed(item);
 }
 
 function isOrderDashboardCompleted(item) {
@@ -3364,10 +3406,11 @@ function renderProductImageManager(product) {
 function renderSidebar(currentRoute) {
   const navItems = [
     { label: "Overview", path: "/overview" },
-    { label: "Orders", path: "/order-dashboard", activeRoute: "Order Dashboard", icon: "factory" },
-    { label: "Reorders", path: "/orders", activeRoute: "Orders", icon: "clipboard-list" },
+    { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
+    { label: "Orders", path: "/orders", icon: "package" },
     { label: "Clients", path: "/clients" },
     { label: "Products", path: "/products" },
+    { label: "Production", path: "/production", icon: "factory" },
     { label: "Catalog", path: "/catalog" },
     { label: "Settings", path: "/settings" },
   ];
@@ -3375,30 +3418,13 @@ function renderSidebar(currentRoute) {
   return `
     <aside class="sidebar ${isSidebarCollapsed ? "is-collapsed" : ""}">
       <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
-      <div class="brand-lockup">
-        <strong>TRRY</strong>
-        <span>APPAREL</span>
-      </div>
+      <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
-        ${navItems
-          .map(
-            (item) => `
-              <a class="${(item.activeRoute || item.label) === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}">
-                ${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}
-                <span class="nav-label">${item.label}</span>
-              </a>`
-          )
-          .join("")}
+        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label}</span></a>`).join("")}
+        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("calendar-check", "nav-icon")}<span class="nav-label">Calendar<small>Phase 2</small></span></span><span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
       </nav>
-      <div class="system-card">
-        ${renderIcon("shield-check", "shield-icon")}
-        <div>
-          <strong>System Status</strong>
-          <p><span></span> All systems operational</p>
-        </div>
-      </div>
-    </aside>
-  `;
+      <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
+    </aside>`;
 }
 
 function getAdminInitials() {
@@ -3467,25 +3493,11 @@ function renderMobileTopBar() {
 function renderMobileBottomNav(currentRoute) {
   const navItems = [
     { label: "Overview", path: "/overview" },
-    { label: "Orders", path: "/order-dashboard", activeRoute: "Order Dashboard", icon: "factory" },
-    { label: "Clients", path: "/clients" },
-    { label: "Products", path: "/products" },
-    { label: "Catalog", path: "/catalog" },
+    { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
+    { label: "Orders", path: "/orders", icon: "package" },
+    { label: "Production", path: "/production", icon: "factory" },
   ];
-
-  return `
-    <nav class="mobile-bottom-nav" aria-label="Mobile navigation">
-      ${navItems
-        .map(
-          (item) => `
-            <a class="${(item.activeRoute || item.label) === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>
-              ${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}
-              <small>${item.label}</small>
-            </a>`
-        )
-        .join("")}
-    </nav>
-  `;
+  return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
 }
 
 function renderGlobalSearchHint() {
@@ -3853,6 +3865,14 @@ function bindEvents() {
     });
   });
 
+  mvpDashboard.bind({
+    root: document,
+    rerender: render,
+    navigate: navigateTo,
+    copy: copyToClipboard,
+    saveProduction: saveMvpProductionFields,
+  });
+  document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
   bindOpsBoardEvents();
   bindOrderDashboardEvents();
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
@@ -4094,6 +4114,42 @@ function bindEvents() {
     );
     render();
   });
+}
+
+async function saveMvpProductionFields(id, changes) {
+  const current = opsInquiries.find((item) => item.id === id);
+  if (!current || !isConfirmedOpsOrder(current)) return;
+  if (shouldLoadSupabaseOps && !current.productionFieldsReady) {
+    orderDashboardSaveError = "Production fields are not ready. Apply the pending migration before saving.";
+    return;
+  }
+
+  const updates = {
+    ...changes,
+    productionUpdatedAt: new Date().toISOString(),
+  };
+  let savedInquiry = null;
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      const payload = await requestOpsWorkflowAction(id, {
+        action: changes.productionStage ? "advance_production" : "save_production",
+        productionStage: changes.productionStage,
+        assignedStaff: changes.assignedStaff,
+        productionNote: changes.productionNote,
+        blockedReason: changes.blockedReason,
+      });
+      savedInquiry = payload.inquiry;
+      if (!savedInquiry) throw new Error("Production update returned no saved inquiry.");
+      orderDashboardSaveError = "";
+    } catch (error) {
+      console.error("Unable to save MVP production fields.", error);
+      orderDashboardSaveError = error.message || "Unable to save production fields.";
+      return;
+    }
+  }
+
+  opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...(savedInquiry || updates) } : item);
 }
 
 function bindOrderDashboardEvents() {
@@ -4585,8 +4641,9 @@ function navigateTo(path) {
 }
 
 function normalizeRoutePath(path) {
-  const routePath = String(path || defaultRoutePath).split("?")[0].replace(/\/+$/, "") || "/";
-  return routes[routePath] ? routePath : defaultRoutePath;
+  const url = new URL(String(path || defaultRoutePath), window.location.origin);
+  const routePath = url.pathname.replace(/\/+$/, "") || "/";
+  return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
 }
 
 function escapeHtml(value) {
