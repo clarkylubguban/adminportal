@@ -365,6 +365,8 @@ let activeFilter = "All";
 let clientKpiFilter = "All";
 let productFilter = "All";
 let catalogStatusFilter = "active";
+let catalogCategoryFilter = "all";
+let catalogFeaturedFilter = "all";
 let query = "";
 let draftStatus = orders[0]?.status ?? "Pending Review";
 let clientQuery = "";
@@ -622,8 +624,8 @@ async function approveAdminSession(session) {
     adminUser = approvedUser;
     adminAuthStatus = "approved";
     adminAuthMessage = "";
-    render();
     startAdminDataLoading();
+    render();
   } catch (error) {
     console.error("Admin role check failed.", error);
     adminUser = null;
@@ -807,19 +809,29 @@ async function loadAdminClients() {
   render();
 }
 async function loadCatalogProducts() {
-  if (hasLoadedCatalogProducts) return;
+  if (hasLoadedCatalogProducts && catalogLoadState !== "loading") return;
   hasLoadedCatalogProducts = true;
+  catalogLoadState = "loading";
+  catalogLoadError = "";
 
-  const result = await getAdminCatalogProducts(adminAuthSession);
-  catalogProducts = result.products;
-  catalogLoadState = result.status;
-  catalogLoadError = result.error?.message ?? "";
+  try {
+    const result = await getAdminCatalogProducts(adminAuthSession);
+    const nextProducts = Array.isArray(result?.products) ? result.products : [];
+    catalogProducts = nextProducts;
+    catalogLoadState = result?.status === "error" ? "error" : nextProducts.length ? "success" : "empty";
+    catalogLoadError = result?.error?.message ?? "";
 
-  if (!catalogProducts.some((item) => item.id === selectedCatalogProductId)) {
-    selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+    if (!catalogProducts.some((item) => item.id === selectedCatalogProductId)) {
+      selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+    }
+  } catch (error) {
+    console.error("Unable to apply catalog products.", error);
+    catalogProducts = [];
+    catalogLoadState = "error";
+    catalogLoadError = error.message || "Unable to load catalog records.";
+  } finally {
+    render();
   }
-
-  render();
 }
 async function loadOpsBoardInquiries() {
   if (hasLoadedOpsInquiries) return;
@@ -2589,6 +2601,8 @@ function renderCatalogPage() {
   const visibleProducts = getVisibleCatalogProducts();
   const selectedProduct = catalogProducts.find((item) => item.id === selectedCatalogProductId);
   const canWrite = canWriteCatalogProducts();
+  const destinationCounts = getCatalogDestinationCounts();
+  const categoryOptions = getCatalogCategoryOptions();
 
   return `
     <main class="orders-page catalog-page admin-saas-page">
@@ -2597,42 +2611,53 @@ function renderCatalogPage() {
           <h1>Catalog</h1>
           <p class="subtitle">Manage how approved products appear across customer-facing catalogs.</p>
         </div>
-        <button class="catalog-add-button" data-catalog-add-product type="button" ${canWrite ? "" : "disabled title=\"Viewer role can read only.\""}>+ Add Catalog Item</button>
+        ${canWrite ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ Add Catalog Item</button>` : ""}
       </div>
 
       <section class="catalog-controls" aria-label="Catalog controls">
-        <div class="catalog-tabs" aria-label="Catalog tabs">
+        <div class="catalog-tabs" role="tablist" aria-label="Catalog destinations">
           ${catalogOptions.map((catalog) => `
-            <button class="${catalog.key === activeCatalogKey ? "active" : ""}" data-catalog-tab="${catalog.key}" type="button">
-              ${catalog.label}
+            <button class="${catalog.key === activeCatalogKey ? "active" : ""}" data-catalog-tab="${catalog.key}" type="button" role="tab" aria-selected="${catalog.key === activeCatalogKey ? "true" : "false"}">
+              <span>${catalog.label}</span>
+              <strong>${destinationCounts[catalog.key] ?? 0}</strong>
             </button>`).join("")}
         </div>
-        <label class="search-field catalog-search">
-          ${renderIcon("search", "search-icon")}
-          <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search products" type="search" />
-        </label>
-        <select class="catalog-status-filter" id="catalog-status-filter" aria-label="Status filter">
-          ${getCatalogFilterOptions().map((option) => `<option value="${option.value}" ${option.value === catalogStatusFilter ? "selected" : ""}>${option.label}</option>`).join("")}
-        </select>
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search catalog" type="search" />
+          </label>
+          <select class="catalog-status-filter" id="catalog-status-filter" aria-label="Publish status filter">
+            ${getCatalogFilterOptions().map((option) => `<option value="${option.value}" ${option.value === catalogStatusFilter ? "selected" : ""}>${option.label}</option>`).join("")}
+          </select>
+          <select class="catalog-status-filter" id="catalog-category-filter" aria-label="Category filter">
+            ${categoryOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogCategoryFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+          </select>
+          <select class="catalog-status-filter" id="catalog-featured-filter" aria-label="Featured filter">
+            <option value="all" ${catalogFeaturedFilter === "all" ? "selected" : ""}>All featured states</option>
+            <option value="featured" ${catalogFeaturedFilter === "featured" ? "selected" : ""}>Featured only</option>
+            <option value="standard" ${catalogFeaturedFilter === "standard" ? "selected" : ""}>Not featured</option>
+          </select>
+        </div>
       </section>
 
       ${renderCatalogNotice()}
 
       <article class="content-card table-card catalog-table-card">
-        <p class="table-helper-text catalog-count-label">${visibleProducts.length} ${visibleProducts.length === 1 ? "PRODUCT" : "PRODUCTS"}</p>
+        <p class="table-helper-text catalog-count-label">${visibleProducts.length} ${visibleProducts.length === 1 ? "CATALOG ITEM" : "CATALOG ITEMS"}</p>
         <table class="products-table catalog-table">
           <thead>
             <tr>
               <th>Product</th>
-              <th>Category</th>
-              <th>Starting Price</th>
-              <th>Minimum Qty</th>
               <th>Destination</th>
+              <th>Category</th>
+              <th>Price Display</th>
+              <th>Min Qty</th>
               <th>Featured</th>
               <th>Publish Status</th>
               <th>Updated</th>
-              </tr>
-            </thead>
+            </tr>
+          </thead>
           <tbody>
             ${visibleProducts.map(renderCatalogProductRow).join("")}
           </tbody>
@@ -2655,32 +2680,38 @@ function getVisibleCatalogProducts() {
         : catalogStatusFilter === "all"
           ? true
           : item.status === catalogStatusFilter;
+    const matchesCategory = catalogCategoryFilter === "all" || item.category === catalogCategoryFilter;
+    const matchesFeatured =
+      catalogFeaturedFilter === "all" ||
+      (catalogFeaturedFilter === "featured" && item.isFeatured) ||
+      (catalogFeaturedFilter === "standard" && !item.isFeatured);
+    const sourceProduct = getCatalogSourceProduct(item);
     const matchesQuery =
       !normalizedQuery ||
-      [item.name, item.slug, item.category, item.description, item.priceLabel]
+      [item.name, item.slug, item.category, item.description, item.priceLabel, sourceProduct?.product, sourceProduct?.code]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
 
-    return matchesCatalog && matchesStatus && matchesQuery;
+    return matchesCatalog && matchesStatus && matchesCategory && matchesFeatured && matchesQuery;
   });
 }
 
 function renderCatalogNotice() {
   if (catalogSaveState === "success") {
-    return `<div class="catalog-notice success">Product saved successfully.</div>`;
+    return `<div class="catalog-notice success">Catalog item saved successfully.</div>`;
   }
 
   if (catalogLoadState === "loading") {
-    return `<div class="catalog-notice">Loading catalog products...</div>`;
+    return `<div class="catalog-notice">Loading catalog publishing records...</div>`;
   }
 
   if (catalogLoadState === "error") {
-    return `<div class="catalog-notice error">Unable to load catalog products. ${escapeHtml(catalogLoadError || "Check Supabase access and RLS policies.")}</div>`;
+    return `<div class="catalog-notice error">Unable to load catalog records. Check Supabase access and RLS policies.</div>`;
   }
 
   if (!canWriteCatalogProducts()) {
-    return `<div class="catalog-notice">Viewer access: catalog products are read-only.</div>`;
+    return `<div class="catalog-notice">Viewer access: catalog publishing records are read-only.</div>`;
   }
 
   return "";
@@ -2690,28 +2721,31 @@ function renderCatalogEmptyState(visibleProducts) {
   if (visibleProducts.length > 0) return "";
 
   if (catalogLoadState === "loading") {
-    return `<div class="empty-state compact-empty"><strong>Loading catalog...</strong><span>Checking Supabase catalog products.</span></div>`;
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading catalog...</strong><span>Checking customer-facing publishing records.</span></div>`;
   }
 
   const catalogLabel = getCatalogLabel(activeCatalogKey);
   if (!catalogProducts.some((item) => item.catalogKey === activeCatalogKey)) {
-    return `<div class="empty-state compact-empty"><strong>Empty catalog</strong><span>${catalogLabel} has no products yet. Add the first product when ready.</span></div>`;
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No Catalog records</strong><span>${catalogLabel} does not have published presentation records yet.</span></div>`;
   }
 
-  return `<div class="empty-state compact-empty"><strong>No search results</strong><span>Try another search term or status filter.</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No results from filters</strong><span>Try another search term, category, featured state, or publish status.</span></div>`;
 }
 
 function renderCatalogProductRow(item) {
+  const sourceProduct = getCatalogSourceProduct(item);
+  const secondary = item.slug ? item.slug : sourceProduct?.code ? `Source: ${sourceProduct.code}` : "No source product linked";
+
   return `
-    <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}" role="button" tabindex="0" aria-label="Open ${escapeHtml(item.name)} catalog editor">
-      <td class="catalog-name-cell"><div class="client-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : ""}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')"` : ""}></span><div><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.slug)}</span></div></div></td>
-      <td class="catalog-category-cell">${escapeHtml(item.category || "-")}</td>
-      <td class="catalog-price-cell">${escapeHtml(formatCatalogPrice(item))}</td>
-      <td class="catalog-moq-cell">${escapeHtml(item.minimumQuantity)}</td>
-      <td class="catalog-destination-cell">${escapeHtml(getCatalogLabel(item.catalogKey))}</td>
-      <td class="catalog-featured-cell">${item.isFeatured ? `<span class="status-pill visible"><span class="desktop-featured-label">Yes</span><span class="mobile-featured-label">Featured</span></span>` : `<span class="status-pill draft"><span class="desktop-featured-label">No</span><span class="mobile-featured-label">Not featured</span></span>`}</td>
-      <td class="catalog-status-cell">${renderStatusPill(item.status)}</td>
-      <td class="catalog-updated-cell">${escapeHtml(formatCatalogUpdated(item.updatedAt))}</td>
+    <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}" role="button" tabindex="0" aria-label="Open ${escapeHtml(item.name)} catalog presentation details">
+      <td class="catalog-name-cell"><div class="client-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : "empty"}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')" aria-label="Catalog image"` : `role="img" aria-label="No catalog image"`}>${item.imageUrl ? "" : renderIcon("package", "catalog-placeholder-icon")}</span><div><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span title="${escapeHtml(secondary)}">${escapeHtml(secondary)}</span></div></div></td>
+      <td class="catalog-destination-cell" data-mobile-label="Destination" title="${escapeHtml(getCatalogLabel(item.catalogKey))}" aria-label="Destination: ${escapeHtml(getCatalogLabel(item.catalogKey))}">${escapeHtml(getCatalogLabel(item.catalogKey))}</td>
+      <td class="catalog-category-cell" data-mobile-label="Category">${escapeHtml(item.category || "-")}</td>
+      <td class="catalog-price-cell" data-mobile-label="Price">${escapeHtml(formatCatalogPrice(item))}</td>
+      <td class="catalog-moq-cell" data-mobile-label="Min Qty">${escapeHtml(item.minimumQuantity)}</td>
+      <td class="catalog-featured-cell" data-mobile-label="Featured">${item.isFeatured ? `<span class="status-pill visible">Featured</span>` : `<span class="catalog-featured-muted">No</span>`}</td>
+      <td class="catalog-status-cell" data-mobile-label="Status">${renderStatusPill(item.status)}</td>
+      <td class="catalog-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(item.updatedAt))}</span></td>
     </tr>
   `;
 }
@@ -2720,58 +2754,156 @@ function renderCatalogDrawer(selectedProduct) {
   const draft = catalogDraft ?? createCatalogDraft(selectedProduct);
   const isSaving = catalogSaveState === "saving" || catalogSaveState === "uploading";
   const canWrite = canWriteCatalogProducts();
-  const title = catalogDrawerMode === "edit" ? (draft.name || "Edit Catalog Item") : "Add Catalog Item";
+  const title = draft.name || (catalogDrawerMode === "edit" ? "Catalog Item" : "Add Catalog Item");
+  const sourceProduct = getCatalogSourceProduct(draft);
 
   return `
     <div class="catalog-drawer-backdrop" data-catalog-close-drawer></div>
-    <aside class="catalog-drawer" aria-label="${title}">
+    <aside class="catalog-drawer" aria-label="${escapeHtml(title)} catalog presentation details">
       <header>
-        <div><span>${escapeHtml(getCatalogLabel(draft.catalogKey))}</span><h2>${escapeHtml(title)}</h2>${renderStatusPill(draft.status || "draft")}</div>
+        <div>
+          <span>${escapeHtml(getCatalogLabel(draft.catalogKey))}</span>
+          <h2>${escapeHtml(title)}</h2>
+          ${renderStatusPill(draft.status || "draft")}
+        </div>
         <button class="catalog-drawer-close" data-catalog-close-drawer type="button" aria-label="Close catalog drawer">X</button>
       </header>
       <form class="catalog-form" id="catalog-product-form">
         ${catalogValidationError ? `<p class="catalog-form-error">${escapeHtml(catalogValidationError)}</p>` : ""}
         ${catalogSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogSaveError)}</p>` : ""}
-        ${renderCatalogField("catalog", "Catalog", renderCatalogSelect(draft))}
-        ${renderCatalogInput("name", "Product name", draft.name, "text", true)}
-        ${renderCatalogInput("slug", "Slug", draft.slug, "text", true)}
-        ${renderCatalogInput("category", "Category", draft.category)}
-        ${renderCatalogImageField(draft, canWrite, isSaving)}
-        ${renderCatalogTextarea("description", "Description", draft.description)}
-        <div class="catalog-form-grid">
-          ${renderCatalogInput("startingPrice", "Starting price", draft.startingPrice, "number")}
-          ${renderCatalogInput("priceLabel", "Price label", draft.priceLabel)}
-        </div>
-        <div class="catalog-form-grid">
+
+        <section class="catalog-drawer-section catalog-preview-section" aria-label="Catalog preview">
+          <h3>Preview</h3>
+          <div class="catalog-preview-card">
+            <div class="catalog-preview-image ${draft.imageUrl || draft.imageFilePreviewUrl ? "has-image" : "empty"}">${draft.imageUrl || draft.imageFilePreviewUrl ? `<img src="${escapeHtml(draft.imageFilePreviewUrl || draft.imageUrl)}" alt="${escapeHtml(draft.name || "Catalog image")}" />` : `<span role="img" aria-label="No catalog image">${renderIcon("package", "catalog-placeholder-icon")}</span>`}</div>
+            <div>
+              <strong>${escapeHtml(draft.name || "Customer-facing name")}</strong>
+              <p>${escapeHtml(draft.description || "No short description yet.")}</p>
+              <span>${escapeHtml(formatCatalogPrice(draft))}</span>
+              <small>MOQ ${escapeHtml(draft.minimumQuantity || 1)}</small>
+            </div>
+          </div>
+        </section>
+
+        <section class="catalog-drawer-section" aria-label="Publishing">
+          <h3>Publishing</h3>
+          <div class="catalog-form-grid">
+            ${renderCatalogField("catalog", "Destination", renderCatalogSelect(draft))}
+            ${renderCatalogField("status", "Publish status", renderCatalogStatusSelect(draft))}
+          </div>
+          <div class="catalog-form-grid">
+            ${renderCatalogFeaturedSetting(draft)}
+            ${renderCatalogInput("sortOrder", "Sort order", draft.sortOrder, "number")}
+          </div>
+          <div class="catalog-kv-list">
+            ${renderCatalogDetailRow("Last published", draft.status === "published" ? formatCatalogUpdated(draft.updatedAt) : "Not published")}
+            ${renderCatalogDetailRow("Last updated", formatCatalogUpdated(draft.updatedAt))}
+          </div>
+        </section>
+
+        <section class="catalog-drawer-section" aria-label="Customer-facing details">
+          <h3>Customer-facing Details</h3>
+          ${renderCatalogInput("name", "Display name", draft.name, "text", true)}
+          ${renderCatalogInput("slug", "Slug", draft.slug, "text", true)}
+          ${renderCatalogInput("category", "Category", draft.category)}
+          ${renderCatalogTextarea("description", "Short description", draft.description)}
+        </section>
+
+        <section class="catalog-drawer-section" aria-label="Pricing display">
+          <h3>Pricing Display</h3>
+          <div class="catalog-form-grid">
+            ${renderCatalogInput("startingPrice", "Starting price", draft.startingPrice, "number")}
+            ${renderCatalogInput("priceLabel", "Price label", draft.priceLabel)}
+          </div>
           ${renderCatalogInput("minimumQuantity", "Minimum quantity", draft.minimumQuantity, "number", true)}
-          ${renderCatalogInput("sortOrder", "Sort order", draft.sortOrder, "number")}
-        </div>
-        ${renderCatalogInput("availableSizesText", "Available sizes", draft.availableSizesText)}
-        ${renderCatalogInput("availableColorsText", "Available colors", draft.availableColorsText)}
-        ${renderCatalogInput("printMethodsText", "Print methods", draft.printMethodsText)}
-        <div class="catalog-form-grid">
-          ${renderCatalogField("featured", "Featured", `<label class="catalog-toggle"><input data-catalog-field="isFeatured" type="checkbox" ${draft.isFeatured ? "checked" : ""} /><span>Featured product</span></label>`)}
-          ${renderCatalogField("status", "Status", renderCatalogStatusSelect(draft))}
-        </div>
-        <div class="catalog-drawer-actions">
-          <button class="primary-button catalog-save-button" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${catalogSaveState === "uploading" ? "Uploading..." : isSaving ? "Saving..." : "Save Product"}</button>
-          <button class="note-button" data-catalog-close-drawer type="button">Cancel</button>
-        </div>
+        </section>
+
+        <section class="catalog-drawer-section" aria-label="Customer options">
+          <h3>Customer Options</h3>
+          ${renderCatalogInput("availableSizesText", "Available sizes", draft.availableSizesText)}
+          ${renderCatalogInput("availableColorsText", "Available colors", draft.availableColorsText)}
+          ${renderCatalogInput("printMethodsText", "Print methods", draft.printMethodsText)}
+        </section>
+
+        <section class="catalog-drawer-section catalog-source-section" aria-label="Source product">
+          <h3>Source Product</h3>
+          ${sourceProduct
+            ? `<div class="catalog-kv-list">
+                ${renderCatalogDetailRow("Linked product", sourceProduct.product)}
+                ${renderCatalogDetailRow("Internal code", sourceProduct.code, true)}
+                ${renderCatalogDetailRow("Availability", sourceProduct.status || "Available")}
+              </div>
+              <button class="note-button catalog-secondary-action" data-route-target="/products" type="button">Open Products record</button>`
+            : `<div class="catalog-source-empty"><strong>No source Product linked</strong><span>This Catalog item can still be edited, but staff should confirm the matching internal Product record before publishing.</span></div>`}
+        </section>
+
+        <section class="catalog-drawer-section" aria-label="Media">
+          <h3>Media</h3>
+          ${renderCatalogImageField(draft, canWrite, isSaving)}
+        </section>
+
       </form>
+      <div class="catalog-drawer-actions">
+        <button class="primary-button catalog-save-button" form="catalog-product-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${catalogSaveState === "uploading" ? "Uploading..." : isSaving ? "Saving..." : getCatalogPrimaryActionLabel(draft)}</button>
+        <button class="note-button" data-catalog-close-drawer type="button">Cancel</button>
+      </div>
     </aside>
   `;
 }
+function getCatalogDestinationCounts() {
+  return catalogOptions.reduce((counts, catalog) => {
+    counts[catalog.key] = catalogProducts.filter((item) => item.catalogKey === catalog.key).length;
+    return counts;
+  }, {});
+}
 
+function getCatalogCategoryOptions() {
+  const categories = Array.from(new Set(catalogProducts.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  return [{ value: "all", label: "All categories" }, ...categories.map((category) => ({ value: category, label: category }))];
+}
+
+function getCatalogSourceProduct(item) {
+  if (!item) return null;
+  const itemSlug = slugify(item.slug || item.name || "");
+  const itemName = String(item.name || "").trim().toLowerCase();
+
+  return products.find((product) => {
+    const productSlug = slugify(product.product || product.code || "");
+    const productName = String(product.product || "").trim().toLowerCase();
+    return productSlug === itemSlug || productName === itemName || itemName.includes(productName) || productName.includes(itemName);
+  }) ?? null;
+}
+
+function renderCatalogFeaturedSetting(draft) {
+  return `
+    <label class="catalog-featured-setting">
+      <span><strong>Featured in destination</strong><small>Highlight this item in the selected customer-facing catalog.</small></span>
+      <input data-catalog-field="isFeatured" type="checkbox" ${draft.isFeatured ? "checked" : ""} />
+    </label>
+  `;
+}
+
+function renderCatalogDetailRow(label, value, mono = false) {
+  const displayValue = value || "Not set";
+  return `<div class="catalog-detail-row"><span>${escapeHtml(label)}</span><strong class="${mono ? "mono-value" : ""}">${escapeHtml(displayValue)}</strong></div>`;
+}
+
+function getCatalogPrimaryActionLabel(draft) {
+  if (!draft?.id) return "Save Catalog Item";
+  if (draft.status === "draft" || draft.status === "hidden") return "Publish";
+  if (draft.status === "archived") return "Restore";
+  return "Save Changes";
+}
 function renderCatalogImageField(draft, canWrite, isSaving) {
   const displayUrl = draft.imageFilePreviewUrl || (!draft.removeImage ? draft.imageUrl : "");
   const hasImage = Boolean(displayUrl);
-  const filename = draft.removeImage ? "" : draft.imageFile?.name || getCatalogImageFilename(draft.imageUrl);
+  const selectedFilename = draft.imageFile?.name || "";
   const imageState = getCatalogImageState(draft);
   const actionLabel = hasImage ? "REPLACE IMAGE" : "UPLOAD IMAGE";
   const disabled = !canWrite || isSaving;
   const preview = hasImage
     ? `<img src="${escapeHtml(displayUrl)}" alt="${escapeHtml(draft.name || "Catalog product image")}" />`
-    : `<span>NO IMAGE</span>`;
+    : `<span role="img" aria-label="No catalog image">${renderIcon("package", "catalog-placeholder-icon")}</span>`;
   const pickerControl = canWrite
     ? `<label class="catalog-image-picker ${disabled ? "disabled" : ""}">
         <span class="catalog-image-preview ${hasImage ? "has-image" : "empty"}">${preview}</span>
@@ -2781,19 +2913,19 @@ function renderCatalogImageField(draft, canWrite, isSaving) {
     : `<div class="catalog-image-picker disabled"><span class="catalog-image-preview ${hasImage ? "has-image" : "empty"}">${preview}</span><span class="catalog-image-pick-text">PREVIEW ONLY</span></div>`;
 
   return `
-    <section class="catalog-image-field" aria-label="Product image">
+    <div class="catalog-image-field" aria-label="Catalog image">
       <div class="catalog-image-heading">
-        <span>PRODUCT IMAGE</span>
+        <span>MAIN CATALOG IMAGE</span>
         <strong class="${imageState === "UPLOAD FAILED" ? "error" : ""}">${imageState}</strong>
       </div>
       ${pickerControl}
       <div class="catalog-image-meta">
-        <span>${filename ? escapeHtml(filename) : "No file selected"}</span>
+        ${selectedFilename ? `<span>${escapeHtml(selectedFilename)}</span>` : ""}
         ${canWrite ? `<button data-catalog-remove-image type="button" ${disabled || (!hasImage && !draft.imageFile && !draft.imageUrl) ? "disabled" : ""}>REMOVE IMAGE</button>` : ""}
       </div>
-      <p>SQUARE IMAGE REQUIRED ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· 1200 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â 1200 RECOMMENDED ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· MINIMUM 800 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â 800 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· MAXIMUM 5 MB</p>
+      <p>SQUARE IMAGE REQUIRED / 1200 x 1200 RECOMMENDED / MINIMUM 800 x 800 / MAXIMUM 5 MB</p>
       ${draft.imageError ? `<p class="catalog-image-error">${escapeHtml(draft.imageError)}</p>` : ""}
-    </section>
+    </div>
   `;
 }
 
@@ -2807,17 +2939,15 @@ function getCatalogImageState(draft) {
 
 function formatCatalogUpdated(value) {
   if (!value) return "Not set";
-  return formatDate(value) || "Recently";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Recently";
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).toUpperCase();
 }
 
-function getCatalogImageFilename(url) {
-  try {
-    const pathname = new URL(url).pathname;
-    return decodeURIComponent(pathname.split("/").filter(Boolean).pop() || "");
-  } catch {
-    return "";
-  }
-}
 function renderCatalogSelect(draft) {
   return `<select data-catalog-field="catalogKey">${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
 }
@@ -3612,7 +3742,7 @@ function focusFieldAtEnd(id) {
   }
 }
 function openCatalogDrawer(mode, productId = null) {
-  if (!canWriteCatalogProducts()) return;
+  if (mode === "create" && !canWriteCatalogProducts()) return;
   const product = catalogProducts.find((item) => item.id === productId) ?? null;
   clearCatalogImagePreview();
   catalogDrawerMode = mode;
@@ -3919,6 +4049,7 @@ function bindEvents() {
     saveProduction: saveMvpProductionFields,
   });
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
+  document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
   bindOpsBoardEvents();
   bindOrderDashboardEvents();
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
@@ -3938,14 +4069,33 @@ function bindEvents() {
     render();
   });
 
+  document.getElementById("catalog-category-filter")?.addEventListener("change", (event) => {
+    catalogCategoryFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("catalog-featured-filter")?.addEventListener("change", (event) => {
+    catalogFeaturedFilter = event.target.value;
+    render();
+  });
+
+
   document.querySelector("[data-catalog-add-product]")?.addEventListener("click", () => {
     openCatalogDrawer("create");
   });
 
   document.querySelectorAll("[data-catalog-edit-product]").forEach((element) => {
+    const openCatalogRow = () => openCatalogDrawer("edit", element.dataset.catalogEditProduct);
+
     element.addEventListener("click", (event) => {
       event.stopPropagation();
-      openCatalogDrawer("edit", element.dataset.catalogEditProduct);
+      openCatalogRow();
+    });
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openCatalogRow();
     });
   });
 

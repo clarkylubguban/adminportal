@@ -13758,3 +13758,1104 @@ body,
     text-align: left;
   }
 }
+
+/* Catalog publishing layer correction */
+.app-shell.admin-saas-shell .catalog-page {
+  overflow-x: clip;
+}
+
+.app-shell.admin-saas-shell .catalog-heading {
+  align-items: flex-start;
+  gap: 20px;
+}
+
+.app-shell.admin-saas-shell .catalog-controls {
+  display: grid;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 4px;
+  width: fit-content;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs button {
+  align-items: center;
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 6px !important;
+  color: #475467 !important;
+  display: inline-flex;
+  font: 600 13px/1.2 Inter, "Geist", Arial, sans-serif !important;
+  gap: 8px;
+  min-height: 36px;
+  padding: 8px 12px !important;
+  position: relative;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs button strong {
+  background: #f2f4f7;
+  border-radius: 999px;
+  color: #344054;
+  font: 600 11px/1 Inter, "Geist", Arial, sans-serif;
+  min-width: 22px;
+  padding: 4px 7px;
+  text-align: center;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs button.active {
+  background: #f7fee7 !important;
+  color: #111827 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs button.active::after {
+  background: #b7ff2a;
+  border-radius: 999px;
+  bottom: 3px;
+  content: "";
+  height: 3px;
+  left: 12px;
+  position: absolute;
+  right: 12px;
+}
+
+.app-shell.admin-saas-shell .catalog-filter-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(260px, 1fr) repeat(4, minmax(145px, 180px));
+}
+
+.app-shell.admin-saas-shell .catalog-filter-row .search-field,
+.app-shell.admin-saas-shell .catalog-filter-row select {
+  min-width: 0;
+}
+
+.app-shell.admin-saas-shell .catalog-table-card {
+  overflow-x: auto;
+}
+
+.app-shell.admin-saas-shell .catalog-table {
+  min-width: 1120px;
+  table-layout: fixed;
+}
+
+.app-shell.admin-saas-shell .catalog-table th:nth-child(1),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(1) { width: 290px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(2),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(2) { width: 145px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(3),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(3) { width: 140px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(4),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(4) { width: 145px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(5),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(5) { text-align: center; width: 80px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(6),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(6) { width: 110px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(7),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(7) { width: 130px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(8),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(8) { width: 130px; }
+
+.app-shell.admin-saas-shell .catalog-table td {
+  height: 52px;
+  vertical-align: middle;
+}
+
+.app-shell.admin-saas-shell .catalog-table .client-cell {
+  min-width: 0;
+}
+
+.app-shell.admin-saas-shell .catalog-table .client-cell strong,
+.app-shell.admin-saas-shell .catalog-table .client-cell span,
+.app-shell.admin-saas-shell .catalog-category-cell,
+.app-shell.admin-saas-shell .catalog-price-cell,
+.app-shell.admin-saas-shell .catalog-destination-cell {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-shell.admin-saas-shell .catalog-table tbody tr.selected td:first-child {
+  box-shadow: inset 3px 0 0 #b7ff2a;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-muted {
+  color: #98a2b3;
+  font: 500 13px/1.2 Inter, "Geist", Arial, sans-serif;
+}
+
+.app-shell.admin-saas-shell .catalog-empty-state {
+  margin: 18px;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-width: min(500px, calc(100vw - 32px));
+  width: 500px;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer header {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.app-shell.admin-saas-shell .catalog-form {
+  display: block;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 18px 22px 96px;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-section {
+  border-bottom: 1px solid #eef0f2;
+  margin: 0;
+  padding: 18px 0;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-section:first-of-type {
+  padding-top: 0;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-section h3 {
+  color: #121417;
+  font: 700 14px/1.25 Inter, "Geist", Arial, sans-serif;
+  letter-spacing: 0;
+  margin: 0 0 10px;
+  text-transform: none;
+}
+
+.app-shell.admin-saas-shell .catalog-preview-card {
+  background: #f8fafc;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  display: grid;
+  gap: 14px;
+  grid-template-columns: 112px minmax(0, 1fr);
+  padding: 12px;
+}
+
+.app-shell.admin-saas-shell .catalog-preview-image {
+  align-items: center;
+  aspect-ratio: 1;
+  background: #ffffff;
+  border: 1px solid #e4e7ec;
+  border-radius: 8px;
+  color: #98a2b3;
+  display: flex;
+  font: 600 11px/1.3 Inter, "Geist", Arial, sans-serif;
+  justify-content: center;
+  overflow: hidden;
+  padding: 8px;
+  text-align: center;
+}
+
+.app-shell.admin-saas-shell .catalog-preview-image img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.app-shell.admin-saas-shell .catalog-preview-card strong {
+  color: #121417;
+  display: block;
+  font: 700 15px/1.25 Inter, "Geist", Arial, sans-serif;
+  margin-bottom: 6px;
+}
+
+.app-shell.admin-saas-shell .catalog-preview-card p {
+  color: #667085;
+  font: 400 13px/1.45 Inter, "Geist", Arial, sans-serif;
+  margin: 0 0 10px;
+}
+
+.app-shell.admin-saas-shell .catalog-preview-card span {
+  color: #121417;
+  display: block;
+  font: 700 14px/1.2 Inter, "Geist", Arial, sans-serif;
+}
+
+.app-shell.admin-saas-shell .catalog-preview-card small {
+  color: #667085;
+  display: block;
+  font: 500 12px/1.2 Inter, "Geist", Arial, sans-serif;
+  margin-top: 4px;
+}
+
+.app-shell.admin-saas-shell .catalog-kv-list {
+  border: 1px solid #eef0f2;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.app-shell.admin-saas-shell .catalog-detail-row {
+  align-items: start;
+  background: #ffffff;
+  border-bottom: 1px solid #eef0f2;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(120px, 0.8fr) minmax(0, 1.2fr);
+  padding: 10px 12px;
+}
+
+.app-shell.admin-saas-shell .catalog-detail-row:last-child {
+  border-bottom: 0;
+}
+
+.app-shell.admin-saas-shell .catalog-detail-row span {
+  color: #667085;
+  font: 500 12px/1.3 Inter, "Geist", Arial, sans-serif;
+}
+
+.app-shell.admin-saas-shell .catalog-detail-row strong {
+  color: #121417;
+  font: 600 13px/1.35 Inter, "Geist", Arial, sans-serif;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.app-shell.admin-saas-shell .mono-value {
+  font-family: "Space Mono", Consolas, monospace !important;
+  font-size: 12px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-source-empty {
+  background: #fffbeb;
+  border: 1px solid #fedf89;
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+}
+
+.app-shell.admin-saas-shell .catalog-source-empty strong {
+  color: #92400e;
+  font: 700 13px/1.3 Inter, "Geist", Arial, sans-serif;
+}
+
+.app-shell.admin-saas-shell .catalog-source-empty span {
+  color: #a16207;
+  font: 400 12px/1.45 Inter, "Geist", Arial, sans-serif;
+}
+
+.app-shell.admin-saas-shell .catalog-secondary-action {
+  margin-top: 10px;
+  width: 100%;
+}
+
+.app-shell.admin-saas-shell .catalog-image-field {
+  margin: 0 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-picker {
+  min-height: 180px;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-actions {
+  align-items: center;
+  background: #ffffff;
+  border-top: 1px solid #e4e7ec;
+  bottom: 0;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  left: 0;
+  margin: 0;
+  padding: 14px 22px;
+  position: sticky;
+  right: 0;
+  z-index: 3;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-actions button {
+  height: 42px;
+  justify-content: center;
+  margin: 0;
+}
+
+@media (max-width: 1200px) {
+  .app-shell.admin-saas-shell .catalog-filter-row {
+    grid-template-columns: minmax(260px, 1fr) repeat(2, minmax(145px, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .app-shell.admin-saas-shell .catalog-heading {
+    align-items: stretch;
+  }
+
+  .app-shell.admin-saas-shell .catalog-add-button {
+    width: 100%;
+  }
+
+  .app-shell.admin-saas-shell .catalog-tabs {
+    display: grid;
+    grid-template-columns: 1fr;
+    width: 100%;
+  }
+
+  .app-shell.admin-saas-shell .catalog-filter-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table {
+    min-width: 980px;
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer {
+    height: 100dvh;
+    max-width: 100vw;
+    width: 100vw;
+  }
+
+  .app-shell.admin-saas-shell .catalog-form {
+    padding: 16px 16px 112px;
+  }
+
+  .app-shell.admin-saas-shell .catalog-preview-card {
+    grid-template-columns: 88px minmax(0, 1fr);
+  }
+
+  .app-shell.admin-saas-shell .catalog-form-grid,
+  .app-shell.admin-saas-shell .catalog-drawer-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.admin-saas-shell .catalog-detail-row {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.admin-saas-shell .catalog-detail-row strong {
+    text-align: left;
+  }
+}
+
+.app-shell.admin-saas-shell .catalog-table .status-pill.published,
+.app-shell.admin-saas-shell .catalog-drawer .status-pill.published {
+  background: #ecfdf3 !important;
+  color: #067647 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table .status-pill.draft,
+.app-shell.admin-saas-shell .catalog-drawer .status-pill.draft {
+  background: #f2f4f7 !important;
+  color: #475467 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table .status-pill.hidden,
+.app-shell.admin-saas-shell .catalog-drawer .status-pill.hidden {
+  background: #fffaeb !important;
+  color: #b54708 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table .status-pill.archived,
+.app-shell.admin-saas-shell .catalog-drawer .status-pill.archived {
+  background: #f2f4f7 !important;
+  color: #667085 !important;
+}
+
+/* Final Catalog visual correction: responsive toolbar, drawer structure, mobile cards */
+.app-shell.admin-saas-shell .catalog-page {
+  min-width: 0;
+  overflow-x: visible !important;
+  padding-bottom: 32px;
+}
+
+.app-shell.admin-saas-shell .catalog-page .catalog-heading {
+  align-items: center !important;
+  background: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  display: flex !important;
+  justify-content: space-between;
+  margin-bottom: 18px;
+  padding: 22px 24px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-page .catalog-controls {
+  align-items: center !important;
+  display: grid !important;
+  gap: 16px !important;
+  grid-template-columns: auto minmax(0, 1fr) !important;
+  margin-bottom: 18px !important;
+  min-width: 0;
+}
+
+.app-shell.admin-saas-shell .catalog-filter-row {
+  align-items: center;
+  display: flex !important;
+  flex-wrap: wrap;
+  gap: 10px !important;
+  justify-content: flex-end;
+  min-width: 0;
+}
+
+.app-shell.admin-saas-shell .catalog-filter-row .catalog-search {
+  flex: 1 1 220px;
+  max-width: 300px;
+  min-width: 220px;
+}
+
+.app-shell.admin-saas-shell .catalog-filter-row select {
+  flex: 0 0 auto;
+  min-width: 155px !important;
+  width: auto !important;
+}
+
+.app-shell.admin-saas-shell .catalog-filter-row #catalog-status-filter {
+  min-width: 145px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs {
+  flex: 0 0 auto;
+  min-width: 0;
+}
+
+.app-shell.admin-saas-shell .catalog-product-image.empty,
+.app-shell.admin-saas-shell .catalog-preview-image.empty,
+.app-shell.admin-saas-shell .catalog-image-preview.empty {
+  align-items: center;
+  background: #f4f6f8 !important;
+  color: #98a2b3;
+  display: inline-flex;
+  justify-content: center;
+}
+
+.app-shell.admin-saas-shell .catalog-placeholder-icon {
+  color: #98a2b3;
+  height: 24px;
+  width: 24px;
+}
+
+.app-shell.admin-saas-shell .catalog-preview-image.empty .catalog-placeholder-icon,
+.app-shell.admin-saas-shell .catalog-image-preview.empty .catalog-placeholder-icon {
+  height: 34px;
+  width: 34px;
+}
+
+.app-shell.admin-saas-shell .catalog-empty-state {
+  background: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  margin: 16px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer {
+  background: #ffffff !important;
+  border: 0 !important;
+  border-left: 1px solid #d5dae0 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+  height: 100dvh !important;
+  inset-block: 0 !important;
+  max-height: 100dvh !important;
+  max-width: min(500px, calc(100vw - 32px)) !important;
+  position: fixed !important;
+  right: 0 !important;
+  width: 500px !important;
+  z-index: 120 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer header {
+  background: #ffffff !important;
+  border-bottom: 1px solid #e1e4e8 !important;
+  display: flex !important;
+  grid-row: 1;
+  padding: 20px 24px !important;
+  position: relative !important;
+  top: auto !important;
+  z-index: 2;
+}
+
+.app-shell.admin-saas-shell .catalog-form {
+  display: block !important;
+  grid-row: 2;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding: 20px 24px 32px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-actions {
+  align-items: center;
+  background: #ffffff !important;
+  border-top: 1px solid #e1e4e8 !important;
+  bottom: auto !important;
+  display: grid !important;
+  gap: 10px !important;
+  grid-row: 3;
+  grid-template-columns: 1fr 1fr !important;
+  left: auto !important;
+  margin: 0 !important;
+  padding: 16px 24px !important;
+  position: relative !important;
+  right: auto !important;
+  z-index: 3;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-section {
+  border-bottom: 1px solid #eef0f2 !important;
+  display: grid;
+  gap: 12px;
+  margin: 0 !important;
+  padding: 24px 0 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-section:first-of-type {
+  padding-top: 0 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-section h3 {
+  color: #121417 !important;
+  font: 600 14px/1.25 Inter, "Geist", Arial, sans-serif !important;
+  margin: 0 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-field {
+  gap: 8px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-field > span,
+.app-shell.admin-saas-shell .catalog-image-heading span,
+.app-shell.admin-saas-shell .catalog-image-meta span {
+  font-size: 11px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-field input,
+.app-shell.admin-saas-shell .catalog-field select,
+.app-shell.admin-saas-shell .catalog-field textarea {
+  font-size: 14px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-setting {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  min-height: 44px;
+  padding: 10px 12px;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-setting span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-setting strong {
+  color: #121417;
+  font: 600 13px/1.25 Inter, "Geist", Arial, sans-serif;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-setting small {
+  color: #68707a;
+  font: 400 12px/1.35 Inter, "Geist", Arial, sans-serif;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-setting input {
+  appearance: none;
+  background: #e5e7eb;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  flex: 0 0 auto;
+  height: 24px;
+  position: relative;
+  transition: background 0.15s ease;
+  width: 44px;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-setting input::after {
+  background: #ffffff;
+  border-radius: 999px;
+  content: "";
+  height: 18px;
+  left: 3px;
+  position: absolute;
+  top: 3px;
+  transition: transform 0.15s ease;
+  width: 18px;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-setting input:checked {
+  background: #b7ff2a;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-setting input:checked::after {
+  transform: translateX(20px);
+}
+
+.app-shell.admin-saas-shell .catalog-image-field {
+  background: transparent !important;
+  border: 0 !important;
+  display: grid;
+  gap: 12px;
+  margin: 0 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-heading {
+  align-items: center !important;
+  border: 0 !important;
+  display: flex !important;
+  justify-content: space-between;
+  padding: 0 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-heading strong {
+  background: #eef1f3 !important;
+  border: 0 !important;
+  border-radius: 999px !important;
+  color: #344054 !important;
+  font: 600 11px/1 Inter, "Geist", Arial, sans-serif !important;
+  padding: 6px 9px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-picker {
+  background: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 8px !important;
+  display: grid !important;
+  grid-template-columns: 160px minmax(0, 1fr) !important;
+  min-height: 160px !important;
+  overflow: hidden;
+}
+
+.app-shell.admin-saas-shell .catalog-image-preview {
+  background-color: #f4f6f8 !important;
+  border: 0 !important;
+  border-right: 1px solid #e1e4e8 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-pick-text {
+  align-items: center;
+  color: #344054 !important;
+  display: flex;
+  font: 600 13px/1.2 Inter, "Geist", Arial, sans-serif !important;
+  justify-content: center;
+  text-transform: none !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-meta {
+  align-items: center !important;
+  border: 0 !important;
+  display: flex !important;
+  gap: 10px;
+  justify-content: space-between;
+  padding: 0 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-meta button {
+  border: 1px solid #d5dae0 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  font: 600 12px/1 Inter, "Geist", Arial, sans-serif !important;
+  min-height: 34px;
+  padding: 8px 10px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-field p {
+  color: #68707a !important;
+  font: 400 12px/1.4 Inter, "Geist", Arial, sans-serif !important;
+  margin: 0 !important;
+  text-transform: none !important;
+}
+
+@media (max-width: 1200px) {
+  .app-shell.admin-saas-shell .catalog-page .catalog-controls {
+    align-items: stretch !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-filter-row {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 767px) {
+  body.catalog-drawer-open .mobile-bottom-nav {
+    display: none !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-page {
+    padding-bottom: calc(112px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-page .catalog-heading {
+    align-items: stretch !important;
+    display: grid !important;
+    gap: 16px !important;
+    padding: 20px !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-page .catalog-controls {
+    gap: 20px !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-tabs,
+  .app-shell.admin-saas-shell .catalog-filter-row {
+    gap: 12px !important;
+    width: 100%;
+  }
+
+  .app-shell.admin-saas-shell .catalog-filter-row .catalog-search,
+  .app-shell.admin-saas-shell .catalog-filter-row select {
+    flex: 1 1 100%;
+    max-width: none;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table-card {
+    overflow: visible !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table,
+  .app-shell.admin-saas-shell .catalog-table tbody,
+  .app-shell.admin-saas-shell .catalog-table tr,
+  .app-shell.admin-saas-shell .catalog-table td {
+    display: block;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table thead {
+    display: none;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table tbody {
+    display: grid;
+    gap: 12px;
+    padding: 0 14px 18px;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table tbody tr {
+    background: #ffffff;
+    border: 1px solid #e1e4e8;
+    border-radius: 8px;
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table td {
+    border: 0 !important;
+    height: auto !important;
+    padding: 0 !important;
+    text-align: left !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table td:nth-child(3),
+  .app-shell.admin-saas-shell .catalog-table td:nth-child(5),
+  .app-shell.admin-saas-shell .catalog-table td:nth-child(8) {
+    display: none;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table td:nth-child(n+2)::before {
+    color: #68707a;
+    content: attr(data-mobile-label);
+    display: block;
+    font: 600 10px/1.2 "Space Mono", Consolas, monospace;
+    margin-bottom: 3px;
+    text-transform: uppercase;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table .client-cell {
+    align-items: center;
+    gap: 12px;
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer {
+    border: 0 !important;
+    height: 100dvh !important;
+    inset: 0 !important;
+    max-height: 100dvh !important;
+    max-width: 100vw !important;
+    width: 100vw !important;
+    z-index: 140 !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer header {
+    padding: 18px 18px !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-form {
+    padding: 18px 18px 28px !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer-actions {
+    grid-template-columns: 1fr !important;
+    padding: 14px 18px calc(14px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-preview-card {
+    grid-template-columns: 88px minmax(0, 1fr) !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-image-picker {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-image-preview {
+    border-bottom: 1px solid #e1e4e8 !important;
+    border-right: 0 !important;
+    min-height: 180px;
+  }
+}
+
+/* Final Catalog blocker fixes: image metadata, mobile shell, 1366 table width */
+.app-shell.admin-saas-shell .catalog-table-card {
+  min-width: 0 !important;
+  overflow-x: auto !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table {
+  min-width: 1030px !important;
+  table-layout: fixed !important;
+  width: 100% !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table th:nth-child(1),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(1) { width: auto !important; min-width: 220px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(2),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(2) { width: 130px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(3),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(3) { width: 120px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(4),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(4) { width: 150px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(5),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(5) { width: 70px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(6),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(6) { width: 105px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(7),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(7) { width: 125px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(8),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(8) { width: 110px !important; }
+
+.app-shell.admin-saas-shell .catalog-image-meta:empty {
+  display: none !important;
+}
+
+.app-shell.admin-saas-shell .catalog-image-meta span:empty {
+  display: none !important;
+}
+
+@media (max-width: 768px) {
+  .app-shell.admin-saas-shell {
+    display: block !important;
+    padding-top: calc(56px + env(safe-area-inset-top, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .mobile-top-bar {
+    align-items: center !important;
+    background: #ffffff !important;
+    border-bottom: 1px solid #e1e4e8 !important;
+    box-shadow: none !important;
+    display: flex !important;
+    height: calc(56px + env(safe-area-inset-top, 0px)) !important;
+    left: 0 !important;
+    padding: calc(env(safe-area-inset-top, 0px) + 10px) 14px 10px !important;
+    position: fixed !important;
+    right: 0 !important;
+    top: 0 !important;
+    transform: none !important;
+    z-index: 80 !important;
+  }
+
+  .app-shell.admin-saas-shell .workspace,
+  .app-shell.admin-saas-shell .admin-saas-workspace {
+    overflow-x: clip !important;
+    padding-top: 0 !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-page {
+    padding-bottom: calc(156px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .mobile-bottom-nav {
+    height: calc(68px + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: 68px !important;
+    z-index: 60 !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table-card {
+    padding-bottom: 24px !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table tbody {
+    padding-bottom: calc(108px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table tbody tr:last-child {
+    margin-bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer {
+    z-index: 160 !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer-backdrop {
+    z-index: 150 !important;
+  }
+}
+
+/* Final Catalog layout bug fixes: stable mobile chrome, footer final row, readable Updated */
+.app-shell.admin-saas-shell {
+  --mobile-bottom-nav-height: 68px;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer {
+  overflow: hidden !important;
+}
+
+.app-shell.admin-saas-shell .catalog-form {
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  overscroll-behavior: contain;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-actions {
+  flex-shrink: 0;
+  grid-row: 3 !important;
+  position: relative !important;
+}
+
+.app-shell.admin-saas-shell .catalog-drawer-actions + * {
+  display: none !important;
+}
+
+.app-shell.admin-saas-shell .catalog-updated-cell,
+.app-shell.admin-saas-shell .catalog-table th:nth-child(8),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(8) {
+  min-width: 115px !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  white-space: nowrap !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table {
+  min-width: 990px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table th:nth-child(1),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(1) { min-width: 210px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(2),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(2) { width: 125px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(3),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(3) { width: 105px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(4),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(4) { width: 145px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(5),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(5) { width: 65px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(6),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(6) { width: 100px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(7),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(7) { width: 115px !important; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(8),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(8) { width: 115px !important; }
+
+@media (max-width: 768px) {
+  .app-shell.admin-saas-shell {
+    display: block !important;
+    padding-top: 0 !important;
+  }
+
+  .app-shell.admin-saas-shell .mobile-top-bar {
+    height: calc(56px + env(safe-area-inset-top, 0px)) !important;
+    min-height: calc(56px + env(safe-area-inset-top, 0px)) !important;
+    position: sticky !important;
+    top: 0 !important;
+    z-index: 120 !important;
+  }
+
+  .app-shell.admin-saas-shell .workspace,
+  .app-shell.admin-saas-shell .admin-saas-workspace {
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + 32px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-page {
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + 64px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .mobile-bottom-nav {
+    height: calc(var(--mobile-bottom-nav-height) + env(safe-area-inset-bottom, 0px)) !important;
+    min-height: var(--mobile-bottom-nav-height) !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table-card {
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + 32px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-table tbody {
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + 48px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer {
+    grid-template-rows: auto minmax(0, 1fr) auto !important;
+    overflow: hidden !important;
+    z-index: 220 !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer-backdrop {
+    z-index: 210 !important;
+  }
+
+  .app-shell.admin-saas-shell .catalog-drawer-actions {
+    padding-bottom: calc(14px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* Final Catalog mobile chrome correction: fixed header with content offset */
+@media (max-width: 768px) {
+  .app-shell.admin-saas-shell {
+    padding-top: 0 !important;
+  }
+
+  .app-shell.admin-saas-shell .mobile-top-bar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    transform: none !important;
+    z-index: 240 !important;
+  }
+
+  .app-shell.admin-saas-shell .workspace,
+  .app-shell.admin-saas-shell .admin-saas-workspace {
+    padding-top: calc(56px + env(safe-area-inset-top, 0px)) !important;
+    padding-bottom: calc(var(--mobile-bottom-nav-height) + 32px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  body.catalog-drawer-open .app-shell.admin-saas-shell .mobile-top-bar {
+    display: none !important;
+  }
+}
+
+/* Final Catalog micro-check: prevent isolated ellipsis artifacts around compact status cells. */
+.app-shell.admin-saas-shell .catalog-featured-cell {
+  overflow: hidden !important;
+  text-overflow: clip !important;
+}
+
+.app-shell.admin-saas-shell .catalog-featured-cell .status-pill,
+.app-shell.admin-saas-shell .catalog-featured-muted {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
