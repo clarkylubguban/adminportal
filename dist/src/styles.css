@@ -10410,3 +10410,195 @@ body,
     overflow-x: hidden;
   }
 }
+/* MVP table column spacing correction */
+.mvp-table {
+  width: 100%;
+}
+
+.mvp-table.inquiry {
+  min-width: 1320px;
+}
+
+.mvp-table.orders,
+.mvp-table.production {
+  min-width: 1260px;
+}
+
+.mvp-table.inquiry .mvp-table-head,
+.mvp-table.inquiry .mvp-table-row {
+  grid-template-columns: 125px 180px 145px minmax(220px, 1fr) 145px 65px 125px 105px 115px 90px;
+}
+
+.mvp-table.orders .mvp-table-head,
+.mvp-table.orders .mvp-table-row {
+  grid-template-columns: 125px 180px 145px minmax(220px, 1fr) 145px 65px 125px 125px 115px 90px;
+}
+
+.mvp-table.production .mvp-table-head,
+.mvp-table.production .mvp-table-row {
+  grid-template-columns: 125px 180px minmax(220px, 1fr) 145px 65px 125px 170px 115px 125px 90px;
+}
+
+.mvp-table-head,
+.mvp-table-row {
+  column-gap: 0;
+  justify-content: stretch;
+}
+
+.mvp-table-head > *,
+.mvp-table-row > * {
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 14px;
+  padding-right: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mvp-table-head > :nth-child(6),
+.mvp-table-row > :nth-child(6) {
+  text-align: center;
+}
+
+.mvp-table-head > :last-child,
+.mvp-table-row > :last-child {
+  text-align: right;
+}
+
+.mvp-table-row > :last-child {
+  align-items: center;
+  display: flex;
+  justify-content: flex-end;
+}
+
+@media (max-width: 1560px) and (min-width: 1181px) {
+  .mvp-table.inquiry .mvp-table-head,
+  .mvp-table.inquiry .mvp-table-row,
+  .mvp-table.orders .mvp-table-head,
+  .mvp-table.orders .mvp-table-row,
+  .mvp-table.production .mvp-table-head,
+  .mvp-table.production .mvp-table-row {
+    display: grid;
+  }
+
+  .mvp-table.inquiry .mvp-table-head > *,
+  .mvp-table.inquiry .mvp-table-row > *,
+  .mvp-table.orders .mvp-table-head > *,
+  .mvp-table.orders .mvp-table-row > *,
+  .mvp-table.production .mvp-table-head > *,
+  .mvp-table.production .mvp-table-row > * {
+    display: block;
+  }
+
+  .mvp-table-row > :last-child {
+    display: flex;
+  }
+}
+
+.mvp-table.production .mvp-table-head > :nth-child(5),
+.mvp-table.production .mvp-table-row > :nth-child(5) {
+  text-align: center;
+}
+
+.mvp-table.production .mvp-table-head > :nth-child(6),
+.mvp-table.production .mvp-table-row > :nth-child(6) {
+  text-align: left;
+}
+
+@media (min-width: 1200px) {
+  .mvp-table.inquiry .mvp-table-head > *,
+  .mvp-table.inquiry .mvp-table-row > *,
+  .mvp-table.orders .mvp-table-head > *,
+  .mvp-table.orders .mvp-table-row > *,
+  .mvp-table.production .mvp-table-head > *,
+  .mvp-table.production .mvp-table-row > * {
+    display: block;
+  }
+
+  .mvp-table-row > :last-child {
+    display: flex;
+  }
+}
+
+@media (min-width: 1200px) {
+  .mvp-table.inquiry .mvp-table-head > :nth-child(1),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(2),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(3),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(4),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(5),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(6),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(7),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(8),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(9),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(10),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(1),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(2),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(3),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(4),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(5),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(6),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(7),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(8),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(9),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(10),
+  .mvp-table.orders .mvp-table-head > :nth-child(1),
+  .mvp-table.orders .mvp-table-head > :nth-child(2),
+  .mvp-table.orders .mvp-table-head > :nth-child(3),
+  .mvp-table.orders .mvp-table-head > :nth-child(4),
+  .mvp-table.orders .mvp-table-head > :nth-child(5),
+  .mvp-table.orders .mvp-table-head > :nth-child(6),
+  .mvp-table.orders .mvp-table-head > :nth-child(7),
+  .mvp-table.orders .mvp-table-head > :nth-child(8),
+  .mvp-table.orders .mvp-table-head > :nth-child(9),
+  .mvp-table.orders .mvp-table-head > :nth-child(10),
+  .mvp-table.orders .mvp-table-row > :nth-child(1),
+  .mvp-table.orders .mvp-table-row > :nth-child(2),
+  .mvp-table.orders .mvp-table-row > :nth-child(3),
+  .mvp-table.orders .mvp-table-row > :nth-child(4),
+  .mvp-table.orders .mvp-table-row > :nth-child(5),
+  .mvp-table.orders .mvp-table-row > :nth-child(6),
+  .mvp-table.orders .mvp-table-row > :nth-child(7),
+  .mvp-table.orders .mvp-table-row > :nth-child(8),
+  .mvp-table.orders .mvp-table-row > :nth-child(9),
+  .mvp-table.orders .mvp-table-row > :nth-child(10),
+  .mvp-table.production .mvp-table-head > :nth-child(1),
+  .mvp-table.production .mvp-table-head > :nth-child(2),
+  .mvp-table.production .mvp-table-head > :nth-child(3),
+  .mvp-table.production .mvp-table-head > :nth-child(4),
+  .mvp-table.production .mvp-table-head > :nth-child(5),
+  .mvp-table.production .mvp-table-head > :nth-child(6),
+  .mvp-table.production .mvp-table-head > :nth-child(7),
+  .mvp-table.production .mvp-table-head > :nth-child(8),
+  .mvp-table.production .mvp-table-head > :nth-child(9),
+  .mvp-table.production .mvp-table-head > :nth-child(10),
+  .mvp-table.production .mvp-table-row > :nth-child(1),
+  .mvp-table.production .mvp-table-row > :nth-child(2),
+  .mvp-table.production .mvp-table-row > :nth-child(3),
+  .mvp-table.production .mvp-table-row > :nth-child(4),
+  .mvp-table.production .mvp-table-row > :nth-child(5),
+  .mvp-table.production .mvp-table-row > :nth-child(6),
+  .mvp-table.production .mvp-table-row > :nth-child(7),
+  .mvp-table.production .mvp-table-row > :nth-child(8),
+  .mvp-table.production .mvp-table-row > :nth-child(9),
+  .mvp-table.production .mvp-table-row > :nth-child(10) {
+    display: block;
+  }
+
+  .mvp-table.inquiry .mvp-table-row > :nth-child(10),
+  .mvp-table.orders .mvp-table-row > :nth-child(10),
+  .mvp-table.production .mvp-table-row > :nth-child(10) {
+    display: flex;
+  }
+}
+
+.mvp-table-head > :last-child,
+.mvp-table-row > :last-child {
+  background: var(--mvp-white);
+  position: sticky;
+  right: 0;
+  z-index: 2;
+}
+
+.mvp-table-head > :last-child {
+  z-index: 3;
+}
