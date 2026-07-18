@@ -432,7 +432,7 @@ function render() {
   const selectedProduct =
     products.find((product) => product.code === selectedProductCode) ?? products[0];
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = ["Clients", "Products", "Catalog"].includes(currentRoute);
+  const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Settings"].includes(currentRoute);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -2913,59 +2913,81 @@ function createDraftImageId() {
 function renderSettingsPage() {
   const sections = [
     {
-      title: "Admin Profile",
-      rows: [["Profile", "TRRY Admin"], ["Role", "Mother Admin"], ["Access", "Operations control center"]],
+      key: "general",
+      title: "General",
+      helper: "Core Admin Portal identity and workspace display details.",
+      rows: [["Profile", "TRRY Admin"], ["Role", "Mother Admin"], ["Workspace", "Production admin"]],
     },
     {
-      title: "Company Settings",
-      rows: [["Company", "TRRY Apparel Management"], ["Primary color", "#ff5a00"], ["Workspace", "Production admin"]],
-    },
-    {
-      title: "Portal Settings",
+      key: "portal",
+      title: "Portal",
+      helper: "Current portal domains and supported operating mode.",
       rows: [["Admin domain", "admin.trryapparel.com"], ["Client portal", clientProgram.domain], ["Mode", "MVP Prototype"]],
     },
     {
-      title: "Notification Settings",
+      key: "notifications",
+      title: "Notifications",
+      helper: "Existing notification preferences shown as read-only states.",
       rows: [["Order alerts", "On"], ["Production updates", "On"], ["Client portal activity", "On"]],
     },
     {
-      title: "Status Workflow",
+      key: "workflow",
+      title: "Operations",
+      helper: "Current status workflow labels used by the Admin Portal.",
       rows: [["Start", "Pending Review"], ["Production", "Approved to In Production"], ["Fulfillment", "Ready to Completed"]],
     },
     {
+      key: "access",
+      title: "Team and Access",
+      helper: "Current access context only. Advanced employee login remains outside this task.",
+      rows: [["Access", "Operations control center"], ["Company", "TRRY Apparel Management"], ["Primary color", "TRRY lime / professional SaaS theme"]],
+    },
+    {
+      key: "danger",
       title: "Danger Zone",
+      helper: "Destructive actions are unavailable in this Admin Portal view.",
       danger: true,
       rows: [["Delete portal data", "Disabled"], ["Reset workspace", "Disabled"], ["Live destructive actions", "Unavailable"]],
     },
   ];
 
   return `
-    <main class="orders-page">
-      <div class="page-heading">
+    <main class="orders-page settings-page admin-saas-page">
+      <div class="page-heading settings-heading">
         <div>
           <h1>Settings</h1>
-          <p class="subtitle">Manage admin portal preferences and system setup.</p>
+          <p class="subtitle">Manage Admin Portal preferences and operational configuration.</p>
         </div>
       </div>
 
-      <section class="settings-grid settings-grid-wide">
-        ${sections
-          .map(
-            (section) => `
-              <article class="settings-card ${section.danger ? "danger-card" : ""}">
-                <h2>${section.title}</h2>
-                ${section.rows
-                  .map(
-                    ([label, value]) => `
-                      <div class="settings-row">
-                        <span>${label}</span>
-                        <strong>${value}</strong>
-                      </div>`
-                  )
-                  .join("")}
-              </article>`
-          )
-          .join("")}
+      <section class="settings-layout" aria-label="Admin settings">
+        <nav class="settings-subnav" aria-label="Settings sections">
+          ${sections.map((section) => `<a href="#settings-${section.key}" class="${section.danger ? "danger" : ""}">${section.title}</a>`).join("")}
+        </nav>
+        <div class="settings-panel-stack">
+          ${sections
+            .map(
+              (section) => `
+                <article id="settings-${section.key}" class="settings-card ${section.danger ? "danger-card" : ""}">
+                  <header>
+                    <h2>${section.title}</h2>
+                    <p>${section.helper}</p>
+                  </header>
+                  <div class="settings-row-list">
+                    ${section.rows
+                      .map(
+                        ([label, value]) => `
+                          <div class="settings-row">
+                            <span>${label}</span>
+                            <strong>${value}</strong>
+                          </div>`
+                      )
+                      .join("")}
+                  </div>
+                </article>`
+            )
+            .join("")}
+        </div>
       </section>
     </main>
   `;
@@ -3854,11 +3876,23 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-route-link]").forEach((link) => {
-    link.addEventListener("click", (event) => {
-      event.preventDefault();
+    const openRoute = () => {
       navigateTo(link.getAttribute("href"));
       isMobileSidebarOpen = false;
       render();
+    };
+
+    link.addEventListener("click", (event) => {
+      event.preventDefault();
+      openRoute();
+    });
+
+    link.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") {
+        return;
+      }
+      event.preventDefault();
+      openRoute();
     });
   });
 
