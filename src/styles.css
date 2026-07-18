@@ -10871,3 +10871,107 @@ body,
     margin-bottom: -2px;
   }
 }
+
+/* MVP table action-column removal */
+.mvp-table.inquiry,
+.mvp-table.orders,
+.mvp-table.production {
+  min-width: 1320px;
+}
+
+.mvp-table.inquiry .mvp-table-head,
+.mvp-table.inquiry .mvp-table-row {
+  grid-template-columns: 125px 200px 145px minmax(260px, 1fr) 160px 65px 145px 110px 110px;
+}
+
+.mvp-table.orders .mvp-table-head,
+.mvp-table.orders .mvp-table-row {
+  grid-template-columns: 125px 200px 145px minmax(260px, 1fr) 160px 65px 135px 135px 95px;
+}
+
+.mvp-table.production .mvp-table-head,
+.mvp-table.production .mvp-table-row {
+  grid-template-columns: 125px 200px minmax(260px, 1fr) 160px 65px 130px 190px 100px 90px;
+}
+
+.mvp-table-head > :last-child,
+.mvp-table-row > :last-child {
+  background: transparent;
+  position: static;
+  right: auto;
+  text-align: left;
+  z-index: auto;
+}
+
+.mvp-table-row > :last-child {
+  display: block;
+  justify-content: initial;
+}
+
+.mvp-table.inquiry .mvp-table-head > :nth-child(6),
+.mvp-table.inquiry .mvp-table-row > :nth-child(6),
+.mvp-table.orders .mvp-table-head > :nth-child(6),
+.mvp-table.orders .mvp-table-row > :nth-child(6),
+.mvp-table.production .mvp-table-head > :nth-child(5),
+.mvp-table.production .mvp-table-row > :nth-child(5) {
+  text-align: center;
+}
+
+@media (min-width: 1200px) {
+  .mvp-table.inquiry .mvp-table-head > :nth-child(1),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(2),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(3),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(4),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(5),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(6),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(7),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(8),
+  .mvp-table.inquiry .mvp-table-head > :nth-child(9),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(1),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(2),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(3),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(4),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(5),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(6),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(7),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(8),
+  .mvp-table.inquiry .mvp-table-row > :nth-child(9),
+  .mvp-table.orders .mvp-table-head > :nth-child(1),
+  .mvp-table.orders .mvp-table-head > :nth-child(2),
+  .mvp-table.orders .mvp-table-head > :nth-child(3),
+  .mvp-table.orders .mvp-table-head > :nth-child(4),
+  .mvp-table.orders .mvp-table-head > :nth-child(5),
+  .mvp-table.orders .mvp-table-head > :nth-child(6),
+  .mvp-table.orders .mvp-table-head > :nth-child(7),
+  .mvp-table.orders .mvp-table-head > :nth-child(8),
+  .mvp-table.orders .mvp-table-head > :nth-child(9),
+  .mvp-table.orders .mvp-table-row > :nth-child(1),
+  .mvp-table.orders .mvp-table-row > :nth-child(2),
+  .mvp-table.orders .mvp-table-row > :nth-child(3),
+  .mvp-table.orders .mvp-table-row > :nth-child(4),
+  .mvp-table.orders .mvp-table-row > :nth-child(5),
+  .mvp-table.orders .mvp-table-row > :nth-child(6),
+  .mvp-table.orders .mvp-table-row > :nth-child(7),
+  .mvp-table.orders .mvp-table-row > :nth-child(8),
+  .mvp-table.orders .mvp-table-row > :nth-child(9),
+  .mvp-table.production .mvp-table-head > :nth-child(1),
+  .mvp-table.production .mvp-table-head > :nth-child(2),
+  .mvp-table.production .mvp-table-head > :nth-child(3),
+  .mvp-table.production .mvp-table-head > :nth-child(4),
+  .mvp-table.production .mvp-table-head > :nth-child(5),
+  .mvp-table.production .mvp-table-head > :nth-child(6),
+  .mvp-table.production .mvp-table-head > :nth-child(7),
+  .mvp-table.production .mvp-table-head > :nth-child(8),
+  .mvp-table.production .mvp-table-head > :nth-child(9),
+  .mvp-table.production .mvp-table-row > :nth-child(1),
+  .mvp-table.production .mvp-table-row > :nth-child(2),
+  .mvp-table.production .mvp-table-row > :nth-child(3),
+  .mvp-table.production .mvp-table-row > :nth-child(4),
+  .mvp-table.production .mvp-table-row > :nth-child(5),
+  .mvp-table.production .mvp-table-row > :nth-child(6),
+  .mvp-table.production .mvp-table-row > :nth-child(7),
+  .mvp-table.production .mvp-table-row > :nth-child(8),
+  .mvp-table.production .mvp-table-row > :nth-child(9) {
+    display: block;
+  }
+}

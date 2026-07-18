@@ -174,7 +174,7 @@ export function createMvpDashboard() {
   }
 
   function inquiryTable(items) {
-    return table("inquiry", ["Code", "Customer", "Phone", "Inquiry / Item", "Service", "Qty", "Quote Status", "Follow-up", "Owner", "Action"], items.map((item) => {
+    return table("inquiry", ["Code", "Customer", "Phone", "Inquiry / Item", "Service", "Qty", "Quote Status", "Follow-up", "Owner"], items.map((item) => {
       const stage = quoteStage(item);
       const phone = String(item.contact || "").trim();
       return row("inquiry", item.id, [
@@ -187,7 +187,6 @@ export function createMvpDashboard() {
         status(QUOTE_STAGES[stage], stage),
         `<span class="mvp-due ${inquiryDue(item)}">${item.followUpDate ? shortDate(item.followUpDate) : "-"}</span>`,
         cell(owner(item)),
-        viewButton("inquiry", item.id),
       ]);
     }), "NO INQUIRIES MATCH THIS FILTER");
   }
@@ -262,7 +261,7 @@ export function createMvpDashboard() {
   }
 
   function ordersTable(items) {
-    return table("orders", ["Code", "Customer", "Phone", "Product", "Service", "Qty", "Artwork", "Payment", "Due Date", "Action"], items.map((item) => {
+    return table("orders", ["Code", "Customer", "Phone", "Product", "Service", "Qty", "Artwork", "Payment", "Due Date"], items.map((item) => {
       const dueState = due(item);
       const phone = String(item.contact || "").trim();
       return row("order", item.id, [
@@ -275,7 +274,6 @@ export function createMvpDashboard() {
         status(artworkLabel(item), "artwork"),
         status(paymentLabel(item), "payment"),
         `<span class="mvp-due ${dueState.key}" title="${html(dueState.label)}">${html(dueState.label)}</span>`,
-        viewButton("order", item.id),
       ]);
     }), "NO ORDERS MATCH THIS FILTER");
   }
@@ -322,7 +320,7 @@ export function createMvpDashboard() {
   }
 
   function productionTable(items) {
-    return table("production", ["Code", "Customer", "Product / Inquiry", "Service", "Qty", "Artwork", "Production Stage", "Due Date", "Assigned", "Action"], items.map((item) => {
+    return table("production", ["Code", "Customer", "Product / Inquiry", "Service", "Qty", "Artwork", "Production Stage", "Due Date", "Assigned"], items.map((item) => {
       const stage = productionStage(item);
       const blocked = blockedReason(item);
       const dueState = due(item);
@@ -336,7 +334,6 @@ export function createMvpDashboard() {
         `<span class="mvp-production-state"><b>${stageLabel(stage)}</b>${blocked ? `<small>Blocked: ${html(blocked)}</small>` : ""}</span>`,
         `<span class="mvp-due ${dueState.key}">${html(dueState.label)}</span>`,
         `<button class="mvp-staff-cell" type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}">${html(assigned(item))}</button>`,
-        viewButton("production", item.id),
       ]);
     }), "NO PRODUCTION ORDERS MATCH THIS FILTER");
   }
@@ -482,7 +479,6 @@ export function createMvpDashboard() {
   function priorityRow(item) { return `<button type="button" data-mvp-route="${html(item.route)}"><code>${html(item.code)}</code><strong>${html(item.customer)}</strong><span>${html(item.reason)}</span><b class="${item.tone}">${html(item.when)}</b><i>View</i></button>`; }
   function countBy(keys, items, getter) { return Object.fromEntries(keys.map((value) => [value, items.filter((item) => getter(item) === value).length])); }
   function copyButton(label, value, aria) { return `<button class="mvp-copy" type="button" data-mvp-copy="${html(value)}" aria-label="Copy ${html(aria)} ${html(label)}"><span>${html(label)}</span><small>Copy</small></button>`; }
-  function viewButton(type, id) { return `<button class="mvp-view" type="button" data-mvp-open="${type}" data-mvp-id="${html(id)}">View</button>`; }
   function strong(value) { return `<strong title="${html(value)}">${html(value)}</strong>`; }
   function cell(value) { return `<span title="${html(value)}">${html(value)}</span>`; }
   function status(label, tone) { return `<b class="mvp-status ${tone}" title="${html(label)}">${html(label)}</b>`; }
