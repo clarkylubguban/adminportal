@@ -13149,3 +13149,400 @@ body,
     width: 196px;
   }
 }
+
+/* Catalog route and Product/Catalog drawer professional SaaS parity */
+.app-shell.admin-saas-shell .catalog-page {
+  background: #f7f7f4 !important;
+  color: #121417;
+}
+
+.app-shell.admin-saas-shell .catalog-page .page-heading h1 {
+  font-size: 28px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.12;
+  text-transform: none !important;
+}
+
+.app-shell.admin-saas-shell .catalog-page .subtitle {
+  color: #68707a !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 14px !important;
+  text-transform: none !important;
+}
+
+.app-shell.admin-saas-shell .catalog-page .catalog-controls {
+  background: transparent !important;
+  border: 0 !important;
+  box-shadow: none !important;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(260px, 1fr) minmax(240px, 0.8fr) 180px;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs {
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 6px;
+  box-shadow: none;
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs button {
+  background: transparent !important;
+  border: 0 !important;
+  border-radius: 5px !important;
+  color: #68707a !important;
+  flex: 1 1 0;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600;
+  min-height: 34px;
+  text-transform: none !important;
+}
+
+.app-shell.admin-saas-shell .catalog-tabs button.active {
+  background: #efffd0 !important;
+  color: #121417 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table-card {
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  overflow-x: auto;
+}
+
+.app-shell.admin-saas-shell .catalog-table {
+  min-width: 1120px;
+}
+
+.app-shell.admin-saas-shell .catalog-table th,
+.app-shell.admin-saas-shell .catalog-table td {
+  border-color: #eef0f2 !important;
+  height: 52px;
+  padding: 0 14px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table th {
+  background: #fbfbf9 !important;
+  color: #68707a !important;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-size: 11px !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table td {
+  color: #121417 !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 14px !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table tbody tr:hover td,
+.app-shell.admin-saas-shell .catalog-table tbody tr.selected td {
+  background: #fbfcf7 !important;
+}
+
+.app-shell.admin-saas-shell .catalog-table tbody tr.selected td:first-child {
+  box-shadow: inset 4px 0 0 #baff16;
+}
+
+.app-shell.admin-saas-shell .catalog-table th:nth-child(1),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(1) { width: 280px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(2),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(2) { width: 145px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(3),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(3) { width: 140px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(4),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(4) { text-align: center; width: 110px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(5),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(5) { width: 140px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(6),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(6),
+.app-shell.admin-saas-shell .catalog-table th:nth-child(7),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(7) { width: 120px; }
+.app-shell.admin-saas-shell .catalog-table th:nth-child(8),
+.app-shell.admin-saas-shell .catalog-table td:nth-child(8) { width: 120px; }
+
+.product-drawer-backdrop,
+.catalog-drawer-backdrop {
+  background: rgba(17, 19, 24, 0.28) !important;
+  inset: 0;
+  position: fixed;
+  z-index: 60;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer,
+.app-shell.admin-saas-shell .catalog-drawer {
+  background: #ffffff !important;
+  border: 1px solid #d5dae0 !important;
+  border-radius: 0 !important;
+  box-shadow: -16px 0 32px rgba(15, 23, 42, 0.1) !important;
+  display: grid !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  grid-template-rows: auto 1fr auto;
+  height: 100vh !important;
+  max-width: min(500px, 100vw) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  position: fixed !important;
+  right: 0 !important;
+  top: 0 !important;
+  width: min(500px, 100vw) !important;
+  z-index: 70 !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header,
+.app-shell.admin-saas-shell .catalog-drawer header {
+  align-items: flex-start !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e1e4e8 !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  min-height: 96px;
+  padding: 22px !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header h2,
+.app-shell.admin-saas-shell .catalog-drawer header h2 {
+  color: #121417 !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  margin: 4px 0 4px !important;
+  text-transform: none !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header code,
+.app-shell.admin-saas-shell .catalog-drawer header span {
+  color: #68707a !important;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-size: 12px !important;
+  font-weight: 700;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase;
+}
+
+.app-shell.admin-saas-shell .product-drawer-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.app-shell.admin-saas-shell .product-drawer-header-actions button,
+.app-shell.admin-saas-shell .catalog-drawer-close {
+  align-items: center;
+  background: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  color: #121417 !important;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer > .product-image-panel,
+.app-shell.admin-saas-shell .professional-product-drawer > .panel-section,
+.app-shell.admin-saas-shell .catalog-form > .catalog-field,
+.app-shell.admin-saas-shell .catalog-image-field {
+  background: #ffffff !important;
+  border: 0 !important;
+  border-bottom: 1px solid #e1e4e8 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 18px 22px !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer {
+  overflow-y: auto !important;
+}
+
+.app-shell.admin-saas-shell .catalog-form {
+  display: block !important;
+  overflow-y: auto !important;
+  padding: 0 0 24px !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .panel-section h3,
+.app-shell.admin-saas-shell .professional-product-drawer .section-title,
+.app-shell.admin-saas-shell .catalog-field > span,
+.app-shell.admin-saas-shell .catalog-image-heading span {
+  color: #68707a !important;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  margin: 0 0 8px !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row {
+  align-items: start;
+  border-bottom: 1px solid #eef0f2 !important;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(122px, 0.8fr) minmax(0, 1fr);
+  min-height: 42px;
+  padding: 9px 0 !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row span {
+  color: #68707a !important;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-size: 11px !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row strong {
+  color: #121417 !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .product-image-viewer {
+  aspect-ratio: 4 / 3;
+  background-color: #fbfbf9 !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  min-height: 180px;
+}
+
+.app-shell.admin-saas-shell .professional-image-grid {
+  display: grid !important;
+  gap: 12px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.app-shell.admin-saas-shell .image-slot {
+  background: #fbfbf9 !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  display: grid !important;
+  gap: 10px !important;
+  padding: 12px !important;
+}
+
+.app-shell.admin-saas-shell .image-slot-preview {
+  aspect-ratio: 1;
+  background-color: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  min-height: 0 !important;
+}
+
+.app-shell.admin-saas-shell .professional-image-actions {
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: 1fr auto !important;
+}
+
+.app-shell.admin-saas-shell .professional-image-actions > button {
+  display: none !important;
+}
+
+.app-shell.admin-saas-shell .image-action-button,
+.app-shell.admin-saas-shell .image-more-actions summary {
+  align-items: center;
+  background: #ffffff !important;
+  border: 1px solid #d5dae0 !important;
+  border-radius: 6px !important;
+  color: #121417 !important;
+  display: flex !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 13px !important;
+  font-weight: 600 !important;
+  justify-content: center;
+  min-height: 36px;
+  padding: 0 10px !important;
+}
+
+.app-shell.admin-saas-shell .image-action-button {
+  background: #baff16 !important;
+  border-color: #a8e900 !important;
+}
+
+.app-shell.admin-saas-shell .image-more-actions {
+  position: relative;
+}
+
+.app-shell.admin-saas-shell .image-more-actions[open] div {
+  background: #ffffff;
+  border: 1px solid #d5dae0;
+  border-radius: 6px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: 40px;
+  width: 150px;
+  z-index: 4;
+}
+
+.app-shell.admin-saas-shell .image-more-actions button {
+  background: #ffffff;
+  border: 1px solid #e1e4e8;
+  border-radius: 5px;
+  color: #121417;
+  font: 600 12px Inter, Arial, sans-serif;
+  min-height: 30px;
+}
+
+.app-shell.admin-saas-shell .image-more-actions button:disabled {
+  color: #a0a7b0;
+  cursor: not-allowed;
+}
+
+.app-shell.admin-saas-shell .product-drawer-footer,
+.app-shell.admin-saas-shell .catalog-drawer-actions {
+  background: #ffffff !important;
+  border-top: 1px solid #e1e4e8 !important;
+  bottom: 0;
+  display: grid !important;
+  gap: 10px;
+  padding: 16px 22px !important;
+  position: sticky;
+}
+
+.app-shell.admin-saas-shell .product-drawer-footer button,
+.app-shell.admin-saas-shell .product-drawer-footer summary,
+.app-shell.admin-saas-shell .catalog-drawer-actions button {
+  align-items: center;
+  border: 1px solid #d5dae0 !important;
+  border-radius: 6px !important;
+  display: flex;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px !important;
+}
+
+
+@media (max-width: 767px) {
+  .app-shell.admin-saas-shell .catalog-page .catalog-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .app-shell.admin-saas-shell .professional-product-drawer,
+  .app-shell.admin-saas-shell .catalog-drawer {
+    max-width: 100vw !important;
+    width: 100vw !important;
+  }
+
+  .app-shell.admin-saas-shell .professional-image-grid {
+    grid-template-columns: 1fr !important;
+  }
+}

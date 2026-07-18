@@ -360,6 +360,7 @@ let orders = shouldLoadSupabaseOrders ? [] : [...localOrders];
 
 let selectedId = orders[0]?.id ?? null;
 let selectedProductCode = products[0].code;
+let isProductDrawerOpen = false;
 let activeFilter = "All";
 let clientKpiFilter = "All";
 let productFilter = "All";
@@ -2578,7 +2579,7 @@ function renderProductsPage(selectedProduct) {
               : ""
           }
         </article>
-        ${visibleProducts.some((item) => item.code === selectedProduct.code) ? renderProductPanel(selectedProduct) : renderEmptyDetailPanel("Select a product", "Product details will appear here.")}
+        ${isProductDrawerOpen && visibleProducts.some((item) => item.code === selectedProduct.code) ? renderProductPanel(selectedProduct) : ""}
       </section>
     </main>
   `;
@@ -2593,10 +2594,10 @@ function renderCatalogPage() {
     <main class="orders-page catalog-page admin-saas-page">
       <div class="page-heading catalog-heading">
         <div>
-          <h1>CATALOG MANAGER</h1>
-          <p class="subtitle">Manage products across TRRY WebApp, Foghead, and TRRY Portal.</p>
+          <h1>Catalog</h1>
+          <p class="subtitle">Manage how approved products appear across customer-facing catalogs.</p>
         </div>
-        <button class="catalog-add-button" data-catalog-add-product type="button" ${canWrite ? "" : "disabled title=\"Viewer role can read only.\""}>+ ADD PRODUCT</button>
+        <button class="catalog-add-button" data-catalog-add-product type="button" ${canWrite ? "" : "disabled title=\"Viewer role can read only.\""}>+ Add Catalog Item</button>
       </div>
 
       <section class="catalog-controls" aria-label="Catalog controls">
@@ -2622,13 +2623,14 @@ function renderCatalogPage() {
         <table class="products-table catalog-table">
           <thead>
             <tr>
-              <th>Image</th>
-              <th>Product Name</th>
+              <th>Product</th>
               <th>Category</th>
-              <th>Price</th>
+              <th>Starting Price</th>
               <th>Minimum Qty</th>
+              <th>Destination</th>
               <th>Featured</th>
-              <th>Status</th>
+              <th>Publish Status</th>
+              <th>Updated</th>
               </tr>
             </thead>
           <tbody>
@@ -2702,13 +2704,14 @@ function renderCatalogEmptyState(visibleProducts) {
 function renderCatalogProductRow(item) {
   return `
     <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}" role="button" tabindex="0" aria-label="Open ${escapeHtml(item.name)} catalog editor">
-      <td class="catalog-image-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : ""}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')"` : ""}></span></td>
-      <td class="catalog-name-cell"><div class="stacked-cell"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.slug)}</span></div></td>
+      <td class="catalog-name-cell"><div class="client-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : ""}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')"` : ""}></span><div><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.slug)}</span></div></div></td>
       <td class="catalog-category-cell">${escapeHtml(item.category || "-")}</td>
       <td class="catalog-price-cell">${escapeHtml(formatCatalogPrice(item))}</td>
       <td class="catalog-moq-cell">${escapeHtml(item.minimumQuantity)}</td>
+      <td class="catalog-destination-cell">${escapeHtml(getCatalogLabel(item.catalogKey))}</td>
       <td class="catalog-featured-cell">${item.isFeatured ? `<span class="status-pill visible"><span class="desktop-featured-label">Yes</span><span class="mobile-featured-label">Featured</span></span>` : `<span class="status-pill draft"><span class="desktop-featured-label">No</span><span class="mobile-featured-label">Not featured</span></span>`}</td>
       <td class="catalog-status-cell">${renderStatusPill(item.status)}</td>
+      <td class="catalog-updated-cell">${escapeHtml(formatCatalogUpdated(item.updatedAt))}</td>
     </tr>
   `;
 }
@@ -2717,13 +2720,13 @@ function renderCatalogDrawer(selectedProduct) {
   const draft = catalogDraft ?? createCatalogDraft(selectedProduct);
   const isSaving = catalogSaveState === "saving" || catalogSaveState === "uploading";
   const canWrite = canWriteCatalogProducts();
-  const title = catalogDrawerMode === "edit" ? "EDIT PRODUCT" : "ADD PRODUCT";
+  const title = catalogDrawerMode === "edit" ? (draft.name || "Edit Catalog Item") : "Add Catalog Item";
 
   return `
     <div class="catalog-drawer-backdrop" data-catalog-close-drawer></div>
     <aside class="catalog-drawer" aria-label="${title}">
       <header>
-        <div><span>${escapeHtml(getCatalogLabel(draft.catalogKey))}</span><h2>${title}</h2></div>
+        <div><span>${escapeHtml(getCatalogLabel(draft.catalogKey))}</span><h2>${escapeHtml(title)}</h2>${renderStatusPill(draft.status || "draft")}</div>
         <button class="catalog-drawer-close" data-catalog-close-drawer type="button" aria-label="Close catalog drawer">X</button>
       </header>
       <form class="catalog-form" id="catalog-product-form">
@@ -2800,6 +2803,11 @@ function getCatalogImageState(draft) {
   if (draft.imageFile) return "FILE SELECTED";
   if (draft.removeImage || !draft.imageUrl) return "NO IMAGE";
   return "IMAGE SAVED";
+}
+
+function formatCatalogUpdated(value) {
+  if (!value) return "Not set";
+  return formatDate(value) || "Recently";
 }
 
 function getCatalogImageFilename(url) {
@@ -3296,9 +3304,10 @@ function renderProductPanel(product) {
   const productImage = getActiveProductImage(product.code);
 
   return `
-    <aside class="detail-panel product-detail-panel">
-      <div class="panel-header">
-        <h2>Product Details</h2>
+    <div class="product-drawer-backdrop" data-product-drawer-close></div><aside class="detail-panel product-detail-panel professional-product-drawer">
+      <div class="panel-header product-drawer-header">
+        <div><code>${escapeHtml(product.code)}</code><h2>${escapeHtml(product.product)}</h2><span>${escapeHtml(product.category)} / Physical item</span></div>
+        <div class="product-drawer-header-actions">${renderStatusPill(product.visible === "Yes" ? "Active" : "Hidden")}<button data-product-drawer-close type="button" aria-label="Close product details">X</button></div>
       </div>
       <section class="product-image-panel">
         <div class="product-image-viewer" style="background-image: url('${escapeHtml(productImage.image_url)}')">
@@ -3331,7 +3340,7 @@ function renderProductPanel(product) {
         <div class="settings-row"><span>Created</span><strong>${product.created}</strong></div>
         <div class="settings-row"><span>Last updated</span><strong>${product.updated}</strong></div>
       </section>
-      <section class="quick-panel-actions product-actions">
+      <section class="quick-panel-actions product-actions product-drawer-footer">
         <button disabled title="Client portal product linking will be connected later." type="button">View in Client Portal</button>
         <button data-copy-value="${product.code}" data-copy-message="Product code copied" type="button">Copy Product Code</button>
         <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
@@ -3357,12 +3366,12 @@ function renderProductImageManager(product) {
   ];
 
   return `
-    <section class="panel-section image-manager-section">
+    <section class="panel-section image-manager-section product-images-section">
       <div class="section-heading-row">
         <p class="section-title">Product Images</p>
         <span>Front required</span>
       </div>
-      <div class="image-manager-grid">
+      <div class="image-manager-grid professional-image-grid">
         ${imageRows
           .map((image, index) => {
             const angleLabel = image.angle_label;
@@ -3379,7 +3388,7 @@ function renderProductImageManager(product) {
                   <strong>${angleLabel}</strong>
                   <small>${isFront ? "Required" : "Optional"}${image.is_main ? " - Main" : ""}</small>
                 </div>
-                <div class="image-slot-actions">
+                <div class="image-slot-actions professional-image-actions">
                   <label class="image-action-button">
                     ${hasImage ? "Replace" : "Add"}
                     <input data-image-upload-code="${product.code}" data-image-upload-angle="${angleLabel}" type="file" accept="image/*" />
@@ -4006,8 +4015,14 @@ function bindEvents() {
     button.addEventListener("click", () => {
       selectedProductCode = button.dataset.productCode;
       selectedImageAngle = getMainProductImage(selectedProductCode).angle_label;
+      isProductDrawerOpen = true;
       render();
     });
+  });
+
+  document.querySelector("[data-product-drawer-close]")?.addEventListener("click", () => {
+    isProductDrawerOpen = false;
+    render();
   });
 
   document.querySelectorAll("[data-image-angle]").forEach((button) => {
