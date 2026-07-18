@@ -431,13 +431,14 @@ function render() {
   const selectedProduct =
     products.find((product) => product.code === selectedProductCode) ?? products[0];
   const filteredOrders = getFilteredOrders();
+  const isAdminSaasRoute = ["Clients", "Products", "Catalog"].includes(currentRoute);
 
   document.getElementById("root").innerHTML = `
-    <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""}">
+    <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
       ${renderMobileTopBar()}
       ${renderSidebar(currentRoute)}
       <button class="sidebar-backdrop" type="button" aria-label="Close navigation"></button>
-      <section class="workspace ${isSidebarCollapsed ? "is-expanded" : ""}">
+      <section class="workspace ${isSidebarCollapsed ? "is-expanded" : ""} ${isAdminSaasRoute ? "admin-saas-workspace" : ""}">
         ${renderTopHeader()}
         ${
           currentRoute === "Orders"
@@ -2421,7 +2422,7 @@ function renderClientsPage() {
   ];
 
   return `
-    <main class="orders-page">
+    <main class="orders-page clients-page admin-saas-page">
       <div class="page-heading">
         <div>
           <h1>Clients</h1>
@@ -2449,32 +2450,32 @@ function renderClientsPage() {
             <thead>
               <tr>
                 <th>Client</th>
-                <th>Portal Slug</th>
-                <th>Account Type</th>
-                <th>Active Orders</th>
-                <th>Saved Employees</th>
-                <th>Approved Products</th>
+                <th>Company</th>
+                <th>Phone</th>
+                <th>Type</th>
+                <th>Inquiries</th>
+                <th>Orders</th>
+                <th>Last Activity</th>
                 <th>Status</th>
-                <th>Review</th>
               </tr>
             </thead>
             <tbody>
               ${
                 clientMatches
-                  ? `<tr class="${selectedClientId === clientProgram.id ? "selected" : ""}" data-client-id="${clientProgram.id}">
+                  ? `<tr class="${selectedClientId === clientProgram.id ? "selected" : ""}" data-client-id="${clientProgram.id}" role="button" tabindex="0" aria-label="Open ${escapeHtml(clientProgram.name)} client details">
                       <td>
                         <div class="client-cell">
                           <span class="client-logo urban-coffee">${clientProgram.initials}</span>
                           <div><strong>${clientProgram.name}</strong><span>${clientProgram.domain}</span></div>
                         </div>
                       </td>
-                      <td>${clientSlug}</td>
+                      <td>${clientProgram.domain}</td>
+                      <td>${clientProgram.contactNumber}</td>
                       <td>${clientProgram.accountType}</td>
-                      <td>${clientProgram.activeOrders}</td>
-                      <td>${clientProgram.savedEmployees}</td>
+                      <td>-</td>
                       <td>${clientProgram.approvedProducts}</td>
+                      <td>${clientProgram.lastOrderDate}</td>
                       <td><span class="status-pill active">${clientProgram.status}</span></td>
-                      <td><button class="view-button" data-client-id="${clientProgram.id}" type="button" aria-label="View Urban Coffee">${renderIcon("eye", "view-icon")}</button></td>
                     </tr>`
                   : ""
               }
@@ -2523,7 +2524,7 @@ function renderProductsPage(selectedProduct) {
   ];
 
   return `
-    <main class="orders-page">
+    <main class="orders-page products-admin-page admin-saas-page">
       <div class="page-heading">
         <div>
           <h1>Products</h1>
@@ -2557,14 +2558,14 @@ function renderProductsPage(selectedProduct) {
           <table class="products-table">
             <thead>
               <tr>
-                <th>Product</th>
-                <th>Client</th>
+                <th>Product / Service</th>
+                <th>Type</th>
                 <th>Category</th>
-                <th>Color</th>
-                <th>Logo Placement</th>
-                <th>Fabric / Spec</th>
-                <th>Status</th>
-                <th>Action</th>
+                <th>Base Price</th>
+                <th>Minimum Qty</th>
+                <th>Available Methods</th>
+                <th>Availability</th>
+                <th>Updated</th>
               </tr>
             </thead>
             <tbody>
@@ -2589,7 +2590,7 @@ function renderCatalogPage() {
   const canWrite = canWriteCatalogProducts();
 
   return `
-    <main class="orders-page catalog-page">
+    <main class="orders-page catalog-page admin-saas-page">
       <div class="page-heading catalog-heading">
         <div>
           <h1>CATALOG MANAGER</h1>
@@ -2628,9 +2629,8 @@ function renderCatalogPage() {
               <th>Minimum Qty</th>
               <th>Featured</th>
               <th>Status</th>
-              <th>Edit</th>
-            </tr>
-          </thead>
+              </tr>
+            </thead>
           <tbody>
             ${visibleProducts.map(renderCatalogProductRow).join("")}
           </tbody>
@@ -2701,7 +2701,7 @@ function renderCatalogEmptyState(visibleProducts) {
 
 function renderCatalogProductRow(item) {
   return `
-    <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}">
+    <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}" role="button" tabindex="0" aria-label="Open ${escapeHtml(item.name)} catalog editor">
       <td class="catalog-image-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : ""}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')"` : ""}></span></td>
       <td class="catalog-name-cell"><div class="stacked-cell"><strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.slug)}</span></div></td>
       <td class="catalog-category-cell">${escapeHtml(item.category || "-")}</td>
@@ -2709,7 +2709,6 @@ function renderCatalogProductRow(item) {
       <td class="catalog-moq-cell">${escapeHtml(item.minimumQuantity)}</td>
       <td class="catalog-featured-cell">${item.isFeatured ? `<span class="status-pill visible"><span class="desktop-featured-label">Yes</span><span class="mobile-featured-label">Featured</span></span>` : `<span class="status-pill draft"><span class="desktop-featured-label">No</span><span class="mobile-featured-label">Not featured</span></span>`}</td>
       <td class="catalog-status-cell">${renderStatusPill(item.status)}</td>
-      <td class="catalog-action-cell"><button class="view-button catalog-edit-action" data-catalog-edit-product="${item.id}" aria-label="Edit ${escapeHtml(item.name)}" type="button">Edit</button></td>
     </tr>
   `;
 }
@@ -2789,7 +2788,7 @@ function renderCatalogImageField(draft, canWrite, isSaving) {
         <span>${filename ? escapeHtml(filename) : "No file selected"}</span>
         ${canWrite ? `<button data-catalog-remove-image type="button" ${disabled || (!hasImage && !draft.imageFile && !draft.imageUrl) ? "disabled" : ""}>REMOVE IMAGE</button>` : ""}
       </div>
-      <p>SQUARE IMAGE REQUIRED Ãƒâ€šÃ‚Â· 1200 ÃƒÆ’Ã¢â‚¬â€ 1200 RECOMMENDED Ãƒâ€šÃ‚Â· MINIMUM 800 ÃƒÆ’Ã¢â‚¬â€ 800 Ãƒâ€šÃ‚Â· MAXIMUM 5 MB</p>
+      <p>SQUARE IMAGE REQUIRED ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· 1200 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â 1200 RECOMMENDED ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· MINIMUM 800 ÃƒÆ’Ã†â€™Ãƒâ€ Ã¢â‚¬â„¢ÃƒÆ’Ã‚Â¢ÃƒÂ¢Ã¢â‚¬Å¡Ã‚Â¬ÃƒÂ¢Ã¢â€šÂ¬Ã‚Â 800 ÃƒÆ’Ã†â€™ÃƒÂ¢Ã¢â€šÂ¬Ã…Â¡ÃƒÆ’Ã¢â‚¬Å¡Ãƒâ€šÃ‚Â· MAXIMUM 5 MB</p>
       ${draft.imageError ? `<p class="catalog-image-error">${escapeHtml(draft.imageError)}</p>` : ""}
     </section>
   `;
@@ -3126,21 +3125,20 @@ function renderProductRow(item) {
   const mainImage = getMainProductImage(item.code);
 
   return `
-    <tr class="${item.code === selectedProductCode ? "selected" : ""}" data-product-code="${item.code}">
+    <tr class="${item.code === selectedProductCode ? "selected" : ""}" data-product-code="${item.code}" role="button" tabindex="0" aria-label="Open ${escapeHtml(item.product)} product details">
       <td>
         <div class="client-cell">
           <span class="product-thumb has-image ${statusToClass(item.category)}" style="background-image: url('${escapeHtml(mainImage.image_url)}')"></span>
           <div><strong>${item.product}</strong><span>${item.code}</span></div>
         </div>
       </td>
-      <td>${item.client}</td>
+      <td>Physical item</td>
       <td>${item.category}</td>
-      <td><span class="color-dot ${statusToClass(item.color)}"></span>${item.color}</td>
+      <td>Not set</td>
+      <td>Not set</td>
       <td>${item.logoPlacement}</td>
-      <td>${item.fabric}</td>
-      <td>${renderStatusPill(item.status)}</td>
-      <td class="mobile-only-cell"><span class="status-pill visible">${item.visible}</span></td>
-      <td><button class="view-button" data-product-code="${item.code}" aria-label="View ${item.product}" type="button">${renderIcon("eye", "view-icon")}</button></td>
+      <td>${renderStatusPill(item.visible === "Yes" ? "Active" : "Hidden")}</td>
+      <td>${item.updated}</td>
     </tr>
   `;
 }

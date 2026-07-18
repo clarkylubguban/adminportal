@@ -12091,3 +12091,1061 @@ body,
     padding-right: 18px;
   }
 }
+
+/* Professional SaaS expansion: Clients, Products, Catalog */
+.app-shell:has(.admin-saas-page) {
+  --saas-bg: #f7f7f4;
+  --saas-surface: #ffffff;
+  --saas-surface-soft: #fbfbf9;
+  --saas-ink: #121417;
+  --saas-muted: #68707a;
+  --saas-subtle: #8c949e;
+  --saas-border: #e1e4e8;
+  --saas-border-strong: #d5dae0;
+  --saas-lime: #baff16;
+  --saas-lime-soft: #efffd0;
+  --saas-red: #ef4444;
+  --saas-red-soft: #fee8e8;
+  --saas-amber: #d97706;
+  --saas-amber-soft: #fff4d7;
+  --saas-green: #16a34a;
+  --saas-green-soft: #dcfce7;
+  --saas-blue: #2563eb;
+  --saas-blue-soft: #e8f1ff;
+  --saas-sidebar: #111318;
+  --saas-sidebar-soft: #1a1d24;
+  --saas-radius: 6px;
+  --saas-font: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  --saas-mono: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  background: var(--saas-bg);
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+.app-shell:has(.admin-saas-page) .workspace,
+.app-shell:has(.admin-saas-page) .admin-saas-page {
+  background: var(--saas-bg);
+  min-width: 0;
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+.workspace:has(.admin-saas-page) .top-header {
+  display: none;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar {
+  background: linear-gradient(180deg, #111318 0%, #0e1015 100%);
+  border-right: 1px solid #242833;
+  box-shadow: none;
+  color: #eef2f6;
+  flex: 0 0 236px;
+  font-family: var(--saas-font);
+  padding: 22px 14px;
+  width: 236px;
+}
+
+.app-shell:has(.admin-saas-page) .brand-lockup {
+  border: 0;
+  display: grid;
+  gap: 2px;
+  height: auto;
+  justify-items: start;
+  margin: 0 0 26px;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.app-shell:has(.admin-saas-page) .brand-lockup strong {
+  color: #ffffff;
+  font-family: var(--saas-font);
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+}
+
+.app-shell:has(.admin-saas-page) .brand-lockup strong::after {
+  color: var(--saas-lime);
+  content: ".";
+}
+
+.app-shell:has(.admin-saas-page) .brand-lockup span {
+  color: var(--saas-lime);
+  display: block;
+  font-family: var(--saas-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar nav {
+  gap: 5px;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar a,
+.app-shell:has(.admin-saas-page) .sidebar-phase-item {
+  background: transparent;
+  border: 0;
+  border-radius: var(--saas-radius);
+  color: #d9dde4;
+  font-family: var(--saas-font);
+  gap: 11px;
+  height: 42px;
+  padding: 0 12px;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar a .nav-label,
+.app-shell:has(.admin-saas-page) .sidebar-phase-item .nav-label {
+  color: inherit;
+  font-family: var(--saas-font);
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar a:hover,
+.app-shell:has(.admin-saas-page) .sidebar a:focus-visible {
+  background: var(--saas-sidebar-soft);
+  border: 0;
+  color: #ffffff;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar a.active {
+  background: var(--saas-lime);
+  color: #111318;
+}
+
+.app-shell:has(.admin-saas-page) .nav-icon.lucide-icon {
+  height: 17px;
+  width: 17px;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar a.active .nav-icon.lucide-icon {
+  color: #111318;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar-phase-item {
+  color: #7e8794;
+  cursor: not-allowed;
+  opacity: 0.74;
+}
+
+.app-shell:has(.admin-saas-page) .sidebar-phase-item small {
+  border: 1px solid #343946;
+  border-radius: 4px;
+  color: #aab1bb;
+  font-family: var(--saas-mono);
+  font-size: 8px;
+  padding: 2px 5px;
+}
+
+.app-shell:has(.admin-saas-page) .system-card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #2a2f3a;
+  border-radius: 0;
+  color: #d9dde4;
+  gap: 10px;
+  margin-top: auto;
+  min-height: 62px;
+  padding: 16px 10px 0;
+}
+
+.app-shell:has(.admin-saas-page) .system-card .shield-icon.lucide-icon {
+  background: var(--saas-lime);
+  border-radius: 999px;
+  color: #111318;
+  height: 34px;
+  padding: 8px;
+  width: 34px;
+}
+
+.app-shell:has(.admin-saas-page) .system-card strong {
+  color: #ffffff;
+  font-family: var(--saas-font);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-shell:has(.admin-saas-page) .system-card p {
+  color: #9aa3af;
+  font-family: var(--saas-font);
+  font-size: 12px;
+}
+
+.admin-saas-page {
+  color: var(--saas-ink);
+  display: grid;
+  gap: 20px;
+  font-family: var(--saas-font);
+  padding: 28px 30px 54px;
+}
+
+.admin-saas-page *,
+.catalog-drawer * {
+  letter-spacing: 0;
+}
+
+.admin-saas-page .page-heading {
+  align-items: end;
+  border: 0;
+  display: flex;
+  justify-content: space-between;
+  min-height: 64px;
+  padding: 0;
+}
+
+.admin-saas-page .page-heading h1 {
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  margin: 0;
+  text-transform: none;
+}
+
+.admin-saas-page .page-heading .subtitle {
+  color: var(--saas-muted);
+  font-family: var(--saas-font);
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 8px 0 0;
+  text-transform: none;
+}
+
+.admin-saas-page .status-grid,
+.admin-saas-page .compact-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.admin-saas-page .status-card {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  box-shadow: none;
+  color: var(--saas-ink);
+  min-height: 118px;
+  padding: 18px;
+}
+
+.admin-saas-page .status-card.active,
+.admin-saas-page .status-card:hover {
+  background: var(--saas-surface);
+  border-color: var(--saas-border-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+.admin-saas-page .status-card.active {
+  border-left: 4px solid var(--saas-lime);
+  padding-left: 15px;
+}
+
+.admin-saas-page .status-card .stat-icon {
+  background: var(--saas-lime-soft);
+  border: 1px solid #d8f99d;
+  border-radius: 999px;
+  color: #405400;
+}
+
+.admin-saas-page .status-card span,
+.admin-saas-page .table-helper-text,
+.catalog-count-label {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.admin-saas-page .status-card strong {
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 30px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+.admin-saas-page .status-card p {
+  color: var(--saas-muted);
+  font-family: var(--saas-font);
+  font-size: 13px;
+  text-transform: none;
+}
+
+.admin-saas-page .clients-action-row,
+.admin-saas-page .catalog-controls,
+.admin-saas-page .toolbar.inner-toolbar {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  display: flex;
+  gap: 12px;
+  padding: 0;
+}
+
+.admin-saas-page .search-field,
+.admin-saas-page .catalog-status-filter,
+.admin-saas-page .filter-tabs button,
+.admin-saas-page .catalog-tabs button,
+.admin-saas-page .primary-button,
+.admin-saas-page .catalog-add-button,
+.catalog-field input,
+.catalog-field select,
+.catalog-field textarea {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  box-shadow: none;
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 14px;
+  min-height: 40px;
+}
+
+.admin-saas-page .search-field {
+  flex: 1 1 360px;
+  max-width: none;
+  padding: 0 12px;
+}
+
+.admin-saas-page .search-field input {
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 14px;
+}
+
+.admin-saas-page .filter-tabs,
+.admin-saas-page .catalog-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.admin-saas-page .filter-tabs button,
+.admin-saas-page .catalog-tabs button,
+.admin-saas-page .primary-button,
+.admin-saas-page .catalog-add-button {
+  align-items: center;
+  display: inline-flex;
+  font-weight: 600;
+  justify-content: center;
+  padding: 0 14px;
+  text-transform: none;
+}
+
+.admin-saas-page .filter-tabs button.active,
+.admin-saas-page .catalog-tabs button.active,
+.admin-saas-page .primary-button:not(:disabled),
+.admin-saas-page .catalog-add-button:not(:disabled) {
+  background: var(--saas-lime);
+  border-color: #a8e900;
+  color: var(--saas-ink);
+}
+
+.admin-saas-page .disabled-primary,
+.admin-saas-page button:disabled {
+  background: #f0f2f3;
+  color: #9aa3af;
+  cursor: not-allowed;
+}
+
+.admin-saas-page .two-column-page {
+  display: block;
+  min-width: 0;
+}
+
+.admin-saas-page .content-card,
+.admin-saas-page .table-card,
+.admin-saas-page .catalog-table-card {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  box-shadow: none;
+  min-width: 0;
+  overflow-x: auto;
+  padding: 0;
+}
+
+.admin-saas-page table {
+  border-collapse: collapse;
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 14px;
+  min-width: 980px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.admin-saas-page .clients-table { min-width: 1040px; }
+.admin-saas-page .products-table:not(.catalog-table) { min-width: 1120px; }
+.admin-saas-page .catalog-table { min-width: 1040px; }
+
+.admin-saas-page th {
+  background: var(--saas-surface-soft);
+  border-bottom: 1px solid var(--saas-border-strong);
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 700;
+  height: 42px;
+  letter-spacing: 0.04em;
+  padding: 0 14px;
+  text-align: left;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-saas-page td {
+  border-bottom: 1px solid #eef0f2;
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 14px;
+  height: 52px;
+  line-height: 1.3;
+  overflow: hidden;
+  padding: 0 14px;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.admin-saas-page tbody tr {
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.admin-saas-page tbody tr:hover td,
+.admin-saas-page tbody tr:focus-visible td,
+.admin-saas-page tbody tr.selected td {
+  background: #fbfcf7;
+}
+
+.admin-saas-page tbody tr.selected td:first-child {
+  box-shadow: inset 4px 0 0 var(--saas-lime);
+}
+
+.admin-saas-page tbody tr:focus-visible {
+  outline: 2px solid var(--saas-lime);
+  outline-offset: -2px;
+}
+
+.clients-page .clients-table th:nth-child(1),
+.clients-page .clients-table td:nth-child(1) { width: 210px; }
+.clients-page .clients-table th:nth-child(2),
+.clients-page .clients-table td:nth-child(2) { width: 230px; }
+.clients-page .clients-table th:nth-child(3),
+.clients-page .clients-table td:nth-child(3) { width: 150px; }
+.clients-page .clients-table th:nth-child(4),
+.clients-page .clients-table td:nth-child(4) { width: 170px; }
+.clients-page .clients-table th:nth-child(5),
+.clients-page .clients-table td:nth-child(5),
+.clients-page .clients-table th:nth-child(6),
+.clients-page .clients-table td:nth-child(6) { text-align: center; width: 95px; }
+.clients-page .clients-table th:nth-child(7),
+.clients-page .clients-table td:nth-child(7) { width: 145px; }
+.clients-page .clients-table th:nth-child(8),
+.clients-page .clients-table td:nth-child(8) { width: 110px; }
+
+.products-admin-page .products-table:not(.catalog-table) th:nth-child(1),
+.products-admin-page .products-table:not(.catalog-table) td:nth-child(1) { width: 250px; }
+.products-admin-page .products-table:not(.catalog-table) th:nth-child(2),
+.products-admin-page .products-table:not(.catalog-table) td:nth-child(2) { width: 135px; }
+.products-admin-page .products-table:not(.catalog-table) th:nth-child(3),
+.products-admin-page .products-table:not(.catalog-table) td:nth-child(3) { width: 135px; }
+.products-admin-page .products-table:not(.catalog-table) th:nth-child(4),
+.products-admin-page .products-table:not(.catalog-table) td:nth-child(4),
+.products-admin-page .products-table:not(.catalog-table) th:nth-child(5),
+.products-admin-page .products-table:not(.catalog-table) td:nth-child(5) { width: 120px; }
+.products-admin-page .products-table:not(.catalog-table) th:nth-child(6),
+.products-admin-page .products-table:not(.catalog-table) td:nth-child(6) { width: 230px; }
+.products-admin-page .products-table:not(.catalog-table) th:nth-child(7),
+.products-admin-page .products-table:not(.catalog-table) td:nth-child(7) { width: 130px; }
+.products-admin-page .products-table:not(.catalog-table) th:nth-child(8),
+.products-admin-page .products-table:not(.catalog-table) td:nth-child(8) { width: 120px; }
+
+.catalog-page .catalog-table th:nth-child(1),
+.catalog-page .catalog-table td:nth-child(1) { width: 76px; }
+.catalog-page .catalog-table th:nth-child(2),
+.catalog-page .catalog-table td:nth-child(2) { width: 260px; }
+.catalog-page .catalog-table th:nth-child(3),
+.catalog-page .catalog-table td:nth-child(3) { width: 150px; }
+.catalog-page .catalog-table th:nth-child(4),
+.catalog-page .catalog-table td:nth-child(4) { width: 145px; }
+.catalog-page .catalog-table th:nth-child(5),
+.catalog-page .catalog-table td:nth-child(5) { width: 120px; text-align: center; }
+.catalog-page .catalog-table th:nth-child(6),
+.catalog-page .catalog-table td:nth-child(6),
+.catalog-page .catalog-table th:nth-child(7),
+.catalog-page .catalog-table td:nth-child(7) { width: 125px; }
+
+.admin-saas-page .client-cell,
+.admin-saas-page .stacked-cell {
+  align-items: center;
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+}
+
+.admin-saas-page .client-cell > div,
+.admin-saas-page .stacked-cell {
+  min-width: 0;
+}
+
+.admin-saas-page .client-cell strong,
+.admin-saas-page .stacked-cell strong {
+  color: var(--saas-ink);
+  display: block;
+  font-family: var(--saas-font);
+  font-size: 14px;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-saas-page .client-cell span,
+.admin-saas-page .stacked-cell span {
+  color: var(--saas-muted);
+  display: block;
+  font-family: var(--saas-font);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.admin-saas-page .client-logo,
+.admin-saas-page .product-thumb,
+.catalog-product-image {
+  align-items: center;
+  background-color: #eef1f3;
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 700;
+  height: 34px;
+  justify-content: center;
+  width: 34px;
+}
+
+.admin-saas-page .product-thumb.has-image,
+.catalog-product-image.has-image {
+  background-position: center;
+  background-size: cover;
+}
+
+.admin-saas-page .status-pill,
+.catalog-drawer .status-pill {
+  align-items: center;
+  background: #eef1f3;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: #4b5563;
+  display: inline-flex;
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 24px;
+  padding: 3px 9px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-saas-page .status-pill.active,
+.admin-saas-page .status-pill.approved,
+.admin-saas-page .status-pill.visible,
+.catalog-drawer .status-pill.active,
+.catalog-drawer .status-pill.approved,
+.catalog-drawer .status-pill.visible {
+  background: var(--saas-green-soft);
+  color: #166534;
+}
+
+.admin-saas-page .status-pill.draft,
+.admin-saas-page .status-pill.pending,
+.catalog-drawer .status-pill.draft,
+.catalog-drawer .status-pill.pending {
+  background: var(--saas-amber-soft);
+  color: #92400e;
+}
+
+.clients-page .detail-panel:not(.empty-panel),
+.products-admin-page .detail-panel:not(.empty-panel),
+.catalog-drawer {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: 0;
+  box-shadow: -16px 0 32px rgba(15, 23, 42, 0.08);
+  color: var(--saas-ink);
+  display: grid;
+  font-family: var(--saas-font);
+  grid-template-rows: auto 1fr auto;
+  height: 100vh;
+  max-width: min(460px, 100vw);
+  overflow: hidden;
+  padding: 0;
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: min(460px, 100vw);
+  z-index: 70;
+}
+
+.clients-page .detail-panel.empty-panel,
+.products-admin-page .detail-panel.empty-panel {
+  display: none;
+}
+
+.clients-page .detail-panel .panel-header,
+.products-admin-page .detail-panel .panel-header,
+.catalog-drawer header {
+  align-items: flex-start;
+  background: var(--saas-surface);
+  border-bottom: 1px solid var(--saas-border);
+  display: flex;
+  justify-content: space-between;
+  min-height: 94px;
+  padding: 22px;
+}
+
+.clients-page .detail-panel .panel-header h2,
+.products-admin-page .detail-panel .panel-header h2,
+.catalog-drawer header h2 {
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.12;
+  margin: 0;
+  text-transform: none;
+}
+
+.catalog-drawer header span {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.catalog-drawer-close {
+  align-items: center;
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.clients-page .detail-panel .panel-section,
+.products-admin-page .detail-panel .panel-section,
+.products-admin-page .product-image-panel,
+.catalog-form,
+.catalog-image-field {
+  background: var(--saas-surface);
+  border: 0;
+  border-bottom: 1px solid var(--saas-border);
+  border-radius: 0;
+  box-shadow: none;
+  padding: 18px 22px;
+}
+
+.clients-page .detail-panel,
+.products-admin-page .detail-panel {
+  overflow-y: auto;
+}
+
+.catalog-form {
+  display: block;
+  overflow-y: auto;
+  padding-bottom: 24px;
+}
+
+.clients-page .settings-row,
+.products-admin-page .settings-row,
+.catalog-image-heading,
+.catalog-image-meta {
+  align-items: start;
+  border-bottom: 1px solid #eef0f2;
+  display: grid;
+  gap: 16px;
+  grid-template-columns: minmax(110px, 0.75fr) minmax(0, 1fr);
+  min-height: 42px;
+  padding: 9px 0;
+}
+
+.clients-page .settings-row span,
+.products-admin-page .settings-row span,
+.clients-page .panel-section span,
+.products-admin-page .panel-section span,
+.catalog-field > span,
+.catalog-image-heading span,
+.catalog-image-meta span,
+.catalog-image-field p {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.clients-page .settings-row strong,
+.products-admin-page .settings-row strong,
+.clients-page .panel-section strong,
+.products-admin-page .panel-section strong,
+.catalog-image-heading strong {
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.clients-page .panel-stat-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.clients-page .panel-stat-grid div {
+  background: var(--saas-surface-soft);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  padding: 12px;
+}
+
+.clients-page .quick-panel-actions,
+.products-admin-page .quick-panel-actions,
+.catalog-drawer-actions {
+  background: var(--saas-surface);
+  border-top: 1px solid var(--saas-border);
+  bottom: 0;
+  display: grid;
+  gap: 10px;
+  padding: 16px 22px;
+  position: sticky;
+}
+
+.clients-page .quick-panel-actions a,
+.clients-page .quick-panel-actions button,
+.products-admin-page .quick-panel-actions button,
+.catalog-drawer-actions button,
+.catalog-image-meta button {
+  align-items: center;
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  display: flex;
+  font-family: var(--saas-font);
+  font-size: 14px;
+  font-weight: 600;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  text-decoration: none;
+  text-transform: none;
+}
+
+.clients-page .quick-panel-actions a:first-child,
+.catalog-drawer-actions .catalog-save-button:not(:disabled) {
+  background: var(--saas-lime);
+  border-color: #a8e900;
+}
+
+.products-admin-page .product-image-viewer,
+.catalog-image-preview {
+  background-color: var(--saas-surface-soft);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  box-shadow: none;
+}
+
+.catalog-image-preview img {
+  height: 100%;
+  object-fit: contain;
+  width: 100%;
+}
+
+.catalog-field {
+  display: grid;
+  gap: 7px;
+  margin: 0 0 12px;
+}
+
+.catalog-field input,
+.catalog-field select,
+.catalog-field textarea {
+  min-height: 40px;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.catalog-field textarea {
+  min-height: 84px;
+  padding: 10px 12px;
+}
+
+.catalog-form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.catalog-drawer-backdrop {
+  background: rgba(17, 19, 24, 0.26);
+  inset: 0;
+  position: fixed;
+  z-index: 60;
+}
+
+@media (max-width: 1199px) and (min-width: 768px) {
+  .app-shell:has(.admin-saas-page) .sidebar {
+    flex-basis: 196px;
+    width: 196px;
+  }
+
+  .admin-saas-page .status-grid,
+  .admin-saas-page .compact-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .admin-saas-page {
+    gap: 16px;
+    padding: 18px 14px 84px;
+  }
+
+  .admin-saas-page .page-heading,
+  .admin-saas-page .clients-action-row,
+  .admin-saas-page .catalog-controls,
+  .admin-saas-page .toolbar.inner-toolbar {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .admin-saas-page .status-grid,
+  .admin-saas-page .compact-grid,
+  .catalog-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .clients-page .detail-panel:not(.empty-panel),
+  .products-admin-page .detail-panel:not(.empty-panel),
+  .catalog-drawer {
+    max-width: 100vw;
+    width: 100vw;
+  }
+}
+
+/* Explicit shell class fallback for professional SaaS legacy modules */
+.app-shell.admin-saas-shell {
+  background: var(--saas-bg, #f7f7f4);
+  color: var(--saas-ink, #121417);
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+.app-shell.admin-saas-shell .workspace,
+.app-shell.admin-saas-shell .admin-saas-page {
+  background: var(--saas-bg, #f7f7f4);
+  color: var(--saas-ink, #121417);
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  min-width: 0;
+  max-width: 100vw;
+  overflow-x: clip;
+}
+
+.workspace.admin-saas-workspace .top-header {
+  display: none;
+}
+
+.app-shell.admin-saas-shell .sidebar {
+  background: linear-gradient(180deg, #111318 0%, #0e1015 100%);
+  border-right: 1px solid #242833;
+  box-shadow: none;
+  color: #eef2f6;
+  flex: 0 0 236px;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  padding: 22px 14px;
+  width: 236px;
+}
+
+.app-shell.admin-saas-shell .brand-lockup {
+  border: 0;
+  display: grid;
+  gap: 2px;
+  height: auto;
+  justify-items: start;
+  margin: 0 0 26px;
+  padding: 0 10px;
+  width: 100%;
+}
+
+.app-shell.admin-saas-shell .brand-lockup strong {
+  color: #ffffff;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-size: 27px;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+  line-height: 0.95;
+}
+
+.app-shell.admin-saas-shell .brand-lockup strong::after {
+  color: var(--saas-lime, #baff16);
+  content: ".";
+}
+
+.app-shell.admin-saas-shell .brand-lockup span {
+  color: var(--saas-lime, #baff16);
+  display: block;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.app-shell.admin-saas-shell .sidebar nav {
+  gap: 5px;
+}
+
+.app-shell.admin-saas-shell .sidebar a,
+.app-shell.admin-saas-shell .sidebar-phase-item {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #d9dde4;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  gap: 11px;
+  height: 42px;
+  padding: 0 12px;
+}
+
+.app-shell.admin-saas-shell .sidebar a .nav-label,
+.app-shell.admin-saas-shell .sidebar-phase-item .nav-label {
+  color: inherit;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  text-transform: none;
+}
+
+.app-shell.admin-saas-shell .sidebar a:hover,
+.app-shell.admin-saas-shell .sidebar a:focus-visible {
+  background: #1a1d24;
+  border: 0;
+  color: #ffffff;
+}
+
+.app-shell.admin-saas-shell .sidebar a.active {
+  background: var(--saas-lime, #baff16);
+  color: #111318;
+}
+
+.app-shell.admin-saas-shell .sidebar a.active .nav-icon.lucide-icon {
+  color: #111318;
+}
+
+.app-shell.admin-saas-shell .nav-icon.lucide-icon {
+  height: 17px;
+  width: 17px;
+}
+
+.app-shell.admin-saas-shell .sidebar-phase-item {
+  color: #7e8794;
+  cursor: not-allowed;
+  opacity: 0.74;
+}
+
+.app-shell.admin-saas-shell .sidebar-phase-item small {
+  border: 1px solid #343946;
+  border-radius: 4px;
+  color: #aab1bb;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 8px;
+  padding: 2px 5px;
+}
+
+.app-shell.admin-saas-shell .system-card {
+  background: transparent;
+  border: 0;
+  border-top: 1px solid #2a2f3a;
+  border-radius: 0;
+  color: #d9dde4;
+  gap: 10px;
+  margin-top: auto;
+  min-height: 62px;
+  padding: 16px 10px 0;
+}
+
+.app-shell.admin-saas-shell .system-card .shield-icon.lucide-icon {
+  background: var(--saas-lime, #baff16);
+  border-radius: 999px;
+  color: #111318;
+  height: 34px;
+  padding: 8px;
+  width: 34px;
+}
+
+.app-shell.admin-saas-shell .system-card strong {
+  color: #ffffff;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.app-shell.admin-saas-shell .system-card p {
+  color: #9aa3af;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-size: 12px;
+}
+
+.app-shell.admin-saas-shell .admin-saas-page,
+.app-shell.admin-saas-shell .admin-saas-page button,
+.app-shell.admin-saas-shell .admin-saas-page input,
+.app-shell.admin-saas-shell .admin-saas-page select,
+.app-shell.admin-saas-shell .admin-saas-page textarea,
+.app-shell.admin-saas-shell .catalog-drawer,
+.app-shell.admin-saas-shell .catalog-drawer button,
+.app-shell.admin-saas-shell .catalog-drawer input,
+.app-shell.admin-saas-shell .catalog-drawer select,
+.app-shell.admin-saas-shell .catalog-drawer textarea {
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+}
+
+@media (max-width: 1199px) and (min-width: 768px) {
+  .app-shell.admin-saas-shell .sidebar {
+    flex-basis: 196px;
+    width: 196px;
+  }
+}
