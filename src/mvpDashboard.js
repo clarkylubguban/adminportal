@@ -396,6 +396,7 @@ export function createMvpDashboard() {
     });
     root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => { const restore = state.returnFocus; state.inquiryId = null; state.orderId = null; state.productionId = null; state.returnFocus = null; clearQuery(); rerender(); requestAnimationFrame(() => { if (restore) root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]`)?.focus(); }); }));
     root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); button.dataset.copied = "true"; button.querySelector("small").textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const label = button.querySelector("small"); if (label) label.textContent = "Copy"; }, 1300); }));
+    root.querySelectorAll('[data-mvp-note-toggle]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); const wrap = button.closest('.mvp-note-wrap'); const expanded = wrap?.classList.toggle('expanded'); button.textContent = expanded ? 'SHOW LESS' : 'SHOW FULL NOTE'; }));
     root.querySelectorAll("[data-mvp-save-production]").forEach((button) => button.addEventListener("click", async () => {
       if (button.disabled) return;
       const id = button.dataset.mvpSaveProduction;
@@ -451,7 +452,14 @@ export function createMvpDashboard() {
   }
 
   function detailSection(title, rows, note = "") {
-    return `<section class="mvp-drawer-section"><h3>${html(title)}</h3><div class="mvp-detail-grid">${rows.map(([label, value]) => `<div><span>${html(label)}</span><strong>${html(value || "Not set")}</strong></div>`).join("")}</div>${note ? `<p class="mvp-customer-message">${html(note)}</p>` : ""}</section>`;
+    return `<section class="mvp-drawer-section"><h3>${html(title)}</h3><div class="mvp-detail-grid">${rows.map(([label, value]) => `<div><span>${html(label)}</span><strong>${html(value || "Not set")}</strong></div>`).join("")}</div>${noteBlock(note)}</section>`;
+  }
+
+  function noteBlock(note = "") {
+    const text = String(note || "").trim();
+    if (!text) return "";
+    const canExpand = text.length > 160 || text.split(/\r?\n/).length > 3;
+    return `<div class="mvp-note-wrap ${canExpand ? "is-clamped" : ""}"><p class="mvp-customer-message">${html(text)}</p>${canExpand ? `<button class="mvp-note-toggle" data-mvp-note-toggle type="button">SHOW FULL NOTE</button>` : ""}</div>`;
   }
 
   function pageTitle(kicker, title, meta) {

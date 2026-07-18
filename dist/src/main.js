@@ -1082,7 +1082,8 @@ function renderOpsMoreActions(actions) {
 
 function renderOpsActionButton({ label, action, id, tone = "", primary = false, disabled = false }) {
   const buttonClass = primary ? "ops-gold-button mini" : `ops-move-button ${tone}`.trim();
-  return `<button class="${buttonClass}" data-ops-customer-action="${escapeHtml(action)}" data-ops-customer-id="${escapeHtml(id)}" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(label)}</button>`;
+  const displayLabel = action === "revise_quote" ? "\u25b6 REVISE QUOTE" : label;
+  return `<button class="${buttonClass}" data-ops-customer-action="${escapeHtml(action)}" data-ops-customer-id="${escapeHtml(id)}" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(displayLabel)}</button>`;
 }
 
 function renderOpsAssetButton({ label, asset, id, disabled = false }) {
