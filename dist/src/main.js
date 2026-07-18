@@ -1135,7 +1135,7 @@ function renderOpsCustomerTracking(item) {
   if (!canEdit) {
     return renderOpsStageShell({
       key: "tracking",
-      title: "Customer Tracking",
+      title: "Fulfillment",
       status: "Locked",
       locked: true,
       current: getOpsInquiryCurrentTask(item).stage === "fulfillment",
@@ -1147,7 +1147,7 @@ function renderOpsCustomerTracking(item) {
 
   return renderOpsStageShell({
     key: "tracking",
-    title: "Customer Tracking",
+    title: "Fulfillment",
     status: currentLabel,
     current: getOpsInquiryCurrentTask(item).stage === "fulfillment",
     body,
@@ -1350,7 +1350,7 @@ function renderOpsQuoteStage(item) {
     body += `<div class="ops-stage-mini-grid"><div><span>Amount</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Valid until</span><strong>${escapeHtml(item.quoteValidUntil || "Not set")}</strong></div><div><span>Published</span><strong>${escapeHtml(formatOpsTrackingDate(item.quotePublishedAt))}</strong></div></div>${renderOpsQuoteForm(item, isLoading, false)}`;
   }
 
-  return renderOpsStageShell({ key: "quote", title: "Quote", status: getOpsCustomerActionLabel("quote", status), current, body });
+  return renderOpsStageShell({ key: "quote", title: "Quotation", status: getOpsCustomerActionLabel("quote", status), current, body });
 }
 
 function renderOpsPaymentStage(item) {
@@ -1362,6 +1362,10 @@ function renderOpsPaymentStage(item) {
   const current = getOpsInquiryCurrentTask(item).stage === "payment";
   const status = item.paymentStatus || "not_required";
   let body = renderOpsQuoteHiddenFields(item);
+  const paymentTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
+  const paymentPaid = Number(item.paymentConfirmedAmount) > 0 ? Number(item.paymentConfirmedAmount) : 0;
+  const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
+  body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
 
   if (status === "confirmed") {
     body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;

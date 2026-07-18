@@ -197,15 +197,49 @@ export function createMvpDashboard() {
     const stage = quoteStage(item);
     const amountReady = Number(item.quotedAmount) > 0;
     const approved = stage === "approved";
+    const conversionAction = approved && amountReady && typeof renderOdoo === "function"
+      ? renderOdoo(item)
+      : `<button type="button" disabled>Confirm Odoo SO &amp; Create Order</button>`;
+    const requestMessage = customerNotes(item) || "No customer message provided.";
+    const moreDetails = item.message
+      ? `<details class="mvp-more-details"><summary>MORE REQUEST DETAILS</summary><p>${html(item.message)}</p></details>`
+      : "";
     return drawer("inquiry", item, QUOTE_STAGES[stage], `
-      ${detailSection("Customer", [["Full Name", item.contact || item.customer], ["Phone", item.contact], ["Company", item.company], ["Contact Via", item.channel || item.source]])}
-      ${detailSection("Request", [["Product", product(item)], ["Service", item.service], ["Quantity", item.qty], ["Needed Date", item.dueDate ? shortDate(item.dueDate) : "Not set"], ["Fulfillment", fulfillment(item)]], item.message)}
-      ${typeof renderQuote === "function" ? renderQuote(item) : detailSection("Quotation", [["Status", QUOTE_STAGES[stage]], ["Quote Amount", money(item.quotedAmount)]])}
-      ${detailSection("Internal", [["Owner", owner(item)], ["Priority", item.priority || "Normal"], ["Follow-up Date", item.followUpDate ? shortDate(item.followUpDate) : "Not set"], ["Last Update", dateTime(item.updatedAt)]])}
-      <section class="mvp-drawer-section"><h3>Conversion</h3><div class="mvp-conversion"><b>${approved ? "QUOTE APPROVED" : "QUOTE NOT APPROVED"}</b><span>Final amount: ${money(item.quotedAmount)}</span>${approved && amountReady && typeof renderOdoo === "function" ? renderOdoo(item) : `<button type="button" disabled>Confirm Odoo SO &amp; Create Order</button>`}<small>${!approved ? "Customer quote approval is required." : !amountReady ? "A valid final quote amount is required." : "Enter and confirm the Odoo SO to create the order."}</small></div></section>
-    `);
+      ${detailSection("Customer", [
+        ["Full Name", item.customer || item.contact],
+        ["Phone", item.contact],
+        ["Company", item.company],
+        ["Contact Channel", item.channel || item.source],
+      ])}
+      ${detailSection("Request", [
+        ["Product / Item", product(item)],
+        ["Service", item.service],
+        ["Quantity", item.sizeBreakdown || item.qty],
+        ["Needed Date", item.dueDate ? shortDate(item.dueDate) : "Not set"],
+        ["Fulfillment", fulfillment(item)],
+        ["Artwork / Reference", artworkLabel(item)],
+      ], requestMessage)}${moreDetails}
+      ${typeof renderQuote === "function" ? renderQuote(item) : detailSection("Quotation", [
+        ["Quote Status", QUOTE_STAGES[stage]],
+        ["Quoted Amount", money(item.quotedAmount)],
+        ["Amount Due", money(item.amountDue)],
+        ["Valid Until", item.quoteValidUntil ? shortDate(item.quoteValidUntil) : "Not set"],
+        ["Published", dateTime(item.quotePublishedAt)],
+      ], [item.quoteBreakdown, item.quoteNotes].filter(Boolean).join("\n\n"))}
+      ${detailSection("Internal", [
+        ["Owner", owner(item)],
+        ["Priority", item.priority || "Normal"],
+        ["Follow-up Date", item.followUpDate ? shortDate(item.followUpDate) : "Not set"],
+        ["Internal Note", item.productionNote || item.internalNote || "Not set"],
+        ["Last Update", dateTime(item.updatedAt)],
+      ])}
+      <section class="mvp-drawer-section"><h3>Conversion</h3><div class="mvp-detail-grid">
+        <div><span>Quote Approval State</span><strong>${html(approved ? "Quote approved" : "Quote not approved")}</strong></div>
+        <div><span>Odoo SO</span><strong>${html(item.odooSO || "Not created")}</strong></div>
+        <div><span>Conversion Requirements</span><strong>${html(!approved ? "Customer quote approval is required." : !amountReady ? "A valid final quote amount is required." : item.odooSO ? "Order already has an Odoo sales order." : "Enter and confirm the Odoo SO to create the order.")}</strong></div>
+      </div></section>
+    `, conversionAction);
   }
-
   function renderOrders({ items, notices = "", schemaNotice = "", renderPayment, renderTracking }) {
     const orders = items.filter(confirmed);
     const stageQuery = query("stage");
@@ -252,12 +286,10 @@ export function createMvpDashboard() {
     return drawer("order", item, `${stageLabel(stage)}${blockedReason(item) ? " / Blocked" : ""}`, `
       ${detailSection("Order", [["Odoo Sales Order", item.odooSO], ["Product", product(item)], ["Service", item.service], ["Quantity / Sizes", item.sizeBreakdown || item.qty], ["Needed Date", due(item).label], ["Fulfillment Method", fulfillment(item)]])}
       ${detailSection("Artwork", [["Status", artworkLabel(item)], ["Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"]])}
-      ${paymentSummary(item)}
-      ${typeof renderPayment === "function" ? renderPayment(item) : ""}
+      ${typeof renderPayment === "function" ? renderPayment(item) : paymentSummary(item)}
       ${detailSection("Production", [["Current Stage", stageLabel(stage)], ["Blocked", blockedReason(item) || "No"], ["Assigned Staff", assigned(item)]])}
-      <button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Open Production &rarr;</button>
       ${typeof renderTracking === "function" ? renderTracking(item) : ""}
-    `);
+    `, `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Open Production &rarr;</button>`);
   }
   function renderProduction({ items, notices = "", schemaNotice = "" }) {
     const orders = items.filter(confirmed);
@@ -328,8 +360,7 @@ export function createMvpDashboard() {
       </div><button class="mvp-secondary-action" type="button" data-mvp-save-production="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>Save Assignment &amp; Note</button>${blockedReason(item) ? `<p class="mvp-blocked">BLOCKED: ${html(blockedReason(item))}</p>` : ""}</section>
       ${detailSection("Artwork", [["Status", artworkLabel(item)], ["Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"]])}
       ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", tracking(item)]])}
-      <section class="mvp-production-action"><span>Now: ${stageLabel(stage)}</span><strong>${next ? `Next: ${stageLabel(next)}` : "Production complete"}</strong>${next ? `<button type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="${next}" ${!fieldsReady || gate.length ? "disabled" : ""}>${stage === "qc" ? "Mark Ready" : stage === "ready" ? "Mark Completed" : `Move to ${stageLabel(next)}`}</button>` : `<button type="button" disabled>Completed</button>`}${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}</section>
-    `);
+    `, `<section class="mvp-production-action"><span>Now: ${stageLabel(stage)}</span><strong>${next ? `Next: ${stageLabel(next)}` : "Production complete"}</strong>${next ? `<button type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="${next}" ${!fieldsReady || gate.length ? "disabled" : ""}>${stage === "qc" ? "Mark Ready" : stage === "ready" ? "Mark Completed" : `Move to ${stageLabel(next)}`}</button>` : `<button type="button" disabled>Completed</button>`}${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}</section>`);
   }
 
   function nextStage(item) {
@@ -418,8 +449,8 @@ export function createMvpDashboard() {
     return `<div class="mvp-table-row" data-mvp-open="${type}" data-mvp-id="${html(id)}" role="row" tabindex="0">${cells.join("")}</div>`;
   }
 
-  function drawer(type, item, statusLabel, body) {
-    return `<button class="mvp-drawer-backdrop" data-mvp-close type="button" aria-label="Close details"></button><aside class="mvp-drawer" aria-label="${type} details"><header><div><code>${html(item.id)}</code><h2>${html(item.customer || "Details")}</h2><mark>${html(statusLabel)}</mark></div><button type="button" data-mvp-close aria-label="Close details">X</button></header><div class="mvp-drawer-body">${body}</div></aside>`;
+  function drawer(type, item, statusLabel, body, footer = "") {
+    return `<button class="mvp-drawer-backdrop" data-mvp-close type="button" aria-label="Close details"></button><aside class="mvp-drawer ${type}" aria-label="${type} details"><header><div><code>${html(item.id)}</code><h2>${html(item.customer || item.company || "Details")}</h2><mark>${html(statusLabel)}</mark></div><button type="button" data-mvp-close aria-label="Close details">X</button></header><div class="mvp-drawer-body">${body}</div><footer class="mvp-drawer-footer">${footer}</footer></aside>`;
   }
 
   function detailSection(title, rows, note = "") {
@@ -460,9 +491,16 @@ export function createMvpDashboard() {
   function inquiryDue(item) { if (!item.followUpDate) return "none"; const date = new Date(`${item.followUpDate}T00:00:00`); const today = new Date(`${todayIso()}T00:00:00`); if (date < today) return "overdue"; if (+date === +today) return "today"; return "week"; }
   function fulfillment(item) { const value = key(item.fulfillmentMethod); return value === "pickup" ? "Pickup" : value === "delivery" ? "Delivery" : "Not set"; }
   function tracking(item) { const labels = { ready_for_pickup: "Ready for Pickup", out_for_delivery: "Out for Delivery", delivered: "Delivered", completed: "Completed" }; return labels[key(item.trackingSubstatus)] || "Not set"; }
-  function paymentSummary(item) { const total = amount(item.quotedAmount); const paid = amount(item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment Summary", [["Status", paymentLabel(item)], ["Total Amount", money(total)], ["Amount Paid", money(paid)], ["Balance", money(balance)]]); }
+  function paymentSummary(item) { const total = amount(item.quotedAmount); const paid = amount(item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Total Amount", money(total)], ["Amount Paid", money(paid)], ["Balance", money(balance)]]); }
   function amount(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
   function messageValue(message, labels) { for (const label of labels) { const match = String(message || "").match(new RegExp(`^${label}:\\s*(.+)$`, "im")); if (match?.[1]?.trim()) return match[1].trim(); } return ""; }
+  function customerNotes(item) {
+    const direct = String(item.notes || item.customerNotes || "").trim();
+    if (direct) return direct;
+    const match = String(item.message || "").match(/^Notes:\s*([\s\S]*?)(?=\nCustomer-side submitted at:\s|$)/m);
+    const extracted = match?.[1]?.trim() || "";
+    return extracted && extracted.toLowerCase() !== "none" ? extracted : "";
+  }
   function shortDate(value) { if (!value) return "-"; const date = new Date(`${String(value).slice(0, 10)}T00:00:00`); return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
   function dateTime(value) { if (!value) return "Not set"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }); }
   function money(value) { const number = Number(value); return Number.isFinite(number) ? `PHP ${number.toLocaleString("en-US")}` : "Not set"; }
