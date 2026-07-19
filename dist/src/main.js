@@ -172,7 +172,7 @@ const OPS_RED = "#E23F32";
 
 const opsStatus = {
   new: { label: "New / Inquiry Received", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
-  quote: { label: "Needs Quote", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
+  quote: { label: "New Inquiry", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
   sent: { label: "Quote Sent", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
   followup: { label: "Follow Up", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
   won: { label: "Won / Odoo Created", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
@@ -197,8 +197,6 @@ const opsStatusNameToKey = {
   "New / Inquiry Received": "new",
   "New Inquiry": "new",
   "Need Details": "followup",
-  "Needs Quote": "quote",
-  "Quote Needed": "quote",
   "Quote Sent": "sent",
   "Follow Up": "followup",
   "Won / Odoo Created": "won",
@@ -227,7 +225,6 @@ const localOpsInquiries = [
   { id: "TRY-0144", customer: "D' Native Grill", service: "Staff Uniforms", qty: "18 pcs", dueDate: "2026-07-14", followUpDate: null, next: "Schedule production", assigned: "Clark", source: "Walk-in", status: "won", odooSO: "SO-2214" },
   { id: "TRY-0143", customer: "J&M Trading", service: "Cap Embroidery", qty: "25 pcs", dueDate: null, followUpDate: null, next: "Went with another supplier", assigned: "Jena", source: "FB", status: "lost", odooSO: "" },
 ];
-
 const shouldLoadSupabaseOps = isSupabaseReady();
 
 let opsInquiries = shouldLoadSupabaseOps ? [] : [...localOpsInquiries];
@@ -961,7 +958,7 @@ function getOpsPriorityItems() {
 
   opsInquiries
     .filter((item) => item.status === "quote")
-    .forEach((item) => addInquiry(item, "Needs Quote", "quote", `${item.customer} - prepare quotation`));
+    .forEach((item) => addInquiry(item, "New Inquiry", "new", `${item.customer} - prepare quotation`));
 
   opsInquiries
     .filter((item) => /confirm/i.test(item.next || "") && !item.odooSO)
@@ -981,7 +978,7 @@ function renderOpsReviewForm() {
   const fields = opsExtractFields;
   const simpleFields = [["customerName", "Customer Name"], ["businessName", "Business Name"], ["quantity", "Quantity"], ["neededDate", "Needed Date"], ["nextAction", "Next Action"]];
   const textFields = [["summary", "Summary", 2], ["missingDetails", "Missing Details", 2], ["suggestedReply", "Suggested Reply", 3]];
-  return `<div class="ops-review-box"><p class="ops-review-label">Review before saving - edit anything AI got wrong</p><div class="ops-review-grid">${simpleFields.map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}<label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label><label><span>Suggested Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Needs Quote", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div><div class="ops-review-stack">${textFields.map(([key, label, rows]) => renderOpsTextarea(key, label, fields[key], rows)).join("")}</div><div class="ops-action-row"><button class="ops-gold-button" id="ops-save-inquiry" type="button">Save Inquiry</button><button class="ops-light-button" id="ops-clear-inquiry" type="button">Clear</button></div></div>`;
+  return `<div class="ops-review-box"><p class="ops-review-label">Review before saving - edit anything AI got wrong</p><div class="ops-review-grid">${simpleFields.map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}<label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label><label><span>Suggested Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div><div class="ops-review-stack">${textFields.map(([key, label, rows]) => renderOpsTextarea(key, label, fields[key], rows)).join("")}</div><div class="ops-action-row"><button class="ops-gold-button" id="ops-save-inquiry" type="button">Save Inquiry</button><button class="ops-light-button" id="ops-clear-inquiry" type="button">Clear</button></div></div>`;
 }
 
 function renderOpsServiceTypeSelect(value) {
@@ -1780,7 +1777,7 @@ function renderOpsStaffActions(item, statusKey) {
 function getOpsStatusActions(statusKey) {
   const actions = {
     new: [
-      { to: "quote", label: "Needs Quote", next: "Prepare quote and confirm requirements" },
+      { to: "new", label: "New Inquiry", next: "Prepare quote and confirm requirements" },
       { to: "followup", label: "Follow Up", next: "Follow up for missing details" },
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
     ],
@@ -1796,7 +1793,7 @@ function getOpsStatusActions(statusKey) {
     followup: [
       { to: "won", label: "Won", next: "Customer confirmed - move to Odoo sales order" },
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
-      { to: "quote", label: "Back to Needs Quote", next: "Prepare quote after follow-up" },
+      { to: "new", label: "Back to New Inquiry", next: "Prepare quote after follow-up" },
     ],
   };
 
@@ -1940,7 +1937,7 @@ function demoExtractOpsInquiry(text) {
   if (!quantity) missing.push("quantity");
   if (!serviceType) missing.push("service type");
   missing.push("sizes", "design file");
-  return { ...emptyOpsExtract, serviceType, quantity, summary: text.trim().slice(0, 90) + (text.trim().length > 90 ? "..." : ""), missingDetails: missing.join(", "), suggestedStatus: missing.length > 2 ? "Follow Up" : "Needs Quote", nextAction: missing.length > 2 ? "Follow up for missing details" : "Prepare quote and confirm requirements", suggestedReply: "Salamat sa inquiry! Para ma-review namo ug tarong, pwede mangayo sa design file ug sizes? I-send ra diri." };
+  return { ...emptyOpsExtract, serviceType, quantity, summary: text.trim().slice(0, 90) + (text.trim().length > 90 ? "..." : ""), missingDetails: missing.join(", "), suggestedStatus: missing.length > 2 ? "Follow Up" : "New / Inquiry Received", nextAction: missing.length > 2 ? "Follow up for missing details" : "Prepare quote and confirm requirements", suggestedReply: "Salamat sa inquiry! Para ma-review namo ug tarong, pwede mangayo sa design file ug sizes? I-send ra diri." };
 }
 
 async function saveOpsInquiry() {
@@ -4067,6 +4064,8 @@ function bindEvents() {
     navigate: navigateTo,
     copy: copyToClipboard,
     saveProduction: saveMvpProductionFields,
+    saveInquiryFollowUp: saveMvpInquiryFollowUp,
+    handleInquiryFollowUpOutcome: handleMvpInquiryFollowUpOutcome,
   });
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
@@ -4360,6 +4359,52 @@ function bindEvents() {
   });
 }
 
+async function handleMvpInquiryFollowUpOutcome(id, outcome) {
+  if (outcome === "not_proceeding") {
+    await moveOpsInquiry(id, "lost");
+    return { ok: true };
+  }
+
+  return {
+    ok: false,
+    message: "Use the existing protected approval or conversion workflow for this result.",
+  };
+}
+async function saveMvpInquiryFollowUp(id, updates) {
+  const normalizedUpdates = {};
+  if (Object.prototype.hasOwnProperty.call(updates, "owner")) {
+    normalizedUpdates.owner = updates.owner || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, "followUpDate")) {
+    normalizedUpdates.followUpDate = updates.followUpDate || null;
+  }
+
+  if (!shouldLoadSupabaseOps) {
+    opsInquiries = opsInquiries.map((item) =>
+      item.id === id ? { ...item, ...normalizedUpdates } : item
+    );
+    return;
+  }
+
+  try {
+    const savedInquiry = await updateOpsInquiryFields(
+      id,
+      normalizedUpdates,
+      adminAuthSession
+    );
+
+    if (!savedInquiry) {
+      throw new Error("Inquiry follow-up update returned no saved inquiry.");
+    }
+
+    opsInquiries = opsInquiries.map((item) =>
+      item.id === id ? { ...item, ...savedInquiry } : item
+    );
+  } catch (error) {
+    console.error("Unable to save inquiry follow-up fields.", error);
+    showFeedback(error.message || "Unable to save inquiry follow-up.");
+  }
+}
 async function saveMvpProductionFields(id, changes) {
   const current = opsInquiries.find((item) => item.id === id);
   if (!current || !isConfirmedOpsOrder(current)) return;

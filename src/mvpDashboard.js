@@ -1,11 +1,17 @@
 const QUOTE_STAGES = {
-  new: "New Inquiry",
-  quote: "Needs Quote",
-  sent: "Quote Sent",
-  followup: "Follow-up",
-  approved: "Quote Approved",
-  lost: "Lost",
+  new: "NEW INQUIRY",
+  sent: "QUOTE SENT",
+  approved: "APPROVED",
+  lost: "LOST",
 };
+
+const INQUIRY_QUEUES = [
+  ["new", "NEW INQUIRY"],
+  ["sent", "QUOTE SENT"],
+  ["follow_due", "FOLLOW-UP DUE"],
+  ["approved", "APPROVED"],
+  ["lost", "LOST"],
+];
 
 const PRODUCTION_STAGES = [
   ["queued", "Queued"],
@@ -27,16 +33,16 @@ export function createMvpDashboard() {
     productionId: null,
     returnFocus: null,
     inquiry: { search: "", stage: "all", owner: "all", service: "all", due: "all" },
-    order: { search: "", stage: "all", payment: "all", fulfillment: "all", due: "all" },
+    order: { search: "", payment: "all", artwork: "all", due: "all", production: "all", owner: "all" },
     production: { search: "", stage: "all", staff: "all", due: "all" },
   };
 
   const quoteStage = (item) => {
-    if (key(item.status) === "lost") return "lost";
-    if (key(item.quoteStatus) === "approved") return "approved";
-    if (key(item.status) === "followup") return "followup";
-    if (key(item.status) === "sent" || key(item.quoteStatus) === "ready") return "sent";
-    if (key(item.status) === "quote") return "quote";
+    const status = key(item.status);
+    const quote = key(item.quoteStatus);
+    if (["lost", "cancelled", "canceled"].includes(status)) return "lost";
+    if (status === "won" || quote === "approved") return "approved";
+    if (item.quotePublishedAt || status === "sent" || status === "followup" || quote === "ready") return "sent";
     return "new";
   };
 
@@ -77,7 +83,7 @@ export function createMvpDashboard() {
     const artwork = artworkLabel(item);
     if (artwork === "No Artwork") return "No artwork";
     if (artwork !== "Artwork Approved") return "Awaiting customer artwork approval";
-    if (Number(item.amountDue) > 0 && paymentLabel(item) !== "Paid") return "Payment requirement not completed";
+    if (Number(item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) return "Payment requirement not completed";
     return "";
   };
 
@@ -113,9 +119,9 @@ export function createMvpDashboard() {
       ${notices}
       ${metricSection("Pipeline", [
         metric("New Inquiries", pipeline.new, "/inquiries?stage=new", "Inquiries"),
-        metric("Needs Quote", pipeline.quote, "/inquiries?stage=quote", "Inquiries"),
-        metric("Quote Sent / Follow-up", pipeline.sent + pipeline.followup, "/inquiries?stage=active_quote", "Inquiries"),
-        metric("Quote Approved / Awaiting SO", pipeline.approved, "/inquiries?stage=approved", "Inquiries", "lime"),
+        metric("Follow-up Due", inquiries.filter(isFollowUpDue).length, "/inquiries?stage=follow_due", "Inquiries", "warning"),
+        metric("Quote Sent", pipeline.sent, "/inquiries?stage=sent", "Inquiries"),
+        metric("Approved / Awaiting SO", pipeline.approved, "/inquiries?stage=approved", "Inquiries", "lime"),
       ], "pipeline")}
       ${metricSection("Operations", [
         metric("Awaiting Payment", orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length, "/orders?payment=awaiting", "Orders"),
@@ -141,10 +147,10 @@ export function createMvpDashboard() {
       else if (dueState.key === "today" || productionStage(item) === "ready") rows.push(priority(item, productionStage(item) === "ready" ? "Ready for release" : "Due today", dueState.label, `/orders?order=${encodeURIComponent(item.id)}`, ""));
     });
     inquiries.forEach((item) => {
-      if (!item.followUpDate || ["approved", "lost"].includes(quoteStage(item))) return;
+      if (!isFollowUpDue(item)) return;
       const follow = new Date(`${item.followUpDate}T00:00:00`);
       const today = new Date(`${todayIso()}T00:00:00`);
-      if (follow <= today) rows.push(priority(item, quoteStage(item) === "quote" ? "Quotation not sent" : "Customer follow-up due", follow < today ? `Since ${shortDate(item.followUpDate)}` : "Today", `/inquiries?inquiry=${encodeURIComponent(item.id)}`, follow < today ? "danger" : "warning"));
+      rows.push(priority(item, "Customer follow-up due", follow < today ? `Since ${shortDate(item.followUpDate)}` : "Today", `/inquiries?inquiry=${encodeURIComponent(item.id)}`, follow < today ? "danger" : "warning"));
     });
     return rows.slice(0, 6);
   }
@@ -156,8 +162,9 @@ export function createMvpDashboard() {
     const search = state.inquiry.search.toLowerCase();
     const rows = inquiries.filter((item) => {
       const stage = quoteStage(item);
-      if (stageFilter === "active_quote" && !["sent", "followup"].includes(stage)) return false;
-      if (!["all", "active_quote"].includes(stageFilter) && stage !== stageFilter) return false;
+      if (stageFilter === "active_quote" && stage !== "sent") return false;
+      if (stageFilter === "follow_due" && !isFollowUpDue(item)) return false;
+      if (!["all", "active_quote", "follow_due"].includes(stageFilter) && stage !== stageFilter) return false;
       if (state.inquiry.owner !== "all" && owner(item) !== state.inquiry.owner) return false;
       if (state.inquiry.service !== "all" && item.service !== state.inquiry.service) return false;
       if (state.inquiry.due !== "all" && inquiryDue(item) !== state.inquiry.due) return false;
@@ -168,27 +175,31 @@ export function createMvpDashboard() {
       ${pageTitle("Inquiries", "Inquiry Pipeline", `${inquiries.length} inquiries`)}
       <p class="mvp-rule">NO QUOTATION / NO WORK</p>${notices}
       ${filterBar("inquiry", items, ["owner", "service", "due"])}
-      <div class="mvp-stage-cards">${Object.entries(QUOTE_STAGES).map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="${stageFilter === value ? "active" : ""}"><span>${label}</span><strong>${inquiries.filter((item) => quoteStage(item) === value).length}</strong></button>`).join("")}</div>
+      <div class="mvp-stage-cards">${INQUIRY_QUEUES.map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="${stageFilter === value ? "active" : ""}"><span>${label}</span><strong>${value === "follow_due" ? inquiries.filter(isFollowUpDue).length : inquiries.filter((item) => quoteStage(item) === value).length}</strong></button>`).join("")}</div>
       ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOdoo)}
     </main>`;
   }
 
   function inquiryTable(items) {
-    return table("inquiry", ["Code", "Customer", "Phone", "Inquiry / Item", "Service", "Qty", "Quote Status", "Follow-up", "Owner"], items.map((item) => {
+    const headers = ["Code", "Customer", "Phone", "Item", "Request", "Service", "Qty", "Quote Status", "Next Follow-up", "Owner"];
+    const desktopRows = items.map((item) => {
       const stage = quoteStage(item);
       const phone = String(item.contact || "").trim();
       return row("inquiry", item.id, [
         copyButton(item.id, item.id, "inquiry code"),
         strong(item.customer || "Unnamed customer"),
-        phone ? copyButton(phone, phone.replace(/\D/g, ""), "phone number") : cell("-"),
-        cell(product(item)),
-        cell(item.service || "-"),
-        cell(item.qty || "-"),
+        phone ? copyButton(phone, phone.replace(/\D/g, ""), "phone number") : cell(displayDash()),
+        itemCell(item),
+        requestCell(item),
+        cell(serviceDisplay(item)),
+        cell(item.qty || displayDash()),
         status(QUOTE_STAGES[stage], stage),
-        `<span class="mvp-due ${inquiryDue(item)}">${item.followUpDate ? shortDate(item.followUpDate) : "-"}</span>`,
+        followUpCell(item),
         cell(owner(item)),
       ]);
-    }), "NO INQUIRIES MATCH THIS FILTER");
+    });
+    const mobileCards = items.map((item) => inquiryMobileCard(item, quoteStage(item))).join("");
+    return `${table("inquiry", headers, desktopRows, "NO INQUIRIES MATCH THIS FILTER")}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("NO INQUIRIES MATCH THIS FILTER")}</section>`;
   }
 
   function inquiryDrawer(item, renderQuote, renderOdoo) {
@@ -211,12 +222,13 @@ export function createMvpDashboard() {
         ["Contact Channel", item.channel || item.source],
       ])}
       ${detailSection("Request", [
-        ["Product / Item", product(item)],
-        ["Service", item.service],
+        ["Product / Item", itemDisplay(item)],
+        ["Item Source", itemSourceLabel(item)],
+        ["Service", serviceDisplay(item)],
         ["Quantity", item.sizeBreakdown || item.qty],
         ["Needed Date", item.dueDate ? shortDate(item.dueDate) : "Not set"],
         ["Fulfillment", fulfillment(item)],
-        ["Artwork / Reference", artworkLabel(item)],
+        ["Artwork / Reference", artworkState(item)],
       ], requestMessage)}${moreDetails}
       ${typeof renderQuote === "function" ? renderQuote(item) : detailSection("Quotation", [
         ["Quote Status", QUOTE_STAGES[stage]],
@@ -225,13 +237,7 @@ export function createMvpDashboard() {
         ["Valid Until", item.quoteValidUntil ? shortDate(item.quoteValidUntil) : "Not set"],
         ["Published", dateTime(item.quotePublishedAt)],
       ], [item.quoteBreakdown, item.quoteNotes].filter(Boolean).join("\n\n"))}
-      ${detailSection("Internal", [
-        ["Owner", owner(item)],
-        ["Priority", item.priority || "Normal"],
-        ["Follow-up Date", item.followUpDate ? shortDate(item.followUpDate) : "Not set"],
-        ["Internal Note", item.productionNote || item.internalNote || "Not set"],
-        ["Last Update", dateTime(item.updatedAt)],
-      ])}
+      ${internalInquirySection(item)}
       <section class="mvp-drawer-section"><h3>Conversion</h3><div class="mvp-detail-grid">
         <div><span>Quote Approval State</span><strong>${html(approved ? "Quote approved" : "Quote not approved")}</strong></div>
         <div><span>Odoo SO</span><strong>${html(item.odooSO || "Not created")}</strong></div>
@@ -243,51 +249,195 @@ export function createMvpDashboard() {
     const orders = items.filter(confirmed);
     const stageQuery = query("stage");
     const paymentQuery = query("payment");
+    const orderQuery = query("order");
     const search = state.order.search.toLowerCase();
     const rows = orders.filter((item) => {
       const stage = productionStage(item);
+      const readiness = readinessState(item);
+      const payment = paymentState(item);
+      const dueState = due(item);
       if (stageQuery && stage !== stageQuery) return false;
-      if (paymentQuery === "awaiting" && paymentLabel(item) !== "Awaiting Payment") return false;
-      if (state.order.stage !== "all" && stage !== state.order.stage) return false;
-      if (state.order.payment !== "all" && paymentLabel(item) !== state.order.payment) return false;
-      if (state.order.fulfillment !== "all" && key(item.fulfillmentMethod || "unset") !== state.order.fulfillment) return false;
-      if (state.order.due !== "all" && due(item).key !== state.order.due) return false;
-      return !search || [item.id, item.customer, item.contact, product(item), item.service, item.odooSO].join(" ").toLowerCase().includes(search);
+      if (paymentQuery === "awaiting" && payment.key !== "awaiting") return false;
+      if (state.order.payment !== "all" && payment.label !== state.order.payment) return false;
+      if (state.order.artwork !== "all" && readiness.artworkKey !== state.order.artwork) return false;
+      if (state.order.due !== "all" && dueState.key !== state.order.due) return false;
+      if (state.order.production !== "all" && stage !== state.order.production) return false;
+      if (state.order.owner !== "all" && orderOwner(item) !== state.order.owner) return false;
+      return !search || [orderReference(item), sourceInquiryReference(item), item.id, item.customer, item.contact, item.service, product(item), item.odooSO, orderOwner(item)].join(" ").toLowerCase().includes(search);
     });
-    const selected = orders.find((item) => item.id === (state.orderId || query("order")));
+    const selected = orders.find((item) => item.id === (state.orderId || orderQuery));
     return `<main class="mvp-page ops-board-page">${pageTitle("Orders", "Confirmed Orders", `${orders.length} orders`)}<p class="mvp-rule">NO CONFIRMED ORDER / DO NOT PRINT</p>${notices}${schemaNotice}
-      ${filterBar("order", items, ["stage", "payment", "fulfillment", "due"])}${ordersTable(rows)}${orderDrawer(selected, renderPayment, renderTracking)}
+      ${orderMetrics(orders)}${filterBar("order", items, ["payment", "artwork", "due", "production", "owner"])}${ordersTable(rows)}${orderCards(rows)}${orderDrawer(selected, renderPayment, renderTracking)}
     </main>`;
   }
 
+  function orderMetrics(orders) {
+    return `<div class="mvp-metrics orders">${metric("Active Orders", orders.filter((item) => !isOrderClosed(item)).length, "/orders", "Confirmed")}${metric("Action Required", orders.filter(orderActionRequired).length, "/orders?due=today", "Work queue", "warning")}${metric("Ready for Production", orders.filter(readyForProduction).length, "/orders?stage=queued", "Gate clear", "lime")}${metric("Overdue", orders.filter((item) => due(item).key === "overdue").length, "/orders?due=overdue", "Orders", "danger")}${metric("Completed", orders.filter((item) => productionStage(item) === "completed").length, "/orders?stage=completed", "Closed")}</div>`;
+  }
+
   function ordersTable(items) {
-    return table("orders", ["Code", "Customer", "Phone", "Product", "Service", "Qty", "Artwork", "Payment", "Due Date"], items.map((item) => {
+    return table("orders", ["Order", "Customer", "Item", "Qty", "Readiness", "Payment", "Due Date", "Production", "Owner"], items.map((item) => {
       const dueState = due(item);
-      const phone = String(item.contact || "").trim();
+      const readiness = readinessState(item);
+      const payment = paymentState(item);
+      const production = productionDisplay(item);
       return row("order", item.id, [
-        copyButton(item.id, item.id, "order code"),
+        copyButton(orderReference(item), orderReference(item), "order reference"),
         strong(item.customer || "Unnamed customer"),
-        phone ? copyButton(phone, phone.replace(/\D/g, ""), "phone number") : cell("-"),
-        cell(product(item)),
-        cell(item.service || "-"),
+        cell(itemDisplay(item)),
         cell(item.qty || "-"),
-        status(artworkLabel(item), "artwork"),
-        status(paymentLabel(item), "payment"),
-        `<span class="mvp-due ${dueState.key}" title="${html(dueState.label)}">${html(dueState.label)}</span>`,
+        readinessCell(readiness),
+        status(payment.label, payment.tone),
+        `<span class="mvp-due ${dueState.key}" title="${html(dueState.label)}">${html(dueShortLabel(dueState, item))}</span>`,
+        productionCell(production),
+        cell(orderOwner(item)),
       ]);
     }), "NO ORDERS MATCH THIS FILTER");
+  }
+
+  function orderCards(items) {
+    return `<section class="mvp-order-card-list">${items.length ? items.map(orderMobileCard).join("") : empty("NO ORDERS MATCH THIS FILTER")}</section>`;
+  }
+
+  function orderMobileCard(item) {
+    const readiness = readinessState(item);
+    const payment = paymentState(item);
+    const production = productionDisplay(item);
+    const dueState = due(item);
+    const action = orderActionRequired(item) ? `<span class="mvp-order-action-required">ACTION REQUIRED</span>` : "";
+    return `<article class="mvp-order-mobile-card" data-mvp-open="order" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-order-mobile-header"><div>${copyButton(orderReference(item), orderReference(item), "order reference")}<strong>${html(item.customer || "Unnamed customer")}</strong></div>${status(production.label, production.tone)}</div><div class="mvp-order-mobile-summary"><strong>${html(itemDisplay(item))} ${String.fromCharCode(183)} ${html(item.qty || "-")}</strong><span>${html(readiness.summary)}</span>${status(payment.label, payment.tone)}</div><div class="mvp-order-mobile-meta"><span>Due: ${html(dueShortLabel(dueState, item))}</span><span>Owner: ${html(orderOwner(item))}</span>${action}</div></article>`;
   }
 
   function orderDrawer(item, renderPayment, renderTracking) {
     if (!item) return "";
     const stage = productionStage(item);
-    return drawer("order", item, `${stageLabel(stage)}${blockedReason(item) ? " / Blocked" : ""}`, `
-      ${detailSection("Order", [["Odoo Sales Order", item.odooSO], ["Product", product(item)], ["Service", item.service], ["Quantity / Sizes", item.sizeBreakdown || item.qty], ["Needed Date", due(item).label], ["Fulfillment Method", fulfillment(item)]])}
-      ${detailSection("Artwork", [["Status", artworkLabel(item)], ["Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"]])}
-      ${typeof renderPayment === "function" ? renderPayment(item) : paymentSummary(item)}
-      ${detailSection("Production", [["Current Stage", stageLabel(stage)], ["Blocked", blockedReason(item) || "No"], ["Assigned Staff", assigned(item)]])}
+    const readiness = readinessState(item);
+    const payment = paymentState(item);
+    const production = productionDisplay(item);
+    const block = blockedReason(item);
+    const gate = productionGate(item);
+    const canOpenProduction = Boolean(item.odooSO);
+    const action = orderFooterAction(item, gate);
+    return drawer("order", item, production.label, `
+      ${detailSection("Overview", [["Order Reference", orderReference(item)], ["Source Inquiry", sourceInquiryReference(item)], ["Odoo SO", item.odooSO || "Not set"], ["Customer", item.customer], ["Item", itemDisplay(item)], ["Quantity", item.sizeBreakdown || item.qty], ["Confirmed", dateTime(item.quoteApprovedAt || item.updatedAt)], ["Due Date", dueShortLabel(due(item), item)]])}
+      ${detailSection("Readiness", [["Artwork Status", readiness.artwork], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Revision Requirement", key(item.artworkStatus) === "revision_requested" ? "Revision needed" : "None"], ["Payment Readiness", payment.label], ["Blocked Reason", block || "None"]])}
+      ${orderPaymentSummary(item)}
+      ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", tracking(item)], ["Contact", item.contact || "Not set"]])}
+      ${detailSection("Production Handoff", [["Release State", stage === "queued" ? (readyForProduction(item) ? "Ready for production" : gate.length ? `Blocked: ${gate.join(", ")}` : "Not released") : "Released to production"], ["Current Production", production.label], ["Assigned Production Staff", assigned(item)], ["Production Link", canOpenProduction ? "Available" : "Not available"], ["Blocked Reason", block || "None"]])}
+      ${detailSection("Internal", [["Order Owner", orderOwner(item)], ["Internal Note", item.productionNote || item.internalNote || "Not set"], ["Last Update", dateTime(item.updatedAt)]])}
       ${typeof renderTracking === "function" ? renderTracking(item) : ""}
-    `, `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Open Production &rarr;</button>`);
+    `, action);
+  }  function orderReference(item) {
+    return String(item.orderCode || item.orderReference || item.reference || item.code || item.odooSO || humanReadableId(item.id) || "Local order").trim();
+  }
+
+  function sourceInquiryReference(item) {
+    const explicit = String(item.sourceInquiryReference || item.sourceInquiryId || item.inquiryReference || item.inquiryId || item.convertedFrom || "").trim();
+    if (explicit) return explicit;
+    const orderRef = orderReference(item);
+    const readableId = humanReadableId(item.id);
+    if (readableId && readableId !== orderRef && readableId !== item.odooSO) return readableId;
+    return "Not linked";
+  }
+
+  function humanReadableId(value) {
+    const text = String(value || "").trim();
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? "" : text;
+  }
+
+  function paymentSatisfiesProductionGate(item) {
+    const value = key(item.paymentStatus);
+    return ["confirmed", "paid"].includes(value);
+  }
+
+  function orderFooterAction(item, gate) {
+    const stage = productionStage(item);
+    if (stage === "completed") return `<button class="mvp-secondary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">View Details</button>`;
+    if (stage !== "queued") return `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Open Production &rarr;</button>`;
+    if (readyForProduction(item)) return `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Release to Production</button>`;
+    return `<button class="mvp-secondary-action" type="button" disabled title="${html(gate.join(", ") || "Order requirements are incomplete")}">View Requirements</button>`;
+  }
+  function readinessState(item) {
+    const artworkKey = orderArtworkKey(item);
+    const artwork = artworkKey === "approved" ? "ART APPROVED" : artworkKey === "revision" ? "REVISION NEEDED" : artworkKey === "pending" ? "ART PENDING" : "NOT SET";
+    const fulfill = fulfillment(item).toUpperCase();
+    return { artwork, artworkKey, fulfillment: fulfill, summary: `${artwork} ${String.fromCharCode(183)} ${fulfill}` };
+  }
+
+  function orderArtworkKey(item) {
+    const value = key(item.artworkStatus);
+    if (value === "approved") return "approved";
+    if (value === "revision_requested") return "revision";
+    if (item.artworkUrl || ["submitted", "under_review", "approval_required"].includes(value)) return "pending";
+    return "not_set";
+  }
+
+  function paymentState(item) {
+    const value = key(item.paymentStatus);
+    const dueAmount = amount(item.amountDue || item.quotedAmount);
+    const paidAmount = amount(item.paymentConfirmedAmount);
+    if (["confirmed", "paid"].includes(value)) return { key: "paid", label: "PAID", tone: "completed" };
+    if (["proof_submitted", "under_review"].includes(value)) return { key: "verification", label: "FOR VERIFICATION", tone: "payment" };
+    if (["50_dp", "50%_dp", "half_down", "half_deposit"].includes(value) || key(item.paymentLabel) === "50%_dp" || key(item.paymentLabel) === "50_dp") return { key: "deposit", label: paidAmount && dueAmount && paidAmount * 2 === dueAmount ? "50% DP" : "PARTIAL", tone: "payment" };
+    if (["partial", "deposit", "down_payment"].includes(value)) return { key: "partial", label: "PARTIAL", tone: "payment" };
+    if (["required", "awaiting_payment", "unpaid"].includes(value)) return { key: "awaiting", label: "UNPAID", tone: "overdue" };
+    if (paidAmount > 0 && dueAmount > paidAmount) return { key: "partial", label: "PARTIAL", tone: "payment" };
+    return { key: "not_set", label: "NOT SET", tone: "queued" };
+  }
+
+  function orderPaymentSummary(item) {
+    const total = amount(item.quotedAmount);
+    const dueAmount = amount(item.amountDue || item.quotedAmount);
+    const paid = amount(item.paymentConfirmedAmount);
+    const balance = Math.max(dueAmount - paid, 0);
+    const payment = paymentState(item);
+    return detailSection("Payment", [["Payment State", payment.label], ["Amount Due", money(dueAmount)], ["Amount Received", money(paid)], ["Balance", money(balance)], ["Verification State", ["verification", "paid"].includes(payment.key) ? payment.label : "Not verified"]]);
+  }
+  function productionDisplay(item) {
+    const stage = productionStage(item);
+    const block = blockedReason(item);
+    if (block && stage === "queued") return { key: "blocked", label: "BLOCKED", tone: "overdue", detail: block };
+    if (stage === "queued") return { key: stage, label: readyForProduction(item) ? "READY" : "NOT RELEASED", tone: readyForProduction(item) ? "ready" : "queued" };
+    if (stage === "qc") return { key: stage, label: "QC", tone: stage };
+    if (stage === "ready") return { key: stage, label: fulfillment(item) === "Delivery" ? "READY FOR DELIVERY" : "READY FOR PICKUP", tone: "ready" };
+    if (stage === "completed") return { key: stage, label: "COMPLETED", tone: "completed" };
+    return { key: stage, label: stage === "screen_printing" ? "SCREEN PRINTING" : stage === "embroidery" ? "EMBROIDERY" : "IN PRODUCTION", tone: stage };
+  }
+
+  function orderOwner(item) {
+    return item.orderOwner || item.assignedStaff || item.assigned || "Unassigned";
+  }
+
+  function isOrderClosed(item) {
+    const status = key(item.status);
+    return productionStage(item) === "completed" || ["lost", "cancelled", "canceled"].includes(status);
+  }
+
+  function orderActionRequired(item) {
+    if (isOrderClosed(item)) return false;
+    const dueState = due(item);
+    return Boolean(blockedReason(item) || dueState.key === "today" || dueState.key === "overdue" || orderArtworkKey(item) !== "approved" || paymentState(item).key !== "paid");
+  }
+
+  function readyForProduction(item) {
+    return Boolean(productionStage(item) === "queued" && item.odooSO && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && !["Unassigned", "Not Yet Assigned"].includes(assigned(item)) && paymentSatisfiesProductionGate(item) && !blockedReason(item));
+  }
+
+  function readinessCell(readiness) {
+    return `<span class="mvp-readiness-cell" title="${html(readiness.summary)}"><strong>${html(readiness.artwork)}</strong><small>${html(readiness.fulfillment)}</small></span>`;
+  }
+
+  function productionCell(production) {
+    return `<span class="mvp-production-state"><b>${html(production.label)}</b>${production.detail ? `<small>${html(production.detail)}</small>` : ""}</span>`;
+  }
+
+  function dueShortLabel(dueState, item) {
+    if (dueState.key === "overdue") return "OVERDUE";
+    if (dueState.key === "today") return "TODAY";
+    if (dueState.key === "completed") return "COMPLETED";
+    if (!item.dueDate) return "NO DATE";
+    const date = new Date(`${item.dueDate}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? "NO DATE" : date.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
   }
   function renderProduction({ items, notices = "", schemaNotice = "" }) {
     const orders = items.filter(confirmed);
@@ -349,7 +499,7 @@ export function createMvpDashboard() {
     const currentStaff = assigned(item);
     const staffOptions = ["Not Yet Assigned", "Unassigned"].includes(currentStaff) || STAFF.includes(currentStaff) ? STAFF : [currentStaff, ...STAFF];
     return drawer("production", item, stageLabel(stage), `
-      ${detailSection("Order", [["Code", item.id], ["Product", product(item)], ["Service", item.service], ["Quantity", item.sizeBreakdown || item.qty], ["Needed Date", due(item).label]])}
+      ${detailSection("Order", [["Code", item.id], ["Product", product(item)], ["Service", serviceDisplay(item)], ["Quantity", item.sizeBreakdown || item.qty], ["Needed Date", due(item).label]])}
       <section class="mvp-drawer-section"><h3>Production</h3>${fieldsReady ? "" : `<p class="mvp-inline-error">DATABASE FIELDS NOT READY. Apply the pending migration before saving.</p>`}${editorLocked ? `<p class="mvp-inline-note">${stage === "ready" ? "READY IS OPEN FOR FULFILLMENT. PRODUCTION DETAILS ARE LOCKED." : "COMPLETED PRODUCTION DETAILS ARE LOCKED."}</p>` : ""}<div class="mvp-production-editor">
         <label><span>Assigned Staff</span><select data-mvp-production-staff="${html(item.id)}" ${editorEnabled ? "" : "disabled"}><option value="">Unassigned</option>${staffOptions.map((staff) => `<option ${currentStaff === staff ? "selected" : ""}>${staff}</option>`).join("")}</select></label>
         <label><span>Current Stage</span><strong>${stageLabel(stage)}</strong></label>
@@ -377,12 +527,12 @@ export function createMvpDashboard() {
     if (!item.dueDate) missing.push("due date");
     if (artworkLabel(item) !== "Artwork Approved") missing.push("artwork approval");
     if (["Not Yet Assigned", "Unassigned"].includes(assigned(item))) missing.push("assigned staff");
-    if (Number(item.amountDue) > 0 && paymentLabel(item) !== "Paid") missing.push("payment");
+    if (Number(item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) missing.push("payment");
     if (item.blockedReason && !missing.length) missing.push(item.blockedReason);
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, saveProduction }) {
+  function bind({ root = document, rerender, navigate, copy, saveProduction, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-filter]").forEach((field) => {
@@ -421,21 +571,23 @@ export function createMvpDashboard() {
   function filterBar(scope, items, fields) {
     const values = state[scope];
     const services = [...new Set(items.map((item) => item.service).filter(Boolean))].sort();
-    const people = [...new Set([...STAFF, ...items.map((item) => scope === "inquiry" ? owner(item) : assigned(item))].filter((value) => !["Unassigned", "Not Yet Assigned"].includes(value)))].sort();
+    const people = [...new Set([...STAFF, ...items.map((item) => scope === "inquiry" ? owner(item) : scope === "order" ? orderOwner(item) : assigned(item))].filter((value) => !["Unassigned", "Not Yet Assigned"].includes(value)))].sort();
     const controls = [`<label class="mvp-search"><span aria-hidden="true">?</span><input type="search" data-mvp-filter="${scope}:search" value="${html(values.search)}" placeholder="Search code, customer, product..." /></label>`];
     if (fields.includes("owner")) controls.push(select(scope, "owner", "All Owners", people, values.owner, true));
     if (fields.includes("staff")) controls.push(select(scope, "staff", "All Staff", people, values.staff, true));
     if (fields.includes("service")) controls.push(select(scope, "service", "All Services", services, values.service));
     if (fields.includes("stage")) controls.push(select(scope, "stage", "All Stages", PRODUCTION_STAGES, values.stage));
-    if (fields.includes("payment")) controls.push(select(scope, "payment", "All Payments", ["Not Yet Requested", "Awaiting Payment", "Proof Submitted", "Paid"], values.payment));
+    if (fields.includes("production")) controls.push(select(scope, "production", "All Production", PRODUCTION_STAGES, values.production));
+    if (fields.includes("artwork")) controls.push(select(scope, "artwork", "All Artwork", [["approved", "Art approved"], ["pending", "Art pending"], ["revision", "Revision needed"], ["not_set", "Not set"]], values.artwork));
+    if (fields.includes("payment")) controls.push(select(scope, "payment", "All Payments", scope === "order" ? ["NOT SET", "UNPAID", "FOR VERIFICATION", "PARTIAL", "50% DP", "PAID"] : ["Not Yet Requested", "Awaiting Payment", "Proof Submitted", "Paid"], values.payment));
     if (fields.includes("fulfillment")) controls.push(select(scope, "fulfillment", "All Fulfillment", [["pickup", "Pickup"], ["delivery", "Delivery"]], values.fulfillment));
-    if (fields.includes("due")) controls.push(select(scope, "due", "All Dates", [["overdue", "Overdue"], ["today", "Due today"], ["week", "This week"]], values.due));
+    if (fields.includes("due")) controls.push(select(scope, "due", scope === "inquiry" ? "All Follow-up" : "All Dates", [["overdue", "Overdue"], ["today", "Due today"], ["week", "This week"]], values.due));
     return `<section class="mvp-filter-bar">${controls.join("")}</section>`;
   }
 
   function select(scope, name, allLabel, options, value, includeUnassigned = false) {
     const rows = options.map((option) => Array.isArray(option) ? option : [option, option]);
-    if (includeUnassigned) rows.push([scope === "inquiry" ? "Unassigned" : "Not Yet Assigned", "Unassigned"]);
+    if (includeUnassigned) rows.push([scope === "production" ? "Not Yet Assigned" : "Unassigned", "Unassigned"]);
     return `<select data-mvp-filter="${scope}:${name}"><option value="all">${allLabel}</option>${rows.map(([keyValue, label]) => `<option value="${html(keyValue)}" ${value === keyValue ? "selected" : ""}>${html(label)}</option>`).join("")}</select>`;
   }
 
@@ -448,7 +600,8 @@ export function createMvpDashboard() {
   }
 
   function drawer(type, item, statusLabel, body, footer = "") {
-    return `<button class="mvp-drawer-backdrop" data-mvp-close type="button" aria-label="Close details"></button><aside class="mvp-drawer ${type}" aria-label="${type} details"><header><div><code>${html(item.id)}</code><h2>${html(item.customer || item.company || "Details")}</h2><mark>${html(statusLabel)}</mark></div><button type="button" data-mvp-close aria-label="Close details">X</button></header><div class="mvp-drawer-body">${body}</div><footer class="mvp-drawer-footer">${footer}</footer></aside>`;
+    const drawerCode = type === "order" ? orderReference(item) : item.id;
+    return `<button class="mvp-drawer-backdrop" data-mvp-close type="button" aria-label="Close details"></button><aside class="mvp-drawer ${type}" aria-label="${type} details"><header><div><code>${html(drawerCode)}</code><h2>${html(item.customer || item.company || "Details")}</h2><mark>${html(statusLabel)}</mark></div><button type="button" data-mvp-close aria-label="Close details">X</button></header><div class="mvp-drawer-body">${body}</div><footer class="mvp-drawer-footer">${footer}</footer></aside>`;
   }
 
   function detailSection(title, rows, note = "") {
@@ -486,7 +639,101 @@ export function createMvpDashboard() {
   function priority(item, reason, when, route, tone) { return { code: item.id, customer: item.customer || "Unnamed", reason, when, route, tone }; }
   function priorityRow(item) { return `<button type="button" data-mvp-route="${html(item.route)}"><code>${html(item.code)}</code><strong>${html(item.customer)}</strong><span>${html(item.reason)}</span><b class="${item.tone}">${html(item.when)}</b><i>View</i></button>`; }
   function countBy(keys, items, getter) { return Object.fromEntries(keys.map((value) => [value, items.filter((item) => getter(item) === value).length])); }
-  function copyButton(label, value, aria) { return `<button class="mvp-copy" type="button" data-mvp-copy="${html(value)}" aria-label="Copy ${html(aria)} ${html(label)}"><span>${html(label)}</span><small>Copy</small></button>`; }
+  function inquiryMobileCard(item, stage) {
+    const serviceQty = `${serviceDisplay(item)} ${String.fromCharCode(183)} ${item.qty || "-"}`;
+    const requestSummary = `${fulfillment(item).toUpperCase()} ${String.fromCharCode(183)} ${artworkState(item)}`;
+    return `<article class="mvp-inquiry-mobile-card" data-mvp-open="inquiry" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-inquiry-mobile-header"><div>${copyButton(item.id, item.id, "inquiry code")}<strong>${html(item.customer || "Unnamed customer")}</strong></div>${status(QUOTE_STAGES[stage], stage)}</div><div class="mvp-inquiry-mobile-request"><strong>${html(itemDisplay(item))}</strong><span>${html(serviceQty)}</span><span>${html(requestSummary)}</span><b>${html(quoteAmount(item))}</b></div><div class="mvp-inquiry-mobile-meta"><span>Follow-up: ${html(followUpLabel(item))}</span><span>Owner: ${html(owner(item))}</span></div></article>`;
+  }
+  function itemDisplay(item) {
+    return normalizeItemForDisplay(cleanCustomerSuppliedLabel(product(item)), serviceDisplay(item));
+  }
+  function itemSourceLabel(item) {
+    return /^customer-supplied\b/i.test(String(product(item) || "")) ? "Customer-owned item" : "Not set";
+  }
+  function itemCell(item) {
+    const source = itemSourceLabel(item);
+    return `<span class="mvp-item-cell" title="${html(itemDisplay(item))}"><strong>${html(itemDisplay(item))}</strong>${source === "Customer-owned item" ? "<small>OWN ITEM</small>" : ""}</span>`;
+  }
+  function cleanCustomerSuppliedLabel(value) {
+    return String(value || "Not set").replace(/^customer-supplied\s*/i, "").trim() || "Other";
+  }
+  function normalizeItemForDisplay(value, service) {
+    let text = String(value || "Not set").trim();
+    const serviceText = String(service || "").trim();
+    if (!text || text === "-") return "Not set";
+    if (!serviceText || serviceText === "-") return text;
+
+    const escapePattern = (input) => input.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const aliases = serviceText === "DTF" ? ["DTF", "DTF Print", "DTF Printing"] : serviceText === "Embroidery" ? ["Embroidery"] : serviceText === "Screen Printing" ? ["Screen Printing", "Screen Print"] : [serviceText];
+    for (const alias of aliases) {
+      const pattern = escapePattern(alias);
+      text = text
+        .replace(new RegExp(`\\s*\\(${pattern}\\)\\s*$`, "i"), "")
+        .replace(new RegExp(`\\s*[+/\\-]\\s*${pattern}\\s*$`, "i"), "")
+        .replace(new RegExp(`\\s+${pattern}\\s*$`, "i"), "")
+        .replace(new RegExp(`^${pattern}\\s*[+/\\-]\\s*`, "i"), "")
+        .trim();
+    }
+    return text || value || "Not set";
+  }
+  function serviceDisplay(item) {
+    const value = String(item.service || "").trim();
+    const normalized = value.toLowerCase();
+    if (!value || normalized.startsWith("customer-supplied")) return "-";
+    if (normalized.includes("embro")) return "Embroidery";
+    if (normalized.includes("screen")) return "Screen Printing";
+    if (normalized.includes("dtf")) return "DTF";
+    return value;
+  }
+  function requestCell(item) {
+    const summary = `${fulfillment(item).toUpperCase()} ${String.fromCharCode(183)} ${artworkState(item)}`;
+    return `<span class="mvp-request-cell" title="${html(summary)} / ${html(quoteAmount(item))}"><strong>${html(summary)}</strong><small>${html(quoteAmount(item))}</small></span>`;
+  }
+  function artworkState(item) {
+    const status = key(item.artworkStatus);
+    const artworkUrl = String(item.artworkUrl || "").trim();
+    const hasSupportedLink = /^https?:\/\/(?:www\.)?(?:canva\.com|drive\.google\.com|dropbox\.com|figma\.com)\//i.test(artworkUrl);
+    if (artworkUrl || hasSupportedLink || ["submitted", "under_review", "approved", "approval_required", "revision_requested"].includes(status)) return "ART READY";
+    if (["send_later", "later", "art_later"].includes(status)) return "ART LATER";
+    if (["none", "no_art", "no_artwork"].includes(status)) return "NO ART";
+    return "NOT SET";
+  }
+  function quoteAmount(item) {
+    const number = Number(item.quotedAmount);
+    return Number.isFinite(number) && number > 0 ? peso(number) : displayDash();
+  }
+  function followUpLabel(item) {
+    if (!item.followUpDate) return displayDash();
+    const state = inquiryDue(item);
+    if (state === "today") return "TODAY";
+    if (state === "overdue") return "OVERDUE";
+    const date = new Date(`${item.followUpDate}T00:00:00`);
+    return Number.isNaN(date.getTime()) ? displayDash() : date.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
+  }
+  function followUpCell(item) {
+    return `<span class="mvp-due ${inquiryDue(item)}" title="${html(item.followUpDate ? shortDate(item.followUpDate) : "No active follow-up")}">${html(followUpLabel(item))}</span>`;
+  }
+  function isFollowUpDue(item) {
+    if (!item.followUpDate || confirmed(item)) return false;
+    if (["approved", "lost"].includes(quoteStage(item))) return false;
+    const follow = new Date(`${item.followUpDate}T00:00:00`);
+    const today = new Date(`${todayIso()}T00:00:00`);
+    return Number.isFinite(follow.getTime()) && follow <= today;
+  }
+  function internalInquirySection(item) {
+    const currentOwner = owner(item);
+    const ownerOptions = [currentOwner, "Unassigned", ...STAFF].filter(Boolean).filter((value, index, list) => list.indexOf(value) === index);
+    const dueActive = isFollowUpDue(item);
+    return `<section class="mvp-drawer-section mvp-internal-section"><h3>Internal</h3><div class="mvp-internal-controls">
+      <label><span>Owner</span><select data-mvp-inquiry-owner="${html(item.id)}">${ownerOptions.map((staff) => `<option value="${html(staff === "Unassigned" ? "" : staff)}" ${currentOwner === staff ? "selected" : ""}>${html(staff)}</option>`).join("")}</select></label>
+      <label><span>Next Follow-up</span><input data-mvp-follow-date-input="${html(item.id)}" type="date" value="${html(item.followUpDate || "")}" /></label>
+      <div class="mvp-follow-presets"><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="0">Today</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="1">Tomorrow</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="3">+3 Days</button></div>
+      <div class="mvp-follow-actions"><button class="mvp-secondary-action" type="button" data-mvp-save-follow="${html(item.id)}">Save Owner & Date</button><button class="mvp-ghost-action" type="button" data-mvp-clear-follow="${html(item.id)}">Clear Follow-up</button></div>
+    </div>${dueActive ? recordFollowUpBox(item) : ""}<div class="mvp-detail-grid"><div><span>Priority</span><strong>${html(item.priority || "Normal")}</strong></div><div><span>Internal Note</span><strong>${html(item.productionNote || item.internalNote || "Not set")}</strong></div><div><span>Last Update</span><strong>${html(dateTime(item.updatedAt))}</strong></div></div></section>`;
+  }
+  function recordFollowUpBox(item) {
+    return `<details class="mvp-record-follow" open><summary>RECORD FOLLOW-UP</summary><div><label><span>Result</span><select data-mvp-follow-outcome="${html(item.id)}"><option value="">Select result</option><option value="no_response">NO RESPONSE</option><option value="customer_considering">CUSTOMER CONSIDERING</option><option value="quotation_approved">QUOTATION APPROVED</option><option value="not_proceeding">NOT PROCEEDING</option><option value="converted_to_order">CONVERTED TO ORDER</option></select></label><label><span>New follow-up date</span><input data-mvp-follow-reschedule="${html(item.id)}" type="date" /></label><button class="mvp-primary-action" type="button" data-mvp-record-follow="${html(item.id)}">Record Result & Reschedule</button><p class="mvp-inline-note" data-mvp-follow-message="${html(item.id)}">No Response and Customer Considering require a new date. Approval, Lost, and conversion use the existing protected workflow actions.</p></div></details>`;
+  }  function copyButton(label, value, aria) { return `<button class="mvp-copy" type="button" data-mvp-copy="${html(value)}" aria-label="Copy ${html(aria)} ${html(label)}"><span>${html(label)}</span><small>Copy</small></button>`; }
   function strong(value) { return `<strong title="${html(value)}">${html(value)}</strong>`; }
   function cell(value) { return `<span title="${html(value)}">${html(value)}</span>`; }
   function status(label, tone) { return `<b class="mvp-status ${tone}" title="${html(label)}">${html(label)}</b>`; }
@@ -507,7 +754,10 @@ export function createMvpDashboard() {
   }
   function shortDate(value) { if (!value) return "-"; const date = new Date(`${String(value).slice(0, 10)}T00:00:00`); return Number.isNaN(date.getTime()) ? "-" : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
   function dateTime(value) { if (!value) return "Not set"; const date = new Date(value); return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }); }
-  function money(value) { const number = Number(value); return Number.isFinite(number) ? `PHP ${number.toLocaleString("en-US")}` : "Not set"; }
+  function money(value) { const number = Number(value); return Number.isFinite(number) ? peso(number) : "Not set"; }
+  function peso(value) { const number = Number(value); return Number.isFinite(number) ? `${String.fromCharCode(8369)}${formatAmountNumber(number)}` : displayDash(); }
+  function formatAmountNumber(number) { return Number.isInteger(number) ? number.toLocaleString("en-US") : number.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
+  function displayDash() { return String.fromCharCode(8212); }
   function key(value) { return String(value || "").trim().toLowerCase().replace(/[\s-]+/g, "_"); }
   function todayIso() { return new Date().toISOString().slice(0, 10); }
   function clearQuery() { if (window.location.search) window.history.replaceState({}, "", window.location.pathname); }
