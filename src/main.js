@@ -359,7 +359,7 @@ const shouldLoadSupabaseOrders = isSupabaseReady();
 let orders = shouldLoadSupabaseOrders ? [] : [...localOrders];
 
 let selectedId = orders[0]?.id ?? null;
-let selectedProductCode = products[0].code;
+let selectedProductCode = null;
 let isProductDrawerOpen = false;
 let activeFilter = "All";
 let clientKpiFilter = "All";
@@ -370,7 +370,7 @@ let catalogFeaturedFilter = "all";
 let query = "";
 let draftStatus = orders[0]?.status ?? "Pending Review";
 let clientQuery = "";
-let selectedClientId = clientProgram.id;
+let selectedClientId = null;
 let productQuery = "";
 let selectedImageAngle = "Front";
 let feedbackMessage = "";
@@ -431,8 +431,7 @@ function render() {
 
   const currentRoute = getCurrentRoute();
   const selectedOrder = orders.find((order) => order.id === selectedId);
-  const selectedProduct =
-    products.find((product) => product.code === selectedProductCode) ?? products[0];
+  const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
   const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Settings"].includes(currentRoute);
 
@@ -471,6 +470,22 @@ function render() {
   `;
 
   bindEvents();
+  resetSettingsMobileNavPosition(currentRoute);
+}
+
+
+function resetSettingsMobileNavPosition(currentRoute) {
+  if (currentRoute !== "Settings") {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    const settingsSubnav = document.querySelector(".settings-subnav");
+
+    if (settingsSubnav) {
+      settingsSubnav.scrollLeft = 0;
+    }
+  });
 }
 
 
@@ -2457,7 +2472,7 @@ function renderClientsPage() {
         </button>
       </div>
 
-      <section class="two-column-page">
+      <section class="client-table-section">
         <article class="content-card table-card">
           <table class="clients-table">
             <thead>
@@ -2500,7 +2515,7 @@ function renderClientsPage() {
               : `<div class="empty-state compact-empty"><strong>No clients found</strong><span>Try searching for Urban Coffee or the portal domain.</span></div>`
           }
         </article>
-        ${selectedClientId === clientProgram.id && clientMatches ? renderClientPanel() : renderEmptyDetailPanel("Select a client", "Profile details will appear here.")}
+        ${selectedClientId === clientProgram.id && clientMatches ? renderClientPanel() : ""}
       </section>
       ${renderFeedback()}
       <p class="page-note">More client management tools will be connected to Supabase later.</p>
@@ -2591,7 +2606,7 @@ function renderProductsPage(selectedProduct) {
               : ""
           }
         </article>
-        ${isProductDrawerOpen && visibleProducts.some((item) => item.code === selectedProduct.code) ? renderProductPanel(selectedProduct) : ""}
+        ${isProductDrawerOpen && selectedProduct && visibleProducts.some((item) => item.code === selectedProduct.code) ? renderProductPanel(selectedProduct) : ""}
       </section>
     </main>
   `;
@@ -3046,38 +3061,31 @@ function renderSettingsPage() {
       key: "general",
       title: "General",
       helper: "Core Admin Portal identity and workspace display details.",
-      rows: [["Profile", "TRRY Admin"], ["Role", "Mother Admin"], ["Workspace", "Production admin"]],
+      rows: [["Admin Portal", "TRRY Apparel Management"], ["Access mode", isSupabaseReady() ? "Authenticated admin session" : "Access code session"], ["Data source", isSupabaseReady() ? "Supabase connected" : "Not connected"]],
     },
     {
       key: "portal",
       title: "Portal",
       helper: "Current portal domains and supported operating mode.",
-      rows: [["Admin domain", "admin.trryapparel.com"], ["Client portal", clientProgram.domain], ["Mode", "MVP Prototype"]],
+      rows: [["Admin domain", "admin.trryapparel.com"], ["Client portal", clientProgram.domain], ["Customer WebApp", "trrywebapp.vercel.app"]],
     },
     {
       key: "notifications",
       title: "Notifications",
-      helper: "Existing notification preferences shown as read-only states.",
-      rows: [["Order alerts", "On"], ["Production updates", "On"], ["Client portal activity", "On"]],
+      helper: "Current notification display state. Editable notification preferences are not available in this Admin Portal.",
+      rows: [["Order alerts", "Read-only display"], ["Production updates", "Read-only display"], ["Client portal activity", "Read-only display"]],
     },
     {
-      key: "workflow",
-      title: "Operations",
-      helper: "Current status workflow labels used by the Admin Portal.",
-      rows: [["Start", "Pending Review"], ["Production", "Approved to In Production"], ["Fulfillment", "Ready to Completed"]],
+      key: "system",
+      title: "System Information",
+      helper: "Read-only operational context for the current Admin Portal.",
+      rows: [["Calendar", "Phase 2 parked"], ["Catalog bucket", "catalog-images"], ["Workflow gates", "Server-side protected"]],
     },
     {
       key: "access",
       title: "Team and Access",
-      helper: "Current access context only. Advanced employee login remains outside this task.",
-      rows: [["Access", "Operations control center"], ["Company", "TRRY Apparel Management"], ["Primary color", "TRRY lime / professional SaaS theme"]],
-    },
-    {
-      key: "danger",
-      title: "Danger Zone",
-      helper: "Destructive actions are unavailable in this Admin Portal view.",
-      danger: true,
-      rows: [["Delete portal data", "Disabled"], ["Reset workspace", "Disabled"], ["Live destructive actions", "Unavailable"]],
+      helper: "Current authenticated access context only.",
+      rows: [["Signed-in account", adminUser?.email || "Not available in access-code mode"], ["Access level", adminUser?.role ? formatAdminRole(adminUser.role) : "Admin access"], ["Company", "TRRY Apparel Management"]],
     },
   ];
 
@@ -3298,7 +3306,7 @@ function renderProductRow(item) {
       <td>Not set</td>
       <td>${item.logoPlacement}</td>
       <td>${renderStatusPill(item.visible === "Yes" ? "Active" : "Hidden")}</td>
-      <td>${item.updated}</td>
+      <td>${formatProductDisplayValue(item.updated)}</td>
     </tr>
   `;
 }
@@ -3415,10 +3423,12 @@ function renderEmptyDetailPanel(title = "Select a reorder request", message = "D
 
 function renderClientPanel() {
   return `
-    <aside class="detail-panel client-detail-panel">
-      <div class="panel-header">
-        <h2>Client Profile</h2>
+    <div class="client-drawer-backdrop" data-client-drawer-close></div><aside class="detail-panel client-detail-panel professional-client-drawer">
+      <div class="panel-header client-drawer-header">
+        <div class="client-drawer-title"><span class="client-logo urban-coffee">${clientProgram.initials}</span><div><code>${escapeHtml(clientProgram.id)}</code><h2>${escapeHtml(clientProgram.name)}</h2><span>${escapeHtml(clientProgram.domain)}</span></div></div>
+        <div class="client-drawer-header-actions">${renderStatusPill(clientProgram.status)}<button data-client-drawer-close type="button" aria-label="Close client details">X</button></div>
       </div>
+      <div class="client-drawer-body">
       <section class="panel-section centered-profile">
         <span class="client-logo xl urban-coffee">${clientProgram.initials}</span>
         <div class="client-panel-name">
@@ -3441,65 +3451,81 @@ function renderClientPanel() {
         <div><span>Active Orders</span><strong>${clientProgram.activeOrders}</strong></div>
         <div><span>Last Order</span><strong>${clientProgram.lastOrderDate}</strong></div>
       </section>
-      <section class="quick-panel-actions">
-        <a href="https://${clientProgram.domain}" target="_blank" rel="noreferrer">Open Portal</a>
-        <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
-        <button data-route-target="/products" type="button">View Products</button>
-        <button data-route-target="/orders" type="button">View Orders</button>
-        <button disabled title="Editing will be connected to Supabase later." type="button">Edit Client</button>
+      </div>
+      <section class="quick-panel-actions client-drawer-footer">
+        <a class="primary-drawer-action" href="https://${clientProgram.domain}" target="_blank" rel="noreferrer">Open Portal</a>
+        <details class="drawer-more-actions"><summary>More Actions</summary><div>
+          <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
+          <button data-route-target="/products" type="button">View Products</button>
+          <button data-route-target="/orders" type="button">View Orders</button>
+          <button disabled title="Editing requires a connected client management backend." type="button">Edit Client</button>
+        </div></details>
       </section>
     </aside>
   `;
 }
 
+function formatProductDisplayValue(value) {
+  const text = String(value ?? "").trim();
+  if (!text || text === "MVP Setup" || text === "Recently") return "Not available";
+  return text;
+}
+
+function renderProductInfoRows(rows) {
+  return rows
+    .map(([label, value]) => `<div class="settings-row"><span>${escapeHtml(label)}</span><strong>${escapeHtml(formatProductDisplayValue(value))}</strong></div>`)
+    .join("");
+}
+
 function renderProductPanel(product) {
   const productImage = getActiveProductImage(product.code);
+  const methods = "Embroidery";
+  const minimumQuantity = "Not set";
+  const basePrice = "Not set";
+  const priceLabel = "Not set";
+  const pricingNote = "Not set";
 
   return `
     <div class="product-drawer-backdrop" data-product-drawer-close></div><aside class="detail-panel product-detail-panel professional-product-drawer">
       <div class="panel-header product-drawer-header">
-        <div><code>${escapeHtml(product.code)}</code><h2>${escapeHtml(product.product)}</h2><span>${escapeHtml(product.category)} / Physical item</span></div>
+        <div class="product-drawer-title">
+          <span class="product-drawer-thumb" style="background-image: url('${escapeHtml(productImage.image_url)}')"></span>
+          <div><code>${escapeHtml(product.code)}</code><h2>${escapeHtml(product.product)}</h2><span>${escapeHtml(product.category)} / Physical item</span></div>
+        </div>
         <div class="product-drawer-header-actions">${renderStatusPill(product.visible === "Yes" ? "Active" : "Hidden")}<button data-product-drawer-close type="button" aria-label="Close product details">X</button></div>
       </div>
-      <section class="product-image-panel">
-        <div class="product-image-viewer" style="background-image: url('${escapeHtml(productImage.image_url)}')">
-          <span>${productImage.angle_label}</span>
-        </div>
-        <div class="image-angle-strip" aria-label="Product image angles">
-          ${getProductImages(product.code)
-            .map(
-              (image) => `
-                <button class="${image.angle_label === productImage.angle_label ? "active" : ""}" data-image-angle="${image.angle_label}" type="button">
-                  ${image.angle_label}${image.is_main ? " - Main" : ""}
-                </button>`
-            )
-            .join("")}
-        </div>
-      </section>
-      ${renderProductImageManager(product)}
-      <section class="panel-section">
-        <div class="panel-title-row">
-          <h2>${product.product}</h2>
-          ${renderStatusPill(product.status)}
-        </div>
-        <div class="settings-row"><span>Client</span><strong>${product.client}</strong></div>
-        <div class="settings-row"><span>Category</span><strong>${product.category}</strong></div>
-        <div class="settings-row"><span>Color</span><strong>${product.color}</strong></div>
-        <div class="settings-row"><span>Logo placement</span><strong>${product.logoPlacement}</strong></div>
-        <div class="settings-row"><span>Fabric / spec</span><strong>${product.fabric}</strong></div>
-        <div class="settings-row"><span>Product code</span><strong>${product.code}</strong></div>
-        <div class="settings-row"><span>Visible in portal</span><strong>${product.visible}</strong></div>
-        <div class="settings-row"><span>Created</span><strong>${product.created}</strong></div>
-        <div class="settings-row"><span>Last updated</span><strong>${product.updated}</strong></div>
-      </section>
+      <div class="product-drawer-body">
+        <section class="panel-section product-overview-section">
+          <p class="section-title">Overview</p>
+          ${renderProductInfoRows([["Client", product.client], ["Type", "Physical item"], ["Category", product.category], ["Approval status", product.status], ["Portal visibility", product.visible], ["Product code", product.code]])}
+        </section>
+        <section class="panel-section product-spec-section">
+          <p class="section-title">Specifications</p>
+          ${renderProductInfoRows([["Color", product.color], ["Logo placement", product.logoPlacement], ["Fabric / specification", product.fabric], ["Available methods", methods], ["Minimum quantity", minimumQuantity]])}
+        </section>
+        <section class="panel-section product-pricing-section">
+          <p class="section-title">Pricing</p>
+          ${renderProductInfoRows([["Base price", basePrice], ["Price label", priceLabel], ["Minimum quantity", minimumQuantity], ["Pricing note", pricingNote]])}
+        </section>
+        ${renderProductImageManager(product)}
+        <section class="panel-section product-portal-section">
+          <p class="section-title">Client Portal</p>
+          ${renderProductInfoRows([["Linked client", product.client], ["Portal visibility", product.visible], ["Portal URL", clientProgram.domain]])}
+        </section>
+        <section class="panel-section product-operations-section">
+          <p class="section-title">Operations</p>
+          ${renderProductInfoRows([["Created", product.created], ["Last updated", product.updated], ["Approval state", product.status], ["Related method", methods]])}
+        </section>
+      </div>
       <section class="quick-panel-actions product-actions product-drawer-footer">
-        <button disabled title="Client portal product linking will be connected later." type="button">View in Client Portal</button>
-        <button data-copy-value="${product.code}" data-copy-message="Product code copied" type="button">Copy Product Code</button>
-        <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
-        <button disabled title="Editing will be connected to Supabase later." type="button">Edit Product</button>
-        <button disabled title="Duplicate will be enabled after Supabase connection." type="button">Duplicate</button>
+        <button disabled title="Editing requires a connected product management backend." type="button">Edit Product</button>
+        <details class="drawer-more-actions"><summary>More Actions</summary><div>
+          <button disabled title="Client portal product linking will be connected later." type="button">View in Client Portal</button>
+          <button data-copy-value="${product.code}" data-copy-message="Product code copied" type="button">Copy Product Code</button>
+          <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
+          <button disabled title="Duplicate requires product persistence support." type="button">Duplicate</button>
+        </div></details>
       </section>
-      ${renderFeedback()}
     </aside>
   `;
 }
@@ -3542,21 +3568,15 @@ function renderProductImageManager(product) {
                 </div>
                 <div class="image-slot-actions professional-image-actions">
                   <label class="image-action-button">
-                    ${hasImage ? "Replace" : "Add"}
+                    ${hasImage ? "Replace" : "Add Image"}
                     <input data-image-upload-code="${product.code}" data-image-upload-angle="${angleLabel}" type="file" accept="image/*" />
                   </label>
-                  <button ${hasImage ? "" : "disabled"} data-set-main-image="${product.code}" data-set-main-angle="${angleLabel}" type="button">
-                    Main
-                  </button>
-                  <button ${!hasImage || isFront ? "disabled" : ""} data-remove-image="${product.code}" data-remove-angle="${angleLabel}" title="${isFront ? "Front image is required." : "Remove image"}" type="button">
-                    Remove
-                  </button>
-                  <button ${!hasImage || savedIndex <= 0 ? "disabled" : ""} data-reorder-image="${product.code}" data-reorder-angle="${angleLabel}" data-reorder-direction="up" type="button">
-                    Up
-                  </button>
-                  <button ${!hasImage || savedIndex < 0 || savedIndex === images.length - 1 ? "disabled" : ""} data-reorder-image="${product.code}" data-reorder-angle="${angleLabel}" data-reorder-direction="down" type="button">
-                    Down
-                  </button>
+                  <details class="image-more-actions"><summary>More</summary><div>
+                    <button ${hasImage ? "" : "disabled"} data-set-main-image="${product.code}" data-set-main-angle="${angleLabel}" type="button">Set as Main</button>
+                    <button ${!hasImage || isFront ? "disabled" : ""} data-remove-image="${product.code}" data-remove-angle="${angleLabel}" title="${isFront ? "Front image is required." : "Remove image"}" type="button">Remove</button>
+                    <button ${!hasImage || savedIndex <= 0 ? "disabled" : ""} data-reorder-image="${product.code}" data-reorder-angle="${angleLabel}" data-reorder-direction="up" type="button">Move Up</button>
+                    <button ${!hasImage || savedIndex < 0 || savedIndex === images.length - 1 ? "disabled" : ""} data-reorder-image="${product.code}" data-reorder-angle="${angleLabel}" data-reorder-direction="down" type="button">Move Down</button>
+                  </div></details>
                 </div>
               </article>
             `;
@@ -4189,24 +4209,46 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-client-id]").forEach((element) => {
-    element.addEventListener("click", () => {
+    const openClient = () => {
       selectedClientId = element.dataset.clientId;
       render();
+    };
+    element.addEventListener("click", openClient);
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openClient();
     });
   });
 
   document.querySelectorAll("[data-product-code]").forEach((button) => {
-    button.addEventListener("click", () => {
+    const openProduct = () => {
       selectedProductCode = button.dataset.productCode;
       selectedImageAngle = getMainProductImage(selectedProductCode).angle_label;
       isProductDrawerOpen = true;
       render();
+    };
+    button.addEventListener("click", openProduct);
+    button.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openProduct();
     });
   });
 
-  document.querySelector("[data-product-drawer-close]")?.addEventListener("click", () => {
-    isProductDrawerOpen = false;
-    render();
+  document.querySelectorAll("[data-product-drawer-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedProductCode = null;
+      isProductDrawerOpen = false;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-client-drawer-close]").forEach((button) => {
+    button.addEventListener("click", () => {
+      selectedClientId = null;
+      render();
+    });
   });
 
   document.querySelectorAll("[data-image-angle]").forEach((button) => {

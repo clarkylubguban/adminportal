@@ -14859,3 +14859,853 @@ body,
   text-overflow: clip;
   white-space: nowrap;
 }
+
+/* Final professional SaaS parity: Clients, Product drawer, and Settings cleanup. */
+.app-shell.admin-saas-shell .client-table-section,
+.app-shell.admin-saas-shell .products-admin-page .two-column-page {
+  min-width: 0;
+  width: 100%;
+}
+
+.app-shell.admin-saas-shell .clients-page .page-note {
+  display: none !important;
+}
+
+.client-drawer-backdrop,
+.product-drawer-backdrop {
+  background: rgba(17, 19, 24, 0.28) !important;
+  inset: 0;
+  position: fixed;
+  z-index: 60;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer,
+.app-shell.admin-saas-shell .professional-product-drawer {
+  background: #ffffff !important;
+  border: 1px solid #d5dae0 !important;
+  border-radius: 0 !important;
+  box-shadow: -16px 0 32px rgba(15, 23, 42, 0.1) !important;
+  color: #121417 !important;
+  display: grid !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+  height: 100dvh !important;
+  max-width: min(500px, 100vw) !important;
+  overflow: hidden !important;
+  padding: 0 !important;
+  position: fixed !important;
+  right: 0 !important;
+  top: 0 !important;
+  width: min(500px, 100vw) !important;
+  z-index: 70 !important;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .client-drawer-header,
+.app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header {
+  align-items: flex-start !important;
+  background: #ffffff !important;
+  border-bottom: 1px solid #e1e4e8 !important;
+  display: flex !important;
+  gap: 16px;
+  justify-content: space-between !important;
+  min-height: 96px;
+  padding: 22px !important;
+}
+
+.app-shell.admin-saas-shell .client-drawer-title {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-shell.admin-saas-shell .client-drawer-title .client-logo {
+  flex: 0 0 38px;
+  height: 38px;
+  width: 38px;
+}
+
+.app-shell.admin-saas-shell .client-drawer-title code,
+.app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header code {
+  color: #68707a !important;
+  display: block;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-size: 11px !important;
+  font-weight: 700;
+  letter-spacing: 0.04em !important;
+  margin-bottom: 3px;
+  text-transform: uppercase;
+}
+
+.app-shell.admin-saas-shell .client-drawer-title h2,
+.app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header h2 {
+  color: #121417 !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 22px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  line-height: 1.12;
+  margin: 0 0 4px !important;
+  text-transform: none !important;
+}
+
+.app-shell.admin-saas-shell .client-drawer-title span:not(.client-logo),
+.app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header span {
+  color: #68707a !important;
+  font-size: 12px !important;
+}
+
+.app-shell.admin-saas-shell .client-drawer-header-actions,
+.app-shell.admin-saas-shell .product-drawer-header-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.app-shell.admin-saas-shell .client-drawer-header-actions button,
+.app-shell.admin-saas-shell .product-drawer-header-actions button {
+  align-items: center;
+  background: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  color: #121417 !important;
+  display: inline-flex;
+  height: 32px;
+  justify-content: center;
+  width: 32px;
+}
+
+.app-shell.admin-saas-shell .client-drawer-body,
+.app-shell.admin-saas-shell .professional-product-drawer {
+  min-height: 0;
+}
+
+.app-shell.admin-saas-shell .client-drawer-body {
+  overflow-y: auto;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer {
+  overflow-y: hidden !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer > .product-image-panel,
+.app-shell.admin-saas-shell .professional-product-drawer > .image-manager-section,
+.app-shell.admin-saas-shell .professional-product-drawer > .panel-section {
+  min-height: 0;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer > .product-image-panel,
+.app-shell.admin-saas-shell .professional-product-drawer > .image-manager-section,
+.app-shell.admin-saas-shell .professional-product-drawer > .panel-section,
+.app-shell.admin-saas-shell .client-drawer-body > .panel-section {
+  background: #ffffff !important;
+  border: 0 !important;
+  border-bottom: 1px solid #e1e4e8 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 18px 22px !important;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .centered-profile {
+  align-items: flex-start;
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  text-align: left;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .centered-profile .client-logo.xl {
+  display: none;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .settings-row,
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row {
+  align-items: start;
+  border-bottom: 1px solid #eef0f2 !important;
+  display: grid;
+  gap: 18px;
+  grid-template-columns: minmax(122px, 0.8fr) minmax(0, 1fr);
+  min-height: 42px;
+  padding: 9px 0 !important;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .settings-row span,
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row span,
+.app-shell.admin-saas-shell .professional-client-drawer .section-title,
+.app-shell.admin-saas-shell .professional-product-drawer .section-title {
+  color: #68707a !important;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-size: 11px !important;
+  font-weight: 700 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .settings-row strong,
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row strong {
+  color: #121417 !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  line-height: 1.35;
+  text-align: right;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .panel-stat-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .panel-stat-grid div {
+  background: #fbfbf9 !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  padding: 12px !important;
+}
+
+.app-shell.admin-saas-shell .client-drawer-footer,
+.app-shell.admin-saas-shell .product-drawer-footer {
+  background: #ffffff !important;
+  border-top: 1px solid #e1e4e8 !important;
+  display: grid !important;
+  flex-shrink: 0;
+  gap: 10px;
+  grid-row: 3;
+  padding: 16px 22px calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  position: relative !important;
+}
+
+.app-shell.admin-saas-shell .client-drawer-footer .primary-drawer-action,
+.app-shell.admin-saas-shell .product-drawer-footer button:first-child {
+  background: #baff16 !important;
+  border-color: #a8e900 !important;
+  color: #121417 !important;
+}
+
+.app-shell.admin-saas-shell .drawer-more-actions,
+.app-shell.admin-saas-shell .image-more-actions {
+  position: relative;
+}
+
+.app-shell.admin-saas-shell .drawer-more-actions summary,
+.app-shell.admin-saas-shell .image-more-actions summary,
+.app-shell.admin-saas-shell .client-drawer-footer a,
+.app-shell.admin-saas-shell .client-drawer-footer button,
+.app-shell.admin-saas-shell .product-drawer-footer button,
+.app-shell.admin-saas-shell .image-action-button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d5dae0;
+  border-radius: 6px;
+  color: #121417;
+  display: flex;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  justify-content: center;
+  min-height: 40px;
+  padding: 0 14px;
+  text-decoration: none;
+}
+
+.app-shell.admin-saas-shell .drawer-more-actions[open] div,
+.app-shell.admin-saas-shell .image-more-actions[open] div {
+  background: #ffffff;
+  border: 1px solid #d5dae0;
+  border-radius: 6px;
+  box-shadow: 0 12px 24px rgba(15, 23, 42, 0.12);
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  position: absolute;
+  right: 0;
+  top: 44px;
+  width: 170px;
+  z-index: 5;
+}
+
+.app-shell.admin-saas-shell .professional-image-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.app-shell.admin-saas-shell .image-slot {
+  background: #fbfbf9 !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  gap: 10px !important;
+  padding: 12px !important;
+}
+
+.app-shell.admin-saas-shell .professional-image-actions {
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: 1fr auto !important;
+}
+
+.app-shell.admin-saas-shell .settings-card.danger-card,
+.app-shell.admin-saas-shell .settings-subnav a.danger {
+  display: none !important;
+}
+
+@media (max-width: 767px) {
+  .app-shell.admin-saas-shell .professional-client-drawer,
+  .app-shell.admin-saas-shell .professional-product-drawer {
+    inset: 0 !important;
+    max-width: 100vw !important;
+    width: 100vw !important;
+  }
+
+  body:has(.professional-client-drawer) .mobile-bottom-nav,
+  body:has(.professional-product-drawer) .mobile-bottom-nav,
+  body:has(.professional-client-drawer) .mobile-top-bar,
+  body:has(.professional-product-drawer) .mobile-top-bar {
+    display: none !important;
+  }
+
+  .app-shell.admin-saas-shell .professional-image-grid,
+  .app-shell.admin-saas-shell .professional-client-drawer .panel-stat-grid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+/* Final visual repair: product drawer structure, clients mobile cards, settings cleanup. */
+.app-shell.admin-saas-shell .clients-page .page-heading,
+.app-shell.admin-saas-shell .products-admin-page .page-heading,
+.app-shell.admin-saas-shell .settings-page .page-heading {
+  background: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  padding: 22px 24px !important;
+}
+
+.app-shell.admin-saas-shell .clients-page .status-card p,
+.app-shell.admin-saas-shell .products-admin-page .status-card p {
+  color: #68707a !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+}
+
+.app-shell.admin-saas-shell .clients-page .status-card strong,
+.app-shell.admin-saas-shell .products-admin-page .status-card strong {
+  font-size: 30px !important;
+  font-weight: 700 !important;
+  letter-spacing: -0.03em !important;
+}
+
+.app-shell.admin-saas-shell .clients-page .status-card small,
+.app-shell.admin-saas-shell .products-admin-page .status-card small {
+  color: #68707a !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 12px !important;
+  line-height: 1.35 !important;
+}
+
+.app-shell.admin-saas-shell .clients-page .status-card small span,
+.app-shell.admin-saas-shell .products-admin-page .status-card small span {
+  display: none !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer {
+  display: grid !important;
+  grid-template-rows: auto minmax(0, 1fr) auto !important;
+  height: 100dvh !important;
+  overflow: hidden !important;
+  width: min(500px, 100vw) !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-title {
+  align-items: center;
+  display: flex;
+  gap: 12px;
+  min-width: 0;
+}
+
+.app-shell.admin-saas-shell .product-drawer-thumb {
+  background-color: #f4f6f8;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: contain;
+  border: 1px solid #e1e4e8;
+  border-radius: 8px;
+  flex: 0 0 46px;
+  height: 46px;
+  width: 46px;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body {
+  display: block !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding: 20px 24px !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body > .panel-section {
+  background: #ffffff !important;
+  border: 0 !important;
+  border-bottom: 1px solid #e1e4e8 !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  margin: 0 0 24px !important;
+  padding: 0 0 20px !important;
+  position: static !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body > .panel-section:last-child {
+  margin-bottom: 0 !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body .section-heading-row {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  margin: 0 0 12px;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row,
+.app-shell.admin-saas-shell .professional-client-drawer .settings-row,
+.app-shell.admin-saas-shell .settings-card .settings-row {
+  border: 0 !important;
+  border-bottom: 1px solid #eef0f2 !important;
+  box-shadow: none !important;
+  min-height: 42px !important;
+  padding: 9px 0 !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row:last-child,
+.app-shell.admin-saas-shell .professional-client-drawer .settings-row:last-child,
+.app-shell.admin-saas-shell .settings-card .settings-row:last-child {
+  border-bottom: 0 !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row span,
+.app-shell.admin-saas-shell .professional-client-drawer .settings-row span,
+.app-shell.admin-saas-shell .settings-card .settings-row span {
+  color: #68707a !important;
+  font-size: 12px !important;
+  letter-spacing: 0 !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer .settings-row strong,
+.app-shell.admin-saas-shell .professional-client-drawer .settings-row strong,
+.app-shell.admin-saas-shell .settings-card .settings-row strong {
+  color: #121417 !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body .professional-image-grid {
+  display: grid !important;
+  gap: 14px !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body .image-slot {
+  align-content: start;
+  background: #fbfbf9 !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 8px !important;
+  box-shadow: none !important;
+  display: grid !important;
+  gap: 10px !important;
+  min-width: 0;
+  padding: 12px !important;
+  position: static !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body .image-slot-preview {
+  aspect-ratio: 1 !important;
+  background-color: #ffffff !important;
+  background-position: center !important;
+  background-repeat: no-repeat !important;
+  background-size: contain !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  min-height: 0 !important;
+  position: relative !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body .image-slot-actions {
+  display: grid !important;
+  gap: 8px !important;
+  grid-template-columns: minmax(0, 1fr) auto !important;
+  position: static !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-body .image-action-button,
+.app-shell.admin-saas-shell .product-drawer-body .image-more-actions summary {
+  min-height: 38px !important;
+  position: static !important;
+}
+
+.app-shell.admin-saas-shell .product-drawer-footer {
+  grid-row: 3 !important;
+  position: relative !important;
+}
+
+.app-shell.admin-saas-shell .professional-product-drawer > .copy-feedback,
+.app-shell.admin-saas-shell .product-drawer-footer + * {
+  display: none !important;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .centered-profile {
+  display: none !important;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer .portal-link {
+  color: #2563eb !important;
+  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+}
+
+.app-shell.admin-saas-shell .settings-layout {
+  align-items: start !important;
+  display: grid !important;
+  gap: 24px !important;
+  grid-template-columns: 220px minmax(0, 860px) !important;
+}
+
+.app-shell.admin-saas-shell .settings-card {
+  background: #ffffff !important;
+  border: 1px solid #e1e4e8 !important;
+  border-radius: 6px !important;
+  box-shadow: none !important;
+  padding: 22px 24px !important;
+}
+
+.app-shell.admin-saas-shell .settings-card .settings-row {
+  background: transparent !important;
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-top: 0 !important;
+  border-radius: 0 !important;
+  display: grid !important;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(0, 1fr) !important;
+}
+
+@media (max-width: 768px) {
+  .app-shell.admin-saas-shell .clients-table,
+  .app-shell.admin-saas-shell .clients-table tbody,
+  .app-shell.admin-saas-shell .clients-table tr,
+  .app-shell.admin-saas-shell .clients-table td {
+    display: block !important;
+    width: 100% !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table thead {
+    display: none !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table tbody {
+    display: grid !important;
+    gap: 12px !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table tr {
+    background: #ffffff !important;
+    border: 1px solid #e1e4e8 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    padding: 14px !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td {
+    border: 0 !important;
+    color: #121417 !important;
+    font-size: 14px !important;
+    padding: 4px 0 !important;
+    text-align: left !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td:nth-child(n+3)::before {
+    color: #68707a;
+    content: attr(data-mobile-label);
+    display: block;
+    font-size: 11px;
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td:nth-child(3)::before { content: "Phone"; }
+  .app-shell.admin-saas-shell .clients-table td:nth-child(4)::before { content: "Account type"; }
+  .app-shell.admin-saas-shell .clients-table td:nth-child(6)::before { content: "Active orders"; }
+  .app-shell.admin-saas-shell .clients-table td:nth-child(8)::before { content: "Status"; }
+  .app-shell.admin-saas-shell .clients-table td:nth-child(2),
+  .app-shell.admin-saas-shell .clients-table td:nth-child(5),
+  .app-shell.admin-saas-shell .clients-table td:nth-child(7) {
+    display: none !important;
+  }
+
+  .app-shell.admin-saas-shell .client-table-section,
+  .app-shell.admin-saas-shell .products-admin-page,
+  .app-shell.admin-saas-shell .settings-page {
+    padding-bottom: calc(var(--mobile-bottom-nav-height, 68px) + 32px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .product-drawer-body {
+    padding: 18px 16px !important;
+  }
+
+  .app-shell.admin-saas-shell .product-drawer-body .professional-image-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell.admin-saas-shell .settings-layout {
+    display: grid !important;
+    gap: 16px !important;
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell.admin-saas-shell .settings-subnav {
+    display: flex !important;
+    gap: 8px !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    padding-bottom: 4px !important;
+    white-space: nowrap !important;
+  }
+
+  .app-shell.admin-saas-shell .settings-subnav a {
+    flex: 0 0 auto !important;
+    min-width: max-content !important;
+  }
+}
+
+/* Final repair follow-up: hide placeholder product table dates and keep drawers above mobile chrome. */
+.app-shell.admin-saas-shell:has(.professional-client-drawer) .mobile-top-bar,
+.app-shell.admin-saas-shell:has(.professional-product-drawer) .mobile-top-bar,
+.app-shell.admin-saas-shell:has(.professional-client-drawer) .mobile-bottom-nav,
+.app-shell.admin-saas-shell:has(.professional-product-drawer) .mobile-bottom-nav {
+  display: none !important;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer,
+.app-shell.admin-saas-shell .professional-product-drawer,
+.client-drawer-backdrop,
+.product-drawer-backdrop {
+  z-index: 320 !important;
+}
+
+.app-shell.admin-saas-shell .professional-client-drawer,
+.app-shell.admin-saas-shell .professional-product-drawer {
+  z-index: 330 !important;
+}
+
+/* Final mobile parity: explicit Clients and Products cards, Settings overflow safety. */
+@media (max-width: 768px) {
+  .app-shell.admin-saas-shell .clients-page,
+  .app-shell.admin-saas-shell .products-admin-page,
+  .app-shell.admin-saas-shell .settings-page {
+    padding-bottom: calc(var(--mobile-bottom-nav-height, 68px) + 32px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table),
+  .app-shell.admin-saas-shell .clients-table tbody,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) tbody,
+  .app-shell.admin-saas-shell .clients-table tr,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) tr,
+  .app-shell.admin-saas-shell .clients-table td,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td {
+    display: block !important;
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) {
+    min-width: 0 !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table thead,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) thead,
+  .app-shell.admin-saas-shell .clients-table td::before,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td::before {
+    content: none !important;
+    display: none !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table tbody,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) tbody {
+    display: grid !important;
+    gap: 12px !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table tr,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) tr {
+    background: #ffffff !important;
+    border: 1px solid #e1e4e8 !important;
+    border-radius: 8px !important;
+    box-shadow: none !important;
+    cursor: pointer;
+    min-height: 44px !important;
+    padding: 14px !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table tr.selected,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) tr.selected {
+    background: #f8ffdf !important;
+    border-color: #d8f85a !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td {
+    border: 0 !important;
+    color: #121417 !important;
+    font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+    font-size: 14px !important;
+    line-height: 1.35 !important;
+    overflow: visible !important;
+    padding: 0 !important;
+    text-align: left !important;
+    white-space: normal !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td:nth-child(1),
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(1) {
+    margin-bottom: 12px !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table .client-cell,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) .client-cell {
+    align-items: center !important;
+    display: flex !important;
+    gap: 12px !important;
+    min-width: 0 !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table .client-logo,
+  .app-shell.admin-saas-shell .products-admin-page .product-thumb {
+    border-radius: 8px !important;
+    flex: 0 0 38px !important;
+    height: 38px !important;
+    width: 38px !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table .client-cell strong,
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) .client-cell strong {
+    color: #121417 !important;
+    display: block !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    line-height: 1.25 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table .client-cell span:not(.client-logo),
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) .client-cell span:not(.product-thumb) {
+    color: #68707a !important;
+    display: block !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+    overflow-wrap: anywhere !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td:nth-child(2),
+  .app-shell.admin-saas-shell .clients-table td:nth-child(3),
+  .app-shell.admin-saas-shell .clients-table td:nth-child(5),
+  .app-shell.admin-saas-shell .clients-table td:nth-child(7) {
+    display: none !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td:nth-child(4),
+  .app-shell.admin-saas-shell .clients-table td:nth-child(6),
+  .app-shell.admin-saas-shell .clients-table td:nth-child(8) {
+    align-items: center !important;
+    display: flex !important;
+    justify-content: space-between !important;
+    padding-top: 8px !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td:nth-child(4)::before,
+  .app-shell.admin-saas-shell .clients-table td:nth-child(6)::before,
+  .app-shell.admin-saas-shell .clients-table td:nth-child(8)::before {
+    color: #68707a !important;
+    display: block !important;
+    font-size: 12px !important;
+    font-weight: 600 !important;
+  }
+
+  .app-shell.admin-saas-shell .clients-table td:nth-child(4)::before { content: "Account type" !important; }
+  .app-shell.admin-saas-shell .clients-table td:nth-child(6)::before { content: "Active Orders" !important; }
+  .app-shell.admin-saas-shell .clients-table td:nth-child(8)::before { content: "Status" !important; }
+
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(4),
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(5),
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(8) {
+    display: none !important;
+  }
+
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(2),
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(3) {
+    color: #4b5563 !important;
+    display: inline !important;
+    font-size: 13px !important;
+  }
+
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(2)::after {
+    content: " · ";
+  }
+
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(6) {
+    color: #121417 !important;
+    display: block !important;
+    font-size: 13px !important;
+    margin-top: 8px !important;
+  }
+
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(7) {
+    display: block !important;
+    margin-top: 10px !important;
+  }
+
+  .app-shell.admin-saas-shell .product-drawer-body .professional-image-grid {
+    grid-template-columns: 1fr !important;
+  }
+
+  .app-shell.admin-saas-shell .settings-subnav {
+    display: flex !important;
+    gap: 8px !important;
+    max-width: 100% !important;
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    padding: 0 0 6px !important;
+    scroll-padding-inline: 14px !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .app-shell.admin-saas-shell .settings-subnav a {
+    flex: 0 0 auto !important;
+    max-width: none !important;
+    min-width: max-content !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    white-space: nowrap !important;
+  }
+
+  .app-shell.admin-saas-shell .settings-card .settings-row {
+    grid-template-columns: minmax(92px, 0.7fr) minmax(0, 1fr) !important;
+  }
+
+  .app-shell.admin-saas-shell .settings-card .settings-row strong {
+    min-width: 0 !important;
+    overflow-wrap: anywhere !important;
+    text-align: right !important;
+    word-break: break-word !important;
+  }
+}
+
+/* Final deployment micro-checks: stable mobile separator and fresh Settings tab position. */
+@media (max-width: 768px) {
+  .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td:nth-child(2)::after {
+    content: " \00B7 " !important;
+  }
+}

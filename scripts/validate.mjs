@@ -40,19 +40,19 @@ const requiredCopy = [
   "Add New Client",
   "Copy Portal Link",
   "View Products",
-  "More client management tools will be connected to Supabase later.",
   "Search request no., client, or requested by...",
   "Update Status",
   "Add Internal Note",
   "Open Portal",
   "View Orders",
   "Select a product to view details.",
-  "Visible in portal",
+  "Portal visibility",
   "View in Client Portal",
   "Copy Product Code",
   "Product code copied",
   "Edit Product",
-  "Danger Zone",
+  "System Information",
+  "Workflow gates",
 ];
 
 for (const text of requiredCopy) {
