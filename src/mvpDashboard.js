@@ -34,7 +34,7 @@ export function createMvpDashboard() {
     returnFocus: null,
     inquiry: { search: "", stage: "all", owner: "all", service: "all", due: "all" },
     order: { search: "", payment: "all", artwork: "all", due: "all", production: "all", owner: "all" },
-    production: { search: "", stage: "all", staff: "all", due: "all" },
+    production: { search: "", staff: "all", method: "all", stage: "all", due: "all", blocker: "all" },
   };
 
   const quoteStage = (item) => {
@@ -110,10 +110,11 @@ export function createMvpDashboard() {
     const inquiries = items.filter((item) => !confirmed(item));
     const orders = items.filter(confirmed);
     const pipeline = countBy(Object.keys(QUOTE_STAGES), inquiries, quoteStage);
-    const production = countBy(PRODUCTION_STAGES.map(([value]) => value), orders, productionStage);
+    const productionJobs = orders.filter(isReleasedToProduction);
+    const production = countBy(PRODUCTION_STAGES.map(([value]) => value), productionJobs, productionStage);
     const priorities = buildPriorities(orders, inquiries);
     const inProgress = ACTIVE_STAGES.reduce((sum, value) => sum + production[value], 0);
-    const completedToday = orders.filter((item) => productionStage(item) === "completed" && String(item.productionUpdatedAt || item.updatedAt || "").slice(0, 10) === todayIso()).length;
+    const completedToday = productionJobs.filter((item) => productionStage(item) === "completed" && String(item.productionUpdatedAt || item.updatedAt || "").slice(0, 10) === todayIso()).length;
     return `<main class="mvp-page ops-board-page mvp-overview-page">
       ${pageTitle("Overview", "What needs attention today", new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}
       ${notices}
@@ -126,13 +127,13 @@ export function createMvpDashboard() {
       ${metricSection("Operations", [
         metric("Awaiting Payment", orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length, "/orders?payment=awaiting", "Orders"),
         metric("In Production", inProgress, "/production?stage=in_progress", "Production"),
-        metric("Overdue", orders.filter((item) => due(item).key === "overdue").length, "/production?due=overdue", "Production", "danger"),
-        metric("Ready for Release", production.ready, "/orders?stage=ready", "Orders"),
+        metric("Overdue", productionJobs.filter((item) => due(item).key === "overdue").length, "/production?due=overdue", "Production", "danger"),
+        metric("Ready for Release", orders.filter(readyForProduction).length, "/orders?stage=queued", "Orders"),
         metric("Completed Today", completedToday, "/production?stage=completed", "Production"),
       ], "operations")}
       <section class="mvp-overview-grid">
         <div class="mvp-section"><div class="mvp-section-title"><h2>Today's Priorities</h2><span>${priorities.length}</span></div><div class="mvp-priority-list">${priorities.length ? priorities.map(priorityRow).join("") : empty("NO PRIORITIES REQUIRE ATTENTION")}</div></div>
-        <div class="mvp-side-stack">${snapshot(orders, production, inProgress)}${staffWorkload(orders)}</div>
+        <div class="mvp-side-stack">${snapshot(productionJobs, production, inProgress)}${staffWorkload(productionJobs)}</div>
       </section>
     </main>`;
   }
@@ -142,7 +143,10 @@ export function createMvpDashboard() {
     orders.forEach((item) => {
       const dueState = due(item);
       const blocked = blockedReason(item);
-      if (dueState.key === "overdue" || blocked) rows.push(priority(item, blocked ? `Blocked: ${blocked}` : "Order is overdue", dueState.label, `/production?order=${encodeURIComponent(item.id)}`, dueState.key === "overdue" ? "danger" : "warning"));
+      if (dueState.key === "overdue" || blocked) {
+        const route = isReleasedToProduction(item) ? `/production?order=${encodeURIComponent(item.id)}` : `/orders?order=${encodeURIComponent(item.id)}`;
+        rows.push(priority(item, blocked ? `Blocked: ${blocked}` : "Order is overdue", dueState.label, route, dueState.key === "overdue" ? "danger" : "warning"));
+      }
       else if (paymentLabel(item) === "Proof Submitted") rows.push(priority(item, "Payment proof submitted / verify payment", "Needs review", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
       else if (dueState.key === "today" || productionStage(item) === "ready") rows.push(priority(item, productionStage(item) === "ready" ? "Ready for release" : "Due today", dueState.label, `/orders?order=${encodeURIComponent(item.id)}`, ""));
     });
@@ -350,6 +354,15 @@ export function createMvpDashboard() {
     return ["confirmed", "paid"].includes(value);
   }
 
+  function isReleasedToProduction(item) {
+    if (!confirmed(item)) return false;
+    const status = key(item.status);
+    if (["lost", "cancelled", "canceled"].includes(status)) return false;
+    const stage = productionStage(item);
+    if ([...ACTIVE_STAGES, "qc", "ready", "completed"].includes(stage)) return true;
+    if (stage !== "queued") return false;
+    return readyForProduction(item);
+  }
   function orderFooterAction(item, gate) {
     const stage = productionStage(item);
     if (stage === "completed") return `<button class="mvp-secondary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">View Details</button>`;
@@ -431,6 +444,32 @@ export function createMvpDashboard() {
     return `<span class="mvp-production-state"><b>${html(production.label)}</b>${production.detail ? `<small>${html(production.detail)}</small>` : ""}</span>`;
   }
 
+  function jobReference(item) {
+    return orderReference(item);
+  }
+
+  function productionMethod(item) {
+    return serviceDisplay(item) === "-" ? "Not set" : serviceDisplay(item);
+  }
+
+  function productionMethods(items) {
+    return [...new Set(items.map(productionMethod).filter((value) => value && value !== "Not set"))].sort();
+  }
+
+  function quantityDisplay(item) {
+    return item.sizeBreakdown || item.qty || "-";
+  }
+
+  function productionBlocker(item) {
+    return item.blockedReason || "";
+  }
+
+  function productionFooterAction(item, next, fieldsReady, gate) {
+    const stage = productionStage(item);
+    const disabled = !fieldsReady || gate.length || !next;
+    const label = !next ? "Completed" : stage === "qc" ? "MARK READY" : stage === "ready" ? "MARK COMPLETED" : `MOVE TO ${stageLabel(next).toUpperCase()}`;
+    return `<section class="mvp-production-action"><span>NOW: ${html(stageLabel(stage))}</span><strong>${next ? `NEXT: ${html(stageLabel(next))}` : "PRODUCTION COMPLETE"}</strong>${next ? `<button type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="${next}" ${disabled ? "disabled" : ""}>${label}</button>` : `<button type="button" disabled>Completed</button>`}${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}</section>`;
+  }
   function dueShortLabel(dueState, item) {
     if (dueState.key === "overdue") return "OVERDUE";
     if (dueState.key === "today") return "TODAY";
@@ -441,75 +480,118 @@ export function createMvpDashboard() {
   }
   function renderProduction({ items, notices = "", schemaNotice = "" }) {
     const orders = items.filter(confirmed);
+    const productionJobs = orders.filter(isReleasedToProduction);
     const stageQuery = query("stage");
     const dueQuery = query("due");
+    const staffQuery = query("staff");
+    const methodQuery = query("method");
+    const blockerQuery = query("blocker");
     const search = state.production.search.toLowerCase();
-    const rows = orders.filter((item) => {
+    const rows = productionJobs.filter((item) => {
       const stage = productionStage(item);
+      const blocker = productionBlocker(item);
+      const method = productionMethod(item);
+      const dueState = due(item);
       if (stageQuery === "in_progress" && !ACTIVE_STAGES.includes(stage)) return false;
       if (stageQuery && stageQuery !== "in_progress" && stage !== stageQuery) return false;
-      if (dueQuery && due(item).key !== dueQuery) return false;
+      if (dueQuery && dueState.key !== dueQuery) return false;
+      if (staffQuery && assigned(item) !== staffQuery) return false;
+      if (methodQuery && method !== methodQuery) return false;
+      if (blockerQuery === "blocked" && !blocker) return false;
+      if (blockerQuery === "clear" && blocker) return false;
       if (state.production.stage !== "all" && stage !== state.production.stage) return false;
       if (state.production.staff !== "all" && assigned(item) !== state.production.staff) return false;
-      if (state.production.due !== "all" && due(item).key !== state.production.due) return false;
-      return !search || [item.id, item.customer, item.service, product(item), assigned(item)].join(" ").toLowerCase().includes(search);
+      if (state.production.method !== "all" && method !== state.production.method) return false;
+      if (state.production.due !== "all" && dueState.key !== state.production.due) return false;
+      if (state.production.blocker === "blocked" && !blocker) return false;
+      if (state.production.blocker === "clear" && blocker) return false;
+      return !search || [jobReference(item), orderReference(item), sourceInquiryReference(item), item.customer, method, itemDisplay(item), product(item), assigned(item)].join(" ").toLowerCase().includes(search);
     });
-    const selected = orders.find((item) => item.id === (state.productionId || query("order")));
+    const selectedId = state.productionId || query("order");
+    const selected = productionJobs.find((item) => item.id === selectedId) || orders.find((item) => item.id === selectedId);
+    const activeJobs = productionJobs.filter((item) => !isOrderClosed(item));
     const counts = {
-      overdue: orders.filter((item) => due(item).key === "overdue").length,
-      today: orders.filter((item) => due(item).key === "today").length,
-      blocked: orders.filter((item) => blockedReason(item)).length,
-      progress: orders.filter((item) => ACTIVE_STAGES.includes(productionStage(item))).length,
-      ready: orders.filter((item) => productionStage(item) === "ready").length,
-      completed: orders.filter((item) => productionStage(item) === "completed").length,
+      active: activeJobs.length,
+      unassigned: activeJobs.filter((item) => ["Not Yet Assigned", "Unassigned"].includes(assigned(item))).length,
+      today: productionJobs.filter((item) => productionStage(item) !== "completed" && due(item).key === "today").length,
+      overdue: productionJobs.filter((item) => productionStage(item) !== "completed" && due(item).key === "overdue").length,
+      blocked: productionJobs.filter((item) => productionBlocker(item)).length,
+      ready: productionJobs.filter((item) => productionStage(item) === "ready").length,
+      completed: productionJobs.filter((item) => productionStage(item) === "completed").length,
     };
-    return `<main class="mvp-page ops-board-page">${pageTitle("Production", "Production Dashboard", `${orders.length} orders`)}<p class="mvp-rule">NO ODOO RECORD / NO PRODUCTION</p>${notices}${schemaNotice}
-      <div class="mvp-metrics production">${metric("Overdue", counts.overdue, "/production?due=overdue", "", "danger")}${metric("Due Today", counts.today, "/production?due=today", "", "lime")}${metric("Blocked", counts.blocked, "/production?stage=queued")}${metric("In Progress", counts.progress, "/production?stage=in_progress")}${metric("Ready", counts.ready, "/production?stage=ready")}${metric("Completed", counts.completed, "/production?stage=completed")}</div>
-      ${filterBar("production", items, ["stage", "staff", "due"])}${productionTable(rows)}${productionDrawer(selected)}
+    return `<main class="mvp-page ops-board-page mvp-production-page">${pageTitle("Production", "PRODUCTION", `${rows.length} jobs`)}<p class="mvp-rule">RELEASED ORDERS ONLY</p>${notices}${schemaNotice}
+      <div class="mvp-metrics production">${metric("ACTIVE JOBS", counts.active, "/production", "Released")}${metric("UNASSIGNED", counts.unassigned, "/production?staff=Not%20Yet%20Assigned", "Needs staff", "warning")}${metric("DUE TODAY", counts.today, "/production?due=today", "Today", "lime")}${metric("OVERDUE", counts.overdue, "/production?due=overdue", "Past due", "danger")}${metric("BLOCKED", counts.blocked, "/production?blocker=blocked", "Has blocker", "warning")}${metric("READY", counts.ready, "/production?stage=ready", "Fulfillment")}${metric("COMPLETED", counts.completed, "/production?stage=completed", "Closed")}</div>
+      ${filterBar("production", productionJobs, ["staff", "method", "stage", "due", "blocker"])}${productionTable(rows, productionJobs.length)}${productionCards(rows, productionJobs.length)}${productionDrawer(selected)}
     </main>`;
   }
 
-  function productionTable(items) {
-    return table("production", ["Code", "Customer", "Product / Inquiry", "Service", "Qty", "Artwork", "Production Stage", "Due Date", "Assigned"], items.map((item) => {
+  function productionTable(items, totalJobs = 0) {
+    const emptyLabel = totalJobs ? "NO PRODUCTION JOBS MATCH THESE FILTERS" : "NO RELEASED PRODUCTION JOBS";
+    const emptyText = totalJobs ? "" : `<small>Orders will appear here after they pass the current release requirements.</small>`;
+    if (!items.length) return productionEmptyTable(emptyLabel, totalJobs);
+    return table("production", ["Job", "Customer", "Item", "Method", "Qty", "Current Stage", "Assigned", "Due Date", "Blocker", "Fulfillment"], items.map((item) => {
       const stage = productionStage(item);
-      const blocked = blockedReason(item);
+      const blocker = productionBlocker(item);
       const dueState = due(item);
       return row("production", item.id, [
-        `<code>${html(item.id)}</code>`,
+        copyButton(jobReference(item), jobReference(item), "job reference"),
         strong(item.customer || "Unnamed customer"),
-        cell(product(item)),
-        cell(item.service || "-"),
-        cell(item.qty || "-"),
-        status(artworkLabel(item), "artwork"),
-        `<span class="mvp-production-state"><b>${stageLabel(stage)}</b>${blocked ? `<small>Blocked: ${html(blocked)}</small>` : ""}</span>`,
-        `<span class="mvp-due ${dueState.key}">${html(dueState.label)}</span>`,
-        `<button class="mvp-staff-cell" type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}">${html(assigned(item))}</button>`,
+        cell(itemDisplay(item)),
+        cell(productionMethod(item)),
+        cell(quantityDisplay(item)),
+        status(stageLabel(stage), stage),
+        cell(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item)),
+        `<span class="mvp-due ${dueState.key}" title="${html(dueState.label)}">${html(dueShortLabel(dueState, item))}</span>`,
+        `<span class="mvp-blocker-cell" title="${html(blocker || "Not blocked")}">${html(blocker || "Not blocked")}</span>`,
+        cell(fulfillment(item).toUpperCase()),
       ]);
-    }), "NO PRODUCTION ORDERS MATCH THIS FILTER");
+    }), `${emptyLabel}${emptyText}`);
+  }
+
+  function productionCards(items, totalJobs = 0) {
+    const emptyLabel = totalJobs ? "NO PRODUCTION JOBS MATCH THESE FILTERS" : "NO RELEASED PRODUCTION JOBS";
+    const emptyText = totalJobs ? "" : `<small>Orders will appear here after they pass the current release requirements.</small>`;
+    return `<section class="mvp-production-card-list">${items.length ? items.map(productionMobileCard).join("") : `<p class="mvp-empty">${html(emptyLabel)}${emptyText}</p>`}</section>`;
+  }
+
+  function productionEmptyTable(label, totalJobs) {
+    const support = totalJobs ? "" : `<small>Orders will appear here after they pass the current release requirements.</small>`;
+    return `<section class="mvp-table-wrap"><div class="mvp-table production" role="table"><div class="mvp-table-head" role="row">${["Job", "Customer", "Item", "Method", "Qty", "Current Stage", "Assigned", "Due Date", "Blocker", "Fulfillment"].map((header) => `<span role="columnheader">${header}</span>`).join("")}</div><div role="rowgroup"><p class="mvp-empty">${html(label)}${support}</p></div></div></section>`;
+  }
+
+  function productionMobileCard(item) {
+    const stage = productionStage(item);
+    const dueState = due(item);
+    const blocker = productionBlocker(item);
+    const ready = stage === "ready" ? productionDisplay(item).label : "";
+    return `<article class="mvp-production-mobile-card" data-mvp-open="production" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-production-mobile-header"><div>${copyButton(jobReference(item), jobReference(item), "job reference")}<strong>${html(item.customer || "Unnamed customer")}</strong></div>${status(stageLabel(stage), stage)}</div><div class="mvp-production-mobile-job"><strong>${html(itemDisplay(item))}</strong><span>${html(productionMethod(item))} ${String.fromCharCode(183)} ${html(quantityDisplay(item))}</span></div><div class="mvp-production-mobile-ops"><span>Assigned: ${html(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item))}</span><span>Due: ${html(dueShortLabel(dueState, item))}</span><span>Blocker: ${html(blocker || "Not blocked")}</span><span>Fulfillment: ${html(ready || fulfillment(item).toUpperCase())}</span></div></article>`;
   }
 
   function productionDrawer(item) {
     if (!item) return "";
+    const released = isReleasedToProduction(item);
     const stage = productionStage(item);
-    const next = nextStage(item);
-    const gate = stage === "queued" ? productionGate(item) : [];
+    const next = released ? nextStage(item) : "";
+    const gate = released ? productionAdvanceGate(item) : [];
     const fieldsReady = !item.requiresProductionMigration;
-    const editorLocked = ["ready", "completed"].includes(stage);
+    const editorLocked = !released || ["ready", "completed"].includes(stage);
     const editorEnabled = fieldsReady && !editorLocked;
     const currentStaff = assigned(item);
     const staffOptions = ["Not Yet Assigned", "Unassigned"].includes(currentStaff) || STAFF.includes(currentStaff) ? STAFF : [currentStaff, ...STAFF];
-    return drawer("production", item, stageLabel(stage), `
-      ${detailSection("Order", [["Code", item.id], ["Product", product(item)], ["Service", serviceDisplay(item)], ["Quantity", item.sizeBreakdown || item.qty], ["Needed Date", due(item).label]])}
-      <section class="mvp-drawer-section"><h3>Production</h3>${fieldsReady ? "" : `<p class="mvp-inline-error">DATABASE FIELDS NOT READY. Apply the pending migration before saving.</p>`}${editorLocked ? `<p class="mvp-inline-note">${stage === "ready" ? "READY IS OPEN FOR FULFILLMENT. PRODUCTION DETAILS ARE LOCKED." : "COMPLETED PRODUCTION DETAILS ARE LOCKED."}</p>` : ""}<div class="mvp-production-editor">
+    const blocker = productionBlocker(item);
+    const footer = released ? productionFooterAction(item, next, fieldsReady, gate) : `<section class="mvp-production-action"><span>Not released to Production</span><strong>Return to Orders</strong><button class="mvp-secondary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(item.id)}">Open Order</button></section>`;
+    return drawer("production", item, released ? stageLabel(stage) : "Not released", `
+      ${detailSection("Job", [["Job Reference", jobReference(item)], ["Item", itemDisplay(item)], ["Method", productionMethod(item)], ["Quantity", quantityDisplay(item)], ["Due Date", dueShortLabel(due(item), item)], ["Order Reference", orderReference(item) === jobReference(item) ? "Same as job" : orderReference(item)], ["Current Production Status", released ? stageLabel(stage) : "Not released"]])}
+      <section class="mvp-drawer-section"><h3>Production</h3>${released ? "" : `<p class="mvp-inline-note">This confirmed order has not passed the current release requirements and is read-only here.</p>`}${fieldsReady ? "" : `<p class="mvp-inline-error">DATABASE FIELDS NOT READY. Apply the pending migration before saving.</p>`}${editorLocked && released ? `<p class="mvp-inline-note">${stage === "ready" ? "READY IS OPEN FOR FULFILLMENT. PRODUCTION DETAILS ARE LOCKED." : stage === "completed" ? "COMPLETED PRODUCTION DETAILS ARE LOCKED." : "PRODUCTION DETAILS ARE READ ONLY."}</p>` : ""}<div class="mvp-production-editor">
         <label><span>Assigned Staff</span><select data-mvp-production-staff="${html(item.id)}" ${editorEnabled ? "" : "disabled"}><option value="">Unassigned</option>${staffOptions.map((staff) => `<option ${currentStaff === staff ? "selected" : ""}>${staff}</option>`).join("")}</select></label>
         <label><span>Current Stage</span><strong>${stageLabel(stage)}</strong></label>
-        <label><span>Blocked Reason</span><select data-mvp-production-blocked="${html(item.id)}" ${editorEnabled ? "" : "disabled"}><option value="">Not blocked</option>${["No artwork", "Awaiting customer artwork approval", "Payment requirement not completed", "Materials unavailable"].map((reason) => `<option ${item.blockedReason === reason ? "selected" : ""}>${reason}</option>`).join("")}</select></label><label class="wide"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>${html(item.productionNote || "")}</textarea></label>
-      </div><button class="mvp-secondary-action" type="button" data-mvp-save-production="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>Save Assignment &amp; Note</button>${blockedReason(item) ? `<p class="mvp-blocked">BLOCKED: ${html(blockedReason(item))}</p>` : ""}</section>
-      ${detailSection("Artwork", [["Status", artworkLabel(item)], ["Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"]])}
-      ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", tracking(item)]])}
-    `, `<section class="mvp-production-action"><span>Now: ${stageLabel(stage)}</span><strong>${next ? `Next: ${stageLabel(next)}` : "Production complete"}</strong>${next ? `<button type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="${next}" ${!fieldsReady || gate.length ? "disabled" : ""}>${stage === "qc" ? "Mark Ready" : stage === "ready" ? "Mark Completed" : `Move to ${stageLabel(next)}`}</button>` : `<button type="button" disabled>Completed</button>`}${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}</section>`);
+        <label><span>Next Stage</span><strong>${next ? stageLabel(next) : stage === "completed" ? "Completed" : released ? "None" : "Not available"}</strong></label>
+        <label><span>Production Blocker</span><select data-mvp-production-blocked="${html(item.id)}" ${editorEnabled ? "" : "disabled"}><option value="">Not blocked</option>${["No artwork", "Awaiting customer artwork approval", "Payment requirement not completed", "Materials unavailable"].map((reason) => `<option ${item.blockedReason === reason ? "selected" : ""}>${reason}</option>`).join("")}</select></label><label class="wide"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>${html(item.productionNote || "")}</textarea></label>
+      </div><button class="mvp-secondary-action" type="button" data-mvp-save-production="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>Save Assignment &amp; Note</button>${blocker ? `<p class="mvp-blocked">BLOCKER: ${html(blocker)}</p>` : ""}</section>
+      ${detailSection("Release Context", [["Artwork Status", artworkLabel(item)], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Payment Status", paymentState(item).label], ["Odoo SO", item.odooSO || "Not set"], ["Source Order", orderReference(item)], ["Released", released ? dateTime(item.productionUpdatedAt || item.updatedAt) : "Not released"]])}
+      ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", stage === "ready" || tracking(item) !== "Not set" ? tracking(item) : "Not set"], ["Readiness", stage === "ready" ? productionDisplay(item).label : "Not ready"]])}
+    `, footer);
   }
-
   function nextStage(item) {
     const stage = productionStage(item);
     if (stage === "queued") return stationFor(item);
@@ -517,6 +599,12 @@ export function createMvpDashboard() {
     if (stage === "qc") return "ready";
     if (stage === "ready") return "completed";
     return "";
+  }
+
+  function productionAdvanceGate(item) {
+    const blocker = productionBlocker(item);
+    if (blocker) return [blocker];
+    return productionStage(item) === "queued" ? productionGate(item) : [];
   }
 
   function productionGate(item) {
@@ -575,12 +663,14 @@ export function createMvpDashboard() {
     const controls = [`<label class="mvp-search"><span aria-hidden="true">?</span><input type="search" data-mvp-filter="${scope}:search" value="${html(values.search)}" placeholder="Search code, customer, product..." /></label>`];
     if (fields.includes("owner")) controls.push(select(scope, "owner", "All Owners", people, values.owner, true));
     if (fields.includes("staff")) controls.push(select(scope, "staff", "All Staff", people, values.staff, true));
+    if (fields.includes("method")) controls.push(select(scope, "method", "All Methods", productionMethods(items), values.method));
     if (fields.includes("service")) controls.push(select(scope, "service", "All Services", services, values.service));
     if (fields.includes("stage")) controls.push(select(scope, "stage", "All Stages", PRODUCTION_STAGES, values.stage));
     if (fields.includes("production")) controls.push(select(scope, "production", "All Production", PRODUCTION_STAGES, values.production));
     if (fields.includes("artwork")) controls.push(select(scope, "artwork", "All Artwork", [["approved", "Art approved"], ["pending", "Art pending"], ["revision", "Revision needed"], ["not_set", "Not set"]], values.artwork));
     if (fields.includes("payment")) controls.push(select(scope, "payment", "All Payments", scope === "order" ? ["NOT SET", "UNPAID", "FOR VERIFICATION", "PARTIAL", "50% DP", "PAID"] : ["Not Yet Requested", "Awaiting Payment", "Proof Submitted", "Paid"], values.payment));
     if (fields.includes("fulfillment")) controls.push(select(scope, "fulfillment", "All Fulfillment", [["pickup", "Pickup"], ["delivery", "Delivery"]], values.fulfillment));
+    if (fields.includes("blocker")) controls.push(select(scope, "blocker", "All Blockers", [["blocked", "Blocked"], ["clear", "Not blocked"]], values.blocker));
     if (fields.includes("due")) controls.push(select(scope, "due", scope === "inquiry" ? "All Follow-up" : "All Dates", [["overdue", "Overdue"], ["today", "Due today"], ["week", "This week"]], values.due));
     return `<section class="mvp-filter-bar">${controls.join("")}</section>`;
   }
@@ -600,7 +690,7 @@ export function createMvpDashboard() {
   }
 
   function drawer(type, item, statusLabel, body, footer = "") {
-    const drawerCode = type === "order" ? orderReference(item) : item.id;
+    const drawerCode = type === "order" ? orderReference(item) : type === "production" ? jobReference(item) : item.id;
     return `<button class="mvp-drawer-backdrop" data-mvp-close type="button" aria-label="Close details"></button><aside class="mvp-drawer ${type}" aria-label="${type} details"><header><div><code>${html(drawerCode)}</code><h2>${html(item.customer || item.company || "Details")}</h2><mark>${html(statusLabel)}</mark></div><button type="button" data-mvp-close aria-label="Close details">X</button></header><div class="mvp-drawer-body">${body}</div><footer class="mvp-drawer-footer">${footer}</footer></aside>`;
   }
 
