@@ -60,15 +60,7 @@ export default async function handler(request, response) {
 
     failureStage = "admin_role";
 
-    const { data: adminUser, error: adminUserError } = await supabase
-      .from("admin_users")
-      .select("id,role")
-      .eq("user_id", userData.user.id)
-      .maybeSingle();
-
-    if (adminUserError) {
-      throw adminUserError;
-    }
+    const adminUser = await readAdminUser(supabase, userData.user.id);
 
     if (!isAuthorizedAdmin(adminUser)) {
       sendJson(response, 403, {
@@ -181,8 +173,28 @@ function isValidInquiryReference(value) {
   return /^[a-z0-9][a-z0-9_-]{2,79}$/i.test(value);
 }
 
+async function readAdminUser(supabase, userId) {
+  const query = (select) => supabase
+    .from("admin_users")
+    .select(select)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const { data, error } = await query("id,role,is_active");
+  if (!error) return data;
+  if (!isMissingAdminProfileColumn(error)) throw error;
+
+  const fallback = await query("id,role");
+  if (fallback.error) throw fallback.error;
+  return fallback.data;
+}
+
 function isAuthorizedAdmin(adminUser) {
-  return ["admin", "staff", "viewer"].includes(adminUser?.role);
+  return adminUser?.is_active !== false && ["owner", "admin", "staff"].includes(String(adminUser?.role || "").trim().toLowerCase());
+}
+
+function isMissingAdminProfileColumn(error) {
+  return /is_active|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
 }
 
 function getBearerToken(request) {

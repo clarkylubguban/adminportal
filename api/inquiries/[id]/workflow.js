@@ -1,7 +1,7 @@
-﻿import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
+import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
-const WRITE_ROLES = new Set(["admin", "staff"]);
+const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
 const WORKFLOW_SELECT = [
   "id", "status", "next_action", "odoo_so", "product", "product_desc", "quantity", "due_date",
   "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status",
@@ -50,9 +50,35 @@ export default async function handler(request, response) {
 async function getAuthorizedAdmin(supabase, token) {
   const { data: userData, error: userError } = await supabase.auth.getUser(token);
   if (userError || !userData?.user) return null;
-  const { data, error } = await supabase.from("admin_users").select("id,role").eq("user_id", userData.user.id).maybeSingle();
-  if (error) throw error;
-  return data || null;
+
+  const adminUser = await readAdminUser(supabase, userData.user.id);
+  return normalizeAdminUser(adminUser);
+}
+
+async function readAdminUser(supabase, userId) {
+  const query = (select) => supabase
+    .from("admin_users")
+    .select(select)
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  const { data, error } = await query("id,role,is_active");
+  if (!error) return data;
+  if (!isMissingAdminProfileColumn(error)) throw error;
+
+  const fallback = await query("id,role");
+  if (fallback.error) throw fallback.error;
+  return fallback.data;
+}
+
+function normalizeAdminUser(adminUser) {
+  if (!adminUser || adminUser.is_active === false) return null;
+  const role = String(adminUser.role || "").trim().toLowerCase();
+  return { ...adminUser, role };
+}
+
+function isMissingAdminProfileColumn(error) {
+  return /is_active|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
 }
 
 function toClientInquiry(row) {
@@ -94,3 +120,4 @@ function sendJson(response, status, body) {
   response.setHeader("Content-Type", "application/json; charset=utf-8");
   response.end(JSON.stringify(body));
 }
+

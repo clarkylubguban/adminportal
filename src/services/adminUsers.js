@@ -5,9 +5,9 @@ import { readSupabaseTableWithAuth } from "../lib/supabaseClient.js";
 export const ADMIN_USERS_SQL = null;
 
 const allowedRoles = new Set([
+  "owner",
   "admin",
   "staff",
-  "viewer",
 ]);
 
 export async function getApprovedAdminUser(session) {
@@ -15,21 +15,14 @@ export async function getApprovedAdminUser(session) {
     return null;
   }
 
-  const rows = await readSupabaseTableWithAuth(
-    "admin_users",
-    {
-      select: "id,user_id,email,role",
-      user_id: `eq.${session.user.id}`,
-      limit: "1",
-    },
-    session.access_token
-  );
-
+  const rows = await readAdminUserRows(session);
   const adminUser = rows[0] ?? null;
+  const role = normalizeRole(adminUser?.role);
 
   if (
     !adminUser ||
-    !allowedRoles.has(adminUser.role)
+    adminUser.is_active === false ||
+    !allowedRoles.has(role)
   ) {
     return null;
   }
@@ -41,6 +34,40 @@ export async function getApprovedAdminUser(session) {
       adminUser.email ||
       session.user.email ||
       "TRRY Admin",
-    role: adminUser.role,
+    displayName: adminUser.display_name || "",
+    role,
   };
+}
+
+async function readAdminUserRows(session) {
+  try {
+    return await readSupabaseTableWithAuth(
+      "admin_users",
+      {
+        select: "id,user_id,email,display_name,role,is_active",
+        user_id: `eq.${session.user.id}`,
+        limit: "1",
+      },
+      session.access_token
+    );
+  } catch (error) {
+    if (!isMissingAdminProfileColumn(error)) throw error;
+    return readSupabaseTableWithAuth(
+      "admin_users",
+      {
+        select: "id,user_id,email,role",
+        user_id: `eq.${session.user.id}`,
+        limit: "1",
+      },
+      session.access_token
+    );
+  }
+}
+
+function isMissingAdminProfileColumn(error) {
+  return /display_name|is_active|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
+}
+
+function normalizeRole(role) {
+  return String(role || "").trim().toLowerCase();
 }

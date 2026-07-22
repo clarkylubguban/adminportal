@@ -4,8 +4,8 @@ const ARTWORK_BUCKET = "inquiry-artworks";
 const SIGNED_URL_EXPIRES_IN_SECONDS = 300;
 const MAX_PROOF_SIZE = 10 * 1024 * 1024;
 const PROOF_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
-const WRITE_ROLES = new Set(["admin", "staff"]);
-const READ_ROLES = new Set(["admin", "staff", "viewer"]);
+const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
+const READ_ROLES = new Set(["owner", "admin", "staff"]);
 const CUSTOMER_ACTION_SELECT = [
   "id",
   "contact",
@@ -21,6 +21,9 @@ const CUSTOMER_ACTION_SELECT = [
   "quote_breakdown",
   "quote_notes",
   "quote_valid_until",
+  "quote_sent_at",
+  "next_action",
+  "updated_at",
   "artwork_status",
   "artwork_url",
   "artwork_approved_at",
@@ -170,14 +173,34 @@ async function getAuthorizedAdmin(supabase, token) {
   const { data: userData, error: userError } = await supabase.auth.getUser(token);
   if (userError || !userData?.user) return null;
 
-  const { data: adminUser, error: adminError } = await supabase
+  const adminUser = await readAdminUser(supabase, userData.user.id);
+  return normalizeAdminUser(adminUser);
+}
+
+async function readAdminUser(supabase, userId) {
+  const query = (select) => supabase
     .from("admin_users")
-    .select("id,role")
-    .eq("user_id", userData.user.id)
+    .select(select)
+    .eq("user_id", userId)
     .maybeSingle();
 
-  if (adminError) throw adminError;
-  return adminUser || null;
+  const { data, error } = await query("id,role,is_active");
+  if (!error) return data;
+  if (!isMissingAdminProfileColumn(error)) throw error;
+
+  const fallback = await query("id,role");
+  if (fallback.error) throw fallback.error;
+  return fallback.data;
+}
+
+function normalizeAdminUser(adminUser) {
+  if (!adminUser || adminUser.is_active === false) return null;
+  const role = String(adminUser.role || "").trim().toLowerCase();
+  return { ...adminUser, role };
+}
+
+function isMissingAdminProfileColumn(error) {
+  return /is_active|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
 }
 
 function buildUpdates(action, body, inquiry, now) {
@@ -223,6 +246,9 @@ function buildUpdates(action, body, inquiry, now) {
       ...currentQuoteValues,
       quote_status: action === "publish_quote" ? "ready" : "pending",
       quote_published_at: action === "publish_quote" ? now : null,
+      quote_sent_at: action === "publish_quote" ? now : inquiry.quote_sent_at,
+      status: action === "publish_quote" ? "sent" : inquiry.status,
+      next_action: action === "publish_quote" ? "Quote sent - wait for customer response" : inquiry.next_action,
       quote_change_request: action === "publish_quote" ? null : inquiry.quote_change_request,
     };
   }
@@ -427,6 +453,10 @@ function getSafeInquiry(row) {
     quoteBreakdown: cleanText(row.quote_breakdown, 5000),
     quoteNotes: cleanText(row.quote_notes, 2000),
     quoteValidUntil: cleanText(row.quote_valid_until, 40),
+    quoteSentAt: cleanText(row.quote_sent_at, 80),
+    status: cleanText(row.status, 80),
+    next: cleanText(row.next_action, 500),
+    updatedAt: cleanText(row.updated_at, 80),
     artworkStatus: cleanText(row.artwork_status, 80),
     artworkApprovedAt: cleanText(row.artwork_approved_at, 80),
     artworkRevisionRequest: cleanText(row.artwork_revision_request, 1000),

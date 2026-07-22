@@ -160,7 +160,7 @@ export function createMvpDashboard() {
   }
 
   return { state, renderOverview, renderInquiries, renderOrders, renderProduction, bind, helpers: { confirmed, productionStage, stageLabel } };
-  function renderInquiries({ items, notices = "", renderQuote, renderOdoo }) {
+  function renderInquiries({ items, notices = "", renderQuote, renderOdoo, renderArtwork }) {
     const inquiries = items.filter((item) => !confirmed(item));
     const stageFilter = query("stage") || state.inquiry.stage;
     const search = state.inquiry.search.toLowerCase();
@@ -180,7 +180,7 @@ export function createMvpDashboard() {
       <p class="mvp-rule">NO QUOTATION / NO WORK</p>${notices}
       ${filterBar("inquiry", items, ["owner", "service", "due"])}
       <div class="mvp-stage-cards">${INQUIRY_QUEUES.map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="${stageFilter === value ? "active" : ""}"><span>${label}</span><strong>${value === "follow_due" ? inquiries.filter(isFollowUpDue).length : inquiries.filter((item) => quoteStage(item) === value).length}</strong></button>`).join("")}</div>
-      ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOdoo)}
+      ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOdoo, renderArtwork)}
     </main>`;
   }
 
@@ -206,7 +206,7 @@ export function createMvpDashboard() {
     return `${table("inquiry", headers, desktopRows, "NO INQUIRIES MATCH THIS FILTER")}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("NO INQUIRIES MATCH THIS FILTER")}</section>`;
   }
 
-  function inquiryDrawer(item, renderQuote, renderOdoo) {
+  function inquiryDrawer(item, renderQuote, renderOdoo, renderArtwork) {
     if (!item) return "";
     const stage = quoteStage(item);
     const amountReady = Number(item.quotedAmount) > 0;
@@ -233,7 +233,7 @@ export function createMvpDashboard() {
         ["Needed Date", item.dueDate ? shortDate(item.dueDate) : "Not set"],
         ["Fulfillment", fulfillment(item)],
         ["Artwork / Reference", artworkState(item)],
-      ], requestMessage)}${moreDetails}
+      ], requestMessage)}${typeof renderArtwork === "function" ? renderArtwork(item) : ""}${moreDetails}
       ${typeof renderQuote === "function" ? renderQuote(item) : detailSection("Quotation", [
         ["Quote Status", QUOTE_STAGES[stage]],
         ["Quoted Amount", money(item.quotedAmount)],
@@ -635,6 +635,48 @@ export function createMvpDashboard() {
     root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => { const restore = state.returnFocus; state.inquiryId = null; state.orderId = null; state.productionId = null; state.returnFocus = null; clearQuery(); rerender(); requestAnimationFrame(() => { if (restore) root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]`)?.focus(); }); }));
     root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); button.dataset.copied = "true"; button.querySelector("small").textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const label = button.querySelector("small"); if (label) label.textContent = "Copy"; }, 1300); }));
     root.querySelectorAll('[data-mvp-note-toggle]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); const wrap = button.closest('.mvp-note-wrap'); const expanded = wrap?.classList.toggle('expanded'); button.textContent = expanded ? 'SHOW LESS' : 'SHOW FULL NOTE'; }));
+    root.querySelectorAll('[data-mvp-follow-preset]').forEach((button) => button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const id = button.dataset.mvpFollowPreset;
+      const input = root.querySelector(`[data-mvp-follow-date-input="${CSS.escape(id)}"]`);
+      const days = Number(button.dataset.mvpFollowDays || 0);
+      const date = new Date();
+      date.setDate(date.getDate() + (Number.isFinite(days) ? days : 0));
+      if (input) input.value = date.toISOString().slice(0, 10);
+    }));
+    root.querySelectorAll('[data-mvp-save-follow]').forEach((button) => button.addEventListener('click', async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpSaveFollow;
+      const ownerValue = root.querySelector(`[data-mvp-inquiry-owner="${CSS.escape(id)}"]`)?.value || null;
+      const followUpDate = root.querySelector(`[data-mvp-follow-date-input="${CSS.escape(id)}"]`)?.value || null;
+      button.disabled = true;
+      button.textContent = 'Saving...';
+      await saveInquiryFollowUp?.(id, { owner: ownerValue, followUpDate });
+      rerender();
+    }));
+    root.querySelectorAll('[data-mvp-clear-follow]').forEach((button) => button.addEventListener('click', async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpClearFollow;
+      const ownerValue = root.querySelector(`[data-mvp-inquiry-owner="${CSS.escape(id)}"]`)?.value || null;
+      button.disabled = true;
+      button.textContent = 'Clearing...';
+      await saveInquiryFollowUp?.(id, { owner: ownerValue, followUpDate: null });
+      rerender();
+    }));
+    root.querySelectorAll('[data-mvp-record-follow]').forEach((button) => button.addEventListener('click', async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpRecordFollow;
+      const outcome = root.querySelector(`[data-mvp-follow-outcome="${CSS.escape(id)}"]`)?.value || '';
+      const reschedule = root.querySelector(`[data-mvp-follow-reschedule="${CSS.escape(id)}"]`)?.value || null;
+      const message = root.querySelector(`[data-mvp-follow-message="${CSS.escape(id)}"]`);
+      if (!outcome) { if (message) message.textContent = 'Select a follow-up result.'; return; }
+      if (["no_response", "customer_considering"].includes(outcome) && !reschedule) { if (message) message.textContent = 'Choose a new follow-up date for this result.'; return; }
+      button.disabled = true;
+      button.textContent = 'Saving...';
+      if (["no_response", "customer_considering"].includes(outcome)) await saveInquiryFollowUp?.(id, { followUpDate: reschedule });
+      else await handleInquiryFollowUpOutcome?.(id, outcome);
+      rerender();
+    }));
     root.querySelectorAll("[data-mvp-save-production]").forEach((button) => button.addEventListener("click", async () => {
       if (button.disabled) return;
       const id = button.dataset.mvpSaveProduction;

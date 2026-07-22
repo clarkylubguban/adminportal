@@ -415,6 +415,7 @@ let adminAuthSession = null;
 let adminUser = null;
 let adminLoginEmail = "";
 let adminLoginPassword = "";
+let adminLoginPasswordVisible = false;
 let adminLoginError = "";
 let adminAuthMessage = "";
 let isSidebarCollapsed = getStoredSidebarCollapsed();
@@ -500,7 +501,7 @@ function renderAdminAuthGate() {
     return;
   }
 
-  if (adminAuthStatus === "checking" || adminAuthStatus === "role-checking") {
+  if (adminAuthStatus === "checking" || adminAuthStatus === "role-checking" || adminAuthStatus === "signing-out") {
     renderAdminAuthLoading();
     return;
   }
@@ -514,41 +515,49 @@ function renderAdminAuthGate() {
 }
 
 function renderAdminAuthLoading() {
-  const message = adminAuthStatus === "role-checking" ? "Checking admin role..." : "Checking admin session...";
+  const message = adminAuthStatus === "role-checking"
+    ? "Checking admin access..."
+    : adminAuthStatus === "signing-out"
+      ? "Signing out..."
+      : "Checking admin session...";
 
   document.getElementById("root").innerHTML = `
     <main class="admin-access-page">
       <section class="admin-access-card admin-login-card" aria-label="TRRY Admin loading">
-        <div class="admin-access-brand"><strong>TRRY</strong><span>APPAREL MANAGEMENT</span></div>
+        <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
         <div class="admin-access-heading">
           <p>ADMIN AUTH</p>
           <h1>TRRY ADMIN LOGIN</h1>
           <span>${escapeHtml(message)}</span>
         </div>
+        <div class="admin-auth-loader" aria-hidden="true"><span></span></div>
       </section>
     </main>
   `;
 }
 
 function renderAdminLoginScreen() {
+  const isSigningIn = adminAuthStatus === "signing-in";
   document.getElementById("root").innerHTML = `
     <main class="admin-access-page">
       <section class="admin-access-card admin-login-card" aria-label="TRRY Admin login">
-        <div class="admin-access-brand"><strong>TRRY</strong><span>APPAREL MANAGEMENT</span></div>
+        <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
         <div class="admin-access-heading">
-          <p>STAFF ACCESS</p>
+          <p>ADMIN AUTH</p>
           <h1>TRRY ADMIN LOGIN</h1>
-          <span>Staff operations dashboard. Sign in to continue.</span>
+          <span>Internal operations access for active TRRY admins.</span>
         </div>
         <form class="admin-access-form" id="admin-login-form">
           <label for="admin-login-email">EMAIL</label>
-          <input id="admin-login-email" value="${escapeHtml(adminLoginEmail)}" type="email" autocomplete="email" />
+          <input id="admin-login-email" value="${escapeHtml(adminLoginEmail)}" type="email" autocomplete="email" inputmode="email" aria-invalid="${adminLoginError ? "true" : "false"}" ${isSigningIn ? "disabled" : ""} />
           <label for="admin-login-password">PASSWORD</label>
-          <input id="admin-login-password" value="${escapeHtml(adminLoginPassword)}" type="password" autocomplete="current-password" />
-          ${adminLoginError ? `<p class="admin-access-error">${escapeHtml(adminLoginError)}</p>` : ""}
-          <button type="submit">SIGN IN</button>
+          <div class="admin-password-field">
+            <input id="admin-login-password" value="${escapeHtml(adminLoginPassword)}" type="${adminLoginPasswordVisible ? "text" : "password"}" autocomplete="current-password" aria-invalid="${adminLoginError ? "true" : "false"}" ${isSigningIn ? "disabled" : ""} />
+            <button id="admin-password-toggle" class="admin-password-toggle" type="button" aria-controls="admin-login-password" aria-pressed="${adminLoginPasswordVisible ? "true" : "false"}" ${isSigningIn ? "disabled" : ""}>${adminLoginPasswordVisible ? "HIDE" : "SHOW"}</button>
+          </div>
+          ${adminLoginError ? `<p class="admin-access-error" role="alert">${escapeHtml(adminLoginError)}</p>` : ""}
+          <button type="submit" ${isSigningIn ? "disabled" : ""}>${isSigningIn ? "SIGNING IN..." : "SIGN IN"}</button>
         </form>
-        <p class="admin-access-note">Internal beta only. Admin auth and secure RLS hardening continue in the next phase.</p>
       </section>
     </main>
   `;
@@ -564,7 +573,7 @@ function renderAdminBlockedScreen() {
         <div class="admin-access-heading">
           <p>ACCESS BLOCKED</p>
           <h1>TRRY ADMIN LOGIN</h1>
-          <span>Your account is not approved for TRRY Admin access.</span>
+          <span>Your Supabase account is signed in, but it is not active for this Admin Portal.</span>
         </div>
         ${adminAuthMessage ? `<p class="admin-access-error">${escapeHtml(adminAuthMessage)}</p>` : ""}
         <button class="admin-logout-button" id="admin-blocked-logout" type="button">LOGOUT</button>
@@ -592,6 +601,12 @@ function bindAdminLoginEvents() {
     adminLoginError = "";
   });
 
+  document.getElementById("admin-password-toggle")?.addEventListener("click", () => {
+    adminLoginPasswordVisible = !adminLoginPasswordVisible;
+    render();
+    document.getElementById("admin-login-password")?.focus();
+  });
+
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await loginAdminUser();
@@ -602,7 +617,7 @@ function bindAdminLoginEvents() {
 
 async function loginAdminUser() {
   adminLoginError = "";
-  adminAuthStatus = "checking";
+  adminAuthStatus = "signing-in";
   render();
 
   try {
@@ -612,7 +627,7 @@ async function loginAdminUser() {
   } catch (error) {
     console.error("Admin login failed.", error);
     adminAuthStatus = "login";
-    adminLoginError = "Invalid login. Check your email or password.";
+    adminLoginError = error.message || "Invalid login. Check your email or password.";
     render();
   }
 }
@@ -628,7 +643,7 @@ async function approveAdminSession(session) {
     if (!approvedUser) {
       adminUser = null;
       adminAuthStatus = "blocked";
-      adminAuthMessage = "Your account is not approved for TRRY Admin access.";
+      adminAuthMessage = "Unauthorized or disabled admin account.";
       render();
       return;
     }
@@ -671,10 +686,13 @@ async function initializeAdminAuth() {
 }
 
 async function logoutAdminUser() {
+  adminAuthStatus = "signing-out";
+  render();
   await signOutAdmin();
   adminAuthSession = null;
   adminUser = null;
   adminLoginPassword = "";
+  adminLoginPasswordVisible = false;
   adminAuthMessage = "";
   adminAuthStatus = isSupabaseReady() ? "login" : "access-code";
   render();
@@ -1228,6 +1246,23 @@ function renderOpsArtworkAction(item) {
   return `<div class="ops-artwork-action"><span>Artwork file</span><div><button class="ops-dark-button mini" data-ops-view-artwork="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>${renderIcon("external-link", "ops-button-icon")}${isLoading ? "OPENING ARTWORK..." : "VIEW ARTWORK"}</button></div>${message}</div>`;
 }
 
+function renderMvpArtworkAction(item) {
+  const status = String(item.artworkStatus || "").trim().toLowerCase();
+  const artworkUrl = String(item.artworkUrl || "").trim();
+  const hasArtwork = Boolean(artworkUrl) || ["submitted", "under_review", "approval_required", "approved", "revision_requested"].includes(status);
+  const request = opsCustomerActionRequests[item.id] || {};
+  const isLoading = request.status === "loading" && request.asset === "customer-artwork";
+  const message = request.asset === "customer-artwork" && request.message
+    ? `<p class="ops-artwork-message ${request.status === "error" ? "error" : ""}">${escapeHtml(request.message)}</p>`
+    : "";
+
+  if (!hasArtwork) {
+    return `<section class="mvp-drawer-section mvp-artwork-access"><h3>Artwork</h3><strong>NO ARTWORK</strong><span>No customer artwork file or supported URL is saved for this inquiry.</span></section>`;
+  }
+
+  return `<section class="mvp-drawer-section mvp-artwork-access"><h3>Artwork</h3><strong>${escapeHtml(getOpsCustomerActionLabel("artwork", status || "missing"))}</strong><button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>${renderIcon("external-link", "ops-button-icon")}${isLoading ? "OPENING..." : "VIEW ARTWORK"}</button>${message}</section>`;
+}
+
 async function openOpsArtwork(inquiryId) {
   if (!inquiryId) return;
 
@@ -1552,6 +1587,7 @@ function setOpsCustomerActionInlineMessage(sourceElement, message, status = "err
 }
 
 function getOpsActionLoadingLabel(action) {
+  if (action === "publish_quote") return "SENDING...";
   if (action === "require_payment") return "REQUESTING...";
   if (action === "confirm_payment") return "CONFIRMING...";
   if (action === "request_new_payment_proof") return "REQUESTING...";
@@ -1559,6 +1595,7 @@ function getOpsActionLoadingLabel(action) {
 }
 
 function getOpsActionSavingMessage(action) {
+  if (action === "publish_quote") return "SENDING QUOTE...";
   if (action === "require_payment") return "REQUESTING PAYMENT...";
   if (action === "confirm_payment") return "CONFIRMING PAYMENT...";
   if (action === "request_new_payment_proof") return "REQUESTING NEW RECEIPT...";
@@ -1567,6 +1604,7 @@ function getOpsActionSavingMessage(action) {
 
 function getOpsActionSuccessMessage(action) {
   if (action === "save_quote_draft") return "QUOTE DRAFT SAVED.";
+  if (action === "publish_quote") return "QUOTE PUBLISHED FOR CUSTOMER.";
   if (action === "require_payment") return "PAYMENT REQUESTED.";
   if (action === "confirm_payment") return "PAYMENT CONFIRMED.";
   if (action === "request_new_payment_proof") return "NEW RECEIPT NEEDED.";
@@ -1617,7 +1655,10 @@ async function saveOpsCustomerAction(inquiryId, action, sourceElement) {
   setOpsActionButtonLoading(sourceElement, true);
 
   try {
-    await requestOpsCustomerAction(inquiryId, body);
+    const payload = await requestOpsCustomerAction(inquiryId, body);
+    if (payload?.inquiry) {
+      opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...payload.inquiry } : item);
+    }
     opsCustomerActionRequests = {
       ...opsCustomerActionRequests,
       [inquiryId]: { status: "success", message: getOpsActionSuccessMessage(action) },
@@ -3004,7 +3045,7 @@ function formatCatalogPrice(item) {
 }
 
 function canWriteCatalogProducts() {
-  return ["admin", "staff"].includes(adminUser?.role);
+  return ["owner", "admin", "staff"].includes(adminUser?.role);
 }
 
 function createCatalogDraft(product = null) {
@@ -3608,9 +3649,13 @@ function renderSidebar(currentRoute) {
     </aside>`;
 }
 
+function getAdminDisplayName() {
+  return adminUser?.displayName || adminUser?.email || "TRRY Admin";
+}
+
 function getAdminInitials() {
-  const email = adminUser?.email || "TRRY Admin";
-  const [name] = email.split("@");
+  const label = getAdminDisplayName();
+  const [name] = label.split("@");
   return name
     .split(/[._\-\s]+/)
     .filter(Boolean)
@@ -3643,13 +3688,13 @@ function renderTopHeader() {
         <button class="notification-button" aria-label="Notifications" type="button">
           ${renderIcon("bell", "notification-icon")}
         </button>
-        <div class="profile-area">
+        <div class="profile-area admin-account-control">
           <div class="avatar">${getAdminInitials()}</div>
           <div>
-            <strong>${escapeHtml(adminUser?.email ?? "TRRY Admin")}</strong>
+            <strong>${escapeHtml(getAdminDisplayName())}</strong>
             <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
           </div>
-          <button class="logout-button" type="button" data-admin-logout>Logout</button>
+          <button class="logout-button" type="button" data-admin-logout>LOG OUT</button>
         </div>
       </div>
     </header>
@@ -3665,7 +3710,14 @@ function renderMobileTopBar() {
       <strong>TRRY APPAREL</strong>
       <div class="mobile-top-actions">
         <button aria-label="Search" class="mobile-search-button" type="button">${renderIcon("search", "mobile-search-icon")}</button>
-        <span class="mobile-avatar" aria-label="TRRY Admin">TA</span>
+        <details class="mobile-account-menu">
+          <summary aria-label="Admin account menu"><span class="mobile-avatar">${getAdminInitials()}</span></summary>
+          <div class="mobile-account-popover">
+            <strong>${escapeHtml(getAdminDisplayName())}</strong>
+            <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
+            <button type="button" data-admin-logout>LOG OUT</button>
+          </div>
+        </details>
       </div>
     </header>
   `;
@@ -4950,3 +5002,4 @@ function escapeHtml(value) {
 }
 
 initializeAdminAuth();
+
