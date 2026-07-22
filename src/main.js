@@ -894,6 +894,7 @@ function renderMvpInquiriesPage() {
     notices: renderOpsPersistenceNotice(),
     renderQuote: renderOpsQuoteStage,
     renderOdoo: renderOpsOdooAction,
+    renderArtwork: renderMvpArtworkAction,
   });
 }
 
