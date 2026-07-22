@@ -2078,6 +2078,7 @@ async function confirmOpsSO(id) {
   }
   opsSoDraft = null;
   opsSoSavingId = null;
+  navigateTo(`/orders?order=${encodeURIComponent(id)}`);
 }
 
 async function requestOpsWorkflowAction(inquiryId, body) {
