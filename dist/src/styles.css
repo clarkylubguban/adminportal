@@ -17020,3 +17020,87 @@ body,
   padding: 0 10px;
   text-transform: uppercase;
 }
+
+/* Authenticated account/logout shell visibility fix. */
+@media (min-width: 769px) {
+  .workspace:has(.mvp-page) .top-header,
+  .workspace:has(.admin-saas-page) .top-header,
+  .workspace.admin-saas-workspace .top-header {
+    display: grid;
+  }
+
+  .top-header {
+    grid-template-columns: minmax(230px, 1fr) minmax(180px, 320px) minmax(270px, max-content);
+  }
+
+  .header-actions,
+  .admin-account-control,
+  .admin-account-control > div {
+    min-width: 0;
+  }
+
+  .admin-account-control {
+    background: #050505;
+    border-left: 3px solid #ffffff;
+    gap: 10px;
+    justify-content: flex-end;
+    padding-left: 12px;
+  }
+
+  .admin-account-control strong,
+  .admin-account-control span {
+    max-width: 128px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .admin-account-control span {
+    display: block;
+  }
+
+  .admin-account-control .logout-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+  }
+}
+
+.admin-shell-message {
+  background: #fff1f1;
+  border: 3px solid #111111;
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 900;
+  margin: 12px 28px 0;
+  padding: 10px 12px;
+  text-transform: uppercase;
+}
+
+.mobile-account-menu summary {
+  align-items: center;
+  background: #ffffff;
+  border: 2px solid #111111;
+  display: flex;
+  gap: 5px;
+  min-height: 32px;
+  padding: 2px 6px 2px 2px;
+}
+
+.mobile-account-label {
+  color: #111111;
+  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+}
+
+.mobile-account-menu[open] summary {
+  background: #ddff4f;
+}
+
+.mobile-account-popover {
+  max-width: calc(100vw - 24px);
+}

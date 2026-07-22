@@ -419,6 +419,7 @@ let adminLoginPassword = "";
 let adminLoginPasswordVisible = false;
 let adminLoginError = "";
 let adminAuthMessage = "";
+let adminShellMessage = "";
 let isSidebarCollapsed = getStoredSidebarCollapsed();
 let isMobileSidebarOpen = false;
 
@@ -440,7 +441,7 @@ function render() {
       ${renderSidebar(currentRoute)}
       <button class="sidebar-backdrop" type="button" aria-label="Close navigation"></button>
       <section class="workspace ${isSidebarCollapsed ? "is-expanded" : ""} ${isAdminSaasRoute ? "admin-saas-workspace" : ""}">
-        ${renderTopHeader()}
+        ${renderTopHeader()}${renderAdminShellMessage()}
         ${
           currentRoute === "Orders"
             ? renderMvpOrdersPage()
@@ -687,16 +688,30 @@ async function initializeAdminAuth() {
 }
 
 async function logoutAdminUser() {
+  if (adminAuthStatus === "signing-out") return;
   adminAuthStatus = "signing-out";
+  adminShellMessage = "";
   render();
-  await signOutAdmin();
-  adminAuthSession = null;
-  adminUser = null;
-  adminLoginPassword = "";
-  adminLoginPasswordVisible = false;
-  adminAuthMessage = "";
-  adminAuthStatus = isSupabaseReady() ? "login" : "access-code";
+  try {
+    await signOutAdmin();
+    adminAuthSession = null;
+    adminUser = null;
+    adminLoginPassword = "";
+    adminLoginPasswordVisible = false;
+    adminAuthMessage = "";
+    adminShellMessage = "";
+    adminAuthStatus = isSupabaseReady() ? "login" : "access-code";
+  } catch (error) {
+    console.error("Admin logout failed.", error);
+    adminShellMessage = error.message || "Unable to log out. Check your connection and try again.";
+    adminAuthStatus = "approved";
+  }
   render();
+}
+function renderAdminShellMessage() {
+  return adminShellMessage
+    ? `<p class="admin-shell-message" role="alert">${escapeHtml(adminShellMessage)}</p>`
+    : "";
 }
 function renderAdminAccessGate() {
   document.getElementById("root").innerHTML = `
@@ -3721,7 +3736,7 @@ function renderMobileTopBar() {
       <div class="mobile-top-actions">
         <button aria-label="Search" class="mobile-search-button" type="button">${renderIcon("search", "mobile-search-icon")}</button>
         <details class="mobile-account-menu">
-          <summary aria-label="Admin account menu"><span class="mobile-avatar">${getAdminInitials()}</span></summary>
+          <summary aria-label="Admin account menu"><span class="mobile-avatar">${getAdminInitials()}</span><span class="mobile-account-label">ACCOUNT</span></summary>
           <div class="mobile-account-popover">
             <strong>${escapeHtml(getAdminDisplayName())}</strong>
             <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
