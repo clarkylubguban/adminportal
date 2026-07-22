@@ -250,6 +250,7 @@ let opsRawMessage = "";
 let opsExtractFields = null;
 let opsSavedNotice = false;
 let opsSoDraft = null;
+let opsSoSavingId = null;
 let opsArtworkRequests = {};
 let opsCustomerActionRequests = {};
 let expandedOpsInquiryId = null;
@@ -1903,6 +1904,7 @@ async function moveOpsInquiry(id, targetStatus) {
       console.error("Unable to update Ops Board inquiry status.", error);
       opsLoadState = "error";
       opsLoadError = error.message;
+      opsSoSavingId = null;
       return;
     }
   }
@@ -1926,7 +1928,8 @@ function todayIsoDate() {
 function renderOpsOdooAction(item) {
   if (opsSoDraft?.id === item.id) {
     const value = opsSoDraft.value ?? "";
-    return `<div class="ops-so-editor"><span>Customer confirmed? Enter the Odoo SO number</span><input class="ops-so-input" data-ops-so-input="${item.id}" value="${escapeHtml(value)}" placeholder="e.g. SO-2216" /><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${value.trim() ? "" : "disabled"}>Confirm Odoo SO & Create Order</button><button class="ops-light-button mini" data-ops-cancel-so type="button">Cancel</button></div></div>`;
+    const isSaving = opsSoSavingId === item.id;
+    return `<div class="ops-so-editor"><span>Customer confirmed? Enter the Odoo SO number</span><input class="ops-so-input" data-ops-so-input="${item.id}" value="${escapeHtml(value)}" placeholder="e.g. SO-2216" ${isSaving ? "disabled" : ""} /><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${value.trim() && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : "Confirm Odoo SO & Create Order"}</button><button class="ops-light-button mini" data-ops-cancel-so type="button" ${isSaving ? "disabled" : ""}>Cancel</button></div></div>`;
   }
   return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">Confirm Odoo SO &amp; Create Order</button>`;
 }
@@ -1996,6 +1999,7 @@ async function saveOpsInquiry() {
       console.error("Unable to save Ops Board inquiry.", error);
       opsLoadState = "error";
       opsLoadError = error.message;
+      opsSoSavingId = null;
       return;
     }
   } else {
@@ -2046,9 +2050,11 @@ function normalizeOpsDate(value) {
 }
 
 async function confirmOpsSO(id) {
+  if (opsSoSavingId) return;
   const so = (opsSoDraft?.value || "").trim();
   const current = opsInquiries.find((item) => item.id === id);
   if (!so || !current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
+  opsSoSavingId = id;
 
   if (shouldLoadSupabaseOps) {
     try {
@@ -2062,6 +2068,7 @@ async function confirmOpsSO(id) {
       console.error("Unable to save Ops Board Odoo SO.", error);
       opsLoadState = "error";
       opsLoadError = error.message;
+      opsSoSavingId = null;
       return;
     }
   }
@@ -2070,6 +2077,7 @@ async function confirmOpsSO(id) {
     opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", odooSO: so, next: "Odoo Sales Order recorded" } : item);
   }
   opsSoDraft = null;
+  opsSoSavingId = null;
 }
 
 async function requestOpsWorkflowAction(inquiryId, body) {
@@ -4698,6 +4706,9 @@ function bindOpsBoardEvents() {
 
   document.querySelectorAll("[data-ops-confirm-so]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (button.disabled || opsSoSavingId) return;
+      button.disabled = true;
+      button.textContent = "Saving...";
       await confirmOpsSO(button.dataset.opsConfirmSo);
       render();
     });
