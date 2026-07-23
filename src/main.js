@@ -567,8 +567,7 @@ function renderAdminAuthLoading() {
       <section class="admin-access-card admin-login-card" aria-label="TRRY Admin loading">
         <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
         <div class="admin-access-heading">
-          <p>ADMIN AUTH</p>
-          <h1>TRRY ADMIN LOGIN</h1>
+          <h1>Welcome back</h1>
           <span>${escapeHtml(message)}</span>
         </div>
         <div class="admin-auth-loader" aria-hidden="true"><span></span></div>
@@ -713,7 +712,7 @@ function renderAdminBlockedScreen() {
         <div class="admin-access-brand"><strong>TRRY</strong><span>APPAREL MANAGEMENT</span></div>
         <div class="admin-access-heading">
           <p>ACCESS BLOCKED</p>
-          <h1>TRRY ADMIN LOGIN</h1>
+          <h1>Access restricted</h1>
           <span>Your Supabase account is signed in, but it is not active for this Admin Portal.</span>
         </div>
         ${adminAuthMessage ? `<p class="admin-access-error">${escapeHtml(adminAuthMessage)}</p>` : ""}
@@ -4167,7 +4166,6 @@ function renderAccountMenu(surface = "desktop") {
   const manageStaff = canManageStaffAccounts()
     ? `<button type="button" data-admin-account-action="staff">MANAGE STAFF</button>`
     : "";
-  const inlineLogout = isMobile ? "" : `<button class="admin-inline-logout" type="button" data-admin-logout>LOG OUT</button>`;
 
   return `<div class="admin-account-menu ${isMobile ? "mobile" : "desktop"} ${isAccountMenuOpen ? "open" : ""}" data-admin-account-menu>
     <button class="${triggerClass}" type="button" data-admin-account-toggle aria-haspopup="menu" aria-expanded="${isAccountMenuOpen ? "true" : "false"}">
@@ -4175,7 +4173,6 @@ function renderAccountMenu(surface = "desktop") {
       <span class="admin-account-copy"><strong>${escapeHtml(getAdminDisplayName())}</strong><small>${escapeHtml(formatAdminRole(adminUser?.role))}</small></span>
       ${renderIcon("chevron-down", "account-chevron")}
     </button>
-    ${inlineLogout}
     <div class="${menuClass}" role="menu">
       <strong>${escapeHtml(getAdminDisplayName())}</strong>
       <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
