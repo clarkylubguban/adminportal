@@ -17694,3 +17694,15 @@ body,
   margin: 14px 0 0;
   text-transform: uppercase;
 }
+
+.admin-access-success {
+  margin: 0;
+  border: 2px solid #111111;
+  background: #d7ff48;
+  color: #111111;
+  padding: 10px 12px;
+  font-family: "Space Mono", monospace;
+  font-size: 0.75rem;
+  font-weight: 800;
+  text-transform: uppercase;
+}

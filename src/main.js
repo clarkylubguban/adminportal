@@ -24,9 +24,11 @@ import {
 import {
   getCurrentAdminAuthSession,
   getSupabaseConfig,
+  readInviteSessionFromUrl,
   isSupabaseReady,
   signInAdminWithPassword,
   signOutAdmin,
+  updateAdminInvitePassword,
 } from "./lib/supabaseClient.js";
 
 const mvpDashboard = createMvpDashboard();
@@ -430,12 +432,22 @@ let adminLoginEmail = "";
 let adminLoginPassword = "";
 let adminLoginPasswordVisible = false;
 let adminLoginError = "";
+let adminLoginNotice = "";
 let adminAuthMessage = "";
 let adminShellMessage = "";
+let passwordSetupDraft = { password: "", confirm: "" };
+let passwordSetupStatus = "idle";
+let passwordSetupError = "";
+let passwordSetupSession = null;
 let isSidebarCollapsed = getStoredSidebarCollapsed();
 let isMobileSidebarOpen = false;
 
 function render() {
+  if (isPasswordSetupRoute()) {
+    renderPasswordSetupScreen();
+    return;
+  }
+
   if (!canRenderAdminShell()) {
     renderAdminAuthGate();
     return;
@@ -570,6 +582,7 @@ function renderAdminLoginScreen() {
             <input id="admin-login-password" value="${escapeHtml(adminLoginPassword)}" type="${adminLoginPasswordVisible ? "text" : "password"}" autocomplete="current-password" aria-invalid="${adminLoginError ? "true" : "false"}" ${isSigningIn ? "disabled" : ""} />
             <button id="admin-password-toggle" class="admin-password-toggle" type="button" aria-controls="admin-login-password" aria-pressed="${adminLoginPasswordVisible ? "true" : "false"}" ${isSigningIn ? "disabled" : ""}>${adminLoginPasswordVisible ? "HIDE" : "SHOW"}</button>
           </div>
+          ${getAdminLoginNotice() ? `<p class="admin-access-success" role="status">${escapeHtml(getAdminLoginNotice())}</p>` : ""}
           ${adminLoginError ? `<p class="admin-access-error" role="alert">${escapeHtml(adminLoginError)}</p>` : ""}
           <button type="submit" ${isSigningIn ? "disabled" : ""}>${isSigningIn ? "SIGNING IN..." : "SIGN IN"}</button>
         </form>
@@ -581,6 +594,105 @@ function renderAdminLoginScreen() {
   bindAdminLoginEvents();
 }
 
+function getAdminLoginNotice() {
+  if (adminLoginNotice) return adminLoginNotice;
+  return new URLSearchParams(window.location.search).get("password_set") === "1"
+    ? "PASSWORD SET. YOU CAN NOW SIGN IN."
+    : "";
+}
+
+function renderPasswordSetupScreen() {
+  const inviteError = passwordSetupSession?.error || "";
+  const isSaving = passwordSetupStatus === "saving";
+  const isInvalid = !passwordSetupSession?.access_token || Boolean(inviteError);
+  const message = inviteError || (isInvalid ? "Invitation link is expired or invalid." : "Create your password to activate your staff account.");
+
+  document.getElementById("root").innerHTML = `
+    <main class="admin-access-page">
+      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin password setup">
+        <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
+        <div class="admin-access-heading">
+          <h1>Set password</h1>
+          <span>${escapeHtml(message)}</span>
+        </div>
+        <form class="admin-access-form" id="admin-password-setup-form">
+          <label for="admin-new-password">NEW PASSWORD</label>
+          <input id="admin-new-password" value="${escapeHtml(passwordSetupDraft.password)}" type="password" autocomplete="new-password" aria-invalid="${passwordSetupError ? "true" : "false"}" ${isInvalid || isSaving ? "disabled" : ""} />
+          <label for="admin-confirm-password">CONFIRM PASSWORD</label>
+          <input id="admin-confirm-password" value="${escapeHtml(passwordSetupDraft.confirm)}" type="password" autocomplete="new-password" aria-invalid="${passwordSetupError ? "true" : "false"}" ${isInvalid || isSaving ? "disabled" : ""} />
+          ${passwordSetupError ? `<p class="admin-access-error" role="alert">${escapeHtml(passwordSetupError)}</p>` : ""}
+          <button type="submit" ${isInvalid || isSaving ? "disabled" : ""}>${isSaving ? "SAVING..." : "SAVE PASSWORD"}</button>
+        </form>
+        <p class="admin-login-note">Authorized staff only.</p>
+      </section>
+    </main>
+  `;
+
+  bindPasswordSetupEvents();
+}
+
+function bindPasswordSetupEvents() {
+  const password = document.getElementById("admin-new-password");
+  const confirm = document.getElementById("admin-confirm-password");
+  const form = document.getElementById("admin-password-setup-form");
+
+  password?.addEventListener("input", (event) => {
+    passwordSetupDraft.password = event.target.value;
+    passwordSetupError = "";
+  });
+
+  confirm?.addEventListener("input", (event) => {
+    passwordSetupDraft.confirm = event.target.value;
+    passwordSetupError = "";
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitPasswordSetup();
+  });
+
+  password?.focus();
+}
+
+async function submitPasswordSetup() {
+  passwordSetupError = validateNewPassword(passwordSetupDraft.password, passwordSetupDraft.confirm);
+  if (passwordSetupError) {
+    render();
+    return;
+  }
+
+  passwordSetupStatus = "saving";
+  render();
+
+  try {
+    await updateAdminInvitePassword(passwordSetupSession, passwordSetupDraft.password);
+    passwordSetupDraft = { password: "", confirm: "" };
+    passwordSetupStatus = "idle";
+    passwordSetupError = "";
+    passwordSetupSession = null;
+    adminAuthSession = null;
+    adminUser = null;
+    adminAuthStatus = "login";
+    adminLoginNotice = "PASSWORD SET. YOU CAN NOW SIGN IN.";
+    window.history.replaceState({}, "", "/?password_set=1");
+    render();
+  } catch (error) {
+    console.error("Admin invite password setup failed.", error);
+    passwordSetupStatus = "idle";
+    passwordSetupError = error.message || "Unable to set password. Try a new invitation link.";
+    render();
+  }
+}
+
+function validateNewPassword(password, confirm) {
+  if (!password || !confirm) return "Enter and confirm a new password.";
+  if (password !== confirm) return "Passwords do not match.";
+  if (password.length < 8) return "Password must be at least 8 characters.";
+  if (!/[a-z]/.test(password) || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+    return "Password must include upper and lower case letters and a number.";
+  }
+  return "";
+}
 function renderAdminBlockedScreen() {
   document.getElementById("root").innerHTML = `
     <main class="admin-access-page">
@@ -610,11 +722,13 @@ function bindAdminLoginEvents() {
   email?.addEventListener("input", (event) => {
     adminLoginEmail = event.target.value;
     adminLoginError = "";
+    adminLoginNotice = "";
   });
 
   password?.addEventListener("input", (event) => {
     adminLoginPassword = event.target.value;
     adminLoginError = "";
+    adminLoginNotice = "";
   });
 
   document.getElementById("admin-password-toggle")?.addEventListener("click", () => {
@@ -633,6 +747,7 @@ function bindAdminLoginEvents() {
 
 async function loginAdminUser() {
   adminLoginError = "";
+  adminLoginNotice = "";
   adminAuthStatus = "signing-in";
   render();
 
@@ -679,6 +794,13 @@ async function approveAdminSession(session) {
 }
 
 async function initializeAdminAuth() {
+  if (isPasswordSetupRoute()) {
+    passwordSetupSession = readInviteSessionFromUrl();
+    adminAuthStatus = "password-setup";
+    render();
+    return;
+  }
+
   if (!isSupabaseReady()) {
     adminAuthStatus = "access-code";
     render();
@@ -5320,6 +5442,9 @@ function statusToClass(status) {
   return status.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 }
 
+function isPasswordSetupRoute() {
+  return window.location.pathname.replace(/\/+$/, "") === "/set-password";
+}
 function getCurrentRoute() {
   return routes[getRoutePath()] ?? routes[defaultRoutePath];
 }

@@ -27,6 +27,7 @@ const appRoutes = new Set([
   "/catalog",
   "/settings",
   "/staff",
+  "/set-password",
 ]);
 
 async function handleRequest(request, response) {

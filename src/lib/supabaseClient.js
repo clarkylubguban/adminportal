@@ -162,6 +162,57 @@ export async function signInAdminWithPassword(email, password) {
   return storeAdminAuthSession(await response.json());
 }
 
+export function readInviteSessionFromUrl() {
+  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const accessToken = params.get("access_token") || "";
+  const refreshToken = params.get("refresh_token") || "";
+  const expiresIn = Number(params.get("expires_in") || 3600);
+  const type = params.get("type") || "";
+  const error = params.get("error_description") || params.get("error") || "";
+
+  if (error) {
+    return { error };
+  }
+
+  if (!accessToken || type !== "invite") {
+    return null;
+  }
+
+  return {
+    access_token: accessToken,
+    refresh_token: refreshToken,
+    expires_at: Math.floor(Date.now() / 1000) + expiresIn,
+    user: {},
+    type,
+  };
+}
+
+export async function updateAdminInvitePassword(inviteSession, password) {
+  const config = getSupabaseConfig();
+
+  if (!inviteSession?.access_token || !isSupabaseReady()) {
+    throw new Error("Invalid or expired invitation link.");
+  }
+
+  const response = await fetch(`${config.url}/auth/v1/user`, {
+    method: "PUT",
+    headers: {
+      apikey: config.anonKey,
+      Authorization: `Bearer ${inviteSession.access_token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ password }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(getPasswordUpdateError(message, response.status));
+  }
+
+  clearAdminAuthSession();
+  return response.json();
+}
 export async function getCurrentAdminAuthSession() {
   const storedSession = readStoredAdminAuthSession();
   if (!storedSession) return null;
