@@ -17681,3 +17681,16 @@ body,
 .admin-login-card .admin-access-heading span {
   font-size: 13px;
 }
+
+.admin-login-card::after {
+  content: none;
+}
+
+.admin-login-note {
+  color: #6e6a5e;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  margin: 14px 0 0;
+  text-transform: uppercase;
+}

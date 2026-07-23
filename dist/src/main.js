@@ -573,6 +573,7 @@ function renderAdminLoginScreen() {
           ${adminLoginError ? `<p class="admin-access-error" role="alert">${escapeHtml(adminLoginError)}</p>` : ""}
           <button type="submit" ${isSigningIn ? "disabled" : ""}>${isSigningIn ? "SIGNING IN..." : "SIGN IN"}</button>
         </form>
+        <p class="admin-login-note">Authorized staff only.</p>
       </section>
     </main>
   `;
