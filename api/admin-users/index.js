@@ -133,6 +133,10 @@ function getInviteErrorMessage(error) {
     return "staff invite rate limit reached; try again later";
   }
 
+  if (code.includes("bad_jwt") || message.includes("invalid jwt") || message.includes("unrecognized jwt")) {
+    return "staff invite service is not configured; check the Supabase server key";
+  }
+
   if (message.includes("smtp") || message.includes("provider") || message.includes("sender") || message.includes("send")) {
     return "staff invite email could not be sent; check Supabase email delivery";
   }

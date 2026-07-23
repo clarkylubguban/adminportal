@@ -118,16 +118,20 @@ export async function listAuthUsersById(supabase, userIds) {
   const users = new Map();
   if (!ids.size) return users;
 
-  for (let page = 1; page <= 20 && ids.size; page += 1) {
-    const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
-    if (error) throw error;
-    for (const user of data?.users || []) {
-      if (ids.has(user.id)) {
-        users.set(user.id, user);
-        ids.delete(user.id);
+  try {
+    for (let page = 1; page <= 20 && ids.size; page += 1) {
+      const { data, error } = await supabase.auth.admin.listUsers({ page, perPage: 1000 });
+      if (error) throw error;
+      for (const user of data?.users || []) {
+        if (ids.has(user.id)) {
+          users.set(user.id, user);
+          ids.delete(user.id);
+        }
       }
+      if ((data?.users || []).length < 1000) break;
     }
-    if ((data?.users || []).length < 1000) break;
+  } catch (error) {
+    console.error("Staff auth metadata lookup failed.", { message: error?.message, code: error?.code, status: error?.status || error?.statusCode });
   }
 
   return users;

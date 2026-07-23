@@ -3569,7 +3569,7 @@ function getStaffApiErrorMessage(status, error) {
   if (status === 401) return "Admin session required. Sign in again.";
   if (status === 403) return normalized.includes("role") ? "Role change is not permitted." : "You do not have permission for that staff account.";
   if (status === 409) return normalized.includes("auth") ? "That email already has a login account." : "That email already has admin access.";
-  if (status === 503) return "Staff invite email could not be sent. Configure Supabase email delivery.";
+  if (status === 503) return normalized.includes("server key") ? "Staff invite service is not configured. Check the Supabase server key." : "Staff invite email could not be sent. Configure Supabase email delivery.";
   if (normalized.includes("display")) return "Display name is required.";
   if (normalized.includes("email")) return "Enter a valid email address.";
   return "Staff account request failed. Try again.";
