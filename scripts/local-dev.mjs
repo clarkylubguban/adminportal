@@ -26,6 +26,7 @@ const appRoutes = new Set([
   "/products",
   "/catalog",
   "/settings",
+  "/staff",
 ]);
 
 async function handleRequest(request, response) {
@@ -33,6 +34,18 @@ async function handleRequest(request, response) {
     const url = new URL(request.url ?? "/", `http://${request.headers.host}`);
     const pathname = decodeURIComponent(url.pathname);
     const routePath = normalizeRoutePath(pathname);
+
+    if (/^\/api\/admin-users\/?$/.test(routePath)) {
+      const { default: handleAdminUsersRequest } = await import("../api/admin-users/index.js");
+      await handleAdminUsersRequest(request, response);
+      return;
+    }
+
+    if (/^\/api\/admin-users\/[^/]+\/?$/.test(routePath)) {
+      const { default: handleAdminUserRequest } = await import("../api/admin-users/[id].js");
+      await handleAdminUserRequest(request, response);
+      return;
+    }
 
     if (/^\/api\/inquiries\/[^/]+\/customer-actions\/?$/.test(routePath)) {
       const { default: handleCustomerActionsRequest } = await import("../api/inquiries/[id]/customer-actions.js");

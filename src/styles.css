@@ -17104,3 +17104,580 @@ body,
 .mobile-account-popover {
   max-width: calc(100vw - 24px);
 }
+
+/* Compact Admin auth UI and Staff Access. */
+.admin-access-page {
+  background: #f4f1e8;
+  min-height: 100vh;
+  padding: 24px;
+}
+
+.admin-access-card.admin-login-card {
+  border: 3px solid #111111;
+  border-radius: 6px;
+  box-shadow: none;
+  max-width: 468px;
+  padding: 24px;
+}
+
+.admin-login-card .admin-access-brand {
+  border-bottom: 2px solid #111111;
+  margin-bottom: 18px;
+  padding-bottom: 12px;
+}
+
+.admin-login-card .admin-access-brand strong {
+  color: #ff5a00;
+  font-size: 31px;
+  line-height: 0.95;
+}
+
+.admin-login-card .admin-access-brand span {
+  color: #111111;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+}
+
+.admin-login-card .admin-access-heading {
+  margin-bottom: 16px;
+}
+
+.admin-login-card .admin-access-heading p {
+  display: none;
+}
+
+.admin-login-card .admin-access-heading h1 {
+  color: #111111;
+  font-size: 24px;
+  line-height: 1.05;
+  margin-bottom: 6px;
+  text-transform: none;
+}
+
+.admin-login-card .admin-access-heading h1::before {
+  content: "Welcome back";
+}
+
+.admin-login-card .admin-access-heading h1 {
+  font-size: 0;
+}
+
+.admin-login-card .admin-access-heading h1::before {
+  font-size: 24px;
+}
+
+.admin-login-card .admin-access-heading span {
+  color: #5d5a52;
+  font-size: 13px;
+}
+
+.admin-login-card .admin-access-heading span::before {
+  content: "Sign in to manage TRRY operations.";
+}
+
+.admin-login-card .admin-access-heading span {
+  font-size: 0;
+}
+
+.admin-login-card .admin-access-heading span::before {
+  font-size: 13px;
+}
+
+.admin-access-form {
+  gap: 9px;
+}
+
+.admin-access-form input,
+.admin-access-form button,
+.admin-password-field input,
+.admin-password-toggle {
+  min-height: 44px;
+}
+
+.admin-access-form button[type="submit"] {
+  background: #ddff4f;
+  border: 3px solid #111111;
+  box-shadow: none;
+}
+
+.admin-login-card::after {
+  color: #6e6a5e;
+  content: "Authorized staff only.";
+  display: block;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 700;
+  margin-top: 14px;
+  text-transform: uppercase;
+}
+
+.admin-account-menu {
+  position: relative;
+}
+
+.admin-account-trigger,
+.mobile-account-trigger {
+  align-items: center;
+  background: #050505;
+  border: 2px solid #ffffff;
+  color: #ffffff;
+  display: flex;
+  gap: 9px;
+  min-height: 42px;
+  max-width: 260px;
+  padding: 4px 8px 4px 4px;
+}
+
+.admin-account-trigger:hover,
+.mobile-account-trigger:hover,
+.admin-account-menu.open .admin-account-trigger,
+.admin-account-menu.open .mobile-account-trigger {
+  background: #ddff4f;
+  color: #111111;
+  border-color: #111111;
+}
+
+.admin-account-copy {
+  display: grid;
+  line-height: 1.1;
+  min-width: 0;
+  text-align: left;
+}
+
+.admin-account-copy strong,
+.admin-account-copy small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-account-copy strong {
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.admin-account-copy small {
+  color: currentColor;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 800;
+  opacity: 0.78;
+  text-transform: uppercase;
+}
+
+.account-chevron {
+  flex: 0 0 auto;
+  height: 14px;
+  width: 14px;
+}
+
+.admin-account-popover,
+.mobile-account-popover {
+  background: #ffffff;
+  border: 3px solid #111111;
+  border-radius: 6px;
+  box-shadow: none;
+  color: #111111;
+  display: none;
+  gap: 8px;
+  min-width: 220px;
+  padding: 12px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  z-index: 120;
+}
+
+.admin-account-menu.open .admin-account-popover,
+.admin-account-menu.open .mobile-account-popover {
+  display: grid;
+}
+
+.admin-account-popover strong,
+.mobile-account-popover strong {
+  font-family: "Space Grotesk", "Archivo", system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  max-width: 196px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-account-popover span,
+.mobile-account-popover span {
+  color: #55534b;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.admin-account-popover i,
+.mobile-account-popover i {
+  border-top: 2px solid #111111;
+  display: block;
+  height: 0;
+}
+
+.admin-account-popover button,
+.mobile-account-popover button {
+  background: #ffffff;
+  border: 2px solid #111111;
+  color: #111111;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 0 12px;
+  text-align: left;
+  text-transform: uppercase;
+}
+
+.admin-account-popover button:hover,
+.mobile-account-popover button:hover {
+  background: #ddff4f;
+}
+
+.mobile-account-trigger {
+  background: #ffffff;
+  border-color: #111111;
+  color: #111111;
+  max-width: 112px;
+  min-height: 33px;
+}
+
+.mobile-account-trigger .admin-account-copy,
+.mobile-account-trigger .account-chevron {
+  display: none;
+}
+
+.staff-access-page {
+  background: #f7f7f4;
+  color: #121417;
+  display: grid;
+  gap: 16px;
+  min-height: 100%;
+  padding: 24px 28px 64px;
+}
+
+.staff-access-header {
+  align-items: end;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.staff-access-header span,
+.staff-access-denied span {
+  color: #6b7280;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+}
+
+.staff-access-header h1,
+.staff-access-denied h1 {
+  font-family: "Space Grotesk", "Archivo", system-ui, sans-serif;
+  font-size: 28px;
+  line-height: 1.05;
+  margin: 4px 0 4px;
+}
+
+.staff-access-header p,
+.staff-access-denied p {
+  color: #68707a;
+  margin: 0;
+}
+
+.staff-primary-action,
+.staff-actions button {
+  background: #ddff4f;
+  border: 3px solid #111111;
+  color: #111111;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 44px;
+  padding: 0 12px;
+  text-transform: uppercase;
+}
+
+.staff-actions button {
+  background: #ffffff;
+  border-width: 2px;
+}
+
+.staff-actions button:hover,
+.staff-primary-action:hover {
+  background: #ffffff;
+}
+
+.staff-list-panel,
+.staff-access-denied {
+  background: #ffffff;
+  border: 3px solid #111111;
+  border-radius: 6px;
+  box-shadow: none;
+  padding: 14px;
+}
+
+.staff-table {
+  min-width: 920px;
+}
+
+.staff-table-head,
+.staff-table-row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: minmax(130px, 1.1fr) minmax(190px, 1.3fr) 84px 92px 110px 110px 150px;
+  min-height: 50px;
+  align-items: center;
+}
+
+.staff-table-head {
+  border-bottom: 3px solid #111111;
+  color: #68707a;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.staff-table-row {
+  border-bottom: 1px solid #d5dae0;
+  font-size: 13px;
+}
+
+.staff-table-row strong,
+.staff-table-row span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.staff-badge {
+  border: 2px solid #111111;
+  display: inline-flex;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 9px;
+  font-weight: 900;
+  justify-content: center;
+  min-height: 26px;
+  padding: 5px 7px;
+}
+
+.staff-badge.active { background: #ddff4f; }
+.staff-badge.disabled { background: #fee8e8; }
+.staff-badge.role { background: #ffffff; }
+
+.staff-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.staff-card-list {
+  display: none;
+}
+
+.staff-feedback,
+.staff-form-error,
+.staff-note {
+  border: 2px solid #111111;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  margin: 0;
+  padding: 10px;
+  text-transform: uppercase;
+}
+
+.staff-feedback { background: #efffd0; }
+.staff-feedback.error,
+.staff-form-error { background: #fee8e8; }
+.staff-note { background: #f7f7f4; }
+
+.staff-drawer-backdrop {
+  background: rgba(17, 17, 17, 0.2);
+  inset: 0;
+  position: fixed;
+  z-index: 130;
+}
+
+.staff-drawer {
+  background: #ffffff;
+  border-left: 3px solid #111111;
+  bottom: 0;
+  box-shadow: none;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  max-width: min(460px, 100vw);
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: 460px;
+  z-index: 131;
+}
+
+.staff-drawer header {
+  align-items: center;
+  border-bottom: 3px solid #111111;
+  display: flex;
+  justify-content: space-between;
+  padding: 16px;
+}
+
+.staff-drawer header span {
+  color: #68707a;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.staff-drawer header h2 {
+  margin: 0;
+}
+
+.staff-drawer header button {
+  background: #ffffff;
+  border: 2px solid #111111;
+  min-height: 34px;
+  width: 34px;
+}
+
+.staff-form {
+  align-content: start;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.staff-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.staff-form label span {
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.staff-form input,
+.staff-form select {
+  border: 2px solid #111111;
+  min-height: 44px;
+  padding: 0 10px;
+}
+
+.staff-empty {
+  color: #68707a;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 900;
+  padding: 16px 0;
+  text-transform: uppercase;
+}
+
+@media (max-width: 900px) {
+  .staff-list-panel {
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 768px) {
+  .admin-access-page {
+    padding: 14px;
+  }
+
+  .admin-access-card.admin-login-card {
+    max-width: 100%;
+    padding: 18px;
+  }
+
+  .staff-access-page {
+    padding: 18px 14px 84px;
+  }
+
+  .staff-access-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .staff-table {
+    display: none;
+  }
+
+  .staff-list-panel {
+    overflow: visible;
+  }
+
+  .staff-card-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .staff-card {
+    border: 2px solid #111111;
+    display: grid;
+    gap: 8px;
+    padding: 12px;
+  }
+
+  .staff-card strong,
+  .staff-card span,
+  .staff-card small {
+    overflow-wrap: anywhere;
+  }
+
+  .staff-card > div:first-child {
+    display: grid;
+    gap: 3px;
+  }
+
+  .staff-card > div:first-child span,
+  .staff-card small {
+    color: #68707a;
+    font-size: 12px;
+  }
+
+  .staff-card-badges,
+  .staff-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .staff-actions button {
+    flex: 1 1 120px;
+  }
+
+  .mobile-account-popover {
+    right: 0;
+    max-width: calc(100vw - 24px);
+  }
+}
+
+/* Login text is real DOM copy; keep pseudo cleanup disabled for auth states. */
+.admin-login-card .admin-access-heading h1,
+.admin-login-card .admin-access-heading span {
+  font-size: revert;
+}
+
+.admin-login-card .admin-access-heading h1::before,
+.admin-login-card .admin-access-heading span::before {
+  content: none;
+}
+
+.admin-login-card .admin-access-heading h1 {
+  font-size: 24px;
+}
+
+.admin-login-card .admin-access-heading span {
+  font-size: 13px;
+}

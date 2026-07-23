@@ -389,6 +389,17 @@ let catalogDraft = null;
 let catalogValidationError = "";
 let catalogSaveState = "idle";
 let catalogSaveError = "";
+let isAccountMenuOpen = false;
+let staffUsers = [];
+let staffLoadState = "idle";
+let staffLoadError = "";
+let staffFeedback = "";
+let staffDrawerMode = "";
+let staffEditingId = null;
+let staffDraft = createEmptyStaffDraft();
+let staffSaveState = "idle";
+let staffSaveError = "";
+let staffActionId = "";
 
 const routes = {
   "/": "Overview",
@@ -401,6 +412,7 @@ const routes = {
   "/clients": "Clients",
   "/products": "Products",
   "/catalog": "Catalog",
+  "/staff": "Staff",
   "/settings": "Settings",
 };
 
@@ -433,7 +445,7 @@ function render() {
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Settings"].includes(currentRoute);
+  const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -459,7 +471,9 @@ function render() {
                     ? renderProductsPage(selectedProduct)
                     : currentRoute === "Catalog"
                       ? renderCatalogPage()
-                      : currentRoute === "Settings"
+                      : currentRoute === "Staff"
+                        ? renderStaffAccessPage()
+                        : currentRoute === "Settings"
                         ? renderSettingsPage()
                         : renderOverviewPage()
         }
@@ -545,9 +559,8 @@ function renderAdminLoginScreen() {
       <section class="admin-access-card admin-login-card" aria-label="TRRY Admin login">
         <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
         <div class="admin-access-heading">
-          <p>ADMIN AUTH</p>
-          <h1>TRRY ADMIN LOGIN</h1>
-          <span>Internal operations access for active TRRY admins.</span>
+          <h1>Welcome back</h1>
+          <span>Sign in to manage TRRY operations.</span>
         </div>
         <form class="admin-access-form" id="admin-login-form">
           <label for="admin-login-email">EMAIL</label>
@@ -3073,6 +3086,10 @@ function canWriteCatalogProducts() {
   return ["owner", "admin", "staff"].includes(adminUser?.role);
 }
 
+function canManageStaffAccounts() {
+  return ["owner", "admin"].includes(adminUser?.role);
+}
+
 function createCatalogDraft(product = null) {
   if (product) {
     return {
@@ -3117,6 +3134,233 @@ function createCatalogDraft(product = null) {
 function createDraftImageId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+function createEmptyStaffDraft() {
+  return { displayName: "", email: "", role: "staff" };
+}
+
+function renderStaffAccessPage() {
+  if (!canManageStaffAccounts()) {
+    return `<main class="staff-access-page"><section class="staff-access-denied"><span>STAFF ACCESS</span><h1>Access restricted</h1><p>Your account cannot manage TRRY Admin Portal access.</p></section></main>`;
+  }
+
+  if (staffLoadState === "idle") {
+    staffLoadState = "loading";
+    window.setTimeout(loadStaffUsers, 0);
+  }
+
+  const loading = staffLoadState === "loading";
+  const rows = staffUsers.map(renderStaffRow).join("");
+  const cards = staffUsers.map(renderStaffCard).join("");
+  const roleNote = adminUser?.role === "admin" ? "Admins can create and manage staff accounts only." : "Owners can create admin or staff accounts.";
+
+  return `<main class="staff-access-page admin-saas-page">
+    <section class="staff-access-header">
+      <div><span>STAFF ACCESS</span><h1>Manage who can enter the TRRY Admin Portal.</h1><p>${escapeHtml(roleNote)}</p></div>
+      <button class="staff-primary-action" type="button" data-staff-new ${loading ? "disabled" : ""}>+ NEW STAFF</button>
+    </section>
+    ${staffFeedback ? `<p class="staff-feedback" role="status">${escapeHtml(staffFeedback)}</p>` : ""}
+    ${staffLoadError ? `<p class="staff-feedback error" role="alert">${escapeHtml(staffLoadError)}</p>` : ""}
+    <section class="staff-list-panel">
+      <div class="staff-table" role="table" aria-label="Staff access accounts">
+        <div class="staff-table-head" role="row"><span>Name</span><span>Email</span><span>Role</span><span>Status</span><span>Created</span><span>Last sign-in</span><span>Actions</span></div>
+        <div role="rowgroup">${loading ? `<p class="staff-empty">Loading staff accounts...</p>` : rows || `<p class="staff-empty">No manageable staff accounts yet.</p>`}</div>
+      </div>
+      <div class="staff-card-list">${loading ? `<p class="staff-empty">Loading staff accounts...</p>` : cards || `<p class="staff-empty">No manageable staff accounts yet.</p>`}</div>
+    </section>
+    ${staffDrawerMode ? renderStaffDrawer() : ""}
+  </main>`;
+}
+
+function renderStaffRow(user) {
+  const actions = renderStaffActions(user);
+  return `<div class="staff-table-row" role="row">
+    <strong title="${escapeHtml(user.displayName || user.email)}">${escapeHtml(user.displayName || "Unnamed staff")}</strong>
+    <span title="${escapeHtml(user.email)}">${escapeHtml(user.email)}</span>
+    ${renderStaffBadge(user.role, "role")}
+    ${renderStaffBadge(user.isActive ? "ACTIVE" : "DISABLED", user.isActive ? "active" : "disabled")}
+    <span>${escapeHtml(formatStaffDate(user.createdAt))}</span>
+    <span>${escapeHtml(formatStaffDate(user.lastSignInAt, "Never"))}</span>
+    <div class="staff-actions">${actions}</div>
+  </div>`;
+}
+
+function renderStaffCard(user) {
+  return `<article class="staff-card">
+    <div><strong>${escapeHtml(user.displayName || "Unnamed staff")}</strong><span>${escapeHtml(user.email)}</span></div>
+    <div class="staff-card-badges">${renderStaffBadge(user.role, "role")}${renderStaffBadge(user.isActive ? "ACTIVE" : "DISABLED", user.isActive ? "active" : "disabled")}</div>
+    <small>Created ${escapeHtml(formatStaffDate(user.createdAt))} / Last sign-in ${escapeHtml(formatStaffDate(user.lastSignInAt, "Never"))}</small>
+    <div class="staff-actions">${renderStaffActions(user)}</div>
+  </article>`;
+}
+
+function renderStaffActions(user) {
+  const busy = staffActionId === user.id;
+  const edit = `<button type="button" data-staff-edit="${escapeHtml(user.id)}" ${busy ? "disabled" : ""}>EDIT</button>`;
+  const status = user.isActive
+    ? `<button type="button" data-staff-disable="${escapeHtml(user.id)}" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : "DISABLE"}</button>`
+    : `<button type="button" data-staff-activate="${escapeHtml(user.id)}" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : "ACTIVATE"}</button>`;
+  return `${edit}${status}`;
+}
+
+function renderStaffBadge(label, tone) {
+  return `<b class="staff-badge ${tone}">${escapeHtml(String(label || "").toUpperCase())}</b>`;
+}
+
+function renderStaffDrawer() {
+  const isEdit = staffDrawerMode === "edit";
+  const title = isEdit ? "EDIT STAFF ACCESS" : "NEW STAFF";
+  const roleOptions = getPermittedStaffRoleOptions(isEdit);
+  const roleLocked = roleOptions.length <= 1;
+  const saving = staffSaveState === "saving";
+  const roleControl = roleLocked
+    ? `<input value="${escapeHtml(formatAdminRole(staffDraft.role))}" disabled />`
+    : `<select id="staff-role" ${saving ? "disabled" : ""}>${roleOptions.map((role) => `<option value="${role}" ${staffDraft.role === role ? "selected" : ""}>${escapeHtml(formatAdminRole(role))}</option>`).join("")}</select>`;
+
+  return `<div class="staff-drawer-backdrop" data-staff-close></div><aside class="staff-drawer" aria-label="${escapeHtml(title)}">
+    <header><div><span>STAFF ACCESS</span><h2>${title}</h2></div><button type="button" data-staff-close aria-label="Close staff drawer">X</button></header>
+    <form id="staff-form" class="staff-form">
+      <label><span>Display name</span><input id="staff-display-name" value="${escapeHtml(staffDraft.displayName)}" autocomplete="name" ${saving ? "disabled" : ""} required /></label>
+      <label><span>Email</span><input id="staff-email" value="${escapeHtml(staffDraft.email)}" type="email" autocomplete="email" ${isEdit || saving ? "disabled" : ""} required /></label>
+      <label><span>Role</span>${roleControl}</label>
+      ${adminUser?.role === "admin" && !isEdit ? `<p class="staff-note">Role is locked to STAFF for admin users.</p>` : ""}
+      ${staffSaveError ? `<p class="staff-form-error" role="alert">${escapeHtml(staffSaveError)}</p>` : ""}
+      <button class="staff-primary-action" type="submit" ${saving ? "disabled" : ""}>${saving ? (isEdit ? "SAVING..." : "CREATING...") : (isEdit ? "SAVE CHANGES" : "CREATE STAFF")}</button>
+    </form>
+  </aside>`;
+}
+
+function getPermittedStaffRoleOptions(isEdit = false) {
+  if (adminUser?.role === "owner") {
+    const editing = isEdit ? staffUsers.find((user) => user.id === staffEditingId) : null;
+    if (editing?.role === "owner") return ["owner"];
+    return ["admin", "staff"];
+  }
+  return ["staff"];
+}
+
+function openNewStaffDrawer() {
+  staffDrawerMode = "create";
+  staffEditingId = null;
+  staffDraft = { ...createEmptyStaffDraft(), role: adminUser?.role === "owner" ? "staff" : "staff" };
+  staffSaveState = "idle";
+  staffSaveError = "";
+  render();
+}
+
+function openEditStaffDrawer(id) {
+  const user = staffUsers.find((item) => item.id === id);
+  if (!user) return;
+  staffDrawerMode = "edit";
+  staffEditingId = id;
+  staffDraft = { displayName: user.displayName || "", email: user.email || "", role: user.role || "staff" };
+  staffSaveState = "idle";
+  staffSaveError = "";
+  render();
+}
+
+function closeStaffDrawer() {
+  staffDrawerMode = "";
+  staffEditingId = null;
+  staffDraft = createEmptyStaffDraft();
+  staffSaveState = "idle";
+  staffSaveError = "";
+  render();
+}
+
+async function loadStaffUsers() {
+  if (!canManageStaffAccounts() || !adminAuthSession?.access_token) return;
+  staffLoadState = "loading";
+  staffLoadError = "";
+  try {
+    const payload = await staffApiRequest("/api/admin-users", { method: "GET" });
+    staffUsers = Array.isArray(payload.users) ? payload.users : [];
+    staffLoadState = "ready";
+  } catch (error) {
+    console.error("Unable to load Staff Access accounts.", error);
+    staffLoadState = "error";
+    staffLoadError = error.message || "Unable to load staff accounts.";
+  }
+  render();
+}
+
+async function submitStaffForm() {
+  staffSaveState = "saving";
+  staffSaveError = "";
+  render();
+  try {
+    if (staffDrawerMode === "edit") {
+      const payload = await staffApiRequest(`/api/admin-users/${encodeURIComponent(staffEditingId)}`, {
+        method: "PATCH",
+        body: { action: "update", displayName: staffDraft.displayName, role: staffDraft.role },
+      });
+      staffUsers = staffUsers.map((user) => user.id === payload.user.id ? payload.user : user);
+      staffFeedback = "Staff account updated.";
+    } else {
+      const payload = await staffApiRequest("/api/admin-users", {
+        method: "POST",
+        body: { displayName: staffDraft.displayName, email: staffDraft.email, role: staffDraft.role },
+      });
+      staffUsers = [payload.user, ...staffUsers.filter((user) => user.id !== payload.user.id)];
+      staffFeedback = payload.inviteSent ? "Staff invite sent and access profile created." : "Staff account created.";
+    }
+    closeStaffDrawer();
+  } catch (error) {
+    staffSaveState = "idle";
+    staffSaveError = error.message || "Staff account save failed.";
+    render();
+  }
+}
+
+async function updateStaffStatus(id, action) {
+  staffActionId = id;
+  staffFeedback = "";
+  staffLoadError = "";
+  render();
+  try {
+    const payload = await staffApiRequest(`/api/admin-users/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: { action },
+    });
+    staffUsers = staffUsers.map((user) => user.id === payload.user.id ? payload.user : user);
+    staffFeedback = action === "disable" ? "Staff account disabled." : "Staff account activated.";
+  } catch (error) {
+    staffLoadError = error.message || "Staff account update failed.";
+  }
+  staffActionId = "";
+  render();
+}
+
+async function staffApiRequest(path, { method = "GET", body } = {}) {
+  const response = await fetch(path, {
+    method,
+    headers: {
+      Authorization: `Bearer ${adminAuthSession?.access_token || ""}`,
+      Accept: "application/json",
+      ...(body ? { "Content-Type": "application/json" } : {}),
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload.ok) throw new Error(getStaffApiErrorMessage(response.status, payload?.error));
+  return payload;
+}
+
+function getStaffApiErrorMessage(status, error) {
+  const normalized = String(error || "").toLowerCase();
+  if (status === 401) return "Admin session required. Sign in again.";
+  if (status === 403) return normalized.includes("role") ? "Role change is not permitted." : "You do not have permission for that staff account.";
+  if (status === 409) return normalized.includes("auth") ? "That email already has a login account." : "That email already has admin access.";
+  if (status === 503) return "Staff invite email could not be sent. Configure Supabase email delivery.";
+  if (normalized.includes("display")) return "Display name is required.";
+  if (normalized.includes("email")) return "Enter a valid email address.";
+  return "Staff account request failed. Try again.";
+}
+
+function formatStaffDate(value, fallback = "-") {
+  if (!value) return fallback;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? fallback : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 function renderSettingsPage() {
   const sections = [
@@ -3659,6 +3903,7 @@ function renderSidebar(currentRoute) {
     { label: "Products", path: "/products" },
     { label: "Production", path: "/production", icon: "factory" },
     { label: "Catalog", path: "/catalog" },
+    ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
     { label: "Settings", path: "/settings" },
   ];
 
@@ -3667,7 +3912,7 @@ function renderSidebar(currentRoute) {
       <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
-        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label}</span></a>`).join("")}
+        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>`).join("")}
         <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("calendar-check", "nav-icon")}<span class="nav-label">Calendar<small>Phase 2</small></span></span><span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
@@ -3693,6 +3938,33 @@ function formatAdminRole(role) {
   if (!role) return "Admin";
   return role.charAt(0).toUpperCase() + role.slice(1);
 }
+
+function renderAccountMenu(surface = "desktop") {
+  const isMobile = surface === "mobile";
+  const triggerClass = isMobile ? "mobile-account-trigger" : "admin-account-trigger";
+  const menuClass = isMobile ? "mobile-account-popover" : "admin-account-popover";
+  const avatarClass = isMobile ? "mobile-avatar" : "avatar";
+  const accountLabel = isMobile ? `<span class="mobile-account-label">ACCOUNT</span>` : "";
+  const manageStaff = canManageStaffAccounts()
+    ? `<button type="button" data-admin-account-action="staff">MANAGE STAFF</button>`
+    : "";
+
+  return `<div class="admin-account-menu ${isMobile ? "mobile" : "desktop"} ${isAccountMenuOpen ? "open" : ""}" data-admin-account-menu>
+    <button class="${triggerClass}" type="button" data-admin-account-toggle aria-haspopup="menu" aria-expanded="${isAccountMenuOpen ? "true" : "false"}">
+      <span class="${avatarClass}">${getAdminInitials()}</span>${accountLabel}
+      <span class="admin-account-copy"><strong>${escapeHtml(getAdminDisplayName())}</strong><small>${escapeHtml(formatAdminRole(adminUser?.role))}</small></span>
+      ${renderIcon("chevron-down", "account-chevron")}
+    </button>
+    <div class="${menuClass}" role="menu">
+      <strong>${escapeHtml(getAdminDisplayName())}</strong>
+      <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
+      <i aria-hidden="true"></i>
+      ${manageStaff}
+      <button type="button" data-admin-logout>LOG OUT</button>
+    </div>
+  </div>`;
+}
+
 function renderTopHeader() {
   return `
     <header class="top-header">
@@ -3710,17 +3982,7 @@ function renderTopHeader() {
         ${renderGlobalSearchHint()}
       </div>
       <div class="header-actions">
-        <button class="notification-button" aria-label="Notifications" type="button">
-          ${renderIcon("bell", "notification-icon")}
-        </button>
-        <div class="profile-area admin-account-control">
-          <div class="avatar">${getAdminInitials()}</div>
-          <div>
-            <strong>${escapeHtml(getAdminDisplayName())}</strong>
-            <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
-          </div>
-          <button class="logout-button" type="button" data-admin-logout>LOG OUT</button>
-        </div>
+        ${renderAccountMenu("desktop")}
       </div>
     </header>
   `;
@@ -3734,15 +3996,7 @@ function renderMobileTopBar() {
       </button>
       <strong>TRRY APPAREL</strong>
       <div class="mobile-top-actions">
-        <button aria-label="Search" class="mobile-search-button" type="button">${renderIcon("search", "mobile-search-icon")}</button>
-        <details class="mobile-account-menu">
-          <summary aria-label="Admin account menu"><span class="mobile-avatar">${getAdminInitials()}</span><span class="mobile-account-label">ACCOUNT</span></summary>
-          <div class="mobile-account-popover">
-            <strong>${escapeHtml(getAdminDisplayName())}</strong>
-            <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
-            <button type="button" data-admin-logout>LOG OUT</button>
-          </div>
-        </details>
+        ${renderAccountMenu("mobile")}
       </div>
     </header>
   `;
@@ -3757,7 +4011,6 @@ function renderMobileBottomNav(currentRoute) {
   ];
   return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
 }
-
 function renderGlobalSearchHint() {
   const normalized = globalSearchQuery.trim().toLowerCase();
   if (!normalized) return "";
@@ -4074,12 +4327,83 @@ function slugify(value) {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-|-$/g, "");
 }
+function handleAccountOutsideClick(event) {
+  if (!isAccountMenuOpen) return;
+  if (event.target.closest("[data-admin-account-menu]")) return;
+  isAccountMenuOpen = false;
+  render();
+}
+
+function handleAccountEscape(event) {
+  if (event.key !== "Escape") return;
+  let changed = false;
+  if (isAccountMenuOpen) {
+    isAccountMenuOpen = false;
+    changed = true;
+  }
+  if (staffDrawerMode) {
+    staffDrawerMode = "";
+    staffEditingId = null;
+    staffDraft = createEmptyStaffDraft();
+    staffSaveState = "idle";
+    staffSaveError = "";
+    changed = true;
+  }
+  if (changed) render();
+}
 function bindEvents() {
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
     button.addEventListener("click", async () => {
+      isAccountMenuOpen = false;
       await logoutAdminUser();
     });
   });
+
+  document.querySelectorAll("[data-admin-account-toggle]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      isAccountMenuOpen = !isAccountMenuOpen;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-admin-account-action='staff']").forEach((button) => {
+    button.addEventListener("click", () => {
+      isAccountMenuOpen = false;
+      navigateTo("/staff");
+      render();
+    });
+  });
+
+  document.removeEventListener("click", handleAccountOutsideClick);
+  document.addEventListener("click", handleAccountOutsideClick);
+  document.removeEventListener("keydown", handleAccountEscape);
+  document.addEventListener("keydown", handleAccountEscape);
+
+  document.querySelectorAll("[data-staff-new]").forEach((button) => button.addEventListener("click", openNewStaffDrawer));
+  document.querySelectorAll("[data-staff-edit]").forEach((button) => button.addEventListener("click", () => openEditStaffDrawer(button.dataset.staffEdit)));
+  document.querySelectorAll("[data-staff-disable]").forEach((button) => button.addEventListener("click", () => updateStaffStatus(button.dataset.staffDisable, "disable")));
+  document.querySelectorAll("[data-staff-activate]").forEach((button) => button.addEventListener("click", () => updateStaffStatus(button.dataset.staffActivate, "activate")));
+  document.querySelectorAll("[data-staff-close]").forEach((button) => button.addEventListener("click", closeStaffDrawer));
+
+  const staffForm = document.getElementById("staff-form");
+  if (staffForm) {
+    const displayName = document.getElementById("staff-display-name");
+    const email = document.getElementById("staff-email");
+    const role = document.getElementById("staff-role");
+
+    displayName?.addEventListener("input", (event) => { staffDraft.displayName = event.target.value; staffSaveError = ""; });
+    email?.addEventListener("input", (event) => { staffDraft.email = event.target.value; staffSaveError = ""; });
+    role?.addEventListener("change", (event) => { staffDraft.role = event.target.value; staffSaveError = ""; });
+    staffForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (staffSaveState === "saving") return;
+      staffDraft.displayName = displayName?.value || staffDraft.displayName;
+      staffDraft.email = email?.value || staffDraft.email;
+      staffDraft.role = role?.value || staffDraft.role;
+      await submitStaffForm();
+    });
+  }
 
   document.querySelectorAll(".menu-button, .mobile-menu-button").forEach((button) => {
     button.addEventListener("click", () => {
