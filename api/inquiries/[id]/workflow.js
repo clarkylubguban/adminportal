@@ -29,7 +29,7 @@ export default async function handler(request, response) {
     if (!inquiry) return sendJson(response, 404, { ok: false, error: "inquiry not found" });
 
     const now = new Date().toISOString();
-    const assignmentPatch = await buildAssignmentPatch(supabase, body, inquiry);
+    const assignmentPatch = await buildAssignmentPatch(supabase, body, inquiry, adminUser);
     if (!assignmentPatch.ok) return sendJson(response, 400, { ok: false, error: assignmentPatch.error });
 
     const workflowBody = { ...body, assignedStaff: assignmentPatch.assignedStaff };
@@ -102,7 +102,7 @@ function toClientInquiry(row) {
   };
 }
 
-async function buildAssignmentPatch(supabase, body, inquiry) {
+async function buildAssignmentPatch(supabase, body, inquiry, adminUser) {
   const action = String(body.action || "");
   if (!["save_production", "advance_production"].includes(action)) {
     return { ok: true, hasAssignment: false, assignedStaff: body.assignedStaff };
@@ -119,7 +119,7 @@ async function buildAssignmentPatch(supabase, body, inquiry) {
     return { ok: true, hasAssignment: true, assignedStaff: "", updates: { assigned_user_id: null } };
   }
 
-  const target = await validateAssignmentUser(supabase, body.assignedUserId);
+  const target = await validateAssignmentUser(supabase, body.assignedUserId, adminUser);
   if (!target) return { ok: false, error: "assigned staff is unavailable" };
   return {
     ok: true,

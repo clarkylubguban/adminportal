@@ -2304,10 +2304,10 @@ function getLegacyAssignmentMatch(value) {
 }
 
 function getAssignmentDisplayFromItem(item, emptyLabel = "Not Yet Assigned") {
-  if (item?.assignedUserId) return formatAssignmentUser(getAssignmentUserById(item.assignedUserId)) || "Former / unavailable user";
+  if (item?.assignedUserId) return formatAssignmentUser(getAssignmentUserById(item.assignedUserId)) || "Inactive user (historical)";
   const legacy = String(item?.assignedStaff || item?.assigned || "").trim();
   if (!legacy) return emptyLabel;
-  return formatAssignmentUser(getLegacyAssignmentMatch(legacy)) || "Former / unavailable user";
+  return formatAssignmentUser(getLegacyAssignmentMatch(legacy)) || "Inactive user (historical)";
 }
 
 function renderAssignmentOptions(currentUserId, legacyValue, emptyLabel = "Unassigned") {
@@ -2315,7 +2315,7 @@ function renderAssignmentOptions(currentUserId, legacyValue, emptyLabel = "Unass
   const currentUser = currentUserId ? getAssignmentUserById(currentUserId) : getLegacyAssignmentMatch(legacyValue);
   const legacyText = String(legacyValue || "").trim();
   const rows = [[emptyLabel, ""]];
-  if ((currentUserId || legacyText) && !currentUser) rows.push(["Former / unavailable user", "__legacy__"]);
+  if ((currentUserId || legacyText) && !currentUser) rows.push(["Inactive user (historical)", "__legacy__"]);
   assignmentUsers.forEach((user) => rows.push([formatAssignmentUser(user), user.userId]));
   return rows.map(([label, value]) => `<option value="${escapeHtml(value)}" ${currentUser?.userId === value || (!currentUser && value === "__legacy__") ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
 }

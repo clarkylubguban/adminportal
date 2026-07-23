@@ -27,7 +27,7 @@ export default async function handler(request, response) {
         updates.owner_user_id = null;
         updates.owner_id = null;
       } else {
-        const target = await validateAssignmentUser(supabase, body.ownerUserId);
+        const target = await validateAssignmentUser(supabase, body.ownerUserId, caller);
         if (!target) return sendJson(response, 400, { ok: false, error: "assigned owner is unavailable" });
         updates.owner_user_id = target.userId;
         updates.owner_id = assignmentLabel(target) || null;

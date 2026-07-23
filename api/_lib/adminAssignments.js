@@ -1,23 +1,22 @@
 const ASSIGNMENT_ROLES = ["owner", "admin", "staff"];
 const ROLE_RANK = new Map(ASSIGNMENT_ROLES.map((role, index) => [role, index]));
 
-export async function listAssignmentUsers(supabase) {
+export async function listAssignmentUsers(supabase, caller = null) {
   const { data, error } = await supabase
     .from("admin_users")
     .select("id,user_id,email,display_name,role,is_active,is_test")
     .eq("is_active", true)
-    .eq("is_test", false)
     .in("role", ASSIGNMENT_ROLES);
 
   if (error) throw error;
 
   return (data || [])
-    .filter((row) => row.user_id && ASSIGNMENT_ROLES.includes(normalizeRole(row.role)))
     .map(toAssignmentUser)
+    .filter((user) => canAssignToUser(caller, user))
     .sort(compareAssignmentUsers);
 }
 
-export async function validateAssignmentUser(supabase, userId) {
+export async function validateAssignmentUser(supabase, userId, caller = null) {
   const normalized = normalizeUuid(userId);
   if (!normalized) return null;
 
@@ -26,13 +25,13 @@ export async function validateAssignmentUser(supabase, userId) {
     .select("id,user_id,email,display_name,role,is_active,is_test")
     .eq("user_id", normalized)
     .eq("is_active", true)
-    .eq("is_test", false)
     .in("role", ASSIGNMENT_ROLES)
     .maybeSingle();
 
   if (error) throw error;
   if (!data?.user_id) return null;
-  return toAssignmentUser(data);
+  const user = toAssignmentUser(data);
+  return canAssignToUser(caller, user) ? user : null;
 }
 
 export function assignmentLabel(user) {
@@ -61,6 +60,16 @@ function compareAssignmentUsers(a, b) {
   return (ROLE_RANK.get(a.role) ?? 99) - (ROLE_RANK.get(b.role) ?? 99)
     || assignmentLabel(a).localeCompare(assignmentLabel(b), undefined, { sensitivity: "base" })
     || a.email.localeCompare(b.email, undefined, { sensitivity: "base" });
+}
+
+function canAssignToUser(caller, target) {
+  const callerRole = normalizeRole(caller?.role);
+  const targetRole = normalizeRole(target?.role);
+  if (!target?.userId || !ASSIGNMENT_ROLES.includes(targetRole)) return false;
+  if (callerRole === "owner") return true;
+  if (callerRole === "admin") return targetRole === "staff";
+  if (callerRole === "staff") return target.userId === caller?.userId;
+  return false;
 }
 
 function normalizeRole(role) {

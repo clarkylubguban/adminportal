@@ -118,10 +118,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   const query = (name) => new URLSearchParams(window.location.search).get(name) || "";
 
   function assignmentDisplay({ userId, legacy, empty }) {
-    if (userId) return assignmentName(findAssignmentUser(userId)) || "Former / unavailable user";
+    if (userId) return assignmentName(findAssignmentUser(userId)) || "Inactive user (historical)";
     const legacyText = String(legacy || "").trim();
     if (!legacyText) return empty;
-    return assignmentName(activeLegacyMatch(legacyText)) || "Former / unavailable user";
+    return assignmentName(activeLegacyMatch(legacyText)) || "Inactive user (historical)";
   }
 
   function assignmentSelectOptions(currentUserId, legacyValue, emptyLabel) {
@@ -130,7 +130,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const rows = [[emptyLabel, ""]];
     const currentUser = currentUserId ? findAssignmentUser(currentUserId) : activeLegacyMatch(legacyValue);
     const legacyText = String(legacyValue || "").trim();
-    if ((currentUserId || legacyText) && !currentUser) rows.push(["Former / unavailable user", "__legacy__"]);
+    if ((currentUserId || legacyText) && !currentUser) rows.push(["Inactive user (historical)", "__legacy__"]);
     assignmentUsers().forEach((user) => rows.push([assignmentName(user), user.userId]));
     return rows.map(([label, value]) => `<option value="${html(value)}" ${currentUser?.userId === value || (!currentUser && value === "__legacy__") ? "selected" : ""}>${html(label)}</option>`).join("");
   }
@@ -379,7 +379,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function ownerInitials(item) {
     const value = owner(item);
-    return ["Unassigned", "Former / unavailable user"].includes(value) ? "" : value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("");
+    return ["Unassigned", "Inactive user (historical)"].includes(value) ? "" : value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("");
   }
 
   function assignmentSubtitle(item) {
