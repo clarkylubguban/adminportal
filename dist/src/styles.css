@@ -17706,3 +17706,71 @@ body,
   font-weight: 800;
   text-transform: uppercase;
 }
+
+/* Simplified quotation MVP form. */
+.mvp-drawer .ops-quote-form,
+.ops-board-page .ops-quote-form {
+  gap: 10px;
+}
+
+.ops-quote-info-note {
+  background: var(--saas-blue-soft, #e8f1ff);
+  border: 1px solid var(--saas-border, #d6dde7);
+  border-radius: 6px;
+  color: var(--saas-ink, #111318);
+  font-family: var(--saas-font, Inter, Arial, sans-serif);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: 0;
+  padding: 10px 12px;
+}
+
+.mvp-drawer .ops-quote-form textarea,
+.ops-board-page .ops-quote-form textarea {
+  field-sizing: content;
+  min-height: 58px;
+  resize: vertical;
+}
+
+@media (max-width: 767px) {
+  .mvp-drawer .ops-quote-editor {
+    gap: 8px;
+    padding-bottom: 12px;
+    padding-top: 14px;
+  }
+
+  .mvp-drawer .ops-quote-editor summary {
+    padding-bottom: 6px;
+  }
+
+  .mvp-drawer .ops-quote-form {
+    gap: 8px;
+  }
+
+  .mvp-drawer .ops-quote-form label {
+    gap: 5px;
+  }
+
+  .mvp-drawer .ops-quote-form span {
+    font-size: 9px;
+  }
+
+  .mvp-drawer .ops-quote-form textarea {
+    min-height: 54px;
+  }
+
+  .mvp-drawer .ops-quote-actions {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: 1fr;
+  }
+
+  .mvp-drawer .ops-quote-actions > button {
+    width: 100%;
+  }
+
+  .mvp-drawer .ops-quote-info-note {
+    font-size: 12px;
+    padding: 9px 10px;
+  }
+}

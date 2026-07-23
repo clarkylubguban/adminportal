@@ -354,9 +354,6 @@ function getQuoteValidationError(action, body, inquiry) {
     return "quote validity date has expired";
   }
 
-  if (action === "publish_quote" && inquiry.artwork_status === "missing") {
-    return "artwork must be uploaded before sending quote";
-  }
 
   return "";
 }

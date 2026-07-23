@@ -1546,10 +1546,14 @@ function renderOpsQuoteForm(item, isLoading, open = false) {
       renderOpsActionButton({ label: "mark quote pending", action: "mark_quote_pending", id: item.id, disabled: isLoading }),
     ]
     : [];
-
-  return `<details class="ops-quote-editor" ${open ? "open" : ""}><summary>${isOpsQuotePublished(item) ? "REVISE QUOTE" : "CREATE QUOTE"}</summary><div class="ops-customer-action-form"><label><span>Quoted amount</span><input data-ops-customer-field="quotedAmount" inputmode="decimal" type="text" value="${escapeHtml(item.quotedAmount ?? "")}" /></label><label><span>Amount due</span><input data-ops-customer-field="amountDue" inputmode="decimal" type="text" value="${escapeHtml(item.amountDue ?? "")}" /></label><label class="wide"><span>Price breakdown</span><textarea data-ops-customer-field="quoteBreakdown" rows="3">${escapeHtml(item.quoteBreakdown || "")}</textarea></label><label class="wide"><span>Quote notes</span><textarea data-ops-customer-field="quoteNotes" rows="2">${escapeHtml(item.quoteNotes || "")}</textarea></label><label><span>Valid until</span><input data-ops-customer-field="quoteValidUntil" type="date" value="${escapeHtml(item.quoteValidUntil || "")}" /></label><label><span>Deposit / payment label</span><input data-ops-customer-field="paymentLabel" value="${escapeHtml(item.paymentLabel || "")}" /></label><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions"><button class="ops-move-button" data-ops-customer-action="save_quote_draft" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SAVE DRAFT</button><button class="ops-gold-button mini" data-ops-customer-action="publish_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SEND QUOTE</button></div>${renderOpsMoreActions(overflowActions)}</details>`;
+  return `<details class="ops-quote-editor" ${open ? "open" : ""}><summary>${isOpsQuotePublished(item) ? "REVISE QUOTE" : "CREATE QUOTE"}</summary><div class="ops-customer-action-form ops-quote-form"><label><span>Quoted amount</span><input data-ops-customer-field="quotedAmount" inputmode="decimal" type="text" value="${escapeHtml(item.quotedAmount ?? "")}" /></label><label class="wide"><span>Price breakdown</span><textarea data-ops-customer-field="quoteBreakdown" rows="2">${escapeHtml(item.quoteBreakdown || "")}</textarea></label><label class="wide"><span>Quote notes</span><textarea data-ops-customer-field="quoteNotes" rows="2">${escapeHtml(item.quoteNotes || "")}</textarea></label><label><span>Valid until</span><input data-ops-customer-field="quoteValidUntil" type="date" value="${escapeHtml(item.quoteValidUntil || "")}" /></label></div><div class="ops-stage-actions ops-quote-actions"><button class="ops-move-button" data-ops-customer-action="save_quote_draft" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SAVE DRAFT</button><button class="ops-gold-button mini" data-ops-customer-action="publish_quote" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>SEND QUOTE</button></div>${renderOpsMoreActions(overflowActions)}</details>`;
 }
 
+function shouldShowOpsQuoteArtworkNotice(item) {
+  const status = String(item.artworkStatus || "missing").trim().toLowerCase();
+  const artworkUrl = String(item.artworkUrl || "").trim();
+  return !artworkUrl && ["", "missing", "not_set", "not set", "none", "null", "undefined"].includes(status);
+}
 function renderOpsQuoteStage(item) {
   const request = opsCustomerActionRequests[item.id] || {};
   const isLoading = request.status === "loading";
@@ -1557,6 +1561,9 @@ function renderOpsQuoteStage(item) {
   const status = item.quoteStatus || "pending";
   const quoteChange = item.quoteChangeRequest ? `<p class="ops-customer-action-alert"><strong>CUSTOMER REQUESTED QUOTE CHANGES</strong>${escapeHtml(item.quoteChangeRequest)}</p>` : "";
   let body = quoteChange;
+  if (shouldShowOpsQuoteArtworkNotice(item)) {
+    body += `<p class="ops-quote-info-note">No artwork attached yet. This quotation is based on the provided requirements and may be updated after artwork review.</p>`;
+  }
 
   if (!isOpsQuotePublished(item) || current) {
     body += !isOpsQuotePublished(item) ? `<p class="ops-stage-muted">No quote created yet.</p>` : "";
@@ -1643,15 +1650,18 @@ function getOpsCustomerActionFormPayload(action, sourceElement) {
       ?? "";
   };
 
+  const quotedAmount = fieldValue("quotedAmount");
+  const quoteAction = ["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending"].includes(action);
+
   return {
     action,
-    quotedAmount: fieldValue("quotedAmount"),
-    amountDue: fieldValue("amountDue"),
+    quotedAmount,
+    amountDue: quoteAction ? quotedAmount : fieldValue("amountDue"),
     quoteBreakdown: fieldValue("quoteBreakdown"),
     quoteNotes: fieldValue("quoteNotes"),
     quoteValidUntil: fieldValue("quoteValidUntil"),
-    paymentLabel: fieldValue("paymentLabel"),
-    paymentInstructions: fieldValue("paymentInstructions"),
+    paymentLabel: quoteAction ? "" : fieldValue("paymentLabel"),
+    paymentInstructions: quoteAction ? "" : fieldValue("paymentInstructions"),
     confirmedAmount: fieldValue("confirmedAmount"),
     paymentReviewNote: fieldValue("paymentReviewNote"),
   };
@@ -1952,7 +1962,6 @@ function getOpsCustomerActionError(status, error) {
   if (status === 400 && ["enter a valid quote validity date", "quote validity date has expired"].includes(normalized)) return "QUOTE VALIDITY DATE HAS EXPIRED\nChoose today or a future date before sending the quote.";
   if (status === 400 && normalized === "enter payment instructions") return "ENTER PAYMENT INSTRUCTIONS\nPayment instructions are required before requesting payment.";
   if (status === 400 && normalized === "receipt request reason required") return "ENTER A RECEIPT REQUEST REASON\nAdd a short reason before requesting a new receipt.";
-  if (status === 400 && normalized === "artwork must be uploaded before sending quote") return "ARTWORK IS REQUIRED BEFORE SENDING THE QUOTE.";
   if (status === 400 && error) return String(error).toUpperCase();
   return "CUSTOMER ACTION FAILED. CHECK YOUR CONNECTION AND TRY AGAIN.";
 }
