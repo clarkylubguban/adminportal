@@ -334,7 +334,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) {
-    if (action.kind === "quote" && typeof renderQuote === "function") return `<section class="mvp-workflow-panel">${renderQuote(item)}</section>`;
+    if (action.kind === "quote" && typeof renderQuote === "function") return `<section class="mvp-workflow-panel">${renderQuote(item).replace(/<details class="ops-quote-editor"(?! open)/, '<details class="ops-quote-editor" open')}</section>`;
     if (action.kind === "so" && typeof renderOdoo === "function") return `<section class="mvp-workflow-panel">${renderOdoo(item)}</section>`;
     if (action.route) return `<section class="mvp-workflow-panel"><button class="mvp-primary-action" type="button" data-mvp-route="${html(action.route)}">${html(action.label)}</button></section>`;
     return `<section class="mvp-workflow-panel"><p>${html(action.hint)}</p></section>`;
