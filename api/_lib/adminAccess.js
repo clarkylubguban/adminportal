@@ -131,7 +131,7 @@ export async function listAuthUsersById(supabase, userIds) {
       if ((data?.users || []).length < 1000) break;
     }
   } catch (error) {
-    console.error("Staff auth metadata lookup failed.", { message: error?.message, code: error?.code, status: error?.status || error?.statusCode });
+    console.warn("Staff auth metadata lookup failed.", { message: error?.message, code: error?.code, status: error?.status || error?.statusCode });
   }
 
   return users;
