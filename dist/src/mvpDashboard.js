@@ -287,7 +287,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquirySummaryCards(item, stage) {
     const follow = followUpSummary(item);
     const quote = quotationSummary(item, stage);
-    return `<div class="mvp-inquiry-summary-grid">${summaryCard("Customer", customerInitials(item), item.customer || "Unnamed customer", item.contact || "No phone")}${summaryCard("Service", "", serviceChips(item), "")}${summaryCard("Quantity", "", item.sizeBreakdown || item.qty || "Not set", "")}${summaryCard("Assigned To", ownerInitials(item), owner(item), assignmentSubtitle(item))}${summaryCard("Follow-up", "", follow.title, follow.sub, "wide")}${summaryCard("Quotation", "", quote.title, quote.sub, "wide")}${summaryCard("Status", "", QUOTE_STAGES[stage], statusSubtitle(item, stage), "wide")}</div>`;
+    return `<div class="mvp-inquiry-summary-grid">${summaryCard("Customer", customerInitials(item), item.customer || "Unnamed customer", item.contact || "No phone")}${summaryCard("Service", "", serviceChips(item), "")}${summaryCard("Quantity", "", item.sizeBreakdown || item.qty || "Not set", "")}${summaryCard("Assigned To", ownerInitials(item), owner(item), assignmentSubtitle(item))}${summaryCard("Follow-up", "", follow.title, follow.sub, "wide")}${summaryCard("Quotation", "", quote.title, quote.sub, "wide")}</div>`;
   }
 
   function summaryCard(label, badge, title, subtitle, className = "") {
@@ -308,7 +308,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryDetailsTab(item, renderArtwork) {
-    return `<div class="mvp-inquiry-detail-list">${detailLine("Customer Name", item.customer || "Not set")}${detailLine("Phone", item.contact || "Not set")}${detailLine("Service", serviceDisplay(item))}${detailLine("Quantity", item.sizeBreakdown || item.qty || "Not set")}${detailLine("Message", customerNotes(item) || "No customer message provided.", true)}${artworkPreviewLine(item, renderArtwork)}${detailLine("Internal Status", internalStatus(item))}</div>`;
+    return `<div class="mvp-inquiry-detail-list">${detailLine("Customer Message", customerNotes(item) || "No customer message provided.", true)}${artworkPreviewLine(item, renderArtwork)}${detailLine("Internal Status", internalStatus(item))}</div>`;
   }
 
   function inquiryRequestTab(item, renderArtwork) {
