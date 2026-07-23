@@ -17774,3 +17774,34 @@ body,
     padding: 9px 10px;
   }
 }
+
+.admin-account-menu.desktop {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.admin-inline-logout {
+  background: #ffffff;
+  border: 2px solid #111111;
+  box-shadow: none;
+  color: #111111;
+  cursor: pointer;
+  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 42px;
+  padding: 0 12px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.admin-inline-logout:hover,
+.admin-inline-logout:focus-visible {
+  background: #ddff4f;
+  outline: none;
+}
+
+.admin-account-menu.mobile .admin-inline-logout {
+  display: none;
+}

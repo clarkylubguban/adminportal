@@ -1,3 +1,4 @@
+import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
@@ -5,7 +6,7 @@ const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
 const WORKFLOW_SELECT = [
   "id", "status", "next_action", "odoo_so", "product", "product_desc", "quantity", "due_date",
   "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status",
-  "assigned_staff", "production_stage", "production_note", "production_updated_at", "blocked_reason",
+  "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "blocked_reason",
 ].join(",");
 
 export default async function handler(request, response) {
@@ -28,8 +29,13 @@ export default async function handler(request, response) {
     if (!inquiry) return sendJson(response, 404, { ok: false, error: "inquiry not found" });
 
     const now = new Date().toISOString();
-    const result = buildOpsWorkflowUpdates(String(body.action || ""), body, inquiry, now);
+    const assignmentPatch = await buildAssignmentPatch(supabase, body, inquiry);
+    if (!assignmentPatch.ok) return sendJson(response, 400, { ok: false, error: assignmentPatch.error });
+
+    const workflowBody = { ...body, assignedStaff: assignmentPatch.assignedStaff };
+    const result = buildOpsWorkflowUpdates(String(body.action || ""), workflowBody, inquiry, now);
     if (!result.ok) return sendJson(response, 400, { ok: false, error: result.error });
+    if (assignmentPatch.hasAssignment) Object.assign(result.updates, assignmentPatch.updates);
 
     const { data: updated, error: updateError } = await supabase
       .from("ops_inquiries")
@@ -42,7 +48,7 @@ export default async function handler(request, response) {
     sendJson(response, 200, { ok: true, inquiry: toClientInquiry(updated) });
   } catch (error) {
     console.error("Admin workflow update failed.", { message: error?.message, code: error?.code });
-    const schemaMissing = /production_stage|assigned_staff|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
+    const schemaMissing = /production_stage|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
     sendJson(response, schemaMissing ? 503 : 500, { ok: false, error: schemaMissing ? "workflow fields are not ready" : "workflow update failed" });
   }
 }
@@ -88,10 +94,38 @@ function toClientInquiry(row) {
     next: row.next_action,
     odooSO: row.odoo_so,
     assignedStaff: row.assigned_staff,
+    assignedUserId: row.assigned_user_id,
     productionStage: row.production_stage,
     productionNote: row.production_note,
     productionUpdatedAt: row.production_updated_at,
     blockedReason: row.blocked_reason,
+  };
+}
+
+async function buildAssignmentPatch(supabase, body, inquiry) {
+  const action = String(body.action || "");
+  if (!["save_production", "advance_production"].includes(action)) {
+    return { ok: true, hasAssignment: false, assignedStaff: body.assignedStaff };
+  }
+
+  if (!Object.prototype.hasOwnProperty.call(body, "assignedUserId")) {
+    if (Object.prototype.hasOwnProperty.call(body, "assignedStaff") && String(body.assignedStaff || "").trim()) {
+      return { ok: false, error: "assigned staff must be selected from active admin users" };
+    }
+    return { ok: true, hasAssignment: false, assignedStaff: inquiry?.assigned_staff || "" };
+  }
+
+  if (body.assignedUserId === null || body.assignedUserId === "") {
+    return { ok: true, hasAssignment: true, assignedStaff: "", updates: { assigned_user_id: null } };
+  }
+
+  const target = await validateAssignmentUser(supabase, body.assignedUserId);
+  if (!target) return { ok: false, error: "assigned staff is unavailable" };
+  return {
+    ok: true,
+    hasAssignment: true,
+    assignedStaff: assignmentLabel(target),
+    updates: { assigned_user_id: target.userId },
   };
 }
 
@@ -120,4 +154,3 @@ function sendJson(response, status, body) {
   response.setHeader("Content-Type", "application/json; charset=utf-8");
   response.end(JSON.stringify(body));
 }
-

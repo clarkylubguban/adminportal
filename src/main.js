@@ -9,6 +9,10 @@ import {
 } from "./services/opsBoard.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
+  getAdminAssignmentUsers,
+  updateInquiryAssignment,
+} from "./services/adminAssignments.js";
+import {
   catalogOptions,
   catalogStatusOptions,
   createAdminCatalogProduct,
@@ -31,7 +35,13 @@ import {
   updateAdminInvitePassword,
 } from "./lib/supabaseClient.js";
 
-const mvpDashboard = createMvpDashboard();
+const mvpDashboard = createMvpDashboard({
+  getAssignmentContext: () => ({
+    users: assignmentUsers,
+    loadState: assignmentLoadState,
+    error: assignmentLoadError,
+  }),
+});
 
 const lucideIcons = {
   "layout-dashboard": '<rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect>',
@@ -402,6 +412,9 @@ let staffDraft = createEmptyStaffDraft();
 let staffSaveState = "idle";
 let staffSaveError = "";
 let staffActionId = "";
+let assignmentUsers = [];
+let assignmentLoadState = "idle";
+let assignmentLoadError = "";
 
 const routes = {
   "/": "Overview",
@@ -958,12 +971,30 @@ function setStoredSidebarCollapsed(value) {
 
 function startAdminDataLoading() {
   if (!canRenderAdminShell()) return;
+  loadAssignmentUsers();
   loadOpsBoardInquiries();
   loadAdminOrders();
   loadAdminClients();
   loadCatalogProducts();
 }
 
+async function loadAssignmentUsers() {
+  if (!adminAuthSession?.access_token) return;
+  assignmentLoadState = "loading";
+  assignmentLoadError = "";
+  render();
+
+  try {
+    assignmentUsers = await getAdminAssignmentUsers(adminAuthSession);
+    assignmentLoadState = "ready";
+  } catch (error) {
+    console.error("Unable to load assignment users.", error);
+    assignmentUsers = [];
+    assignmentLoadState = "error";
+    assignmentLoadError = error.message || "Unable to load team members.";
+  }
+  render();
+}
 async function loadAdminOrders() {
   if (hasLoadedAdminOrders) return;
   hasLoadedAdminOrders = true;
@@ -2254,6 +2285,53 @@ async function requestOpsWorkflowAction(inquiryId, body) {
   if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Workflow update failed.");
   return payload;
 }
+function getAssignmentUserById(userId) {
+  return assignmentUsers.find((user) => user.userId === userId) || null;
+}
+
+function formatAssignmentRole(role) {
+  const value = String(role || "").trim().toLowerCase();
+  return value ? value.charAt(0).toUpperCase() + value.slice(1) : "Staff";
+}
+
+function formatAssignmentUser(user) {
+  return user ? `${user.displayName || user.email} - ${formatAssignmentRole(user.role)}` : "";
+}
+
+function getLegacyAssignmentMatch(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return null;
+  return assignmentUsers.find((user) => [user.displayName, user.email].some((candidate) => String(candidate || "").trim().toLowerCase() === text)) || null;
+}
+
+function getAssignmentDisplayFromItem(item, emptyLabel = "Not Yet Assigned") {
+  if (item?.assignedUserId) return formatAssignmentUser(getAssignmentUserById(item.assignedUserId)) || "Former / unavailable user";
+  const legacy = String(item?.assignedStaff || item?.assigned || "").trim();
+  if (!legacy) return emptyLabel;
+  return formatAssignmentUser(getLegacyAssignmentMatch(legacy)) || "Former / unavailable user";
+}
+
+function renderAssignmentOptions(currentUserId, legacyValue, emptyLabel = "Unassigned") {
+  if (assignmentLoadState === "loading") return `<option value="">Loading team members...</option>`;
+  const currentUser = currentUserId ? getAssignmentUserById(currentUserId) : getLegacyAssignmentMatch(legacyValue);
+  const legacyText = String(legacyValue || "").trim();
+  const rows = [[emptyLabel, ""]];
+  if ((currentUserId || legacyText) && !currentUser) rows.push(["Former / unavailable user", "__legacy__"]);
+  assignmentUsers.forEach((user) => rows.push([formatAssignmentUser(user), user.userId]));
+  return rows.map(([label, value]) => `<option value="${escapeHtml(value)}" ${currentUser?.userId === value || (!currentUser && value === "__legacy__") ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+}
+
+function renderAssignmentLoadMessage(className = "order-dashboard-schema-warning") {
+  if (!shouldLoadSupabaseOps) return "";
+  if (assignmentLoadState === "error") return `<p class="${className}">${escapeHtml(assignmentLoadError || "Unable to load team members.")}</p>`;
+  if (assignmentLoadState === "loading") return `<p class="${className}">Loading team members...</p>`;
+  if (!assignmentUsers.length) return `<p class="${className}">No active admin users are available for assignment.</p>`;
+  return "";
+}
+
+function areAssignmentControlsReady() {
+  return !shouldLoadSupabaseOps || (assignmentLoadState === "ready" && assignmentUsers.length > 0);
+}
 function getOrderProductionStage(item) {
   const stage = String(item.productionStage || "").trim().toLowerCase();
   if (orderProductionStages.some((option) => option.value === stage)) return stage;
@@ -2274,7 +2352,7 @@ function getOrderProductionStageLabel(value) {
 }
 
 function getOrderAssignedStaff(item) {
-  return item.assignedStaff || item.assigned || "Not Yet Assigned";
+  return getAssignmentDisplayFromItem(item, "Not Yet Assigned");
 }
 
 function isConfirmedOpsOrder(item) {
@@ -2313,7 +2391,7 @@ function getConfirmedOrderDashboardOrders() {
 }
 
 function getOrderDashboardStaffOptions() {
-  return [...new Set(getConfirmedOrderDashboardOrders().map(getOrderAssignedStaff).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  return assignmentUsers.map((user) => ({ value: user.userId, label: formatAssignmentUser(user) }));
 }
 
 function getFilteredOrderDashboardOrders() {
@@ -2330,7 +2408,7 @@ function getFilteredOrderDashboardOrders() {
     if (orderDashboardFilters.stage === "active" && completed) return false;
     if (orderDashboardFilters.stage === "completed" && !completed) return false;
     if (orderDashboardFilters.stage !== "all" && !["active", "completed"].includes(orderDashboardFilters.stage) && stage !== orderDashboardFilters.stage) return false;
-    if (orderDashboardFilters.staff !== "all" && staff !== orderDashboardFilters.staff) return false;
+    if (orderDashboardFilters.staff !== "all" && (item.assignedUserId || "") !== orderDashboardFilters.staff) return false;
     if (orderDashboardFilters.fulfillment !== "all" && fulfillment !== orderDashboardFilters.fulfillment) return false;
     if (orderDashboardFilters.due !== "all" && dueState !== orderDashboardFilters.due) return false;
     return true;
@@ -2427,7 +2505,7 @@ function renderOrderDashboardFilters() {
   return `<section class="order-dashboard-filters" aria-label="Order dashboard filters">
     <label class="order-dashboard-search">${renderIcon("search", "search-icon")}<input id="order-dashboard-search" value="${escapeHtml(orderDashboardFilters.search)}" placeholder="Search order, customer, Odoo SO..." type="search" /></label>
     <select data-order-dashboard-filter="stage">${stageOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.stage === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
-    <select data-order-dashboard-filter="staff"><option value="all">All Staff</option>${staffOptions.map((staff) => `<option value="${escapeHtml(staff)}" ${orderDashboardFilters.staff === staff ? "selected" : ""}>${escapeHtml(staff)}</option>`).join("")}</select>
+    <select data-order-dashboard-filter="staff"><option value="all">All Staff</option>${staffOptions.map((staff) => `<option value="${escapeHtml(staff.value)}" ${orderDashboardFilters.staff === staff.value ? "selected" : ""}>${escapeHtml(staff.label)}</option>`).join("")}</select>
     <select data-order-dashboard-filter="fulfillment">${fulfillmentOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.fulfillment === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
     <select data-order-dashboard-filter="due">${dueOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.due === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
   </section>`;
@@ -2563,10 +2641,13 @@ function renderOrderDashboardDrawer(item) {
 function renderOrderProductionEditor(item) {
   const stage = getOrderProductionStage(item);
   const fieldsReady = !shouldLoadSupabaseOps || item.productionFieldsReady;
-  const disabled = fieldsReady ? "" : "disabled";
-  const notice = fieldsReady ? "" : `<p class="order-dashboard-schema-warning">DATABASE FIELDS NOT READY. Apply the pending migration before saving internal production fields.</p>`;
+  const assignmentsReady = areAssignmentControlsReady();
+  const disabled = fieldsReady && assignmentsReady ? "" : "disabled";
+  const schemaNotice = fieldsReady ? "" : `<p class="order-dashboard-schema-warning">DATABASE FIELDS NOT READY. Apply the pending migration before saving internal production fields.</p>`;
+  const assignmentNotice = renderAssignmentLoadMessage();
+  const notice = `${schemaNotice}${assignmentNotice}`;
   return `<section class="order-production-editor ${fieldsReady ? "" : "schema-missing"}"><h3>Internal Production</h3>${notice}<div class="order-production-grid">
-    <label><span>Assigned staff</span><input data-order-dashboard-assigned="${escapeHtml(item.id)}" value="${escapeHtml(["Unassigned", "Not Yet Assigned"].includes(getOrderAssignedStaff(item)) ? "" : getOrderAssignedStaff(item))}" placeholder="Unassigned" ${disabled} /></label>
+    <label><span>Assigned staff</span><select data-order-dashboard-assigned="${escapeHtml(item.id)}" ${disabled}>${renderAssignmentOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select></label>
     <label><span>Production stage</span><select data-order-dashboard-stage="${escapeHtml(item.id)}" ${disabled}>${orderProductionStages.map((option) => `<option value="${option.value}" ${stage === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select></label>
     <label class="wide"><span>Production note</span><textarea data-order-dashboard-note="${escapeHtml(item.id)}" rows="3" placeholder="Internal note only" ${disabled}>${escapeHtml(item.productionNote || "")}</textarea></label>
   </div><div class="order-production-footer"><span>Last production update: ${escapeHtml(formatOpsTrackingDate(item.productionUpdatedAt))}</span><button class="ops-gold-button mini" data-order-dashboard-save="${escapeHtml(item.id)}" type="button" ${disabled}>Save Production</button></div></section>`;
@@ -2587,7 +2668,7 @@ async function saveOrderDashboardProduction(id) {
   if (!orderProductionStages.some((stage) => stage.value === nextStage)) return;
 
   const updates = {
-    assignedStaff: assignedInput?.value?.trim() || null,
+    assignedUserId: assignedInput?.value === "__legacy__" ? null : assignedInput?.value || null,
     productionStage: nextStage,
     productionNote: noteInput?.value?.trim() || null,
     productionUpdatedAt: new Date().toISOString(),
@@ -2596,7 +2677,13 @@ async function saveOrderDashboardProduction(id) {
 
   if (shouldLoadSupabaseOps) {
     try {
-      savedInquiry = await updateOpsInquiryFields(id, updates, adminAuthSession);
+      const payload = await requestOpsWorkflowAction(id, {
+        action: "save_production",
+        assignedUserId: updates.assignedUserId,
+        productionStage: updates.productionStage,
+        productionNote: updates.productionNote,
+      });
+      savedInquiry = payload.inquiry;
       if (!savedInquiry) throw new Error("Order Dashboard update returned no saved inquiry.");
       orderDashboardSaveError = "";
     } catch (error) {
@@ -4080,6 +4167,7 @@ function renderAccountMenu(surface = "desktop") {
   const manageStaff = canManageStaffAccounts()
     ? `<button type="button" data-admin-account-action="staff">MANAGE STAFF</button>`
     : "";
+  const inlineLogout = isMobile ? "" : `<button class="admin-inline-logout" type="button" data-admin-logout>LOG OUT</button>`;
 
   return `<div class="admin-account-menu ${isMobile ? "mobile" : "desktop"} ${isAccountMenuOpen ? "open" : ""}" data-admin-account-menu>
     <button class="${triggerClass}" type="button" data-admin-account-toggle aria-haspopup="menu" aria-expanded="${isAccountMenuOpen ? "true" : "false"}">
@@ -4087,6 +4175,7 @@ function renderAccountMenu(surface = "desktop") {
       <span class="admin-account-copy"><strong>${escapeHtml(getAdminDisplayName())}</strong><small>${escapeHtml(formatAdminRole(adminUser?.role))}</small></span>
       ${renderIcon("chevron-down", "account-chevron")}
     </button>
+    ${inlineLogout}
     <div class="${menuClass}" role="menu">
       <strong>${escapeHtml(getAdminDisplayName())}</strong>
       <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
@@ -4905,8 +4994,8 @@ async function handleMvpInquiryFollowUpOutcome(id, outcome) {
 }
 async function saveMvpInquiryFollowUp(id, updates) {
   const normalizedUpdates = {};
-  if (Object.prototype.hasOwnProperty.call(updates, "owner")) {
-    normalizedUpdates.owner = updates.owner || null;
+  if (Object.prototype.hasOwnProperty.call(updates, "ownerUserId") && updates.ownerUserId !== undefined) {
+    normalizedUpdates.ownerUserId = updates.ownerUserId || null;
   }
   if (Object.prototype.hasOwnProperty.call(updates, "followUpDate")) {
     normalizedUpdates.followUpDate = updates.followUpDate || null;
@@ -4920,7 +5009,7 @@ async function saveMvpInquiryFollowUp(id, updates) {
   }
 
   try {
-    const savedInquiry = await updateOpsInquiryFields(
+    const savedInquiry = await updateInquiryAssignment(
       id,
       normalizedUpdates,
       adminAuthSession
@@ -4957,7 +5046,7 @@ async function saveMvpProductionFields(id, changes) {
       const payload = await requestOpsWorkflowAction(id, {
         action: changes.productionStage ? "advance_production" : "save_production",
         productionStage: changes.productionStage,
-        assignedStaff: changes.assignedStaff,
+        assignedUserId: changes.assignedUserId,
         productionNote: changes.productionNote,
         blockedReason: changes.blockedReason,
       });
