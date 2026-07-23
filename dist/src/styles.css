@@ -18771,3 +18771,29 @@ body,
     padding: 0 10px;
   }
 }
+
+.mvp-drawer.inquiry.locked .mvp-inquiry-number-row .mvp-copy {
+  background: #ffffff;
+  border: 1px solid #aeb6c2;
+  border-radius: 6px;
+  color: #0b0c0f;
+  font-family: "Space Mono", Consolas, monospace;
+  font-size: 10px;
+  font-weight: 900;
+  min-height: 28px;
+  padding: 0 9px;
+  text-transform: uppercase;
+  width: auto;
+}
+
+.mvp-drawer.inquiry.locked .mvp-inquiry-number-row .mvp-copy:hover,
+.mvp-drawer.inquiry.locked .mvp-inquiry-number-row .mvp-copy:focus-visible {
+  background: #ddff4f;
+  border-color: #0b0c0f;
+  outline: none;
+}
+
+.mvp-drawer.inquiry.locked .mvp-inquiry-number-row .mvp-copy small {
+  font-size: 10px;
+  line-height: 1;
+}
