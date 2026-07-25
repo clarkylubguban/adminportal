@@ -21961,3 +21961,258 @@ body,
     font-size: 9px;
   }
 }
+
+.workboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.workboard-summary {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+}
+
+.workboard-summary article {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  min-height: 74px;
+  padding: 13px 14px;
+}
+
+.workboard-summary span,
+.workboard-summary small,
+.workboard-table th,
+.workboard-table td,
+.workboard-filters select,
+.workboard-form span {
+  font-family: var(--saas-mono);
+  letter-spacing: 0;
+}
+
+.workboard-summary span {
+  color: var(--saas-muted);
+  display: block;
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.workboard-summary strong {
+  color: var(--saas-ink);
+  display: block;
+  font-size: 24px;
+  line-height: 1;
+  margin-top: 6px;
+}
+
+.workboard-summary small {
+  color: var(--saas-muted);
+  display: block;
+  font-size: 10px;
+  margin-top: 7px;
+}
+
+.workboard-filters {
+  align-items: center;
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(5, minmax(118px, 1fr)) minmax(220px, 1.4fr) auto;
+}
+
+.workboard-filters select,
+.workboard-filters button,
+.workboard-form input,
+.workboard-form select,
+.workboard-form textarea,
+.workboard-actions textarea {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  font: inherit;
+  min-height: 42px;
+  padding: 0 12px;
+  width: 100%;
+}
+
+.workboard-filters button {
+  cursor: pointer;
+  font-family: var(--saas-mono);
+  font-size: 12px;
+  font-weight: 800;
+  width: auto;
+}
+
+.workboard-search {
+  min-width: 0;
+}
+
+.workboard-table-wrap {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  overflow-x: auto;
+}
+
+.workboard-table {
+  min-width: 1040px;
+}
+
+.workboard-table th,
+.workboard-table td {
+  font-size: 11px;
+  vertical-align: middle;
+}
+
+.workboard-table td {
+  height: 58px;
+}
+
+.workboard-table tr.for-review td {
+  background: var(--saas-purple-soft);
+}
+
+.workboard-table tr.overdue td {
+  border-top-color: var(--saas-red);
+}
+
+.workboard-task-link,
+.workboard-table td > button {
+  background: transparent;
+  border: 0;
+  color: var(--saas-ink);
+  cursor: pointer;
+  font: inherit;
+  padding: 0;
+  text-align: left;
+}
+
+.workboard-task-link span {
+  color: var(--saas-muted);
+  display: block;
+  font-family: var(--saas-mono);
+  font-size: 10px;
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.workboard-task-link strong {
+  display: block;
+  font-size: 13px;
+  line-height: 1.2;
+}
+
+.workboard-table td > button:not(.workboard-task-link) {
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 0 12px;
+  text-align: center;
+}
+
+.workboard-card-list {
+  display: none;
+}
+
+.workboard-drawer {
+  max-width: 560px;
+}
+
+.workboard-form,
+.workboard-actions {
+  display: grid;
+  gap: 14px;
+  padding: 16px;
+}
+
+.workboard-form label,
+.workboard-actions label {
+  display: grid;
+  gap: 7px;
+}
+
+.workboard-form span,
+.workboard-actions span {
+  color: var(--saas-muted);
+  font-size: 10px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.workboard-form textarea,
+.workboard-actions textarea {
+  min-height: 94px;
+  padding: 10px 12px;
+  resize: vertical;
+}
+
+.workboard-form-grid {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.workboard-checkbox {
+  align-items: center;
+  display: flex !important;
+  gap: 10px !important;
+}
+
+.workboard-checkbox input {
+  min-height: 18px;
+  width: 18px;
+}
+
+.sticky-actions {
+  background: var(--saas-surface);
+  bottom: 0;
+  border-top: 1px solid var(--saas-border);
+  position: sticky;
+  padding-top: 12px;
+}
+
+@media (max-width: 980px) {
+  .workboard-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workboard-filters {
+    grid-template-columns: 1fr;
+  }
+
+  .workboard-table-wrap {
+    display: none;
+  }
+
+  .workboard-card-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .workboard-drawer {
+    border-radius: 0;
+    inset: 0;
+    max-width: none;
+    width: 100vw;
+  }
+
+  .workboard-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .workboard-page .mvp-page-title {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .workboard-page .mvp-page-title .ops-gold-button {
+    min-height: 44px;
+    width: 100%;
+  }
+}

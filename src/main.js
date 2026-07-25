@@ -1,12 +1,22 @@
 import { createMvpDashboard } from "./mvpDashboard.js";
 import {
+  approveTaskDraft,
+  approveTaskWork,
+  archiveTask,
+  assignTask,
+  cancelTask,
   createIdempotencyKey,
+  createTaskDraft,
   getMyTasks,
   getTaskDetail,
+  getWorkboardTasks,
+  reopenTask,
+  requestTaskRevision,
   startTaskRevision,
   startTaskWork,
   submitTaskForReview,
   submitTaskWithoutRecordedTime,
+  updateTaskDraft,
 } from "./services/tasks.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
@@ -442,6 +452,21 @@ let taskNoTimeReason = "";
 let taskFallbackOpen = false;
 let myTasksClock = Date.now();
 let myTasksTickHandle = null;
+let workboardTasks = [];
+let workboardLoadState = "idle";
+let workboardLoadError = "";
+let workboardFilterStatus = "active";
+let workboardFilterPriority = "";
+let workboardFilterSource = "";
+let workboardFilterAssignee = "";
+let workboardFilterReviewer = "";
+let workboardSearch = "";
+let workboardDrawerMode = "closed";
+let workboardCommandState = "idle";
+let workboardCommandError = "";
+let workboardReviewNote = "";
+let workboardReason = "";
+let workboardDraftForm = createEmptyWorkboardDraft();
 
 const routes = {
   "/": "Overview",
@@ -450,6 +475,7 @@ const routes = {
   "/orders": "Orders",
   "/production": "Production",
   "/my-tasks": "My Tasks",
+  "/workboard": "Workboard",
   "/reorders": "Reorders",
   "/overview": "Overview",
   "/clients": "Clients",
@@ -500,6 +526,7 @@ function render() {
   const filteredOrders = getFilteredOrders();
   const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
+  if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -519,6 +546,8 @@ function render() {
                   ? renderMvpProductionPage()
                   : currentRoute === "My Tasks"
                     ? renderMyTasksPage()
+                    : currentRoute === "Workboard"
+                      ? renderWorkboardPage()
                   : currentRoute === "Overview"
                 ? renderOverviewPage()
                 : currentRoute === "Clients"
@@ -1108,21 +1137,26 @@ function isLocalTaskQaMode() {
 }
 
 function createLocalTaskQaSession() {
+  const userId = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_USER_ID || "95000000-0000-4000-8000-000000000010");
   return {
     access_token: "synthetic-staff-a-token",
     refresh_token: "",
     expires_at: Math.floor(Date.now() / 1000) + 3600,
-    user: { id: "95000000-0000-4000-8000-000000000010" },
+    user: { id: userId },
   };
 }
 
 function createLocalTaskQaUser() {
+  const role = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_ROLE || "staff").trim().toLowerCase();
+  const safeRole = ["owner", "admin", "staff"].includes(role) ? role : "staff";
+  const userId = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_USER_ID || "95000000-0000-4000-8000-000000000010");
+  const displayName = safeRole === "owner" ? "Synthetic Owner" : safeRole === "admin" ? "Synthetic Admin" : "Synthetic Staff A";
   return {
-    id: "synthetic-staff-a",
-    userId: "95000000-0000-4000-8000-000000000010",
-    email: "synthetic-staff-a.invalid",
-    displayName: "Synthetic Staff A",
-    role: "staff",
+    id: `synthetic-${safeRole}`,
+    userId,
+    email: `synthetic-${safeRole}.invalid`,
+    displayName,
+    role: safeRole,
   };
 }
 function isTaskFeatureUiEnabled() {
@@ -1237,6 +1271,469 @@ function stopMyTasksTimerTick() {
   myTasksTickHandle = null;
 }
 
+function canViewWorkboardRoute() {
+  return isTaskFeatureUiEnabled() && ["owner", "admin"].includes(adminUser?.role);
+}
+
+function createEmptyWorkboardDraft(task = null) {
+  const now = new Date();
+  const defaultDeadline = new Date(now.getTime() + 24 * 3600000).toISOString().slice(0, 16);
+  return {
+    title: task?.title || "",
+    brief: task?.brief || "",
+    sourceType: task?.sourceType || "MANUAL",
+    sourceRecordType: task?.sourceRecordType || "",
+    sourceRecordId: task?.sourceRecordId || "",
+    priority: task?.priority || "MEDIUM",
+    assignedUserId: task?.assignedUserId || "",
+    reviewerUserId: task?.reviewerUserId || "",
+    timeTrackingMode: task?.timeTrackingMode || "EXPECTED",
+    draftApprovalRequired: task?.draftApprovalRequired === true,
+    scheduledDate: task?.scheduledDate || "",
+    startDeadline: toLocalDatetimeInput(task?.startDeadline || ""),
+    submissionDeadline: toLocalDatetimeInput(task?.submissionDeadline || defaultDeadline),
+    approvalDeadline: toLocalDatetimeInput(task?.approvalDeadline || ""),
+  };
+}
+
+async function loadWorkboardTasks({ silent = false } = {}) {
+  if (!canViewWorkboardRoute() || !adminAuthSession?.access_token) return;
+  if (!silent) {
+    workboardLoadState = "loading";
+    workboardLoadError = "";
+    render();
+  }
+  try {
+    const response = await getWorkboardTasks(adminAuthSession, getWorkboardApiFilters());
+    workboardTasks = sortMyTasks(response.tasks || []);
+    workboardLoadState = "ready";
+    workboardLoadError = "";
+    syncMyTasksTimerTick();
+  } catch (error) {
+    workboardLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : "error";
+    workboardLoadError = getTaskErrorMessage(error);
+    workboardTasks = [];
+  }
+  render();
+}
+
+function getWorkboardApiFilters() {
+  const statusMap = {
+    draft: "DRAFT",
+    to_do: "TO_DO",
+    in_progress: "IN_PROGRESS",
+    for_review: "FOR_REVIEW",
+    needs_revision: "NEEDS_REVISION",
+    done: "DONE",
+    cancelled: "CANCELLED",
+  };
+  return {
+    status: statusMap[workboardFilterStatus] || "",
+    priority: workboardFilterPriority,
+    sourceType: workboardFilterSource,
+    assignedUserId: workboardFilterAssignee,
+    reviewerUserId: workboardFilterReviewer,
+    archived: workboardFilterStatus === "archived" ? "true" : "false",
+    search: workboardSearch.trim(),
+    pageSize: 100,
+  };
+}
+
+function getVisibleWorkboardTasks() {
+  const normalized = workboardSearch.trim().toLowerCase();
+  return workboardTasks.filter((task) => {
+    if (workboardFilterStatus === "active" && ["DONE", "CANCELLED"].includes(task.status)) return false;
+    if (workboardFilterStatus === "overdue" && !isTaskOverdue(task)) return false;
+    if (normalized) return [task.taskCode, task.title, task.sourceType, task.priority, task.status, getUserLabel(task.assignedUser), getUserLabel(task.reviewerUser)].join(" ").toLowerCase().includes(normalized);
+    return true;
+  });
+}
+
+function renderWorkboardPage() {
+  if (!canViewWorkboardRoute()) {
+    return `<section class="mvp-page workboard-page"><div class="mvp-page-title"><div><span>HOME / WORKBOARD</span><h1>Workboard</h1><p>Task planning is not enabled for this account.</p></div></div></section>`;
+  }
+  const visibleTasks = getVisibleWorkboardTasks();
+  return `<section class="mvp-page workboard-page">
+    <div class="mvp-page-title">
+      <div><span>HOME / WORKBOARD</span><h1>Workboard</h1><p>Plan, assign, review, and monitor canonical task records.</p></div>
+      <button class="ops-gold-button" data-workboard-create type="button">CREATE TASK</button>
+    </div>
+    ${renderWorkboardStateNotice()}
+    ${renderWorkboardSummary()}
+    ${renderWorkboardFilters()}
+    ${workboardLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Workboard</strong><span>Checking task records.</span></div>` : ""}
+    ${workboardLoadState === "ready" ? renderWorkboardTaskList(visibleTasks) : ""}
+    ${renderWorkboardDrawer()}
+  </section>`;
+}
+
+function renderWorkboardStateNotice() {
+  if (workboardLoadState === "error") return `<div class="ops-persistence-card error"><strong>Unable to load Workboard</strong><span>${escapeHtml(workboardLoadError)}</span></div>`;
+  if (workboardLoadState === "forbidden") return `<div class="ops-persistence-card error"><strong>Workboard access is restricted</strong><span>${escapeHtml(workboardLoadError || "Your account cannot view manager task records.")}</span></div>`;
+  if (workboardLoadState === "feature-disabled") return `<div class="ops-persistence-card"><strong>Workboard unavailable</strong><span>The task domain is disabled for this environment.</span></div>`;
+  if (workboardCommandError) return `<div class="ops-persistence-card error"><strong>Workboard action needs attention</strong><span>${escapeHtml(workboardCommandError)}</span></div>`;
+  return "";
+}
+
+function renderWorkboardSummary() {
+  const counts = {
+    drafts: workboardTasks.filter((task) => task.status === "DRAFT").length,
+    todo: workboardTasks.filter((task) => task.status === "TO_DO").length,
+    progress: workboardTasks.filter((task) => task.status === "IN_PROGRESS").length,
+    review: workboardTasks.filter((task) => task.status === "FOR_REVIEW").length,
+    revision: workboardTasks.filter((task) => task.status === "NEEDS_REVISION").length,
+    overdue: workboardTasks.filter((task) => isTaskOverdue(task)).length,
+    done: workboardTasks.filter((task) => task.status === "DONE").length,
+  };
+  return `<div class="workboard-summary">
+    ${renderMyTaskMetric("Drafts", counts.drafts, "Planning")}
+    ${renderMyTaskMetric("To Do", counts.todo, "Queued")}
+    ${renderMyTaskMetric("In Progress", counts.progress, "Running")}
+    ${renderMyTaskMetric("For Review", counts.review, "Owner/Admin")}
+    ${renderMyTaskMetric("Needs Revision", counts.revision, "Returned")}
+    ${renderMyTaskMetric("Overdue", counts.overdue, "Needs attention")}
+    ${renderMyTaskMetric("Done", counts.done, "Completed")}
+  </div>`;
+}
+
+function renderWorkboardFilters() {
+  return `<div class="workboard-filters">
+    ${renderWorkboardSelect("workboard-status-filter", workboardFilterStatus, [["active", "Active"], ["draft", "Draft"], ["to_do", "To Do"], ["in_progress", "In Progress"], ["for_review", "For Review"], ["needs_revision", "Needs Revision"], ["overdue", "Overdue"], ["done", "Done"], ["cancelled", "Cancelled"], ["archived", "Archived"]])}
+    ${renderWorkboardSelect("workboard-priority-filter", workboardFilterPriority, [["", "All priorities"], ["URGENT", "Urgent"], ["HIGH", "High"], ["MEDIUM", "Medium"], ["LOW", "Low"]])}
+    ${renderWorkboardSelect("workboard-source-filter", workboardFilterSource, [["", "All sources"], ["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]])}
+    ${renderWorkboardUserSelect("workboard-assignee-filter", workboardFilterAssignee, "All assignees")}
+    ${renderWorkboardUserSelect("workboard-reviewer-filter", workboardFilterReviewer, "All reviewers")}
+    <label class="my-tasks-search workboard-search">${renderIcon("search", "search-icon")}<input id="workboard-search" value="${escapeHtml(workboardSearch)}" placeholder="Search task title or code..." type="search" /></label>
+    <button data-workboard-clear type="button">CLEAR</button>
+  </div>`;
+}
+
+function renderWorkboardSelect(id, value, options) {
+  return `<select id="${escapeHtml(id)}">${options.map(([optionValue, label]) => `<option value="${escapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`;
+}
+
+function renderWorkboardUserSelect(id, value, label) {
+  const users = getEligibleAssignmentUsers(false);
+  return `<select id="${escapeHtml(id)}"><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
+}
+
+function renderWorkboardTaskList(tasks) {
+  if (!tasks.length) return `<div class="my-tasks-empty"><strong>${workboardTasks.length ? "No tasks match your filters" : "No task records yet"}</strong><span>${workboardTasks.length ? "Try another status or search term." : "Create a manual task draft when planning is ready."}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
+  return `<div class="workboard-table-wrap"><table class="workboard-table"><thead><tr><th>Task</th><th>Source</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Reviewer</th><th>Deadline</th><th>Time</th><th>Action</th></tr></thead><tbody>${tasks.map(renderWorkboardRow).join("")}</tbody></table></div><div class="workboard-card-list">${tasks.map(renderWorkboardCard).join("")}</div>`;
+}
+
+function renderWorkboardRow(task) {
+  const latest = getWorkboardPrimaryAction(task);
+  return `<tr class="${task.status === "FOR_REVIEW" ? "for-review" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
+    <td><button class="workboard-task-link" data-workboard-open="${escapeHtml(task.id)}" type="button"><span>${escapeHtml(task.taskCode || "TASK")}</span><strong>${escapeHtml(task.title || "Untitled task")}</strong></button></td>
+    <td>${escapeHtml(formatSourceType(task.sourceType))}</td>
+    <td>${renderTaskPriority(task.priority)}</td>
+    <td>${renderTaskStatus(task.status)}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</td>
+    <td>${escapeHtml(getUserLabel(task.assignedUser))}</td>
+    <td>${escapeHtml(getUserLabel(task.reviewerUser))}</td>
+    <td>${escapeHtml(formatTaskDue(task))}</td>
+    <td>${escapeHtml(formatTaskTimeSummary(task))}</td>
+    <td><button data-workboard-open="${escapeHtml(task.id)}" type="button">${escapeHtml(latest || "OPEN")}</button></td>
+  </tr>`;
+}
+
+function renderWorkboardCard(task) {
+  return `<article class="my-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
+    <button class="my-task-card-main" data-workboard-open="${escapeHtml(task.id)}" type="button"><span class="my-task-code">${escapeHtml(task.taskCode || "TASK")}</span><strong>${escapeHtml(task.title || "Untitled task")}</strong><small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(getUserLabel(task.assignedUser))}</small></button>
+    <div class="my-task-card-meta">${renderTaskPriority(task.priority)}${renderTaskStatus(task.status)}<span>${escapeHtml(formatTaskDue(task))}</span><span>${escapeHtml(formatTaskTimeSummary(task))}</span></div>
+  </article>`;
+}
+
+function getWorkboardPrimaryAction(task) {
+  const actions = task.allowedActions || [];
+  if (actions.includes("APPROVE_WORK")) return "REVIEW";
+  if (actions.includes("REQUEST_REVISION")) return "REVIEW";
+  if (actions.includes("APPROVE_DRAFT")) return "APPROVE DRAFT";
+  if (actions.includes("EDIT_DRAFT")) return "EDIT";
+  return "OPEN";
+}
+
+function renderWorkboardDrawer() {
+  if (workboardDrawerMode === "closed") return "";
+  const isForm = workboardDrawerMode === "create" || workboardDrawerMode === "edit";
+  const detail = selectedTaskDetail;
+  const task = detail?.task || workboardTasks.find((item) => item.id === selectedTaskId) || null;
+  return `<div class="my-task-drawer-backdrop" data-workboard-close></div><aside class="my-task-drawer workboard-drawer" aria-label="Workboard task details">
+    <header><div><span>${escapeHtml(workboardDrawerMode === "create" ? "NEW TASK" : task?.taskCode || "TASK")}</span><h2>${escapeHtml(workboardDrawerMode === "create" ? "Create manual task draft" : task?.title || "Loading task")}</h2></div><button data-workboard-close type="button" aria-label="Close Workboard drawer">X</button></header>
+    ${workboardCommandError ? `<div class="ops-persistence-card error"><strong>Action needs attention</strong><span>${escapeHtml(workboardCommandError)}</span></div>` : ""}
+    ${isForm ? renderWorkboardDraftForm(task) : renderWorkboardTaskDetail(detail, task)}
+  </aside>`;
+}
+
+function renderWorkboardDraftForm(task) {
+  const busy = workboardCommandState === "saving";
+  return `<form class="workboard-form" data-workboard-draft-form>
+    <label><span>Title</span><input id="workboard-title" value="${escapeHtml(workboardDraftForm.title)}" maxlength="200" ${busy ? "disabled" : ""} /></label>
+    <label><span>Brief</span><textarea id="workboard-brief" rows="5" ${busy ? "disabled" : ""}>${escapeHtml(workboardDraftForm.brief)}</textarea></label>
+    <div class="workboard-form-grid">
+      <label><span>Source</span>${renderWorkboardSelect("workboard-source-type", workboardDraftForm.sourceType, [["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]])}</label>
+      <label><span>Priority</span>${renderWorkboardSelect("workboard-priority", workboardDraftForm.priority, [["LOW", "Low"], ["MEDIUM", "Medium"], ["HIGH", "High"], ["URGENT", "Urgent"]])}</label>
+      <label><span>Assigned</span>${renderWorkboardDraftUserSelect("workboard-assigned", workboardDraftForm.assignedUserId, "Unassigned")}</label>
+      <label><span>Reviewer</span>${renderWorkboardDraftUserSelect("workboard-reviewer", workboardDraftForm.reviewerUserId, "No reviewer")}</label>
+      <label><span>Time mode</span>${renderWorkboardSelect("workboard-time-mode", workboardDraftForm.timeTrackingMode, [["EXPECTED", "Expected"], ["NONE", "Time not required"]])}</label>
+      <label><span>Scheduled date</span><input id="workboard-scheduled" value="${escapeHtml(workboardDraftForm.scheduledDate)}" type="date" ${busy ? "disabled" : ""} /></label>
+      <label><span>Start deadline</span><input id="workboard-start-deadline" value="${escapeHtml(workboardDraftForm.startDeadline)}" type="datetime-local" ${busy ? "disabled" : ""} /></label>
+      <label><span>Submission deadline</span><input id="workboard-submission-deadline" value="${escapeHtml(workboardDraftForm.submissionDeadline)}" type="datetime-local" ${busy ? "disabled" : ""} /></label>
+      <label><span>Approval deadline</span><input id="workboard-approval-deadline" value="${escapeHtml(workboardDraftForm.approvalDeadline)}" type="datetime-local" ${busy ? "disabled" : ""} /></label>
+      <label><span>Source record type</span><input id="workboard-source-record-type" value="${escapeHtml(workboardDraftForm.sourceRecordType)}" maxlength="64" ${busy ? "disabled" : ""} /></label>
+      <label><span>Source record id</span><input id="workboard-source-record-id" value="${escapeHtml(workboardDraftForm.sourceRecordId)}" maxlength="200" ${busy ? "disabled" : ""} /></label>
+      <label class="workboard-checkbox"><input id="workboard-draft-approval" type="checkbox" ${workboardDraftForm.draftApprovalRequired ? "checked" : ""} ${busy ? "disabled" : ""} /><span>Owner approval required</span></label>
+    </div>
+    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button>${task?.allowedActions?.includes("APPROVE_DRAFT") ? `<button data-workboard-approve-draft="${escapeHtml(task.id)}" type="button" ${busy ? "disabled" : ""}>APPROVE DRAFT</button>` : ""}</div>
+  </form>`;
+}
+
+function renderWorkboardDraftUserSelect(id, value, label) {
+  const users = getEligibleAssignmentUsers(true);
+  return `<select id="${escapeHtml(id)}"><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
+}
+
+function renderWorkboardTaskDetail(detail, task) {
+  if (taskDetailLoadState === "loading") return `<div class="my-tasks-empty"><strong>Loading task detail</strong><span>Fetching canonical task state.</span></div>`;
+  if (taskDetailLoadError) return `<div class="ops-persistence-card error"><strong>Unable to open task</strong><span>${escapeHtml(taskDetailLoadError)}</span></div>`;
+  if (!detail || !task) return `<div class="my-tasks-empty"><strong>No task selected</strong><span>Select a task to inspect.</span></div>`;
+  const latestSubmission = (detail.submissions || []).at(-1) || null;
+  return `<div class="my-task-drawer-content">
+    <section class="my-task-detail-hero"><div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</div><p>${escapeHtml(task.brief || "No brief provided.")}</p>${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}</section>
+    <section class="my-task-detail-grid">
+      ${renderTaskFact("Source", formatSourceReference(task))}
+      ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
+      ${renderTaskFact("Reviewer", getUserLabel(task.reviewerUser))}
+      ${renderTaskFact("Scheduled", formatTaskDate(task.scheduledDate))}
+      ${renderTaskFact("Start", formatTaskDateTime(task.startDeadline))}
+      ${renderTaskFact("Submission", formatTaskDateTime(task.submissionDeadline))}
+      ${renderTaskFact("Approval", formatTaskDateTime(task.approvalDeadline))}
+      ${renderTaskFact("Recorded", formatTaskTimeSummary(task))}
+    </section>
+    ${latestSubmission ? renderWorkboardLatestSubmission(latestSubmission) : ""}
+    ${renderTaskSubmissions(detail.submissions || [])}
+    ${renderWorkboardHistory(detail.history || [])}
+    ${renderWorkboardActionArea(task)}
+  </div>`;
+}
+
+function renderWorkboardLatestSubmission(submission) {
+  return `<section class="my-task-warning ${submission.timeRecordingStatus === "NOT_RECORDED" ? "no-time" : ""}"><strong>LATEST SUBMISSION - ${escapeHtml(formatSubmissionTimeStatus(submission))}</strong><p>${escapeHtml(submission.submissionNote || "No note saved.")}</p>${submission.proofUrl ? `<p><b>Proof:</b> ${escapeHtml(submission.proofUrl)}</p>` : ""}${submission.noTimeReason ? `<p><b>Time not recorded reason:</b> ${escapeHtml(submission.noTimeReason)}</p>` : ""}<small>${escapeHtml(formatTaskDateTime(submission.submittedAt))} / ${escapeHtml(getUserLabel(submission.submittedByUser))}${submission.recordedDurationSeconds !== null ? ` / ${escapeHtml(formatDuration(submission.recordedDurationSeconds))}` : ""}</small></section>`;
+}
+
+function renderWorkboardHistory(history) {
+  if (!history.length) return "";
+  return `<section class="my-task-history"><h3>Audit History</h3>${history.slice(-6).reverse().map((event) => `<article><div><strong>${escapeHtml(String(event.eventType || "EVENT").replace(/_/g, " "))}</strong><span>${escapeHtml(formatTaskDateTime(event.occurredAt))}</span></div>${event.reason ? `<p>${escapeHtml(event.reason)}</p>` : ""}</article>`).join("")}</section>`;
+}
+
+function renderWorkboardActionArea(task) {
+  const actions = task.allowedActions || [];
+  const busy = workboardCommandState === "saving";
+  if (!actions.length) return `<section class="my-task-action-area"><strong>No available manager action</strong><span>This task is waiting on another step.</span></section>`;
+  return `<section class="my-task-action-area workboard-actions"><strong>Allowed manager actions</strong>
+    ${actions.includes("REQUEST_REVISION") || actions.includes("APPROVE_WORK") ? `<label><span>Review note</span><textarea id="workboard-review-note" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReviewNote)}</textarea></label>` : ""}
+    ${actions.includes("ASSIGN") ? `<label><span>Assign user</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
+    ${actions.includes("CANCEL") || actions.includes("REOPEN") ? `<label><span>Reason</span><textarea id="workboard-reason" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReason)}</textarea></label>` : ""}
+    <div class="my-task-action-buttons sticky-actions">
+      ${actions.includes("EDIT_DRAFT") ? `<button data-workboard-edit-draft="${escapeHtml(task.id)}" type="button">EDIT DRAFT</button>` : ""}
+      ${actions.includes("ASSIGN") ? `<button data-workboard-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ASSIGN</button>` : ""}
+      ${actions.includes("APPROVE_DRAFT") ? `<button class="primary" data-workboard-approve-draft="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE DRAFT</button>` : ""}
+      ${actions.includes("REQUEST_REVISION") ? `<button data-workboard-request-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">REQUEST REVISION</button>` : ""}
+      ${actions.includes("APPROVE_WORK") ? `<button class="primary" data-workboard-approve-work="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE WORK</button>` : ""}
+      ${actions.includes("CANCEL") ? `<button data-workboard-cancel="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">CANCEL</button>` : ""}
+      ${actions.includes("REOPEN") ? `<button data-workboard-reopen="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">REOPEN</button>` : ""}
+      ${actions.includes("ARCHIVE") ? `<button data-workboard-archive="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ARCHIVE</button>` : ""}
+    </div>
+  </section>`;
+}
+
+function getEligibleAssignmentUsers(activeOnly = true) {
+  return assignmentUsers.filter((user) => {
+    if (!user?.userId) return false;
+    if (activeOnly && user.isActive === false) return false;
+    if (user.assignmentEligible === false) return false;
+    return ["owner", "admin", "staff"].includes(String(user.role || "").toLowerCase());
+  });
+}
+
+function getAssignmentUserLabel(user) {
+  return `${user.displayName || "TRRY teammate"}${user.isActive === false ? " (inactive)" : ""} - ${formatAdminRole(user.role || "staff")}`;
+}
+
+function formatSourceReference(task) {
+  const base = formatSourceType(task.sourceType);
+  if (!task.sourceRecordType || !task.sourceRecordId) return base;
+  return `${base} / ${task.sourceRecordType}:${task.sourceRecordId}`;
+}
+
+function formatTaskTimeSummary(task) {
+  if (task.timeTrackingMode === "NONE") return "Time not required";
+  if (task.openTimeEntry) return formatElapsed(getRunningElapsedSeconds(task));
+  return formatDuration(task.totalClosedDurationSeconds);
+}
+
+function toLocalDatetimeInput(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const offset = date.getTimezoneOffset() * 60000;
+  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function fromLocalDatetimeInput(value) {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function readWorkboardDraftForm() {
+  workboardDraftForm = {
+    title: document.getElementById("workboard-title")?.value || "",
+    brief: document.getElementById("workboard-brief")?.value || "",
+    sourceType: document.getElementById("workboard-source-type")?.value || "MANUAL",
+    sourceRecordType: document.getElementById("workboard-source-record-type")?.value || "",
+    sourceRecordId: document.getElementById("workboard-source-record-id")?.value || "",
+    priority: document.getElementById("workboard-priority")?.value || "MEDIUM",
+    assignedUserId: document.getElementById("workboard-assigned")?.value || "",
+    reviewerUserId: document.getElementById("workboard-reviewer")?.value || "",
+    timeTrackingMode: document.getElementById("workboard-time-mode")?.value || "EXPECTED",
+    draftApprovalRequired: document.getElementById("workboard-draft-approval")?.checked === true,
+    scheduledDate: document.getElementById("workboard-scheduled")?.value || "",
+    startDeadline: document.getElementById("workboard-start-deadline")?.value || "",
+    submissionDeadline: document.getElementById("workboard-submission-deadline")?.value || "",
+    approvalDeadline: document.getElementById("workboard-approval-deadline")?.value || "",
+  };
+}
+
+function buildWorkboardDraftPayload(task = null) {
+  readWorkboardDraftForm();
+  const sourceRecordType = workboardDraftForm.sourceRecordType.trim();
+  const sourceRecordId = workboardDraftForm.sourceRecordId.trim();
+  return {
+    ...(task ? { expectedVersion: task.version } : {}),
+    title: workboardDraftForm.title.trim(),
+    brief: workboardDraftForm.brief.trim(),
+    sourceType: workboardDraftForm.sourceType,
+    sourceRecordType: sourceRecordType || null,
+    sourceRecordId: sourceRecordId || null,
+    priority: workboardDraftForm.priority,
+    assignedUserId: workboardDraftForm.assignedUserId || null,
+    reviewerUserId: workboardDraftForm.reviewerUserId || null,
+    timeTrackingMode: workboardDraftForm.timeTrackingMode,
+    draftApprovalRequired: workboardDraftForm.draftApprovalRequired,
+    scheduledDate: workboardDraftForm.scheduledDate || null,
+    startDeadline: fromLocalDatetimeInput(workboardDraftForm.startDeadline),
+    submissionDeadline: fromLocalDatetimeInput(workboardDraftForm.submissionDeadline),
+    approvalDeadline: fromLocalDatetimeInput(workboardDraftForm.approvalDeadline),
+  };
+}
+
+async function openWorkboardTask(taskId) {
+  selectedTaskId = taskId;
+  selectedTaskDetail = null;
+  taskDetailLoadState = "loading";
+  taskDetailLoadError = "";
+  workboardDrawerMode = "detail";
+  workboardCommandError = "";
+  workboardReviewNote = "";
+  workboardReason = "";
+  render();
+  try {
+    selectedTaskDetail = await getTaskDetail(taskId, adminAuthSession);
+    taskDetailLoadState = "ready";
+    workboardTasks = sortMyTasks(workboardTasks.map((item) => item.id === selectedTaskDetail.task.id ? selectedTaskDetail.task : item));
+    syncMyTasksTimerTick();
+  } catch (error) {
+    taskDetailLoadState = "error";
+    taskDetailLoadError = getTaskErrorMessage(error);
+  }
+  render();
+}
+
+function openWorkboardCreate() {
+  selectedTaskId = null;
+  selectedTaskDetail = null;
+  workboardDrawerMode = "create";
+  workboardDraftForm = createEmptyWorkboardDraft();
+  workboardCommandError = "";
+  render();
+}
+
+function openWorkboardEditDraft(taskId) {
+  const task = selectedTaskDetail?.task?.id === taskId ? selectedTaskDetail.task : workboardTasks.find((item) => item.id === taskId);
+  if (!task) return;
+  selectedTaskId = taskId;
+  workboardDrawerMode = "edit";
+  workboardDraftForm = createEmptyWorkboardDraft(task);
+  workboardCommandError = "";
+  render();
+}
+
+function closeWorkboardDrawer() {
+  workboardDrawerMode = "closed";
+  selectedTaskId = null;
+  selectedTaskDetail = null;
+  taskDetailLoadState = "idle";
+  taskDetailLoadError = "";
+  workboardCommandError = "";
+  workboardReviewNote = "";
+  workboardReason = "";
+  render();
+}
+
+async function saveWorkboardDraft() {
+  if (workboardCommandState === "saving") return;
+  const existing = workboardDrawerMode === "edit" ? selectedTaskDetail?.task || workboardTasks.find((item) => item.id === selectedTaskId) : null;
+  const payload = buildWorkboardDraftPayload(existing);
+  workboardCommandState = "saving";
+  workboardCommandError = "";
+  render();
+  try {
+    const response = existing
+      ? await updateTaskDraft(existing.id, payload, adminAuthSession, createIdempotencyKey("draft"))
+      : await createTaskDraft(payload, adminAuthSession, createIdempotencyKey("create"));
+    applyTaskCommandResponse(response);
+    workboardDrawerMode = "detail";
+    await loadWorkboardTasks({ silent: true });
+  } catch (error) {
+    workboardCommandError = getTaskErrorMessage(error);
+    if (error.code === "VERSION_CONFLICT" && existing?.id) await refreshTaskAfterConflict(existing.id);
+  } finally {
+    workboardCommandState = "idle";
+    render();
+  }
+}
+
+async function runWorkboardCommand(taskId, action) {
+  if (workboardCommandState === "saving") return;
+  const task = selectedTaskDetail?.task?.id === taskId ? selectedTaskDetail.task : workboardTasks.find((item) => item.id === taskId);
+  if (!task) return;
+  workboardReviewNote = document.getElementById("workboard-review-note")?.value || workboardReviewNote;
+  workboardReason = document.getElementById("workboard-reason")?.value || workboardReason;
+  workboardCommandState = "saving";
+  workboardCommandError = "";
+  render();
+  try {
+    const version = task.version;
+    let response;
+    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: document.getElementById("workboard-assign-user")?.value || null }, adminAuthSession, createIdempotencyKey("assign"));
+    if (action === "approve-draft") response = await approveTaskDraft(taskId, version, adminAuthSession, createIdempotencyKey("approve-draft"));
+    if (action === "request-revision") response = await requestTaskRevision(taskId, { expectedVersion: version, reviewNote: workboardReviewNote.trim() }, adminAuthSession, createIdempotencyKey("revision-request"));
+    if (action === "approve-work") response = await approveTaskWork(taskId, { expectedVersion: version, reviewNote: workboardReviewNote.trim() || null }, adminAuthSession, createIdempotencyKey("approve-work"));
+    if (action === "cancel") response = await cancelTask(taskId, { expectedVersion: version, reason: workboardReason.trim() }, adminAuthSession, createIdempotencyKey("cancel"));
+    if (action === "reopen") response = await reopenTask(taskId, { expectedVersion: version, reason: workboardReason.trim() }, adminAuthSession, createIdempotencyKey("reopen"));
+    if (action === "archive") response = await archiveTask(taskId, version, adminAuthSession, createIdempotencyKey("archive"));
+    applyTaskCommandResponse(response);
+    await loadWorkboardTasks({ silent: true });
+  } catch (error) {
+    workboardCommandError = getTaskErrorMessage(error);
+    if (["VERSION_CONFLICT", "TIMER_ALREADY_OPEN", "INVALID_TRANSITION"].includes(error.code)) await refreshTaskAfterConflict(taskId);
+  } finally {
+    workboardCommandState = "idle";
+    render();
+  }
+}
 function renderMyTasksPage() {
   if (!canViewMyTasksRoute()) {
     return `<section class="mvp-page my-tasks-page"><div class="mvp-page-title"><div><span>HOME / MY TASKS</span><h1>My Tasks</h1><p>Task execution is not enabled in this environment.</p></div></div></section>`;
@@ -1580,7 +2077,8 @@ function applyTaskCommandResponse(response) {
     timeEntries: response.timeEntries || selectedTaskDetail?.timeEntries || [],
     history: response.history || selectedTaskDetail?.history || [],
   };
-  myTasks = sortMyTasks(myTasks.map((item) => item.id === response.task.id ? response.task : item));
+  myTasks = sortMyTasks(upsertTaskRecord(myTasks, response.task));
+  workboardTasks = sortMyTasks(upsertTaskRecord(workboardTasks, response.task));
   taskFallbackOpen = false;
   taskSubmissionNote = "";
   taskProofUrl = "";
@@ -1588,11 +2086,17 @@ function applyTaskCommandResponse(response) {
   syncMyTasksTimerTick();
 }
 
+function upsertTaskRecord(tasks, task) {
+  const found = tasks.some((item) => item.id === task.id);
+  return found ? tasks.map((item) => item.id === task.id ? task : item) : [task, ...tasks];
+}
+
 async function refreshTaskAfterConflict(taskId) {
   try {
     const detail = await getTaskDetail(taskId, adminAuthSession);
     selectedTaskDetail = detail;
-    myTasks = sortMyTasks(myTasks.map((item) => item.id === detail.task.id ? detail.task : item));
+    myTasks = sortMyTasks(upsertTaskRecord(myTasks, detail.task));
+    workboardTasks = sortMyTasks(upsertTaskRecord(workboardTasks, detail.task));
   } catch {
     await loadMyTasks({ silent: true });
   }
@@ -4692,7 +5196,8 @@ function renderSidebar(currentRoute) {
     { label: "Clients", path: "/clients" },
     { label: "Products", path: "/products" },
     { label: "Production", path: "/production", icon: "factory" },
-    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
+  ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
     { label: "Catalog", path: "/catalog" },
     ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
     { label: "Settings", path: "/settings" },
@@ -4799,6 +5304,7 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
+  ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
   ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
   return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
@@ -5143,6 +5649,50 @@ function handleAccountEscape(event) {
   }
   if (changed) render();
 }
+function bindWorkboardEvents() {
+  document.querySelector("[data-workboard-create]")?.addEventListener("click", openWorkboardCreate);
+  document.querySelectorAll("[data-workboard-open]").forEach((button) => button.addEventListener("click", () => openWorkboardTask(button.dataset.workboardOpen)));
+  document.querySelectorAll("[data-workboard-close]").forEach((button) => button.addEventListener("click", closeWorkboardDrawer));
+  document.querySelectorAll("[data-workboard-edit-draft]").forEach((button) => button.addEventListener("click", () => openWorkboardEditDraft(button.dataset.workboardEditDraft)));
+
+  const status = document.getElementById("workboard-status-filter");
+  const priority = document.getElementById("workboard-priority-filter");
+  const source = document.getElementById("workboard-source-filter");
+  const assignee = document.getElementById("workboard-assignee-filter");
+  const reviewer = document.getElementById("workboard-reviewer-filter");
+  const search = document.getElementById("workboard-search");
+  status?.addEventListener("change", (event) => { workboardFilterStatus = event.target.value; loadWorkboardTasks(); });
+  priority?.addEventListener("change", (event) => { workboardFilterPriority = event.target.value; loadWorkboardTasks(); });
+  source?.addEventListener("change", (event) => { workboardFilterSource = event.target.value; loadWorkboardTasks(); });
+  assignee?.addEventListener("change", (event) => { workboardFilterAssignee = event.target.value; loadWorkboardTasks(); });
+  reviewer?.addEventListener("change", (event) => { workboardFilterReviewer = event.target.value; loadWorkboardTasks(); });
+  search?.addEventListener("input", (event) => {
+    workboardSearch = event.target.value;
+    render();
+    focusFieldAtEnd("workboard-search");
+  });
+  document.querySelectorAll("[data-workboard-clear]").forEach((button) => button.addEventListener("click", () => {
+    workboardFilterStatus = "active";
+    workboardFilterPriority = "";
+    workboardFilterSource = "";
+    workboardFilterAssignee = "";
+    workboardFilterReviewer = "";
+    workboardSearch = "";
+    loadWorkboardTasks();
+  }));
+
+  document.querySelector("[data-workboard-draft-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    saveWorkboardDraft();
+  });
+  document.querySelectorAll("[data-workboard-assign]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardAssign, "assign")));
+  document.querySelectorAll("[data-workboard-approve-draft]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveDraft, "approve-draft")));
+  document.querySelectorAll("[data-workboard-request-revision]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardRequestRevision, "request-revision")));
+  document.querySelectorAll("[data-workboard-approve-work]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveWork, "approve-work")));
+  document.querySelectorAll("[data-workboard-cancel]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardCancel, "cancel")));
+  document.querySelectorAll("[data-workboard-reopen]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardReopen, "reopen")));
+  document.querySelectorAll("[data-workboard-archive]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardArchive, "archive")));
+}
 function bindMyTasksEvents() {
   document.getElementById("my-tasks-search")?.addEventListener("input", (event) => {
     myTasksSearch = event.target.value;
@@ -5347,6 +5897,7 @@ function bindEvents() {
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
   bindOpsBoardEvents();
   bindOrderDashboardEvents();
+  bindWorkboardEvents();
   bindMyTasksEvents();
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -6205,6 +6756,7 @@ function getCurrentRoute() {
 function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
+  if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   return routes[path] ? path : defaultRoutePath;
 }
 
@@ -6217,6 +6769,7 @@ function normalizeRoutePath(path) {
   const url = new URL(String(path || defaultRoutePath), window.location.origin);
   const routePath = url.pathname.replace(/\/+$/, "") || "/";
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
+  if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
 }
 

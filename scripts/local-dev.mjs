@@ -21,6 +21,7 @@ const appRoutes = new Set([
   "/order-dashboard",
   "/production",
   "/my-tasks",
+  "/workboard",
   "/reorders",
   "/overview",
   "/clients",
@@ -106,10 +107,18 @@ function getTaskApiHandlerPath(routePath) {
   if (routePath === "/api/my-tasks") return "../api/my-tasks.js";
   if (routePath === "/api/tasks") return "../api/tasks/index.js";
   if (/^\/api\/tasks\/[^/]+$/.test(routePath)) return "../api/tasks/[id]/index.js";
+  if (/^\/api\/tasks\/[^/]+\/draft$/.test(routePath)) return "../api/tasks/[id]/draft.js";
+  if (/^\/api\/tasks\/[^/]+\/assign$/.test(routePath)) return "../api/tasks/[id]/assign.js";
+  if (/^\/api\/tasks\/[^/]+\/approve-draft$/.test(routePath)) return "../api/tasks/[id]/approve-draft.js";
   if (/^\/api\/tasks\/[^/]+\/start$/.test(routePath)) return "../api/tasks/[id]/start.js";
   if (/^\/api\/tasks\/[^/]+\/submit$/.test(routePath)) return "../api/tasks/[id]/submit.js";
   if (/^\/api\/tasks\/[^/]+\/submit-without-time$/.test(routePath)) return "../api/tasks/[id]/submit-without-time.js";
   if (/^\/api\/tasks\/[^/]+\/start-revision$/.test(routePath)) return "../api/tasks/[id]/start-revision.js";
+  if (/^\/api\/tasks\/[^/]+\/request-revision$/.test(routePath)) return "../api/tasks/[id]/request-revision.js";
+  if (/^\/api\/tasks\/[^/]+\/approve$/.test(routePath)) return "../api/tasks/[id]/approve.js";
+  if (/^\/api\/tasks\/[^/]+\/cancel$/.test(routePath)) return "../api/tasks/[id]/cancel.js";
+  if (/^\/api\/tasks\/[^/]+\/reopen$/.test(routePath)) return "../api/tasks/[id]/reopen.js";
+  if (/^\/api\/tasks\/[^/]+\/archive$/.test(routePath)) return "../api/tasks/[id]/archive.js";
   if (/^\/api\/tasks\/[^/]+\/history$/.test(routePath)) return "../api/tasks/[id]/history.js";
   if (/^\/api\/tasks\/[^/]+\/time-entries$/.test(routePath)) return "../api/tasks/[id]/time-entries/index.js";
   return "";

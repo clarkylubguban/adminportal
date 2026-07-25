@@ -7,6 +7,50 @@ export async function getMyTasks(session, filters = {}) {
   return taskRequest(`/api/my-tasks?${params.toString()}`, { session });
 }
 
+export async function getWorkboardTasks(session, filters = {}) {
+  const params = new URLSearchParams();
+  for (const key of ["status", "priority", "sourceType", "assignedUserId", "reviewerUserId", "scheduledDate", "deadlineFrom", "deadlineTo", "archived", "search"]) {
+    if (filters[key] !== undefined && filters[key] !== null && filters[key] !== "") params.set(key, String(filters[key]));
+  }
+  params.set("pageSize", String(filters.pageSize || 100));
+  return taskRequest(`/api/tasks?${params.toString()}`, { session });
+}
+
+export async function createTaskDraft(body, session, idempotencyKey = createIdempotencyKey("create")) {
+  return taskRequest("/api/tasks", { method: "POST", body, session, idempotencyKey });
+}
+
+export async function updateTaskDraft(taskId, body, session, idempotencyKey = createIdempotencyKey("draft")) {
+  return taskRequest(`/api/tasks/${encodeURIComponent(taskId)}/draft`, { method: "PATCH", body, session, idempotencyKey });
+}
+
+export async function assignTask(taskId, body, session, idempotencyKey = createIdempotencyKey("assign")) {
+  return taskCommand(taskId, "assign", body, session, idempotencyKey);
+}
+
+export async function approveTaskDraft(taskId, expectedVersion, session, idempotencyKey = createIdempotencyKey("approve-draft")) {
+  return taskCommand(taskId, "approve-draft", { expectedVersion }, session, idempotencyKey);
+}
+
+export async function requestTaskRevision(taskId, body, session, idempotencyKey = createIdempotencyKey("revision-request")) {
+  return taskCommand(taskId, "request-revision", body, session, idempotencyKey);
+}
+
+export async function approveTaskWork(taskId, body, session, idempotencyKey = createIdempotencyKey("approve-work")) {
+  return taskCommand(taskId, "approve", body, session, idempotencyKey);
+}
+
+export async function cancelTask(taskId, body, session, idempotencyKey = createIdempotencyKey("cancel")) {
+  return taskCommand(taskId, "cancel", body, session, idempotencyKey);
+}
+
+export async function reopenTask(taskId, body, session, idempotencyKey = createIdempotencyKey("reopen")) {
+  return taskCommand(taskId, "reopen", body, session, idempotencyKey);
+}
+
+export async function archiveTask(taskId, expectedVersion, session, idempotencyKey = createIdempotencyKey("archive")) {
+  return taskCommand(taskId, "archive", { expectedVersion }, session, idempotencyKey);
+}
 export async function getTaskDetail(taskId, session) {
   return taskRequest(`/api/tasks/${encodeURIComponent(taskId)}`, { session });
 }
