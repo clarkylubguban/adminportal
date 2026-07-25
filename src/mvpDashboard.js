@@ -162,33 +162,40 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function renderOverview({ items, notices = "" }) {
-    const inquiries = items.filter((item) => !confirmed(item));
-    const orders = items.filter(confirmed);
+    const rows = Array.isArray(items) ? items : [];
+    const inquiries = rows.filter((item) => !confirmed(item));
+    const orders = rows.filter(confirmed);
     const pipeline = countBy(Object.keys(QUOTE_STAGES), inquiries, quoteStage);
     const productionJobs = orders.filter(isReleasedToProduction);
     const production = countBy(PRODUCTION_STAGES.map(([value]) => value), productionJobs, productionStage);
-    const priorities = buildPriorities(orders, inquiries);
     const inProgress = ACTIVE_STAGES.reduce((sum, value) => sum + production[value], 0);
-    const completedToday = productionJobs.filter((item) => productionStage(item) === "completed" && String(item.productionUpdatedAt || item.updatedAt || "").slice(0, 10) === todayIso()).length;
+    const followUpsDue = inquiries.filter(isFollowUpDue).length;
+    const awaitingPayment = orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length;
+    const paymentProofs = orders.filter((item) => paymentLabel(item) === "Proof Submitted").length;
+    const blockedOrders = orders.filter((item) => blockedReason(item)).length;
+    const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
+    const priorities = buildPriorities(orders, inquiries);
+    const bottlenecks = buildBottlenecks({ inquiries, orders, productionJobs, pipeline });
+
     return `<main class="mvp-page ops-board-page mvp-overview-page">
       ${pageTitle("Overview", "What needs attention today", new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}
       ${notices}
-      ${metricSection("Pipeline", [
-        metric("New Inquiries", pipeline.new, "/inquiries?stage=new", "Inquiries"),
-        metric("Follow-up Due", inquiries.filter(isFollowUpDue).length, "/inquiries?stage=follow_due", "Inquiries", "warning"),
-        metric("Quote Sent", pipeline.sent, "/inquiries?stage=sent", "Inquiries"),
-        metric("Approved / Awaiting SO", pipeline.approved, "/inquiries?stage=approved", "Inquiries", "lime"),
-      ], "pipeline")}
-      ${metricSection("Operations", [
-        metric("Awaiting Payment", orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length, "/orders?payment=awaiting", "Orders"),
-        metric("In Production", inProgress, "/production?stage=in_progress", "Production"),
-        metric("Overdue", productionJobs.filter((item) => due(item).key === "overdue").length, "/production?due=overdue", "Production", "danger"),
-        metric("Ready for Release", orders.filter(readyForProduction).length, "/orders?stage=queued", "Orders"),
-        metric("Completed Today", completedToday, "/production?stage=completed", "Production"),
-      ], "operations")}
-      <section class="mvp-overview-grid">
-        <div class="mvp-section"><div class="mvp-section-title"><h2>Today's Priorities</h2><span>${priorities.length}</span></div><div class="mvp-priority-list">${priorities.length ? priorities.map(priorityRow).join("") : empty("NO PRIORITIES REQUIRE ATTENTION")}</div></div>
-        <div class="mvp-side-stack">${snapshot(productionJobs, production, inProgress)}${staffWorkload(productionJobs)}</div>
+      ${metricSection("Attention Snapshot", [
+        metric("Needs Quote", pipeline.new, "/inquiries?stage=new", "Inquiries", pipeline.new ? "warning" : ""),
+        metric("Follow-up Due", followUpsDue, "/inquiries?stage=follow_due", "Inquiries", followUpsDue ? "warning" : ""),
+        metric("Confirmed Orders", orders.length, "/orders", "Orders"),
+        metric("Awaiting Payment", awaitingPayment, "/orders?payment=awaiting", "Orders", awaitingPayment ? "warning" : ""),
+        metric("Payment Review", paymentProofs, "/orders", "Orders", paymentProofs ? "warning" : ""),
+        metric("Blocked Release", blockedOrders, "/orders", "Orders", blockedOrders ? "danger" : ""),
+        metric("Released Jobs", productionJobs.length, "/production", "Production"),
+        metric("Overdue Jobs", overdueProduction, "/production?due=overdue", "Production", overdueProduction ? "danger" : ""),
+      ], "attention")}
+      <section class="mvp-overview-grid phase3">
+        <div class="mvp-section mvp-priority-section"><div class="mvp-section-title"><h2>Today's Priorities</h2><span>${priorities.length}</span></div><div class="mvp-priority-list">${priorities.length ? priorities.map(priorityRow).join("") : empty("NO PRIORITIES REQUIRE ATTENTION")}</div></div>
+        <div class="mvp-side-stack">
+          ${bottleneckSection(bottlenecks)}
+          ${moduleEntrySection({ inquiries: inquiries.length, orders: orders.length, productionJobs: productionJobs.length, inProgress })}
+        </div>
       </section>
     </main>`;
   }
@@ -214,6 +221,55 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return rows.slice(0, 6);
   }
 
+
+  function buildBottlenecks({ inquiries, orders, productionJobs, pipeline }) {
+    const today = new Date(`${todayIso()}T00:00:00`);
+    const overdueFollowUps = inquiries.filter((item) => {
+      if (!isFollowUpDue(item)) return false;
+      const follow = new Date(`${item.followUpDate}T00:00:00`);
+      return Number.isFinite(follow.getTime()) && follow < today;
+    }).length;
+    const quoteBacklog = pipeline.new || 0;
+    const awaitingPayment = orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length;
+    const paymentProofs = orders.filter((item) => paymentLabel(item) === "Proof Submitted").length;
+    const artworkAttention = orders.filter((item) => !isOrderClosed(item) && ["revision", "pending", "not_set"].includes(orderArtworkKey(item))).length;
+    const blockedRelease = orders.filter((item) => blockedReason(item)).length;
+    const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
+
+    return [
+      bottleneck("Overdue follow-ups", overdueFollowUps, "Customer follow-ups are past their scheduled date.", "/inquiries?stage=follow_due", "danger"),
+      bottleneck("Quotation queue", quoteBacklog, "New inquiries still need quotation action.", "/inquiries?stage=new", quoteBacklog ? "warning" : ""),
+      bottleneck("Payment waiting", awaitingPayment, "Confirmed orders still need payment completion.", "/orders?payment=awaiting", awaitingPayment ? "warning" : ""),
+      bottleneck("Payment proof review", paymentProofs, "Receipts or payment proof need owner review.", "/orders", paymentProofs ? "warning" : ""),
+      bottleneck("Artwork attention", artworkAttention, "Artwork is missing, pending, or needs revision on open orders.", "/orders", artworkAttention ? "warning" : ""),
+      bottleneck("Blocked release", blockedRelease, "Production release requirements are not fully satisfied.", "/orders", blockedRelease ? "danger" : ""),
+      bottleneck("Overdue production", overdueProduction, "Released production jobs are past due.", "/production?due=overdue", overdueProduction ? "danger" : ""),
+    ].filter((item) => item.count > 0).slice(0, 5);
+  }
+
+  function bottleneck(title, count, detail, route, tone = "") {
+    return { title, count, detail, route, tone };
+  }
+
+  function bottleneckSection(items) {
+    return `<section class="mvp-section mvp-bottleneck-section"><div class="mvp-section-title"><h2>Bottlenecks</h2><span>${items.length}</span></div><div class="mvp-bottleneck-list">${items.length ? items.map(bottleneckRow).join("") : empty("NO CURRENT BOTTLENECKS")}</div></section>`;
+  }
+
+  function bottleneckRow(item) {
+    return `<button type="button" class="mvp-bottleneck-row ${html(item.tone)}" data-mvp-route="${html(item.route)}"><span><strong>${html(item.title)}</strong><small>${html(item.detail)}</small></span><b>${item.count}</b></button>`;
+  }
+
+  function moduleEntrySection(counts) {
+    return `<section class="mvp-section mvp-module-entry-section"><div class="mvp-section-title"><h2>Open Next</h2></div><div class="mvp-module-links">
+      ${moduleEntry("Inquiries", counts.inquiries, "Quotation and follow-up pipeline", "/inquiries")}
+      ${moduleEntry("Orders", counts.orders, "Payment, artwork, and release readiness", "/orders")}
+      ${moduleEntry("Production", counts.productionJobs, `${counts.inProgress} actively in production`, "/production")}
+    </div></section>`;
+  }
+
+  function moduleEntry(label, count, detail, route) {
+    return `<button type="button" class="mvp-module-link" data-mvp-route="${html(route)}"><span><strong>${html(label)}</strong><small>${html(detail)}</small></span><b>${count}</b></button>`;
+  }
   return { state, renderOverview, renderInquiries, renderOrders, renderProduction, bind, helpers: { confirmed, productionStage, stageLabel } };
   function renderInquiries({ items, notices = "", renderQuote, renderOdoo, renderArtwork }) {
     const inquiries = items.filter((item) => !confirmed(item));
@@ -230,7 +286,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return !search || [item.id, item.customer, item.contact, item.service, product(item)].join(" ").toLowerCase().includes(search);
     });
     const selected = inquiries.find((item) => item.id === (state.inquiryId || query("inquiry")));
-    return `<main class="mvp-page ops-board-page">
+    return `<main class="mvp-page ops-board-page mvp-inquiries-page">
       ${pageTitle("Inquiries", "Inquiry Pipeline", `${inquiries.length} inquiries`)}
       <p class="mvp-rule">NO QUOTATION / NO WORK</p>${notices}
       ${filterBar("inquiry", items, ["owner", "service", "due"])}
@@ -455,7 +511,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return !search || [orderReference(item), sourceInquiryReference(item), item.id, item.customer, item.contact, item.service, product(item), item.odooSO, orderOwner(item)].join(" ").toLowerCase().includes(search);
     });
     const selected = orders.find((item) => item.id === (state.orderId || orderQuery));
-    return `<main class="mvp-page ops-board-page">${pageTitle("Orders", "Confirmed Orders", `${orders.length} orders`)}<p class="mvp-rule">NO CONFIRMED ORDER / DO NOT PRINT</p>${notices}${schemaNotice}
+    return `<main class="mvp-page ops-board-page mvp-orders-page">${pageTitle("Orders", "Confirmed Orders", `${orders.length} orders`)}<p class="mvp-rule">NO CONFIRMED ORDER / DO NOT PRINT</p>${notices}${schemaNotice}
       ${orderMetrics(orders)}${filterBar("order", items, ["payment", "artwork", "due", "production", "owner"])}${ordersTable(rows)}${orderCards(rows)}${orderDrawer(selected, renderPayment, renderTracking)}
     </main>`;
   }
