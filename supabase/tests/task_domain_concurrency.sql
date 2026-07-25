@@ -1,0 +1,49 @@
+-- Two-session concurrency test for a disposable local Supabase database only.
+-- Prepare two TO_DO tasks assigned to the same synthetic staff account and note
+-- each task id/version. Enable TASK_DOMAIN locally, never in production.
+--
+-- SESSION A
+-- begin;
+-- select set_config('request.jwt.claim.sub', '<synthetic-staff-uuid>', true);
+-- select public.task_start_work(
+--   '<task-a-uuid>', <task-a-version>, 'concurrency-a'
+-- );
+-- Keep the transaction open until Session B has attempted its command.
+--
+-- SESSION B
+-- begin;
+-- select set_config('request.jwt.claim.sub', '<synthetic-staff-uuid>', true);
+-- select public.task_start_work(
+--   '<task-b-uuid>', <task-b-version>, 'concurrency-b'
+-- );
+--
+-- EXPECTED
+-- Exactly one start commits. The other fails with unique-violation SQLSTATE
+-- 23505 from task_time_entries_one_open_user_uidx. There must be exactly one
+-- open timer for the synthetic staff account and no STARTED event for the
+-- rolled-back command.
+--
+-- Repeat the pattern against the same task/version with two distinct
+-- idempotency keys. Row locking plus optimistic version checks must allow one
+-- transition and reject the other.
+--
+-- Replay the successful command with its original idempotency key. It must
+-- return the current task projection without creating another timer or event.
+-- SIMULTANEOUS SUBMIT
+-- Prepare one IN_PROGRESS task with one open timer. In two sessions, call
+-- task_submit_for_review with the same expected version and different keys.
+-- Exactly one commits. The other must fail after the task row lock because the
+-- status/version changed. One timer closure, one submission, and one SUBMITTED
+-- event must remain.
+--
+-- CANCELLATION DURING ACTIVE WORK
+-- Against one IN_PROGRESS task, race task_cancel as an authorized owner against
+-- task_submit_for_review as the assignee. Exactly one terminal path commits:
+-- CANCELLED with a TASK_CANCELLED timer closure, or FOR_REVIEW with a SUBMITTED
+-- timer closure. Partial timer/submission/event writes are forbidden.
+--
+-- SIMULTANEOUS REVIEWER DECISIONS
+-- Against one FOR_REVIEW task and pending submission, race task_approve_work
+-- and task_request_revision using the same expected version. Exactly one
+-- commits. The task and submission decisions must agree, and only events from
+-- the committed decision may remain.

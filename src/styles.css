@@ -21426,3 +21426,538 @@ body,
     min-height: var(--trry-tap-target);
   }
 }
+
+/* Phase 10 My Tasks MVP */
+.my-tasks-page {
+  padding-bottom: 92px;
+}
+
+.my-tasks-search {
+  align-items: center;
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  display: flex;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 12px;
+  width: min(340px, 100%);
+}
+
+.my-tasks-search input {
+  border: 0;
+  color: var(--saas-ink);
+  flex: 1;
+  font: 500 14px/1.2 var(--saas-font);
+  min-width: 0;
+  outline: 0;
+}
+
+.my-tasks-snapshot {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.my-tasks-snapshot article,
+.my-task-card,
+.my-task-detail-grid > div,
+.my-task-history article,
+.my-task-action-area,
+.my-tasks-empty {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  box-shadow: none;
+}
+
+.my-tasks-snapshot article {
+  padding: 16px;
+}
+
+.my-tasks-snapshot span,
+.my-task-code,
+.my-task-detail-grid span,
+.my-task-history h3,
+.my-task-history small,
+.my-task-action-area > strong,
+.my-task-submit-fields span,
+.my-task-no-time-dialog span {
+  color: var(--saas-muted);
+  display: block;
+  font-family: var(--saas-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.my-tasks-snapshot strong {
+  color: var(--saas-ink);
+  display: block;
+  font-size: 28px;
+  line-height: 1;
+  margin-top: 6px;
+}
+
+.my-tasks-snapshot small,
+.my-task-card-main small,
+.my-task-action-area > span,
+.my-tasks-empty span {
+  color: var(--saas-muted);
+  display: block;
+  font-size: 12px;
+  margin-top: 6px;
+}
+
+.my-tasks-running-pin {
+  align-items: center;
+  background: var(--saas-sidebar);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  color: #fff;
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+}
+
+.my-tasks-running-pin span {
+  color: var(--saas-lime);
+  font-family: var(--saas-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+}
+
+.my-tasks-running-pin strong {
+  display: block;
+  font-size: 18px;
+  margin-top: 4px;
+}
+
+.my-tasks-running-pin small {
+  color: #c9ced6;
+  display: block;
+  font-family: var(--saas-mono);
+  font-size: 12px;
+  margin-top: 6px;
+}
+.my-tasks-running-pin .ops-gold-button.mini {
+  min-height: 40px;
+}
+
+
+.my-tasks-filters {
+  border-bottom: 1px solid var(--saas-border);
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 8px;
+}
+
+.my-tasks-filters button,
+.my-task-card-actions button,
+.my-task-action-buttons button,
+.my-task-no-time-dialog button,
+.my-tasks-empty button {
+  align-items: center;
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--saas-mono);
+  font-size: 12px;
+  font-weight: 700;
+  justify-content: center;
+  min-height: 44px;
+  padding: 0 14px;
+  text-transform: uppercase;
+}
+
+.my-tasks-filters button.active,
+.my-task-card-actions button.primary,
+.my-task-action-buttons button.primary,
+.my-task-no-time-dialog button.primary {
+  background: var(--saas-lime);
+  border-color: var(--saas-lime);
+  color: var(--saas-ink);
+}
+
+.my-task-action-buttons button.dark,
+.my-task-no-time-dialog button.dark {
+  background: var(--saas-sidebar);
+  border-color: var(--saas-sidebar);
+  color: #fff;
+}
+
+.my-task-group h2 {
+  align-items: baseline;
+  color: var(--saas-ink);
+  display: flex;
+  font-size: 14px;
+  gap: 8px;
+  margin: 6px 0 10px;
+  text-transform: uppercase;
+}
+
+.my-task-group h2 span {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+}
+
+.my-task-list {
+  display: grid;
+  gap: 10px;
+}
+
+.my-task-card {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: minmax(0, 1.5fr) minmax(260px, 1fr) auto;
+  padding: 14px 16px;
+}
+
+.my-task-card.running {
+  border-color: var(--saas-lime);
+}
+
+.my-task-card.overdue {
+  border-left: 4px solid var(--saas-red);
+}
+
+.my-task-card-main {
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  min-width: 0;
+  padding: 0;
+  text-align: left;
+}
+
+.my-task-card-main strong {
+  color: var(--saas-ink);
+  display: block;
+  font-size: 15px;
+  line-height: 1.25;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.my-task-card-meta,
+.my-task-card-actions,
+.my-task-action-buttons {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.my-task-card-meta > span:not(.my-task-status):not(.my-task-priority) {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+}
+
+.my-task-status,
+.my-task-priority,
+.my-task-mode {
+  border: 1px solid var(--saas-border);
+  border-radius: 5px;
+  display: inline-flex;
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  min-height: 24px;
+  padding: 6px 9px;
+  text-transform: uppercase;
+}
+
+.my-task-status.to-do { background: #f5f6f8; color: #4b5563; }
+.my-task-status.in-progress { background: var(--saas-amber-soft); color: #9a5a00; }
+.my-task-status.needs-revision { background: var(--saas-red-soft); color: var(--saas-red); }
+.my-task-status.for-review { background: var(--saas-purple-soft); color: var(--saas-purple); }
+.my-task-status.done { background: var(--saas-green-soft); color: var(--saas-green); }
+.my-task-priority.urgent { background: var(--saas-sidebar); border-color: var(--saas-sidebar); color: #fff; }
+.my-task-priority.high { border-color: var(--saas-red); color: var(--saas-red); }
+.my-task-priority.medium { border-color: var(--saas-amber); color: #9a5a00; }
+.my-task-priority.low { color: var(--saas-muted); }
+
+.my-task-drawer-backdrop {
+  background: rgba(17, 19, 24, 0.32);
+  inset: 0;
+  position: fixed;
+  z-index: 70;
+}
+
+.my-task-drawer {
+  background: var(--saas-surface);
+  border-left: 1px solid var(--saas-border-strong);
+  bottom: 0;
+  box-shadow: none;
+  display: flex;
+  flex-direction: column;
+  max-width: 560px;
+  position: fixed;
+  right: 0;
+  top: 0;
+  width: min(560px, 100vw);
+  z-index: 71;
+}
+
+.my-task-drawer header {
+  align-items: start;
+  border-bottom: 1px solid var(--saas-border);
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px;
+}
+
+.my-task-drawer header span {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+}
+
+.my-task-drawer h2 {
+  color: var(--saas-ink);
+  font-size: 19px;
+  line-height: 1.18;
+  margin: 5px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.my-task-drawer header button {
+  background: transparent;
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  min-height: 36px;
+  min-width: 36px;
+}
+
+.my-task-drawer-content {
+  display: grid;
+  gap: 14px;
+  overflow: auto;
+  padding: 18px 20px 96px;
+}
+
+.my-task-detail-hero,
+.my-task-warning,
+.my-task-no-time-dialog {
+  background: var(--saas-surface-soft);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  padding: 16px;
+}
+
+.my-task-detail-hero p,
+.my-task-warning p,
+.my-task-history p {
+  color: var(--saas-ink);
+  font-size: 14px;
+  line-height: 1.45;
+  margin: 10px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.my-task-running-time {
+  color: var(--saas-lime);
+  display: block;
+  font-family: var(--saas-mono);
+  margin-top: 12px;
+}
+
+.my-task-warning {
+  background: var(--saas-red-soft);
+  border-color: #f4a8bd;
+}
+
+.my-task-warning strong,
+.my-task-no-time-dialog strong {
+  color: var(--saas-red);
+  font-family: var(--saas-mono);
+  font-size: 12px;
+}
+
+.my-task-detail-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.my-task-detail-grid > div {
+  padding: 12px;
+}
+
+.my-task-detail-grid strong {
+  color: var(--saas-ink);
+  display: block;
+  font-size: 13px;
+  margin-top: 5px;
+  overflow-wrap: anywhere;
+}
+
+.my-task-history {
+  display: grid;
+  gap: 10px;
+}
+
+.my-task-history article {
+  padding: 14px;
+}
+
+.my-task-history article.no-time {
+  border-left: 4px solid var(--saas-red);
+}
+
+.my-task-history article > div {
+  align-items: baseline;
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.my-task-history article > div strong {
+  color: var(--saas-ink);
+  font-family: var(--saas-mono);
+  font-size: 12px;
+}
+
+.my-task-history article > div span {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+}
+
+.my-task-action-area {
+  bottom: 0;
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  position: sticky;
+}
+
+.my-task-submit-fields {
+  display: grid;
+  gap: 10px;
+}
+
+.my-task-submit-fields textarea,
+.my-task-submit-fields input,
+.my-task-no-time-dialog textarea {
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  font: 500 14px/1.35 var(--saas-font);
+  margin-top: 6px;
+  min-height: 44px;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.my-task-form-error {
+  color: var(--saas-red);
+  font-size: 13px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.my-task-no-time-dialog {
+  display: grid;
+  gap: 10px;
+}
+
+.my-task-no-time-dialog div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.my-tasks-empty {
+  align-items: center;
+  display: grid;
+  justify-items: center;
+  min-height: 180px;
+  padding: 28px;
+  text-align: center;
+}
+
+.my-tasks-empty strong {
+  color: var(--saas-ink);
+  font-size: 16px;
+}
+
+@media (max-width: 900px) {
+  .my-tasks-snapshot {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .my-task-card {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .my-tasks-page {
+    gap: 14px;
+    padding: 18px 14px 116px;
+  }
+
+  .my-tasks-page .mvp-page-title {
+    align-items: stretch;
+    display: grid;
+    gap: 12px;
+  }
+
+  .my-tasks-search {
+    width: 100%;
+  }
+
+  .my-tasks-snapshot {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .my-tasks-running-pin {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .my-task-card {
+    padding: 14px;
+  }
+
+  .my-task-card-main strong {
+    font-size: 15px;
+  }
+
+  .my-task-drawer {
+    border-left: 0;
+    max-width: none;
+    width: 100vw;
+  }
+
+  .my-task-drawer-content {
+    padding-bottom: 132px;
+  }
+
+  .my-task-detail-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .my-task-action-area {
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+
+  .mobile-bottom-nav:has(a[href="/my-tasks"]) a small {
+    font-size: 9px;
+  }
+}

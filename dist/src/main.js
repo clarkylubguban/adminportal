@@ -1,4 +1,13 @@
 import { createMvpDashboard } from "./mvpDashboard.js";
+import {
+  createIdempotencyKey,
+  getMyTasks,
+  getTaskDetail,
+  startTaskRevision,
+  startTaskWork,
+  submitTaskForReview,
+  submitTaskWithoutRecordedTime,
+} from "./services/tasks.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
@@ -415,6 +424,24 @@ let staffActionId = "";
 let assignmentUsers = [];
 let assignmentLoadState = "idle";
 let assignmentLoadError = "";
+let myTasks = [];
+let myTasksLoadState = "idle";
+let myTasksLoadError = "";
+let myTasksFilter = "active";
+let myTasksSearch = "";
+let selectedTaskId = null;
+let selectedTaskDetail = null;
+let taskDrawerState = "closed";
+let taskDetailLoadState = "idle";
+let taskDetailLoadError = "";
+let taskCommandState = "idle";
+let taskCommandError = "";
+let taskSubmissionNote = "";
+let taskProofUrl = "";
+let taskNoTimeReason = "";
+let taskFallbackOpen = false;
+let myTasksClock = Date.now();
+let myTasksTickHandle = null;
 
 const routes = {
   "/": "Overview",
@@ -422,6 +449,7 @@ const routes = {
   "/order-dashboard": "Orders",
   "/orders": "Orders",
   "/production": "Production",
+  "/my-tasks": "My Tasks",
   "/reorders": "Reorders",
   "/overview": "Overview",
   "/clients": "Clients",
@@ -471,6 +499,7 @@ function render() {
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
   const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
+  if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -488,6 +517,8 @@ function render() {
                 ? renderMvpInquiriesPage()
                 : currentRoute === "Production"
                   ? renderMvpProductionPage()
+                  : currentRoute === "My Tasks"
+                    ? renderMyTasksPage()
                   : currentRoute === "Overview"
                 ? renderOverviewPage()
                 : currentRoute === "Clients"
@@ -530,6 +561,9 @@ function resetSettingsMobileNavPosition(currentRoute) {
 
 function canRenderAdminShell() {
   if (!isSupabaseReady()) {
+    if (isLocalTaskQaMode()) {
+      return adminAuthStatus === "approved" && Boolean(adminAuthSession && adminUser);
+    }
     return isAdminAccessUnlocked();
   }
 
@@ -814,6 +848,16 @@ async function initializeAdminAuth() {
   }
 
   if (!isSupabaseReady()) {
+    if (isLocalTaskQaMode()) {
+      adminAuthSession = createLocalTaskQaSession();
+      adminUser = createLocalTaskQaUser();
+      adminAuthStatus = "approved";
+      adminAuthMessage = "";
+      startAdminDataLoading();
+      render();
+      return;
+    }
+
     adminAuthStatus = "access-code";
     render();
     if (isAdminAccessUnlocked()) startAdminDataLoading();
@@ -975,6 +1019,7 @@ function startAdminDataLoading() {
   loadAdminOrders();
   loadAdminClients();
   loadCatalogProducts();
+  if (isTaskFeatureUiEnabled()) loadMyTasks();
 }
 
 async function loadAssignmentUsers() {
@@ -1055,6 +1100,533 @@ async function loadOpsBoardInquiries() {
   opsLoadError = result.error?.message ?? "";
 
   render();
+}
+function isLocalTaskQaMode() {
+  const value = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_MODE ?? "false").trim().toLowerCase();
+  const localHost = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  return localHost && ["1", "true", "yes", "on"].includes(value);
+}
+
+function createLocalTaskQaSession() {
+  return {
+    access_token: "synthetic-staff-a-token",
+    refresh_token: "",
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    user: { id: "95000000-0000-4000-8000-000000000010" },
+  };
+}
+
+function createLocalTaskQaUser() {
+  return {
+    id: "synthetic-staff-a",
+    userId: "95000000-0000-4000-8000-000000000010",
+    email: "synthetic-staff-a.invalid",
+    displayName: "Synthetic Staff A",
+    role: "staff",
+  };
+}
+function isTaskFeatureUiEnabled() {
+  const value = String(window.TRRY_ADMIN_ENV?.VITE_ENABLE_TASK_DOMAIN ?? window.TRRY_ADMIN_ENV?.VITE_TASK_DOMAIN_ENABLED ?? "false").trim().toLowerCase();
+  return ["1", "true", "yes", "on"].includes(value) && (isSupabaseReady() || isLocalTaskQaMode());
+}
+
+function canViewMyTasksRoute() {
+  return isTaskFeatureUiEnabled() && ["owner", "admin", "staff"].includes(adminUser?.role);
+}
+
+async function loadMyTasks({ silent = false } = {}) {
+  if (!canViewMyTasksRoute() || !adminAuthSession?.access_token) return;
+  if (!silent) {
+    myTasksLoadState = "loading";
+    myTasksLoadError = "";
+    render();
+  }
+
+  try {
+    const response = await getMyTasks(adminAuthSession, getMyTasksApiFilters());
+    myTasks = sortMyTasks(response.tasks || []);
+    myTasksLoadState = "ready";
+    myTasksLoadError = "";
+    syncMyTasksTimerTick();
+  } catch (error) {
+    myTasksLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : "error";
+    myTasksLoadError = getTaskErrorMessage(error);
+    myTasks = [];
+    stopMyTasksTimerTick();
+  }
+  render();
+}
+
+function getMyTasksApiFilters() {
+  const statusByFilter = {
+    to_do: "TO_DO",
+    in_progress: "IN_PROGRESS",
+    needs_revision: "NEEDS_REVISION",
+    for_review: "FOR_REVIEW",
+    completed: "DONE",
+  };
+  return {
+    status: statusByFilter[myTasksFilter] || "",
+    search: myTasksSearch.trim(),
+    pageSize: 100,
+  };
+}
+
+function sortMyTasks(tasks) {
+  const now = Date.now();
+  return [...tasks]
+    .filter((task) => task.status !== "DRAFT")
+    .sort((a, b) => getTaskSortWeight(a, now) - getTaskSortWeight(b, now) || compareTaskDate(a, b));
+}
+
+function getTaskSortWeight(task, now = Date.now()) {
+  if (task.openTimeEntry) return 0;
+  if (isTaskOverdue(task, now)) return 10;
+  if (task.status === "NEEDS_REVISION") return 20;
+  if (isTaskDueToday(task, now)) return 30;
+  if (task.status === "TO_DO") return 40;
+  if (task.status === "IN_PROGRESS") return 45;
+  if (task.status === "FOR_REVIEW") return 50;
+  if (task.status === "DONE") return 80;
+  return 60;
+}
+
+function compareTaskDate(a, b) {
+  return Date.parse(a.submissionDeadline || a.scheduledDate || a.updatedAt || 0) - Date.parse(b.submissionDeadline || b.scheduledDate || b.updatedAt || 0);
+}
+
+function isTaskOverdue(task, now = Date.now()) {
+  const due = Date.parse(task.submissionDeadline || "");
+  return Number.isFinite(due) && due < startOfToday(now) && !["DONE", "CANCELLED"].includes(task.status);
+}
+
+function isTaskDueToday(task, now = Date.now()) {
+  const due = Date.parse(task.submissionDeadline || task.scheduledDate || "");
+  return Number.isFinite(due) && due >= startOfToday(now) && due < startOfTomorrow(now);
+}
+
+function startOfToday(now) {
+  const date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+  return date.getTime();
+}
+
+function startOfTomorrow(now) {
+  return startOfToday(now) + 86400000;
+}
+
+function getRunningTask() {
+  return myTasks.find((task) => task.openTimeEntry?.startedAt && task.status === "IN_PROGRESS") || null;
+}
+
+function syncMyTasksTimerTick() {
+  if (myTasks.some((task) => task.openTimeEntry?.startedAt) || selectedTaskDetail?.task?.openTimeEntry?.startedAt) {
+    if (!myTasksTickHandle) {
+      myTasksTickHandle = window.setInterval(() => {
+        myTasksClock = Date.now();
+        render();
+      }, 1000);
+    }
+    return;
+  }
+  stopMyTasksTimerTick();
+}
+
+function stopMyTasksTimerTick() {
+  if (myTasksTickHandle) window.clearInterval(myTasksTickHandle);
+  myTasksTickHandle = null;
+}
+
+function renderMyTasksPage() {
+  if (!canViewMyTasksRoute()) {
+    return `<section class="mvp-page my-tasks-page"><div class="mvp-page-title"><div><span>HOME / MY TASKS</span><h1>My Tasks</h1><p>Task execution is not enabled in this environment.</p></div></div></section>`;
+  }
+
+  const runningTask = getRunningTask();
+  const visibleTasks = getVisibleMyTasks();
+  const groups = getMyTaskGroups(visibleTasks);
+  return `
+    <section class="mvp-page my-tasks-page">
+      <div class="mvp-page-title">
+        <div><span>HOME / MY TASKS</span><h1>My Tasks</h1><p>Your assigned execution queue, review submissions, and task timing.</p></div>
+        <label class="my-tasks-search">${renderIcon("search", "search-icon")}<input id="my-tasks-search" value="${escapeHtml(myTasksSearch)}" placeholder="Search task title or code..." type="search" /></label>
+      </div>
+      ${renderMyTasksStateNotice()}
+      ${runningTask ? renderRunningTaskPin(runningTask) : ""}
+      ${renderMyTasksSnapshot()}
+      ${renderMyTasksFilters()}
+      ${myTasksLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading assigned tasks</strong><span>Checking your task queue.</span></div>` : ""}
+      ${myTasksLoadState === "ready" ? renderMyTaskGroups(groups, visibleTasks) : ""}
+      ${renderTaskDrawer()}
+    </section>`;
+}
+
+function getVisibleMyTasks() {
+  const normalized = myTasksSearch.trim().toLowerCase();
+  return myTasks.filter((task) => {
+    if (task.status === "DRAFT") return false;
+    if (myTasksFilter === "active" && ["DONE", "CANCELLED"].includes(task.status)) return false;
+    if (myTasksFilter === "to_do" && task.status !== "TO_DO") return false;
+    if (myTasksFilter === "in_progress" && task.status !== "IN_PROGRESS") return false;
+    if (myTasksFilter === "needs_revision" && task.status !== "NEEDS_REVISION") return false;
+    if (myTasksFilter === "for_review" && task.status !== "FOR_REVIEW") return false;
+    if (myTasksFilter === "completed" && task.status !== "DONE") return false;
+    if (!normalized) return true;
+    return [task.taskCode, task.title, task.sourceType, task.priority, task.status].join(" ").toLowerCase().includes(normalized);
+  });
+}
+
+function renderMyTasksStateNotice() {
+  if (myTasksLoadState === "error") return `<div class="ops-persistence-card error"><strong>Unable to load My Tasks</strong><span>${escapeHtml(myTasksLoadError)}</span></div>`;
+  if (myTasksLoadState === "forbidden") return `<div class="ops-persistence-card error"><strong>Task access is restricted</strong><span>${escapeHtml(myTasksLoadError || "Your account cannot view task records.")}</span></div>`;
+  if (myTasksLoadState === "feature-disabled") return `<div class="ops-persistence-card"><strong>My Tasks unavailable</strong><span>The task domain is disabled for this environment.</span></div>`;
+  if (taskCommandError) return `<div class="ops-persistence-card error"><strong>Task action needs attention</strong><span>${escapeHtml(taskCommandError)}</span></div>`;
+  return "";
+}
+
+function renderMyTasksSnapshot() {
+  const counts = {
+    due: myTasks.filter((task) => isTaskDueToday(task)).length,
+    inProgress: myTasks.filter((task) => task.status === "IN_PROGRESS").length,
+    revision: myTasks.filter((task) => task.status === "NEEDS_REVISION").length,
+    review: myTasks.filter((task) => task.status === "FOR_REVIEW").length,
+  };
+  return `<div class="my-tasks-snapshot">
+    ${renderMyTaskMetric("Due Today", counts.due, "Deadline today")}
+    ${renderMyTaskMetric("In Progress", counts.inProgress, "Being worked on")}
+    ${renderMyTaskMetric("Needs Revision", counts.revision, "Returned by reviewer")}
+    ${renderMyTaskMetric("For Review", counts.review, "With reviewer")}
+  </div>`;
+}
+
+function renderMyTaskMetric(label, value, note) {
+  return `<article><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(note)}</small></article>`;
+}
+
+function renderRunningTaskPin(task) {
+  return `<section class="my-tasks-running-pin"><div><span>RUNNING</span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.taskCode)} / ${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</small></div><button class="ops-gold-button mini" data-task-open="${escapeHtml(task.id)}" type="button">OPEN TASK</button></section>`;
+}
+
+function renderMyTasksFilters() {
+  const filters = [
+    ["active", "Active"],
+    ["to_do", "To Do"],
+    ["in_progress", "In Progress"],
+    ["needs_revision", "Needs Revision"],
+    ["for_review", "For Review"],
+    ["completed", "Completed"],
+  ];
+  return `<div class="my-tasks-filters">${filters.map(([value, label]) => `<button class="${myTasksFilter === value ? "active" : ""}" data-my-tasks-filter="${value}" type="button">${escapeHtml(label)}</button>`).join("")}</div>`;
+}
+
+function getMyTaskGroups(tasks) {
+  return [
+    ["IN_PROGRESS", "In Progress"],
+    ["NEEDS_REVISION", "Needs Revision"],
+    ["TO_DO", "To Do"],
+    ["FOR_REVIEW", "For Review"],
+    ["DONE", "Completed"],
+  ].map(([status, label]) => [label, tasks.filter((task) => task.status === status)]).filter(([, items]) => items.length);
+}
+
+function renderMyTaskGroups(groups, visibleTasks) {
+  if (!visibleTasks.length) return `<div class="my-tasks-empty"><strong>${myTasks.length ? "No tasks match your filters" : "No assigned tasks"}</strong><span>${myTasks.length ? "Try another status or search term." : "Your assigned queue is clear."}</span>${myTasks.length ? `<button data-my-tasks-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
+  return `<div class="my-tasks-groups">${groups.map(([label, tasks]) => `<section class="my-task-group"><h2>${escapeHtml(label)} <span>${tasks.length}</span></h2><div class="my-task-list">${tasks.map(renderMyTaskCard).join("")}</div></section>`).join("")}</div>`;
+}
+
+function renderMyTaskCard(task) {
+  const action = getPrimaryTaskAction(task);
+  return `<article class="my-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
+    <button class="my-task-card-main" data-task-open="${escapeHtml(task.id)}" type="button">
+      <span class="my-task-code">${escapeHtml(task.taskCode || "TASK")}</span>
+      <strong>${escapeHtml(task.title || "Untitled task")}</strong>
+      <small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(getUserLabel(task.assignedUser))}</small>
+    </button>
+    <div class="my-task-card-meta">
+      ${renderTaskPriority(task.priority)}
+      ${renderTaskStatus(task.status)}
+      <span>${escapeHtml(formatTaskDue(task))}</span>
+      <span>${escapeHtml(task.openTimeEntry ? formatElapsed(getRunningElapsedSeconds(task)) : formatDuration(task.totalClosedDurationSeconds))}</span>
+    </div>
+    <div class="my-task-card-actions">${action ? renderTaskQuickAction(task, action) : `<button data-task-open="${escapeHtml(task.id)}" type="button">OPEN</button>`}</div>
+  </article>`;
+}
+
+function getPrimaryTaskAction(task) {
+  const actions = task.allowedActions || [];
+  if (actions.includes("START_WORK")) return "START_WORK";
+  if (actions.includes("START_REVISION")) return "START_REVISION";
+  if (actions.includes("SUBMIT_FOR_REVIEW")) return "SUBMIT_FOR_REVIEW";
+  if (actions.includes("SUBMIT_WITHOUT_RECORDED_TIME")) return "OPEN_FALLBACK";
+  return "";
+}
+
+function renderTaskQuickAction(task, action) {
+  if (action === "START_WORK") return `<button class="primary" data-task-start="${escapeHtml(task.id)}" type="button">START WORK</button>`;
+  if (action === "START_REVISION") return `<button class="primary" data-task-start-revision="${escapeHtml(task.id)}" type="button">START REVISION</button>`;
+  if (action === "SUBMIT_FOR_REVIEW") return `<button data-task-open="${escapeHtml(task.id)}" type="button">SUBMIT</button>`;
+  return `<button data-task-open="${escapeHtml(task.id)}" type="button">OPEN</button>`;
+}
+
+function renderTaskDrawer() {
+  if (taskDrawerState === "closed") return "";
+  const detail = selectedTaskDetail;
+  const task = detail?.task || myTasks.find((item) => item.id === selectedTaskId) || null;
+  return `<div class="my-task-drawer-backdrop" data-task-close></div><aside class="my-task-drawer" aria-label="Task details">
+    <header><div><span>${escapeHtml(task?.taskCode || "TASK")}</span><h2>${escapeHtml(task?.title || "Loading task")}</h2></div><button data-task-close type="button" aria-label="Close task details">X</button></header>
+    ${taskDetailLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading task detail</strong><span>Fetching canonical task state.</span></div>` : ""}
+    ${taskDetailLoadError ? `<div class="ops-persistence-card error"><strong>Unable to open task</strong><span>${escapeHtml(taskDetailLoadError)}</span></div>` : ""}
+    ${detail ? renderTaskDetailBody(detail) : ""}
+  </aside>`;
+}
+
+function renderTaskDetailBody(detail) {
+  const task = detail.task;
+  const latestSubmission = (detail.submissions || []).at(-1) || null;
+  const latestRevision = [...(detail.submissions || [])].reverse().find((submission) => submission.reviewDecision === "REVISION_REQUESTED" && submission.reviewNote);
+  return `<div class="my-task-drawer-content">
+    <section class="my-task-detail-hero">
+      <div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}</div>
+      <p>${escapeHtml(task.brief || "No brief provided.")}</p>
+      ${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}
+    </section>
+    ${latestRevision ? `<section class="my-task-warning"><strong>REVISION NOTE</strong><p>${escapeHtml(latestRevision.reviewNote)}</p></section>` : ""}
+    <section class="my-task-detail-grid">
+      ${renderTaskFact("Source", formatSourceType(task.sourceType))}
+      ${renderTaskFact("Scheduled", formatTaskDate(task.scheduledDate))}
+      ${renderTaskFact("Deadline", formatTaskDateTime(task.submissionDeadline))}
+      ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
+      ${renderTaskFact("Reviewer", getUserLabel(task.reviewerUser))}
+      ${renderTaskFact("Recorded Time", task.openTimeEntry ? formatElapsed(getRunningElapsedSeconds(task)) : formatDuration(task.totalClosedDurationSeconds))}
+    </section>
+    ${renderTaskSubmissions(detail.submissions || [])}
+    ${renderTaskActionArea(task, latestSubmission)}
+  </div>`;
+}
+
+function renderTaskFact(label, value) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "-")}</strong></div>`;
+}
+
+function renderTaskSubmissions(submissions) {
+  if (!submissions.length) return `<section class="my-task-history"><h3>Submission History</h3><p>No submissions yet.</p></section>`;
+  return `<section class="my-task-history"><h3>Submission History</h3>${submissions.map((submission) => `<article class="${submission.timeRecordingStatus === "NOT_RECORDED" ? "no-time" : ""}"><div><strong>${escapeHtml(formatSubmissionTimeStatus(submission))}</strong><span>${escapeHtml(formatTaskDateTime(submission.submittedAt))}</span></div><p>${escapeHtml(submission.submissionNote || "No note saved.")}</p>${submission.noTimeReason ? `<p><b>Reason:</b> ${escapeHtml(submission.noTimeReason)}</p>` : ""}<small>Submitted by ${escapeHtml(getUserLabel(submission.submittedByUser))}${submission.recordedDurationSeconds !== null ? ` / ${escapeHtml(formatDuration(submission.recordedDurationSeconds))}` : ""}</small>${submission.reviewNote ? `<p><b>Review:</b> ${escapeHtml(submission.reviewNote)}</p>` : ""}</article>`).join("")}</section>`;
+}
+
+function renderTaskActionArea(task) {
+  const actions = task.allowedActions || [];
+  const busy = taskCommandState === "saving";
+  if (!actions.length) return `<section class="my-task-action-area"><strong>No available staff action</strong><span>This task is waiting on another step.</span></section>`;
+  return `<section class="my-task-action-area">
+    ${taskCommandError ? `<p class="my-task-form-error" role="alert">${escapeHtml(taskCommandError)}</p>` : ""}
+    ${actions.includes("SUBMIT_FOR_REVIEW") || actions.includes("SUBMIT_WITHOUT_RECORDED_TIME") ? renderTaskSubmitFields(busy) : ""}
+    <div class="my-task-action-buttons">
+      ${actions.includes("START_WORK") ? `<button class="primary" data-task-start="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "STARTING..." : "START WORK"}</button>` : ""}
+      ${actions.includes("START_REVISION") ? `<button class="primary" data-task-start-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "STARTING..." : "START REVISION"}</button>` : ""}
+      ${actions.includes("SUBMIT_FOR_REVIEW") ? `<button class="dark" data-task-submit="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "SUBMITTING..." : "SUBMIT FOR REVIEW"}</button>` : ""}
+      ${actions.includes("SUBMIT_WITHOUT_RECORDED_TIME") ? `<button data-task-open-fallback="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">SUBMIT WITHOUT RECORDED TIME</button>` : ""}
+    </div>
+    ${taskFallbackOpen ? renderNoTimeFallback(task, busy) : ""}
+  </section>`;
+}
+
+function renderTaskSubmitFields(disabled) {
+  return `<div class="my-task-submit-fields"><label><span>Submission note</span><textarea id="task-submission-note" rows="3" ${disabled ? "disabled" : ""}>${escapeHtml(taskSubmissionNote)}</textarea></label><label><span>Proof URL optional</span><input id="task-proof-url" value="${escapeHtml(taskProofUrl)}" placeholder="https://..." ${disabled ? "disabled" : ""} /></label></div>`;
+}
+
+function renderNoTimeFallback(task, busy) {
+  return `<div class="my-task-no-time-dialog" role="alertdialog" aria-label="No work time recorded"><strong>NO WORK TIME RECORDED</strong><p>Did you forget to start the task timer?</p><label><span>Reason required</span><textarea id="task-no-time-reason" rows="3" ${busy ? "disabled" : ""} placeholder="Forgot to start timer">${escapeHtml(taskNoTimeReason)}</textarea></label><small>Examples: Forgot to start timer / Task was already completed before opening the portal / Quick task completed immediately</small><div><button class="primary" data-task-start="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">START WORK NOW</button><button class="dark" data-task-submit-no-time="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">SUBMIT WITHOUT RECORDED TIME</button><button data-task-cancel-fallback type="button">CANCEL</button></div></div>`;
+}
+
+function renderTaskStatus(status) {
+  return `<span class="my-task-status ${statusToClass(status || "unknown")}">${escapeHtml(formatTaskStatus(status))}</span>`;
+}
+
+function renderTaskPriority(priority) {
+  return `<span class="my-task-priority ${statusToClass(priority || "normal")}">${escapeHtml(formatTaskPriority(priority))}</span>`;
+}
+
+function formatTaskStatus(status) {
+  return String(status || "UNKNOWN").replace(/_/g, " ");
+}
+
+function formatTaskPriority(priority) {
+  return String(priority || "normal").replace(/_/g, " ").toUpperCase();
+}
+
+function formatSourceType(sourceType) {
+  return String(sourceType || "TASK").replace(/_/g, " ").toUpperCase();
+}
+
+function getUserLabel(user) {
+  if (!user) return "Unassigned";
+  return `${user.displayName || "TRRY teammate"}${user.isActive === false ? " (inactive)" : ""}`;
+}
+
+function formatTaskDue(task) {
+  if (isTaskOverdue(task)) return "Overdue";
+  if (isTaskDueToday(task)) return "Due today";
+  return formatTaskDate(task.submissionDeadline || task.scheduledDate);
+}
+
+function formatTaskDate(value) {
+  if (!value) return "No date";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "No date" : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
+function formatTaskDateTime(value) {
+  if (!value) return "Not set";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "Not set" : date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function formatDuration(seconds) {
+  const value = Number(seconds || 0);
+  if (!value) return "No recorded time";
+  return formatElapsed(value);
+}
+
+function formatElapsed(seconds) {
+  const value = Math.max(0, Math.floor(Number(seconds || 0)));
+  const hours = Math.floor(value / 3600);
+  const minutes = Math.floor((value % 3600) / 60);
+  const secs = value % 60;
+  return hours ? `${hours}h ${String(minutes).padStart(2, "0")}m` : `${minutes}m ${String(secs).padStart(2, "0")}s`;
+}
+
+function getRunningElapsedSeconds(task) {
+  const start = Date.parse(task?.openTimeEntry?.startedAt || "");
+  if (!Number.isFinite(start)) return 0;
+  return Math.max(0, Math.floor((myTasksClock - start) / 1000));
+}
+
+function formatSubmissionTimeStatus(submission) {
+  if (submission.timeRecordingStatus === "NOT_RECORDED") return "TIME NOT RECORDED";
+  if (submission.timeRecordingStatus === "NOT_REQUIRED") return "TIME NOT REQUIRED";
+  return "RECORDED TIME";
+}
+
+async function openTaskDetail(taskId) {
+  selectedTaskId = taskId;
+  taskDrawerState = "open";
+  taskDetailLoadState = "loading";
+  taskDetailLoadError = "";
+  taskCommandError = "";
+  taskFallbackOpen = false;
+  selectedTaskDetail = null;
+  render();
+  try {
+    selectedTaskDetail = await getTaskDetail(taskId, adminAuthSession);
+    taskDetailLoadState = "ready";
+    seedTaskFormFromDetail(selectedTaskDetail);
+    syncMyTasksTimerTick();
+  } catch (error) {
+    taskDetailLoadState = "error";
+    taskDetailLoadError = getTaskErrorMessage(error);
+  }
+  render();
+}
+
+function seedTaskFormFromDetail(detail) {
+  taskSubmissionNote = "";
+  taskProofUrl = "";
+  taskNoTimeReason = "";
+  taskFallbackOpen = false;
+  const task = detail?.task;
+  myTasks = sortMyTasks(myTasks.map((item) => item.id === task?.id ? task : item));
+}
+
+function closeTaskDetail() {
+  selectedTaskId = null;
+  selectedTaskDetail = null;
+  taskDrawerState = "closed";
+  taskDetailLoadState = "idle";
+  taskDetailLoadError = "";
+  taskCommandError = "";
+  taskFallbackOpen = false;
+  render();
+}
+
+async function runTaskCommand(taskId, action) {
+  if (taskCommandState === "saving") return;
+  const task = selectedTaskDetail?.task?.id === taskId ? selectedTaskDetail.task : myTasks.find((item) => item.id === taskId);
+  if (!task) return;
+  taskCommandState = "saving";
+  taskCommandError = "";
+  render();
+  try {
+    const version = task.version;
+    let response;
+    if (action === "start") response = await startTaskWork(taskId, version, adminAuthSession, createIdempotencyKey("start"));
+    if (action === "start-revision") response = await startTaskRevision(taskId, version, adminAuthSession, createIdempotencyKey("revision"));
+    if (action === "submit") response = await submitTaskForReview(taskId, { expectedVersion: version, submissionNote: taskSubmissionNote.trim(), proofUrl: taskProofUrl.trim() }, adminAuthSession, createIdempotencyKey("submit"));
+    if (action === "submit-no-time") response = await submitTaskWithoutRecordedTime(taskId, { expectedVersion: version, note: taskSubmissionNote.trim(), reason: taskNoTimeReason.trim() }, adminAuthSession, createIdempotencyKey("notime"));
+    applyTaskCommandResponse(response);
+  } catch (error) {
+    taskCommandError = getTaskErrorMessage(error);
+    if (["VERSION_CONFLICT", "TIMER_ALREADY_OPEN", "INVALID_TRANSITION"].includes(error.code)) await refreshTaskAfterConflict(taskId);
+  } finally {
+    taskCommandState = "idle";
+    render();
+  }
+}
+
+function applyTaskCommandResponse(response) {
+  if (!response?.task) return;
+  selectedTaskDetail = {
+    task: response.task,
+    submissions: response.submissions || (response.submission ? [response.submission] : selectedTaskDetail?.submissions || []),
+    timeEntries: response.timeEntries || selectedTaskDetail?.timeEntries || [],
+    history: response.history || selectedTaskDetail?.history || [],
+  };
+  myTasks = sortMyTasks(myTasks.map((item) => item.id === response.task.id ? response.task : item));
+  taskFallbackOpen = false;
+  taskSubmissionNote = "";
+  taskProofUrl = "";
+  taskNoTimeReason = "";
+  syncMyTasksTimerTick();
+}
+
+async function refreshTaskAfterConflict(taskId) {
+  try {
+    const detail = await getTaskDetail(taskId, adminAuthSession);
+    selectedTaskDetail = detail;
+    myTasks = sortMyTasks(myTasks.map((item) => item.id === detail.task.id ? detail.task : item));
+  } catch {
+    await loadMyTasks({ silent: true });
+  }
+}
+
+function getTaskErrorMessage(error) {
+  if (error?.code === "VERSION_CONFLICT") return "This task changed in another session. The latest task state has been refreshed.";
+  if (error?.code === "TIMER_ALREADY_OPEN") return "Another task timer is already running. Open the running task before starting a new one.";
+  if (error?.code === "VALIDATION_ERROR") return error.message || "Check the task form and try again.";
+  if (error?.code === "TIMER_REQUIRED") return "Start Work is required before timed submission.";
+  if (error?.code === "ACCOUNT_INACTIVE") return "This account is inactive and cannot perform task actions.";
+  return error?.message || "Task request failed.";
+}
+
+function validateTaskSubmit(action) {
+  taskSubmissionNote = document.getElementById("task-submission-note")?.value || taskSubmissionNote;
+  taskProofUrl = document.getElementById("task-proof-url")?.value || taskProofUrl;
+  taskNoTimeReason = document.getElementById("task-no-time-reason")?.value || taskNoTimeReason;
+  if (["submit", "submit-no-time"].includes(action) && !taskSubmissionNote.trim()) {
+    taskCommandError = "Submission note is required.";
+    render();
+    return false;
+  }
+  if (action === "submit" && taskProofUrl.trim() && !/^https:\/\//i.test(taskProofUrl.trim())) {
+    taskCommandError = "Proof URL must start with https://.";
+    render();
+    return false;
+  }
+  if (action === "submit-no-time" && !taskNoTimeReason.trim()) {
+    taskCommandError = "Reason is required when time was not recorded.";
+    render();
+    return false;
+  }
+  return true;
 }
 function getMvpDashboardItems() {
   return opsInquiries.map((item) => ({
@@ -4120,6 +4692,7 @@ function renderSidebar(currentRoute) {
     { label: "Clients", path: "/clients" },
     { label: "Products", path: "/products" },
     { label: "Production", path: "/production", icon: "factory" },
+    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
     { label: "Catalog", path: "/catalog" },
     ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
     { label: "Settings", path: "/settings" },
@@ -4226,6 +4799,7 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
+  ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
   return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
 }
@@ -4569,6 +5143,89 @@ function handleAccountEscape(event) {
   }
   if (changed) render();
 }
+function bindMyTasksEvents() {
+  document.getElementById("my-tasks-search")?.addEventListener("input", (event) => {
+    myTasksSearch = event.target.value;
+    loadMyTasks({ silent: true });
+  });
+
+  document.querySelectorAll("[data-my-tasks-filter]").forEach((button) => {
+    button.addEventListener("click", () => {
+      myTasksFilter = button.dataset.myTasksFilter;
+      loadMyTasks();
+    });
+  });
+
+  document.querySelector("[data-my-tasks-clear]")?.addEventListener("click", () => {
+    myTasksFilter = "active";
+    myTasksSearch = "";
+    loadMyTasks();
+  });
+
+  document.querySelectorAll("[data-task-open]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openTaskDetail(button.dataset.taskOpen);
+    });
+  });
+
+  document.querySelectorAll("[data-task-close]").forEach((button) => {
+    button.addEventListener("click", closeTaskDetail);
+  });
+
+  document.querySelectorAll("[data-task-start]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      runTaskCommand(button.dataset.taskStart, "start");
+    });
+  });
+
+  document.querySelectorAll("[data-task-start-revision]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      runTaskCommand(button.dataset.taskStartRevision, "start-revision");
+    });
+  });
+
+  document.querySelectorAll("[data-task-submit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (validateTaskSubmit("submit")) runTaskCommand(button.dataset.taskSubmit, "submit");
+    });
+  });
+
+  document.querySelectorAll("[data-task-submit-no-time]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (validateTaskSubmit("submit-no-time")) runTaskCommand(button.dataset.taskSubmitNoTime, "submit-no-time");
+    });
+  });
+
+  document.querySelectorAll("[data-task-open-fallback]").forEach((button) => {
+    button.addEventListener("click", () => {
+      taskFallbackOpen = true;
+      taskCommandError = "";
+      render();
+    });
+  });
+
+  document.querySelector("[data-task-cancel-fallback]")?.addEventListener("click", () => {
+    taskFallbackOpen = false;
+    taskNoTimeReason = "";
+    render();
+  });
+
+  document.getElementById("task-submission-note")?.addEventListener("input", (event) => {
+    taskSubmissionNote = event.target.value;
+    taskCommandError = "";
+  });
+  document.getElementById("task-proof-url")?.addEventListener("input", (event) => {
+    taskProofUrl = event.target.value;
+    taskCommandError = "";
+  });
+  document.getElementById("task-no-time-reason")?.addEventListener("input", (event) => {
+    taskNoTimeReason = event.target.value;
+    taskCommandError = "";
+  });
+}
 function bindEvents() {
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -4690,6 +5347,7 @@ function bindEvents() {
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
   bindOpsBoardEvents();
   bindOrderDashboardEvents();
+  bindMyTasksEvents();
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCatalogKey = button.dataset.catalogTab;
@@ -5546,6 +6204,7 @@ function getCurrentRoute() {
 
 function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   return routes[path] ? path : defaultRoutePath;
 }
 
@@ -5557,6 +6216,7 @@ function navigateTo(path) {
 function normalizeRoutePath(path) {
   const url = new URL(String(path || defaultRoutePath), window.location.origin);
   const routePath = url.pathname.replace(/\/+$/, "") || "/";
+  if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
 }
 

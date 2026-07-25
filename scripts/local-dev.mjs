@@ -20,6 +20,7 @@ const appRoutes = new Set([
   "/orders",
   "/order-dashboard",
   "/production",
+  "/my-tasks",
   "/reorders",
   "/overview",
   "/clients",
@@ -66,6 +67,14 @@ async function handleRequest(request, response) {
       return;
     }
 
+
+    const taskHandlerPath = getTaskApiHandlerPath(routePath);
+    if (taskHandlerPath) {
+      const { default: handleTaskRequest } = await import(taskHandlerPath);
+      await handleTaskRequest(request, response);
+      return;
+    }
+
     if (routePath === "/src/env.js") {
       response.writeHead(200, { "Content-Type": contentTypes[".js"] });
       response.end(await createEnvScript());
@@ -92,6 +101,19 @@ async function handleRequest(request, response) {
   }
 }
 
+
+function getTaskApiHandlerPath(routePath) {
+  if (routePath === "/api/my-tasks") return "../api/my-tasks.js";
+  if (routePath === "/api/tasks") return "../api/tasks/index.js";
+  if (/^\/api\/tasks\/[^/]+$/.test(routePath)) return "../api/tasks/[id]/index.js";
+  if (/^\/api\/tasks\/[^/]+\/start$/.test(routePath)) return "../api/tasks/[id]/start.js";
+  if (/^\/api\/tasks\/[^/]+\/submit$/.test(routePath)) return "../api/tasks/[id]/submit.js";
+  if (/^\/api\/tasks\/[^/]+\/submit-without-time$/.test(routePath)) return "../api/tasks/[id]/submit-without-time.js";
+  if (/^\/api\/tasks\/[^/]+\/start-revision$/.test(routePath)) return "../api/tasks/[id]/start-revision.js";
+  if (/^\/api\/tasks\/[^/]+\/history$/.test(routePath)) return "../api/tasks/[id]/history.js";
+  if (/^\/api\/tasks\/[^/]+\/time-entries$/.test(routePath)) return "../api/tasks/[id]/time-entries/index.js";
+  return "";
+}
 function normalizeRoutePath(pathname) {
   if (pathname === "/") return "/";
   return pathname.replace(/\/+$/, "");
@@ -139,6 +161,8 @@ async function createEnvScript() {
     VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? env.VITE_SUPABASE_URL ?? "",
     VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY ?? "",
     VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA ?? env.VITE_USE_SUPABASE_DATA ?? "true",
+    VITE_ENABLE_TASK_DOMAIN: process.env.VITE_ENABLE_TASK_DOMAIN ?? env.VITE_ENABLE_TASK_DOMAIN ?? "false",
+    VITE_LOCAL_TASK_QA_MODE: process.env.VITE_LOCAL_TASK_QA_MODE ?? env.VITE_LOCAL_TASK_QA_MODE ?? "false",
     VITE_ADMIN_ACCESS_CODE: process.env.VITE_ADMIN_ACCESS_CODE ?? env.VITE_ADMIN_ACCESS_CODE ?? "",
   };
 
