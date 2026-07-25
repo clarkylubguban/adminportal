@@ -1,11 +1,9 @@
-@import url("https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800;900&family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;700&family=Space+Grotesk:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
 :root {
   /* TRRY Phase 1 shared visual tokens. */
-  --trry-font-ui: "Space Grotesk", Inter, ui-sans-serif, system-ui, -apple-system,
-    BlinkMacSystemFont, "Segoe UI", sans-serif;
-  --trry-font-mono: "Space Mono", "JetBrains Mono", Consolas, ui-monospace,
-    monospace;
-  --trry-font-legacy: Archivo, Inter, ui-sans-serif, system-ui, sans-serif;
+  --trry-font-ui: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --trry-font-mono: var(--trry-font-ui);
+  --trry-font-legacy: var(--trry-font-ui);
 
   --trry-shell: #0b0c0f;
   --trry-shell-raised: #151820;
@@ -3483,7 +3481,7 @@ td:nth-child(9) {
 .ops-section-heading h2,
 .ops-production-section h2 {
   color: var(--ops-ink);
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-weight: 900;
   letter-spacing: 0;
   line-height: 0.98;
@@ -3516,7 +3514,7 @@ td:nth-child(9) {
 .ops-production-card span,
 .ops-column header strong,
 .ops-column header small {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -3690,7 +3688,7 @@ td:nth-child(9) {
   border-radius: 0;
   color: var(--ops-ink);
   display: inline-flex;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 12px;
   font-weight: 900;
   gap: 7px;
@@ -3751,7 +3749,7 @@ td:nth-child(9) {
   border: 2px solid var(--ops-ink);
   color: var(--ops-ink);
   display: inline-flex;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   font-weight: 700;
   gap: 6px;
@@ -3797,7 +3795,7 @@ td:nth-child(9) {
   background: #fff5f4;
   border: 2px solid var(--ops-red);
   color: var(--ops-red) !important;
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px !important;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -3917,7 +3915,7 @@ td:nth-child(9) {
 .ops-empty-column {
   border: 2px dashed var(--ops-ink);
   color: var(--ops-muted);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -4127,7 +4125,7 @@ td:nth-child(9) {
 
 .ops-persistence-card strong,
 .ops-persistence-card summary {
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 13px;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -4152,7 +4150,7 @@ td:nth-child(9) {
 .ops-persistence-card pre {
   background: var(--ops-ink);
   color: var(--ops-lime);
-  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   line-height: 1.45;
   margin: 10px 0 0;
@@ -4239,14 +4237,14 @@ td:nth-child(9) {
 
 .brand-lockup strong {
   color: var(--orange);
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 30px;
   letter-spacing: 0.12em;
 }
 
 .brand-lockup span {
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   letter-spacing: 0.45em;
 }
@@ -4258,7 +4256,7 @@ td:nth-child(9) {
 .sidebar a {
   border: 2px solid transparent;
   border-radius: 0;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 13px;
   font-weight: 900;
   height: 42px;
@@ -4297,7 +4295,7 @@ td:nth-child(9) {
 
 .system-card strong,
 .system-card p {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -4326,7 +4324,7 @@ td:nth-child(9) {
 }
 
 .header-brand strong {
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 16px;
   font-weight: 900;
   letter-spacing: 0.02em;
@@ -4372,7 +4370,7 @@ td:nth-child(9) {
 }
 
 .global-search input {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   letter-spacing: 0.02em;
 }
@@ -4386,7 +4384,7 @@ td:nth-child(9) {
   border: 2px solid #111111;
   border-radius: 0;
   box-shadow: none;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   text-transform: uppercase;
 }
 
@@ -4399,12 +4397,12 @@ td:nth-child(9) {
   background: #ddff4f;
   border: 2px solid #ffffff;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
 }
 
 .profile-area strong,
 .profile-area span {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   letter-spacing: 0.04em;
   text-transform: uppercase;
 }
@@ -4435,7 +4433,7 @@ td:nth-child(9) {
 
   .mobile-top-bar strong {
     color: #111111;
-    font-family: "Archivo", system-ui, sans-serif;
+    font-family: var(--trry-font-ui);
     font-weight: 900;
   }
 
@@ -4456,7 +4454,7 @@ td:nth-child(9) {
     background: #ddff4f;
     border: 2px solid #111111;
     color: #111111;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--trry-font-ui);
   }
 
   .mobile-bottom-nav {
@@ -4468,7 +4466,7 @@ td:nth-child(9) {
   .mobile-bottom-nav a {
     border-right: 2px solid #111111;
     color: #111111;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--trry-font-ui);
     text-transform: uppercase;
   }
 
@@ -4502,7 +4500,7 @@ td:nth-child(9) {
 .orders-page:not(.ops-board-page) h2,
 .orders-page:not(.ops-board-page) h3 {
   color: #111111;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
@@ -4524,7 +4522,7 @@ th,
 .request-id,
 .portal-link,
 .copy-feedback {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
 }
 
 .orders-page:not(.ops-board-page) .subtitle,
@@ -4581,7 +4579,7 @@ th,
 .status-card p,
 .status-card small {
   color: #55534b;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-weight: 700;
   letter-spacing: 0.08em;
 }
@@ -4646,7 +4644,7 @@ th,
   border: 2px solid #111111;
   border-radius: 0;
   box-shadow: none;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-weight: 900;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -4689,7 +4687,7 @@ th,
 
 .search-field input,
 .search-field input::placeholder {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
 }
 
@@ -4847,7 +4845,7 @@ tbody tr.selected td:last-child {
   border: 2px solid #111111;
   background: #ffffff;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-weight: 900;
   height: 28px;
   width: 28px;
@@ -4986,7 +4984,7 @@ tbody tr.selected td:last-child {
 
 .empty-state strong {
   color: #111111;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 16px;
   font-weight: 900;
   text-transform: uppercase;
@@ -5011,7 +5009,7 @@ tbody tr.selected td:last-child {
   border-radius: 0;
   background: #ffffff;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-weight: 800;
   text-transform: uppercase;
 }
@@ -5073,7 +5071,7 @@ tbody tr.selected td:last-child {
   .products-table td::before,
   .recent-table td::before {
     color: #55534b;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--trry-font-ui);
     font-weight: 800;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -5114,7 +5112,7 @@ tbody tr.selected td:last-child {
 .admin-access-brand strong {
   color: var(--orange);
   display: block;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: clamp(34px, 8vw, 58px);
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -5124,7 +5122,7 @@ tbody tr.selected td:last-child {
 .admin-access-brand span {
   color: #111111;
   display: block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -5142,7 +5140,7 @@ tbody tr.selected td:last-child {
 .admin-access-form label,
 .admin-access-error,
 .admin-access-note {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-weight: 800;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -5161,7 +5159,7 @@ tbody tr.selected td:last-child {
 
 .admin-access-heading h1 {
   color: #111111;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: clamp(34px, 7vw, 54px);
   font-weight: 900;
   letter-spacing: 0;
@@ -5194,7 +5192,7 @@ tbody tr.selected td:last-child {
   border: 3px solid #111111;
   border-radius: 0;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 18px;
   font-weight: 800;
   height: 48px;
@@ -5217,7 +5215,7 @@ tbody tr.selected td:last-child {
   border-radius: 0;
   color: #111111;
   cursor: pointer;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 14px;
   font-weight: 900;
   height: 48px;
@@ -5337,7 +5335,7 @@ tbody tr.selected td:last-child {
     border-radius: 0;
     color: #111111;
     display: grid;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--trry-font-ui);
     font-size: 22px;
     font-weight: 900;
     height: 38px;
@@ -5938,7 +5936,7 @@ tbody tr.selected td:last-child {
   border-radius: 0;
   color: var(--ops-ink);
   display: inline-flex;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 7.5px;
   font-weight: 900;
   justify-content: center;
@@ -5980,7 +5978,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-ticket-details span {
   color: var(--ops-secondary);
   display: block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 7px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -6117,7 +6115,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-summary-text strong {
   color: inherit;
   display: block;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 9.5px;
   font-weight: 900;
   letter-spacing: 0.02em;
@@ -6131,7 +6129,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-summary-text small {
   color: inherit;
   display: block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 6.8px;
   font-weight: 900;
   letter-spacing: 0.05em;
@@ -6148,7 +6146,7 @@ tbody tr.selected td:last-child {
   border: 1.5px solid currentColor;
   display: inline-flex;
   flex: 0 0 18px;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 12px;
   font-weight: 900;
   height: 18px;
@@ -6276,7 +6274,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-detail-drawer header span {
   color: var(--ops-lime);
   display: block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.1em;
@@ -6286,7 +6284,7 @@ tbody tr.selected td:last-child {
 
 .ops-board-page .ops-detail-drawer header h2 {
   color: inherit;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 24px;
   font-weight: 900;
   letter-spacing: 0;
@@ -6301,7 +6299,7 @@ tbody tr.selected td:last-child {
   border-radius: 0;
   color: var(--ops-ink);
   flex: 0 0 34px;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 14px;
   font-weight: 900;
   height: 34px;
@@ -6683,7 +6681,7 @@ tbody tr.selected td:last-child {
     color: #ffffff;
     content: attr(aria-label);
     display: none;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--trry-font-ui);
     font-size: 10px;
     font-weight: 900;
     left: calc(100% + 10px);
@@ -6728,7 +6726,7 @@ tbody tr.selected td:last-child {
 .orders-page .page-helper-note {
   border-left: 4px solid #ddff4f;
   color: #55534b;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -6758,7 +6756,7 @@ tbody tr.selected td:last-child {
 }
 
 .review-action-label {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -6779,7 +6777,7 @@ tbody tr.selected td:last-child {
 
 .panel-kicker {
   color: #55534b;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -6880,7 +6878,7 @@ tbody tr.selected td:last-child {
 .detail-panel.empty-panel .empty-state strong {
   color: #111111;
   display: block;
-  font-family: "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 18px;
   font-weight: 900;
   text-transform: uppercase;
@@ -6889,7 +6887,7 @@ tbody tr.selected td:last-child {
 .detail-panel.empty-panel .empty-state span {
   color: #55534b;
   display: block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.05em;
@@ -7100,7 +7098,7 @@ tbody tr.selected td:last-child {
   border: 2px solid #111111;
   border-radius: 0;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -7127,7 +7125,7 @@ tbody tr.selected td:last-child {
 
 .admin-sql-handoff summary {
   cursor: pointer;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -7137,7 +7135,7 @@ tbody tr.selected td:last-child {
 .admin-sql-handoff pre {
   background: #111111;
   color: #ddff4f;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   line-height: 1.45;
   margin: 12px 0 0;
@@ -7307,7 +7305,7 @@ tbody tr.selected td:last-child {
   border: 2px solid #111111;
   border-radius: 0;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   letter-spacing: 0.08em;
 }
 
@@ -7361,7 +7359,7 @@ tbody tr.selected td:last-child {
   border: 2px solid #111111;
   border-radius: 0;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   height: 32px;
@@ -7417,7 +7415,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-artwork-action > span {
   color: var(--ops-secondary);
   display: block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -7433,7 +7431,7 @@ tbody tr.selected td:last-child {
 
 .ops-board-page .ops-artwork-message {
   color: var(--ops-ink);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.06em;
@@ -7460,7 +7458,7 @@ tbody tr.selected td:last-child {
   border-radius: 0;
   color: #111111;
   flex: 0 0 auto;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 12px;
   font-weight: 900;
   letter-spacing: 0.06em;
@@ -7501,7 +7499,7 @@ tbody tr.selected td:last-child {
 }
 
 .catalog-tabs button {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.06em;
@@ -7523,7 +7521,7 @@ tbody tr.selected td:last-child {
 }
 
 .catalog-status-filter {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   height: 38px;
@@ -7535,7 +7533,7 @@ tbody tr.selected td:last-child {
   background: #ffffff;
   border: 2px solid #111111;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.05em;
@@ -7584,7 +7582,7 @@ tbody tr.selected td:last-child {
 .catalog-edit-action {
   border: 2px solid #111111;
   border-radius: 0;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   height: 30px;
@@ -7625,7 +7623,7 @@ tbody tr.selected td:last-child {
 .catalog-drawer header span {
   color: #ddff4f;
   display: block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -7676,7 +7674,7 @@ tbody tr.selected td:last-child {
 .catalog-image-field p,
 .catalog-image-pick-text,
 .catalog-image-meta button {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   text-transform: uppercase;
 }
 
@@ -7815,7 +7813,7 @@ tbody tr.selected td:last-child {
 
 .catalog-field > span {
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.06em;
@@ -7875,7 +7873,7 @@ tbody tr.selected td:last-child {
 
 .catalog-form-error {
   border: 2px solid #e23f32;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.05em;
@@ -7929,7 +7927,7 @@ tbody tr.selected td:last-child {
 
   .catalog-count-label {
     color: #111111;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--trry-font-ui);
     font-size: 10px;
     font-weight: 900;
     letter-spacing: 0.08em;
@@ -8019,7 +8017,7 @@ tbody tr.selected td:last-child {
   .catalog-category-cell {
     align-self: start;
     color: #6b6760;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--trry-font-ui);
     font-size: 10px;
     font-weight: 800;
     grid-area: category;
@@ -8034,7 +8032,7 @@ tbody tr.selected td:last-child {
     align-self: center;
     border-top: 1px solid #111111;
     color: #111111;
-    font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+    font-family: var(--trry-font-ui);
     font-size: 12px;
     font-weight: 900;
     margin-top: 10px;
@@ -8130,7 +8128,7 @@ tbody tr.selected td:last-child {
 }
 
 .ops-board-page .ops-customer-tracking h3 {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 950;
   letter-spacing: 0.12em;
@@ -8150,7 +8148,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-tracking-controls label span,
 .ops-board-page .ops-tracking-disabled {
   color: var(--ops-muted);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -8303,7 +8301,7 @@ tbody tr.selected td:last-child {
 
 .order-dashboard-row-head span {
   color: #55534b;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   font-weight: 950;
   padding: 8px;
@@ -8409,7 +8407,7 @@ tbody tr.selected td:last-child {
 .order-dashboard-copy-feedback {
   color: #41620e;
   flex: 0 0 auto;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   font-weight: 950;
   text-transform: uppercase;
@@ -8424,7 +8422,7 @@ tbody tr.selected td:last-child {
 }
 
 .order-dashboard-artwork {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 950;
   text-transform: uppercase;
@@ -8472,7 +8470,7 @@ tbody tr.selected td:last-child {
 }
 
 .order-dashboard-due {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   text-transform: uppercase;
@@ -8498,7 +8496,7 @@ tbody tr.selected td:last-child {
   border-radius: 0;
   color: var(--order-border);
   cursor: pointer;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   font-weight: 950;
   min-height: 36px;
@@ -8585,7 +8583,7 @@ tbody tr.selected td:last-child {
 .order-dashboard-drawer.empty p,
 .order-fulfillment-grid h3 {
   color: #55534b;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -8754,7 +8752,7 @@ tbody tr.selected td:last-child {
   background: #fff5f4;
   border: 2px solid #e23f32;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -8793,7 +8791,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-customer-action-meta span {
   color: var(--ops-secondary);
   display: block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -8809,7 +8807,7 @@ tbody tr.selected td:last-child {
 
 .ops-board-page .ops-customer-actions > header small {
   color: var(--ops-secondary);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   line-height: 1.3;
   text-align: right;
@@ -8830,7 +8828,7 @@ tbody tr.selected td:last-child {
 }
 
 .ops-board-page .ops-customer-action-heading strong {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   letter-spacing: 0.08em;
 }
@@ -8838,7 +8836,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-customer-action-heading mark {
   background: var(--ops-ink);
   color: var(--ops-paper);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   font-weight: 900;
   padding: 4px 6px;
@@ -8903,7 +8901,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-customer-confirmed,
 .ops-board-page .ops-customer-action-guard {
   color: var(--ops-ink);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   line-height: 1.4;
   margin: 0;
@@ -8921,7 +8919,7 @@ tbody tr.selected td:last-child {
   border: 2px solid var(--ops-red);
   color: var(--ops-red);
   display: grid;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   gap: 4px;
   line-height: 1.4;
@@ -8933,7 +8931,7 @@ tbody tr.selected td:last-child {
   background: var(--ops-lime);
   border: 2px solid var(--ops-ink);
   color: var(--ops-ink);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   margin: 0;
@@ -8967,7 +8965,7 @@ tbody tr.selected td:last-child {
 
 .ops-board-page .ops-payment-receipt-preview figcaption {
   color: var(--ops-secondary);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   margin: 0;
@@ -9007,7 +9005,7 @@ tbody tr.selected td:last-child {
   background: var(--ops-lime);
   color: var(--ops-ink);
   display: inline-block;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 950;
   margin-top: 8px;
@@ -9036,7 +9034,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-more-actions summary,
 .ops-board-page .ops-proof-upload summary {
   color: var(--ops-secondary);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 950;
   letter-spacing: 0.08em;
@@ -9140,7 +9138,7 @@ tbody tr.selected td:last-child {
 }
 
 .ops-board-page .ops-stage-overview strong {
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 950;
   text-transform: uppercase;
@@ -9190,7 +9188,7 @@ tbody tr.selected td:last-child {
 .ops-board-page .ops-stage-section-heading mark {
   background: var(--ops-lime);
   color: var(--ops-ink);
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   font-weight: 950;
   padding: 3px 5px;
@@ -9293,7 +9291,7 @@ tbody tr.selected td:last-child {
   color: var(--mvp-ink);
   display: flex;
   flex-direction: column;
-  font-family: Archivo, Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   gap: 18px;
   min-height: 100%;
   min-width: 0;
@@ -9361,7 +9359,7 @@ tbody tr.selected td:last-child {
 .mvp-inline-error,
 .mvp-inline-note,
 .sidebar-phase-item small {
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   text-transform: uppercase;
 }
 
@@ -9422,7 +9420,7 @@ tbody tr.selected td:last-child {
   background: transparent;
   border: 0;
   color: var(--mvp-muted);
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 700;
   padding: 4px;
@@ -9486,13 +9484,13 @@ tbody tr.selected td:last-child {
 }
 
 .mvp-priority-list > button:hover { background: #f7f7f0; }
-.mvp-priority-list code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 10px; font-weight: 700; }
+.mvp-priority-list code { font-family: var(--trry-font-ui); font-size: 10px; font-weight: 700; }
 .mvp-priority-list strong { font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mvp-priority-list span { color: #4a4a44; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.mvp-priority-list b { font-family: "JetBrains Mono", Consolas, monospace; font-size: 9px; text-transform: uppercase; }
+.mvp-priority-list b { font-family: var(--trry-font-ui); font-size: 9px; text-transform: uppercase; }
 .mvp-priority-list b.danger { color: var(--mvp-red); }
 .mvp-priority-list b.warning { color: var(--mvp-amber); }
-.mvp-priority-list i { font-family: "JetBrains Mono", Consolas, monospace; font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; }
+.mvp-priority-list i { font-family: var(--trry-font-ui); font-size: 9px; font-style: normal; font-weight: 700; text-transform: uppercase; }
 
 .mvp-snapshot { display: grid; grid-template-columns: repeat(5, 1fr); }
 .mvp-snapshot span { border-right: 1px solid var(--mvp-soft-line); display: grid; font-size: 9px; gap: 6px; padding: 12px 8px; text-align: center; text-transform: uppercase; }
@@ -9500,9 +9498,9 @@ tbody tr.selected td:last-child {
 .mvp-snapshot b { font-size: 22px; }
 .mvp-workload { display: grid; }
 .mvp-workload > span { align-items: center; border-bottom: 1px solid var(--mvp-soft-line); display: grid; gap: 9px; grid-template-columns: 30px 1fr auto; min-height: 46px; padding: 7px 12px; }
-.mvp-workload i { align-items: center; background: var(--mvp-ink); color: var(--mvp-lime); display: flex; font-family: "JetBrains Mono", Consolas, monospace; font-size: 9px; font-style: normal; height: 28px; justify-content: center; width: 28px; }
+.mvp-workload i { align-items: center; background: var(--mvp-ink); color: var(--mvp-lime); display: flex; font-family: var(--trry-font-ui); font-size: 9px; font-style: normal; height: 28px; justify-content: center; width: 28px; }
 .mvp-workload strong { font-size: 12px; }
-.mvp-workload b { color: var(--mvp-muted); font-family: "JetBrains Mono", Consolas, monospace; font-size: 8px; text-transform: uppercase; }
+.mvp-workload b { color: var(--mvp-muted); font-family: var(--trry-font-ui); font-size: 8px; text-transform: uppercase; }
 .mvp-filter-bar {
   display: grid;
   gap: 10px;
@@ -9540,7 +9538,7 @@ tbody tr.selected td:last-child {
 }
 .mvp-stage-cards button:hover { border-color: var(--mvp-ink); }
 .mvp-stage-cards button.active { background: var(--mvp-lime); border-color: var(--mvp-ink); }
-.mvp-stage-cards span { font-family: "JetBrains Mono", Consolas, monospace; font-size: 9px; font-weight: 700; text-transform: uppercase; }
+.mvp-stage-cards span { font-family: var(--trry-font-ui); font-size: 9px; font-weight: 700; text-transform: uppercase; }
 .mvp-stage-cards strong { font-size: 22px; }
 
 .mvp-table-wrap {
@@ -9589,7 +9587,7 @@ tbody tr.selected td:last-child {
 .mvp-table-row > * { min-width: 0; overflow: hidden; padding-right: 10px; text-overflow: ellipsis; white-space: nowrap; }
 .mvp-table-row > strong { font-size: 12px; font-weight: 800; }
 .mvp-table-row > span { color: #4a4a44; font-size: 12px; }
-.mvp-table-row > code { font-family: "JetBrains Mono", Consolas, monospace; font-size: 10px; font-weight: 700; }
+.mvp-table-row > code { font-family: var(--trry-font-ui); font-size: 10px; font-weight: 700; }
 
 .mvp-copy {
   align-items: center;
@@ -9624,7 +9622,7 @@ tbody tr.selected td:last-child {
 .mvp-due.today { color: var(--mvp-ink); font-weight: 900; }
 .mvp-production-state { display: grid; gap: 2px; }
 .mvp-production-state b { font-size: 11px; }
-.mvp-production-state small { color: var(--mvp-amber); font-family: "JetBrains Mono", Consolas, monospace; font-size: 7px; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
+.mvp-production-state small { color: var(--mvp-amber); font-family: var(--trry-font-ui); font-size: 7px; overflow: hidden; text-overflow: ellipsis; text-transform: uppercase; }
 .mvp-view,
 .mvp-staff-cell {
   background: var(--mvp-white);
@@ -9692,7 +9690,7 @@ tbody tr.selected td:last-child {
 .mvp-conversion { display: grid; gap: 8px; }
 .mvp-conversion > b,
 .mvp-conversion > span,
-.mvp-conversion > small { font-family: "JetBrains Mono", Consolas, monospace; font-size: 9px; }
+.mvp-conversion > small { font-family: var(--trry-font-ui); font-size: 9px; }
 .mvp-conversion > button,
 .mvp-primary-action,
 .mvp-secondary-action,
@@ -9700,7 +9698,7 @@ tbody tr.selected td:last-child {
   background: var(--mvp-lime);
   border: 1px solid var(--mvp-ink);
   color: var(--mvp-ink);
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 700;
   min-height: 40px;
@@ -9714,7 +9712,7 @@ tbody tr.selected td:last-child {
 .mvp-production-editor { display: grid; gap: 10px; grid-template-columns: 1fr 1fr; }
 .mvp-production-editor label { display: grid; gap: 5px; }
 .mvp-production-editor label.wide { grid-column: 1 / -1; }
-.mvp-production-editor label > span { color: var(--mvp-muted); font-family: "JetBrains Mono", Consolas, monospace; font-size: 8px; text-transform: uppercase; }
+.mvp-production-editor label > span { color: var(--mvp-muted); font-family: var(--trry-font-ui); font-size: 8px; text-transform: uppercase; }
 .mvp-production-editor select,
 .mvp-production-editor textarea { background: var(--mvp-white); border: 1px solid var(--mvp-ink); min-height: 36px; padding: 7px; width: 100%; }
 .mvp-production-editor textarea { min-height: 70px; resize: vertical; }
@@ -9982,7 +9980,7 @@ tbody tr.selected td:last-child {
 .mvp-more-details summary {
   color: var(--mvp-muted);
   cursor: pointer;
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   font-weight: 700;
   padding: 2px 0 8px;
@@ -9992,7 +9990,7 @@ tbody tr.selected td:last-child {
 .mvp-more-details p {
   background: var(--mvp-paper);
   border: 1px solid var(--mvp-line);
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   line-height: 1.5;
   margin: 0;
@@ -10023,7 +10021,7 @@ tbody tr.selected td:last-child {
 .mvp-drawer .ops-stage-mini-grid span,
 .mvp-drawer .ops-customer-action-form span,
 .mvp-drawer .ops-so-editor > span {
-  font-family: "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   text-transform: uppercase;
 }
 
@@ -10236,7 +10234,7 @@ body,
     align-items: center;
     color: inherit;
     flex: 1 1 auto;
-    font-family: Archivo, system-ui, sans-serif;
+    font-family: var(--trry-font-ui);
     font-size: 12px;
     font-weight: 900;
     justify-content: flex-start;
@@ -10414,7 +10412,7 @@ body,
     align-items: center;
     color: inherit;
     flex: 1 1 auto;
-    font-family: Archivo, system-ui, sans-serif;
+    font-family: var(--trry-font-ui);
     font-size: 10px;
     font-weight: 900;
     min-width: 0;
@@ -10677,8 +10675,8 @@ body,
 
 /* MVP drawer key/value spacing and typography correction */
 .mvp-drawer {
-  --mvp-drawer-content-font: "Space Grotesk", Archivo, Arial, sans-serif;
-  --mvp-drawer-label-font: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  --mvp-drawer-content-font: var(--trry-font-ui);
+  --mvp-drawer-label-font: var(--trry-font-ui);
   width: clamp(440px, 31vw, 460px);
 }
 
@@ -11081,7 +11079,7 @@ body,
   border: 1px solid var(--mvp-line);
   color: var(--mvp-ink);
   display: block;
-  font-family: var(--mvp-drawer-content-font, "Space Grotesk", Archivo, Arial, sans-serif);
+  font-family: var(--mvp-drawer-content-font, var(--trry-font-ui));
   font-size: 13px;
   font-weight: 400;
   line-height: 1.45;
@@ -11112,7 +11110,7 @@ body,
   background: transparent;
   border: 0;
   color: var(--mvp-muted);
-  font-family: var(--mvp-drawer-label-font, "Space Mono", "JetBrains Mono", Consolas, monospace);
+  font-family: var(--mvp-drawer-label-font, var(--trry-font-ui));
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.06em;
@@ -11164,7 +11162,7 @@ body,
   align-items: center;
   box-shadow: none;
   display: flex;
-  font-family: var(--mvp-drawer-content-font, "Space Grotesk", Archivo, Arial, sans-serif);
+  font-family: var(--mvp-drawer-content-font, var(--trry-font-ui));
   font-size: 14px;
   font-weight: 600;
   gap: 8px;
@@ -11260,7 +11258,7 @@ body,
   --saas-sidebar-soft: var(--trry-shell-raised);
   --saas-radius: var(--trry-radius);
   --saas-font: var(--trry-font-ui);
-  --saas-mono: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  --saas-mono: var(--trry-font-ui);
   background: var(--saas-bg);
   color: var(--saas-ink);
   font-family: var(--saas-font);
@@ -12188,7 +12186,7 @@ body,
   --saas-sidebar-soft: var(--trry-shell-raised);
   --saas-radius: var(--trry-radius);
   --saas-font: var(--trry-font-ui);
-  --saas-mono: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  --saas-mono: var(--trry-font-ui);
   background: var(--saas-bg);
   color: var(--saas-ink);
   font-family: var(--saas-font);
@@ -13040,7 +13038,7 @@ body,
 .app-shell.admin-saas-shell {
   background: var(--saas-bg, #f7f7f4);
   color: var(--saas-ink, #121417);
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   max-width: 100vw;
   overflow-x: clip;
 }
@@ -13049,7 +13047,7 @@ body,
 .app-shell.admin-saas-shell .admin-saas-page {
   background: var(--saas-bg, #f7f7f4);
   color: var(--saas-ink, #121417);
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   min-width: 0;
   max-width: 100vw;
   overflow-x: clip;
@@ -13065,7 +13063,7 @@ body,
   box-shadow: none;
   color: #eef2f6;
   flex: 0 0 236px;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   padding: 22px 14px;
   width: 236px;
 }
@@ -13083,7 +13081,7 @@ body,
 
 .app-shell.admin-saas-shell .brand-lockup strong {
   color: #ffffff;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 27px;
   font-weight: 800;
   letter-spacing: -0.04em;
@@ -13098,7 +13096,7 @@ body,
 .app-shell.admin-saas-shell .brand-lockup span {
   color: var(--saas-lime, #baff16);
   display: block;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.12em;
@@ -13116,7 +13114,7 @@ body,
   border: 0;
   border-radius: 6px;
   color: #d9dde4;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   gap: 11px;
   height: 42px;
   padding: 0 12px;
@@ -13125,7 +13123,7 @@ body,
 .app-shell.admin-saas-shell .sidebar a .nav-label,
 .app-shell.admin-saas-shell .sidebar-phase-item .nav-label {
   color: inherit;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.01em;
@@ -13163,7 +13161,7 @@ body,
   border: 1px solid #343946;
   border-radius: 4px;
   color: #aab1bb;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   padding: 2px 5px;
 }
@@ -13191,14 +13189,14 @@ body,
 
 .app-shell.admin-saas-shell .system-card strong {
   color: #ffffff;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 13px;
   font-weight: 600;
 }
 
 .app-shell.admin-saas-shell .system-card p {
   color: #9aa3af;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 12px;
 }
 
@@ -13212,7 +13210,7 @@ body,
 .app-shell.admin-saas-shell .catalog-drawer input,
 .app-shell.admin-saas-shell .catalog-drawer select,
 .app-shell.admin-saas-shell .catalog-drawer textarea {
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
 }
 
 @media (max-width: 1199px) and (min-width: 768px) {
@@ -13238,7 +13236,7 @@ body,
 
 .app-shell.admin-saas-shell .catalog-page .subtitle {
   color: #68707a !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
   text-transform: none !important;
 }
@@ -13268,7 +13266,7 @@ body,
   border-radius: 5px !important;
   color: #68707a !important;
   flex: 1 1 0;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
   font-weight: 600;
   min-height: 34px;
@@ -13301,7 +13299,7 @@ body,
 .app-shell.admin-saas-shell .catalog-table th {
   background: #fbfbf9 !important;
   color: #68707a !important;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 11px !important;
   letter-spacing: 0.04em !important;
   text-transform: uppercase !important;
@@ -13309,7 +13307,7 @@ body,
 
 .app-shell.admin-saas-shell .catalog-table td {
   color: #121417 !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
 }
 
@@ -13354,7 +13352,7 @@ body,
   border-radius: 0 !important;
   box-shadow: -16px 0 32px rgba(15, 23, 42, 0.1) !important;
   display: grid !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   grid-template-rows: auto 1fr auto;
   height: 100vh !important;
   max-width: min(500px, 100vw) !important;
@@ -13381,7 +13379,7 @@ body,
 .app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header h2,
 .app-shell.admin-saas-shell .catalog-drawer header h2 {
   color: #121417 !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 22px !important;
   font-weight: 700 !important;
   letter-spacing: -0.02em !important;
@@ -13392,7 +13390,7 @@ body,
 .app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header code,
 .app-shell.admin-saas-shell .catalog-drawer header span {
   color: #68707a !important;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 12px !important;
   font-weight: 700;
   letter-spacing: 0.04em !important;
@@ -13445,7 +13443,7 @@ body,
 .app-shell.admin-saas-shell .catalog-field > span,
 .app-shell.admin-saas-shell .catalog-image-heading span {
   color: #68707a !important;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.04em !important;
@@ -13465,14 +13463,14 @@ body,
 
 .app-shell.admin-saas-shell .professional-product-drawer .settings-row span {
   color: #68707a !important;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 11px !important;
   text-transform: uppercase !important;
 }
 
 .app-shell.admin-saas-shell .professional-product-drawer .settings-row strong {
   color: #121417 !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
   font-weight: 600 !important;
   line-height: 1.35;
@@ -13530,7 +13528,7 @@ body,
   border-radius: 6px !important;
   color: #121417 !important;
   display: flex !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   justify-content: center;
@@ -13567,7 +13565,7 @@ body,
   border: 1px solid #e1e4e8;
   border-radius: 5px;
   color: #121417;
-  font: 600 12px Inter, Arial, sans-serif;
+  font: 600 12px var(--trry-font-ui);
   min-height: 30px;
 }
 
@@ -13594,7 +13592,7 @@ body,
   border: 1px solid #d5dae0 !important;
   border-radius: 6px !important;
   display: flex;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
   font-weight: 600 !important;
   justify-content: center;
@@ -13642,14 +13640,14 @@ body,
 .app-shell.admin-saas-shell .settings-page {
   background: #f7f7f4 !important;
   color: #121417;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   max-width: 100%;
   min-width: 0;
 }
 
 .app-shell.admin-saas-shell .settings-heading h1 {
   color: #121417 !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 28px !important;
   font-weight: 700 !important;
   letter-spacing: -0.02em !important;
@@ -13660,7 +13658,7 @@ body,
 
 .app-shell.admin-saas-shell .settings-heading .subtitle {
   color: #68707a !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
   line-height: 1.45;
   margin-top: 8px;
@@ -13692,7 +13690,7 @@ body,
   border-radius: 5px;
   color: #68707a;
   display: flex;
-  font: 600 14px Inter, "Geist", Arial, sans-serif;
+  font: 600 14px var(--trry-font-ui);
   min-height: 36px;
   padding: 0 10px;
   text-decoration: none;
@@ -13734,7 +13732,7 @@ body,
 
 .app-shell.admin-saas-shell .settings-card h2 {
   color: #121417 !important;
-  font-family: Inter, "Geist", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 16px !important;
   font-weight: 700 !important;
   letter-spacing: -0.01em !important;
@@ -13745,7 +13743,7 @@ body,
 
 .app-shell.admin-saas-shell .settings-card header p {
   color: #68707a;
-  font: 400 12px/1.45 Inter, "Geist", Arial, sans-serif;
+  font: 400 12px/1.45 var(--trry-font-ui);
   margin: 0;
 }
 
@@ -13769,7 +13767,7 @@ body,
 
 .app-shell.admin-saas-shell .settings-card .settings-row span {
   color: #68707a !important;
-  font-family: Inter, "Geist", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 13px !important;
   font-weight: 600 !important;
   letter-spacing: 0 !important;
@@ -13778,7 +13776,7 @@ body,
 
 .app-shell.admin-saas-shell .settings-card .settings-row strong {
   color: #121417 !important;
-  font-family: Inter, "Geist", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
   font-weight: 600 !important;
   line-height: 1.35;
@@ -13866,7 +13864,7 @@ body,
   border-radius: 6px !important;
   color: #475467 !important;
   display: inline-flex;
-  font: 600 13px/1.2 Inter, "Geist", Arial, sans-serif !important;
+  font: 600 13px/1.2 var(--trry-font-ui) !important;
   gap: 8px;
   min-height: 36px;
   padding: 8px 12px !important;
@@ -13877,7 +13875,7 @@ body,
   background: #f2f4f7;
   border-radius: 999px;
   color: #344054;
-  font: 600 11px/1 Inter, "Geist", Arial, sans-serif;
+  font: 600 11px/1 var(--trry-font-ui);
   min-width: 22px;
   padding: 4px 7px;
   text-align: center;
@@ -13961,7 +13959,7 @@ body,
 
 .app-shell.admin-saas-shell .catalog-featured-muted {
   color: #98a2b3;
-  font: 500 13px/1.2 Inter, "Geist", Arial, sans-serif;
+  font: 500 13px/1.2 var(--trry-font-ui);
 }
 
 .app-shell.admin-saas-shell .catalog-empty-state {
@@ -14000,7 +13998,7 @@ body,
 
 .app-shell.admin-saas-shell .catalog-drawer-section h3 {
   color: #121417;
-  font: 700 14px/1.25 Inter, "Geist", Arial, sans-serif;
+  font: 700 14px/1.25 var(--trry-font-ui);
   letter-spacing: 0;
   margin: 0 0 10px;
   text-transform: none;
@@ -14024,7 +14022,7 @@ body,
   border-radius: 8px;
   color: #98a2b3;
   display: flex;
-  font: 600 11px/1.3 Inter, "Geist", Arial, sans-serif;
+  font: 600 11px/1.3 var(--trry-font-ui);
   justify-content: center;
   overflow: hidden;
   padding: 8px;
@@ -14040,26 +14038,26 @@ body,
 .app-shell.admin-saas-shell .catalog-preview-card strong {
   color: #121417;
   display: block;
-  font: 700 15px/1.25 Inter, "Geist", Arial, sans-serif;
+  font: 700 15px/1.25 var(--trry-font-ui);
   margin-bottom: 6px;
 }
 
 .app-shell.admin-saas-shell .catalog-preview-card p {
   color: #667085;
-  font: 400 13px/1.45 Inter, "Geist", Arial, sans-serif;
+  font: 400 13px/1.45 var(--trry-font-ui);
   margin: 0 0 10px;
 }
 
 .app-shell.admin-saas-shell .catalog-preview-card span {
   color: #121417;
   display: block;
-  font: 700 14px/1.2 Inter, "Geist", Arial, sans-serif;
+  font: 700 14px/1.2 var(--trry-font-ui);
 }
 
 .app-shell.admin-saas-shell .catalog-preview-card small {
   color: #667085;
   display: block;
-  font: 500 12px/1.2 Inter, "Geist", Arial, sans-serif;
+  font: 500 12px/1.2 var(--trry-font-ui);
   margin-top: 4px;
 }
 
@@ -14085,19 +14083,19 @@ body,
 
 .app-shell.admin-saas-shell .catalog-detail-row span {
   color: #667085;
-  font: 500 12px/1.3 Inter, "Geist", Arial, sans-serif;
+  font: 500 12px/1.3 var(--trry-font-ui);
 }
 
 .app-shell.admin-saas-shell .catalog-detail-row strong {
   color: #121417;
-  font: 600 13px/1.35 Inter, "Geist", Arial, sans-serif;
+  font: 600 13px/1.35 var(--trry-font-ui);
   min-width: 0;
   overflow-wrap: anywhere;
   text-align: right;
 }
 
 .app-shell.admin-saas-shell .mono-value {
-  font-family: "Space Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 12px !important;
 }
 
@@ -14112,12 +14110,12 @@ body,
 
 .app-shell.admin-saas-shell .catalog-source-empty strong {
   color: #92400e;
-  font: 700 13px/1.3 Inter, "Geist", Arial, sans-serif;
+  font: 700 13px/1.3 var(--trry-font-ui);
 }
 
 .app-shell.admin-saas-shell .catalog-source-empty span {
   color: #a16207;
-  font: 400 12px/1.45 Inter, "Geist", Arial, sans-serif;
+  font: 400 12px/1.45 var(--trry-font-ui);
 }
 
 .app-shell.admin-saas-shell .catalog-secondary-action {
@@ -14392,7 +14390,7 @@ body,
 
 .app-shell.admin-saas-shell .catalog-drawer-section h3 {
   color: #121417 !important;
-  font: 600 14px/1.25 Inter, "Geist", Arial, sans-serif !important;
+  font: 600 14px/1.25 var(--trry-font-ui) !important;
   margin: 0 !important;
 }
 
@@ -14432,12 +14430,12 @@ body,
 
 .app-shell.admin-saas-shell .catalog-featured-setting strong {
   color: #121417;
-  font: 600 13px/1.25 Inter, "Geist", Arial, sans-serif;
+  font: 600 13px/1.25 var(--trry-font-ui);
 }
 
 .app-shell.admin-saas-shell .catalog-featured-setting small {
   color: #68707a;
-  font: 400 12px/1.35 Inter, "Geist", Arial, sans-serif;
+  font: 400 12px/1.35 var(--trry-font-ui);
 }
 
 .app-shell.admin-saas-shell .catalog-featured-setting input {
@@ -14494,7 +14492,7 @@ body,
   border: 0 !important;
   border-radius: 999px !important;
   color: #344054 !important;
-  font: 600 11px/1 Inter, "Geist", Arial, sans-serif !important;
+  font: 600 11px/1 var(--trry-font-ui) !important;
   padding: 6px 9px !important;
 }
 
@@ -14518,7 +14516,7 @@ body,
   align-items: center;
   color: #344054 !important;
   display: flex;
-  font: 600 13px/1.2 Inter, "Geist", Arial, sans-serif !important;
+  font: 600 13px/1.2 var(--trry-font-ui) !important;
   justify-content: center;
   text-transform: none !important;
 }
@@ -14536,14 +14534,14 @@ body,
   border: 1px solid #d5dae0 !important;
   border-radius: 6px !important;
   box-shadow: none !important;
-  font: 600 12px/1 Inter, "Geist", Arial, sans-serif !important;
+  font: 600 12px/1 var(--trry-font-ui) !important;
   min-height: 34px;
   padding: 8px 10px !important;
 }
 
 .app-shell.admin-saas-shell .catalog-image-field p {
   color: #68707a !important;
-  font: 400 12px/1.4 Inter, "Geist", Arial, sans-serif !important;
+  font: 400 12px/1.4 var(--trry-font-ui) !important;
   margin: 0 !important;
   text-transform: none !important;
 }
@@ -14642,7 +14640,7 @@ body,
     color: #68707a;
     content: attr(data-mobile-label);
     display: block;
-    font: 600 10px/1.2 "Space Mono", Consolas, monospace;
+    font: 600 10px/1.2 var(--trry-font-ui);
     margin-bottom: 3px;
     text-transform: uppercase;
   }
@@ -14959,7 +14957,7 @@ body,
   box-shadow: -16px 0 32px rgba(15, 23, 42, 0.1) !important;
   color: #121417 !important;
   display: grid !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   grid-template-rows: auto minmax(0, 1fr) auto !important;
   height: 100dvh !important;
   max-width: min(500px, 100vw) !important;
@@ -15001,7 +14999,7 @@ body,
 .app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header code {
   color: #68707a !important;
   display: block;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 11px !important;
   font-weight: 700;
   letter-spacing: 0.04em !important;
@@ -15012,7 +15010,7 @@ body,
 .app-shell.admin-saas-shell .client-drawer-title h2,
 .app-shell.admin-saas-shell .professional-product-drawer .product-drawer-header h2 {
   color: #121417 !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 22px !important;
   font-weight: 700 !important;
   letter-spacing: -0.02em !important;
@@ -15106,7 +15104,7 @@ body,
 .app-shell.admin-saas-shell .professional-client-drawer .section-title,
 .app-shell.admin-saas-shell .professional-product-drawer .section-title {
   color: #68707a !important;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 11px !important;
   font-weight: 700 !important;
   letter-spacing: 0.04em !important;
@@ -15116,7 +15114,7 @@ body,
 .app-shell.admin-saas-shell .professional-client-drawer .settings-row strong,
 .app-shell.admin-saas-shell .professional-product-drawer .settings-row strong {
   color: #121417 !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
   font-weight: 600 !important;
   line-height: 1.35;
@@ -15172,7 +15170,7 @@ body,
   border-radius: 6px;
   color: #121417;
   display: flex;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 14px;
   font-weight: 600;
   justify-content: center;
@@ -15256,7 +15254,7 @@ body,
 .app-shell.admin-saas-shell .clients-page .status-card p,
 .app-shell.admin-saas-shell .products-admin-page .status-card p {
   color: #68707a !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 12px !important;
   font-weight: 600 !important;
   letter-spacing: 0 !important;
@@ -15273,7 +15271,7 @@ body,
 .app-shell.admin-saas-shell .clients-page .status-card small,
 .app-shell.admin-saas-shell .products-admin-page .status-card small {
   color: #68707a !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 12px !important;
   line-height: 1.35 !important;
 }
@@ -15431,7 +15429,7 @@ body,
 
 .app-shell.admin-saas-shell .professional-client-drawer .portal-link {
   color: #2563eb !important;
-  font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 14px !important;
   font-weight: 600 !important;
   text-decoration: none !important;
@@ -15631,7 +15629,7 @@ body,
   .app-shell.admin-saas-shell .products-admin-page .products-table:not(.catalog-table) td {
     border: 0 !important;
     color: #121417 !important;
-    font-family: Inter, "Geist", "Geist Sans", Arial, sans-serif !important;
+    font-family: var(--trry-font-ui) !important;
     font-size: 14px !important;
     line-height: 1.35 !important;
     overflow: visible !important;
@@ -15826,7 +15824,7 @@ body,
 .mvp-item-cell small,
 .mvp-request-cell small {
   color: #68707a;
-  font-family: "Space Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -15875,7 +15873,7 @@ body,
 .mvp-internal-section label span,
 .mvp-record-follow label span {
   color: #68707a;
-  font-family: "Space Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -15890,7 +15888,7 @@ body,
   border: 1px solid #d5dae0;
   border-radius: 6px;
   color: #121417;
-  font: 600 14px Inter, Arial, sans-serif;
+  font: 600 14px var(--trry-font-ui);
   min-height: 42px;
   padding: 0 12px;
 }
@@ -15909,7 +15907,7 @@ body,
   align-items: center;
   border-radius: 6px;
   display: inline-flex;
-  font: 700 13px Inter, Arial, sans-serif;
+  font: 700 13px var(--trry-font-ui);
   justify-content: center;
   min-height: 40px;
   padding: 0 14px;
@@ -15938,7 +15936,7 @@ body,
 
 .mvp-record-follow summary {
   cursor: pointer;
-  font: 800 12px "Space Mono", Consolas, monospace;
+  font: 800 12px var(--trry-font-ui);
   letter-spacing: 0.04em;
   min-height: 32px;
   text-transform: uppercase;
@@ -16438,7 +16436,7 @@ body,
 
 .mvp-readiness-cell strong {
   color: var(--saas-ink, #101418);
-  font-family: var(--saas-mono, monospace);
+  font-family: var(--saas-mono, var(--trry-font-ui));
   font-size: 11px;
   font-weight: 600;
 }
@@ -16514,7 +16512,7 @@ body,
 
 .mvp-order-action-required {
   color: var(--saas-red, #d9432f);
-  font-family: var(--saas-mono, monospace);
+  font-family: var(--saas-mono, var(--trry-font-ui));
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.02em;
@@ -16820,7 +16818,7 @@ body,
 }
 
 .admin-access-heading h1 {
-  font-family: "Space Grotesk", "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: clamp(32px, 6vw, 50px);
   line-height: 0.96;
 }
@@ -16849,7 +16847,7 @@ body,
   background: #ffffff !important;
   border: 3px solid #111111 !important;
   color: #111111 !important;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 11px !important;
   height: 48px !important;
   min-width: 68px;
@@ -16887,7 +16885,7 @@ body,
   align-items: center !important;
   border-radius: 4px !important;
   display: inline-flex !important;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace !important;
+  font-family: var(--trry-font-ui) !important;
   font-size: 10px !important;
   font-weight: 800 !important;
   height: 24px !important;
@@ -16923,7 +16921,7 @@ body,
 
 .mvp-artwork-access > strong {
   color: var(--saas-ink, #101418);
-  font-family: "Space Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.04em;
@@ -17066,14 +17064,14 @@ body,
 }
 
 .mobile-account-popover strong {
-  font-family: "Space Grotesk", "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 13px;
   font-weight: 800;
 }
 
 .mobile-account-popover span {
   color: #55534b;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 800;
   letter-spacing: 0.06em;
@@ -17084,7 +17082,7 @@ body,
   background: #ddff4f;
   border: 2px solid #111111;
   color: #111111;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.08em;
@@ -17143,7 +17141,7 @@ body,
   background: #fff1f1;
   border: 3px solid #111111;
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   font-weight: 900;
   margin: 12px 28px 0;
@@ -17163,7 +17161,7 @@ body,
 
 .mobile-account-label {
   color: #111111;
-  font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 8px;
   font-weight: 900;
   letter-spacing: 0.04em;
@@ -17206,7 +17204,7 @@ body,
 
 .admin-login-card .admin-access-brand span {
   color: #111111;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   letter-spacing: 0.12em;
 }
@@ -17277,7 +17275,7 @@ body,
   color: #6e6a5e;
   content: "Authorized staff only.";
   display: block;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 700;
   margin-top: 14px;
@@ -17325,7 +17323,7 @@ body,
 }
 
 .admin-account-copy strong {
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   font-weight: 900;
   text-transform: uppercase;
@@ -17333,7 +17331,7 @@ body,
 
 .admin-account-copy small {
   color: currentColor;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 800;
   opacity: 0.78;
@@ -17370,7 +17368,7 @@ body,
 
 .admin-account-popover strong,
 .mobile-account-popover strong {
-  font-family: "Space Grotesk", "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 14px;
   font-weight: 800;
   max-width: 196px;
@@ -17382,7 +17380,7 @@ body,
 .admin-account-popover span,
 .mobile-account-popover span {
   color: #55534b;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
@@ -17400,7 +17398,7 @@ body,
   background: #ffffff;
   border: 2px solid #111111;
   color: #111111;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   min-height: 44px;
@@ -17446,7 +17444,7 @@ body,
 .staff-access-header span,
 .staff-access-denied span {
   color: #6b7280;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   letter-spacing: 0.12em;
@@ -17454,7 +17452,7 @@ body,
 
 .staff-access-header h1,
 .staff-access-denied h1 {
-  font-family: "Space Grotesk", "Archivo", system-ui, sans-serif;
+  font-family: var(--trry-font-ui);
   font-size: 28px;
   line-height: 1.05;
   margin: 4px 0 4px;
@@ -17471,7 +17469,7 @@ body,
   background: #ddff4f;
   border: 3px solid #111111;
   color: #111111;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   min-height: 44px;
@@ -17514,7 +17512,7 @@ body,
 .staff-table-head {
   border-bottom: 3px solid #111111;
   color: #68707a;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   text-transform: uppercase;
@@ -17535,7 +17533,7 @@ body,
 .staff-badge {
   border: 2px solid #111111;
   display: inline-flex;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 9px;
   font-weight: 900;
   justify-content: center;
@@ -17560,7 +17558,7 @@ body,
 .staff-form-error,
 .staff-note {
   border: 2px solid #111111;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   margin: 0;
@@ -17605,7 +17603,7 @@ body,
 
 .staff-drawer header span {
   color: #68707a;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
 }
@@ -17634,7 +17632,7 @@ body,
 }
 
 .staff-form label span {
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   text-transform: uppercase;
@@ -17649,7 +17647,7 @@ body,
 
 .staff-empty {
   color: #68707a;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 11px;
   font-weight: 900;
   padding: 16px 0;
@@ -17760,7 +17758,7 @@ body,
 
 .admin-login-note {
   color: #6e6a5e;
-  font-family: "Space Mono", "JetBrains Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 700;
   margin: 14px 0 0;
@@ -17773,7 +17771,7 @@ body,
   background: #d7ff48;
   color: #111111;
   padding: 10px 12px;
-  font-family: "Space Mono", monospace;
+  font-family: var(--trry-font-ui);
   font-size: 0.75rem;
   font-weight: 800;
   text-transform: uppercase;
@@ -17790,7 +17788,7 @@ body,
   border: 1px solid var(--saas-border, #d6dde7);
   border-radius: 6px;
   color: var(--saas-ink, #111318);
-  font-family: var(--saas-font, Inter, Arial, sans-serif);
+  font-family: var(--saas-font, var(--trry-font-ui));
   font-size: 12px;
   line-height: 1.4;
   margin: 0;
@@ -18734,7 +18732,7 @@ body,
   border: 1px solid #aeb6c2;
   border-radius: 6px;
   color: #0b0c0f;
-  font-family: "Space Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   min-height: 32px;
@@ -18849,7 +18847,7 @@ body,
   border: 1px solid #aeb6c2;
   border-radius: 6px;
   color: #0b0c0f;
-  font-family: "Space Mono", Consolas, monospace;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
   font-weight: 900;
   min-height: 28px;
@@ -22215,4 +22213,128 @@ body,
     min-height: 44px;
     width: 100%;
   }
+}
+
+/* Typography-only Inter normalization for the Admin Portal. */
+:root {
+  --trry-label-tracking: 0.02em;
+}
+
+html,
+body,
+#root,
+.app-shell,
+.app-shell *,
+.app-shell *::before,
+.app-shell *::after {
+  font-family: var(--trry-font-ui) !important;
+}
+
+button,
+input,
+select,
+textarea,
+table,
+th,
+td,
+code,
+kbd,
+pre,
+.mono-value,
+.mvp-copy,
+.order-dashboard-copy,
+.client-drawer-title code,
+.product-drawer-header code,
+.catalog-drawer code {
+  font-family: inherit !important;
+}
+
+code,
+kbd,
+pre,
+.mono-value,
+.mvp-copy,
+.order-dashboard-copy,
+.client-drawer-title code,
+.product-drawer-header code,
+.catalog-drawer code,
+.table-card th,
+.products-table th,
+.clients-table th,
+.mvp-table-head,
+.staff-table-head,
+.order-dashboard-header,
+.catalog-table th,
+.mvp-table-row > strong,
+.mvp-table-row > span,
+.mvp-due,
+.workboard-table th,
+.workboard-table td,
+.workboard-task-link span,
+.workboard-summary strong,
+.workboard-summary small,
+.my-task-code,
+.my-task-card-meta > span,
+.my-task-history article > div span,
+.my-task-running-time,
+.my-tasks-snapshot strong,
+.my-tasks-snapshot small,
+.status-pill,
+.trry-badge,
+.mvp-status,
+.staff-badge,
+.order-dashboard-artwork-badge,
+.mvp-inquiry-status-pill {
+  font-variant-numeric: tabular-nums;
+}
+
+.trry-badge,
+.status-pill,
+.mvp-status,
+.staff-badge,
+.order-dashboard-artwork-badge,
+.mvp-inquiry-status-pill,
+.table-card th,
+.products-table th,
+.clients-table th,
+.mvp-table-head,
+.staff-table-head,
+.order-dashboard-header,
+.catalog-table th,
+.mvp-page-title span,
+.mvp-page-title > strong,
+.mvp-rule,
+.mvp-stage-cards span,
+.mvp-copy span,
+.mvp-copy small,
+.mvp-item-cell small,
+.mvp-request-cell small,
+.workboard-summary span,
+.workboard-summary small,
+.workboard-table th,
+.my-tasks-snapshot span,
+.my-task-code,
+.my-task-detail-grid span,
+.my-task-history h3,
+.my-task-history small,
+.my-task-action-area > strong,
+.my-task-submit-fields span,
+.my-task-no-time-dialog span,
+.my-tasks-running-pin span,
+.my-task-status,
+.my-task-priority,
+.my-task-mode {
+  font-weight: 600 !important;
+  letter-spacing: var(--trry-label-tracking) !important;
+}
+
+.brand-lockup strong,
+.header-brand strong,
+.mvp-page-title h1,
+.page-heading h1,
+.product-drawer-title h2,
+.client-drawer-title h2,
+.my-task-drawer h2,
+.my-task-card-main strong {
+  letter-spacing: 0 !important;
 }

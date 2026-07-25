@@ -6734,8 +6734,8 @@ function createProductImageDataUrl(product, angleLabel) {
       <rect width="320" height="240" rx="18" fill="#f5f3f3"/>
       <rect x="18" y="18" width="284" height="204" rx="14" fill="#ffffff" stroke="#e2bfb0"/>
       <g transform="translate(62 36)">${shape}</g>
-      <text x="28" y="194" fill="#111827" font-family="Arial, sans-serif" font-size="19" font-weight="700">${product.product}</text>
-      <text x="28" y="216" fill="${labelColor}" font-family="Arial, sans-serif" font-size="13" font-weight="700">${angleLabel}</text>
+      <text x="28" y="194" fill="#111827" font-family="Inter, sans-serif" font-size="19" font-weight="700">${product.product}</text>
+      <text x="28" y="216" fill="${labelColor}" font-family="Inter, sans-serif" font-size="13" font-weight="700">${angleLabel}</text>
     </svg>
   `;
 
