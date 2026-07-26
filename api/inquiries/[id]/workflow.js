@@ -5,7 +5,7 @@ import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
 const WORKFLOW_SELECT = [
   "id", "status", "next_action", "odoo_so", "product", "product_desc", "quantity", "due_date",
-  "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status",
+  "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status", "payment_verified_amount", "payment_confirmed_amount",
   "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "blocked_reason",
 ].join(",");
 

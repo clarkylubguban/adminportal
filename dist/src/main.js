@@ -486,6 +486,7 @@ const routes = {
 };
 
 const defaultRoutePath = "/";
+const parkedAdminRoutes = new Set(["/clients", "/products"]);
 const ADMIN_ACCESS_SESSION_KEY = "trry_admin_access_unlocked";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "trry_admin_sidebar_collapsed_v3";
 
@@ -1351,12 +1352,12 @@ function getVisibleWorkboardTasks() {
 
 function renderWorkboardPage() {
   if (!canViewWorkboardRoute()) {
-    return `<section class="mvp-page workboard-page"><div class="mvp-page-title"><div><span>HOME / WORKBOARD</span><h1>Workboard</h1><p>Task planning is not enabled for this account.</p></div></div></section>`;
+    return `<section class="mvp-page workboard-page"><div class="mvp-page-title"><div><span>WORKBOARD</span><h1>WORKBOARD</h1><p>Task planning is not enabled for this account.</p></div></div></section>`;
   }
   const visibleTasks = getVisibleWorkboardTasks();
   return `<section class="mvp-page workboard-page">
     <div class="mvp-page-title">
-      <div><span>HOME / WORKBOARD</span><h1>Workboard</h1><p>Plan, assign, review, and monitor canonical task records.</p></div>
+      <div><span>WORKBOARD</span><h1>WORKBOARD</h1><p>${visibleTasks.length} shown / ${workboardTasks.length} total</p></div>
       <button class="ops-gold-button" data-workboard-create type="button">CREATE TASK</button>
     </div>
     ${renderWorkboardStateNotice()}
@@ -1390,10 +1391,10 @@ function renderWorkboardSummary() {
     ${renderMyTaskMetric("Drafts", counts.drafts, "Planning")}
     ${renderMyTaskMetric("To Do", counts.todo, "Queued")}
     ${renderMyTaskMetric("In Progress", counts.progress, "Running")}
-    ${renderMyTaskMetric("For Review", counts.review, "Owner/Admin")}
+    ${renderMyTaskMetric("Waiting Review", counts.review, "Owner/Admin")}
     ${renderMyTaskMetric("Needs Revision", counts.revision, "Returned")}
     ${renderMyTaskMetric("Overdue", counts.overdue, "Needs attention")}
-    ${renderMyTaskMetric("Done", counts.done, "Completed")}
+    ${renderMyTaskMetric("Approved", counts.done, "Completed")}
   </div>`;
 }
 
@@ -1420,9 +1421,29 @@ function renderWorkboardUserSelect(id, value, label) {
 
 function renderWorkboardTaskList(tasks) {
   if (!tasks.length) return `<div class="my-tasks-empty"><strong>${workboardTasks.length ? "No tasks match your filters" : "No task records yet"}</strong><span>${workboardTasks.length ? "Try another status or search term." : "Create a manual task draft when planning is ready."}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
-  return `<div class="workboard-table-wrap"><table class="workboard-table"><thead><tr><th>Task</th><th>Source</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Reviewer</th><th>Deadline</th><th>Time</th><th>Action</th></tr></thead><tbody>${tasks.map(renderWorkboardRow).join("")}</tbody></table></div><div class="workboard-card-list">${tasks.map(renderWorkboardCard).join("")}</div>`;
+  const groups = getWorkboardStatusGroups(tasks);
+  return `<section class="workboard-board" aria-label="Workboard task groups">${groups.map(renderWorkboardGroup).join("")}</section>`;
 }
 
+function getWorkboardStatusGroups(tasks) {
+  const definitions = [
+    ["DRAFT", "Draft", "No draft tasks."],
+    ["FOR_REVIEW", "Waiting for Review", "Nothing waiting for review."],
+    ["NEEDS_REVISION", "Needs Revision", "No tasks need revision."],
+    ["TO_DO", "To Do", "No queued tasks."],
+    ["IN_PROGRESS", "In Progress", "No tasks in progress."],
+    ["DONE", "Approved", "No approved tasks."],
+    ["CANCELLED", "Cancelled", "No cancelled tasks."],
+  ];
+  const important = new Set(["DRAFT", "FOR_REVIEW", "NEEDS_REVISION"]);
+  return definitions
+    .map(([status, label, emptyText]) => ({ status, label, emptyText, tasks: tasks.filter((task) => task.status === status) }))
+    .filter((group) => group.tasks.length || important.has(group.status) || (workboardFilterStatus !== "active" && tasks.some((task) => task.status === group.status)));
+}
+
+function renderWorkboardGroup(group) {
+  return `<section class="workboard-group ${statusToClass(group.status)}"><header><div><strong>${escapeHtml(group.label)}</strong><span>${group.tasks.length}</span></div></header><div class="workboard-group-list">${group.tasks.length ? group.tasks.map(renderWorkboardCard).join("") : `<p class="workboard-empty">${escapeHtml(group.emptyText)}</p>`}</div></section>`;
+}
 function renderWorkboardRow(task) {
   const latest = getWorkboardPrimaryAction(task);
   return `<tr class="${task.status === "FOR_REVIEW" ? "for-review" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
@@ -1439,12 +1460,16 @@ function renderWorkboardRow(task) {
 }
 
 function renderWorkboardCard(task) {
-  return `<article class="my-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
-    <button class="my-task-card-main" data-workboard-open="${escapeHtml(task.id)}" type="button"><span class="my-task-code">${escapeHtml(task.taskCode || "TASK")}</span><strong>${escapeHtml(task.title || "Untitled task")}</strong><small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(getUserLabel(task.assignedUser))}</small></button>
-    <div class="my-task-card-meta">${renderTaskPriority(task.priority)}${renderTaskStatus(task.status)}<span>${escapeHtml(formatTaskDue(task))}</span><span>${escapeHtml(formatTaskTimeSummary(task))}</span></div>
-  </article>`;
+  const objective = String(task.brief || formatSourceType(task.sourceType) || "No brief provided.").trim();
+  const dueLabel = formatTaskDue(task);
+  return `<button class="workboard-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""} ${statusToClass(task.status)}" data-workboard-open="${escapeHtml(task.id)}" type="button">
+    <span class="workboard-card-top"><code>${escapeHtml(task.taskCode || "TASK")}</code>${renderTaskStatus(task.status)}</span>
+    <strong>${escapeHtml(task.title || "Untitled task")}</strong>
+    <small>${escapeHtml(objective)}</small>
+    <span class="workboard-card-meta">${renderTaskPriority(task.priority)}<b>${escapeHtml(getUserLabel(task.assignedUser))}</b></span>
+    <span class="workboard-card-footer"><em>${escapeHtml(dueLabel)}</em><i>${escapeHtml(getWorkboardPrimaryAction(task) || "OPEN")}</i></span>
+  </button>`;
 }
-
 function getWorkboardPrimaryAction(task) {
   const actions = task.allowedActions || [];
   if (actions.includes("APPROVE_WORK")) return "REVIEW";
@@ -1459,8 +1484,9 @@ function renderWorkboardDrawer() {
   const isForm = workboardDrawerMode === "create" || workboardDrawerMode === "edit";
   const detail = selectedTaskDetail;
   const task = detail?.task || workboardTasks.find((item) => item.id === selectedTaskId) || null;
+  const drawerBadges = task && !isForm ? `<div class="workboard-drawer-badges">${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}</div>` : "";
   return `<div class="my-task-drawer-backdrop" data-workboard-close></div><aside class="my-task-drawer workboard-drawer" aria-label="Workboard task details">
-    <header><div><span>${escapeHtml(workboardDrawerMode === "create" ? "NEW TASK" : task?.taskCode || "TASK")}</span><h2>${escapeHtml(workboardDrawerMode === "create" ? "Create manual task draft" : task?.title || "Loading task")}</h2></div><button data-workboard-close type="button" aria-label="Close Workboard drawer">X</button></header>
+    <header><div><span>${escapeHtml(workboardDrawerMode === "create" ? "NEW TASK" : task?.taskCode || "TASK")}</span><h2>${escapeHtml(workboardDrawerMode === "create" ? "Create manual task draft" : task?.title || "Loading task")}</h2>${drawerBadges}</div><button data-workboard-close type="button" aria-label="Close Workboard drawer">X</button></header>
     ${workboardCommandError ? `<div class="ops-persistence-card error"><strong>Action needs attention</strong><span>${escapeHtml(workboardCommandError)}</span></div>` : ""}
     ${isForm ? renderWorkboardDraftForm(task) : renderWorkboardTaskDetail(detail, task)}
   </aside>`;
@@ -1499,10 +1525,11 @@ function renderWorkboardTaskDetail(detail, task) {
   if (taskDetailLoadError) return `<div class="ops-persistence-card error"><strong>Unable to open task</strong><span>${escapeHtml(taskDetailLoadError)}</span></div>`;
   if (!detail || !task) return `<div class="my-tasks-empty"><strong>No task selected</strong><span>Select a task to inspect.</span></div>`;
   const latestSubmission = (detail.submissions || []).at(-1) || null;
-  return `<div class="my-task-drawer-content">
-    <section class="my-task-detail-hero"><div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</div><p>${escapeHtml(task.brief || "No brief provided.")}</p>${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}</section>
-    <section class="my-task-detail-grid">
-      ${renderTaskFact("Source", formatSourceReference(task))}
+  return `<div class="my-task-drawer-content workboard-detail-content">
+    <section class="workboard-detail-section"><h3>Task Summary</h3><div class="workboard-summary-line"><strong>${escapeHtml(formatSourceReference(task))}</strong><span>${escapeHtml(task.timeTrackingMode === "NONE" ? "Time not required" : "Time expected")}</span></div>${task.openTimeEntry ? `<p class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</p>` : ""}</section>
+    <section class="workboard-detail-section workboard-instructions"><h3>Instructions</h3><p>${escapeHtml(task.brief || "No instructions recorded.")}</p></section>
+    <section class="workboard-detail-section"><h3>Required Assets or Shots</h3><ul class="workboard-checklist"><li>No required assets or shot list recorded.</li></ul></section>
+    <section class="workboard-detail-section"><h3>Assignment and Deadline</h3><div class="my-task-detail-grid workboard-detail-grid">
       ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
       ${renderTaskFact("Reviewer", getUserLabel(task.reviewerUser))}
       ${renderTaskFact("Scheduled", formatTaskDate(task.scheduledDate))}
@@ -1510,33 +1537,37 @@ function renderWorkboardTaskDetail(detail, task) {
       ${renderTaskFact("Submission", formatTaskDateTime(task.submissionDeadline))}
       ${renderTaskFact("Approval", formatTaskDateTime(task.approvalDeadline))}
       ${renderTaskFact("Recorded", formatTaskTimeSummary(task))}
-    </section>
-    ${latestSubmission ? renderWorkboardLatestSubmission(latestSubmission) : ""}
-    ${renderTaskSubmissions(detail.submissions || [])}
-    ${renderWorkboardHistory(detail.history || [])}
+    </div></section>
+    ${renderWorkboardSubmissionProof(latestSubmission)}
     ${renderWorkboardActionArea(task)}
+    ${renderWorkboardHistory(detail.history || [])}
   </div>`;
 }
 
-function renderWorkboardLatestSubmission(submission) {
-  return `<section class="my-task-warning ${submission.timeRecordingStatus === "NOT_RECORDED" ? "no-time" : ""}"><strong>LATEST SUBMISSION - ${escapeHtml(formatSubmissionTimeStatus(submission))}</strong><p>${escapeHtml(submission.submissionNote || "No note saved.")}</p>${submission.proofUrl ? `<p><b>Proof:</b> ${escapeHtml(submission.proofUrl)}</p>` : ""}${submission.noTimeReason ? `<p><b>Time not recorded reason:</b> ${escapeHtml(submission.noTimeReason)}</p>` : ""}<small>${escapeHtml(formatTaskDateTime(submission.submittedAt))} / ${escapeHtml(getUserLabel(submission.submittedByUser))}${submission.recordedDurationSeconds !== null ? ` / ${escapeHtml(formatDuration(submission.recordedDurationSeconds))}` : ""}</small></section>`;
+function renderWorkboardSubmissionProof(submission) {
+  if (!submission) return `<section class="workboard-detail-section workboard-proof-section"><h3>Submission / Proof</h3><p class="workboard-empty inline">No submissions yet.</p></section>`;
+  const proof = submission.proofUrl ? `<a class="workboard-proof-action" href="${escapeHtml(submission.proofUrl)}" target="_blank" rel="noreferrer">VIEW PROOF</a>` : `<span class="workboard-proof-missing">No proof link submitted.</span>`;
+  return `<section class="workboard-detail-section workboard-proof-section"><h3>Submission / Proof</h3><div class="workboard-proof-row"><div><strong>${escapeHtml(formatSubmissionTimeStatus(submission))}</strong><p>${escapeHtml(submission.submissionNote || "No note saved.")}</p><small>${escapeHtml(formatTaskDateTime(submission.submittedAt))} / ${escapeHtml(getUserLabel(submission.submittedByUser))}${submission.recordedDurationSeconds !== null ? ` / ${escapeHtml(formatDuration(submission.recordedDurationSeconds))}` : ""}</small>${submission.noTimeReason ? `<p><b>Time note:</b> ${escapeHtml(submission.noTimeReason)}</p>` : ""}${submission.reviewNote ? `<p><b>Review:</b> ${escapeHtml(submission.reviewNote)}</p>` : ""}</div>${proof}</div></section>`;
 }
 
+function renderWorkboardLatestSubmission(submission) {
+  return renderWorkboardSubmissionProof(submission);
+}
 function renderWorkboardHistory(history) {
   if (!history.length) return "";
-  return `<section class="my-task-history"><h3>Audit History</h3>${history.slice(-6).reverse().map((event) => `<article><div><strong>${escapeHtml(String(event.eventType || "EVENT").replace(/_/g, " "))}</strong><span>${escapeHtml(formatTaskDateTime(event.occurredAt))}</span></div>${event.reason ? `<p>${escapeHtml(event.reason)}</p>` : ""}</article>`).join("")}</section>`;
+  return `<section class="my-task-history workboard-activity"><h3>Notes or Activity</h3>${history.slice(-6).reverse().map((event) => `<article><div><strong>${escapeHtml(String(event.eventType || "EVENT").replace(/_/g, " "))}</strong><span>${escapeHtml(formatTaskDateTime(event.occurredAt))}</span></div>${event.reason ? `<p>${escapeHtml(event.reason)}</p>` : ""}</article>`).join("")}</section>`;
 }
 
 function renderWorkboardActionArea(task) {
   const actions = task.allowedActions || [];
   const busy = workboardCommandState === "saving";
   if (!actions.length) return `<section class="my-task-action-area"><strong>No available manager action</strong><span>This task is waiting on another step.</span></section>`;
-  return `<section class="my-task-action-area workboard-actions"><strong>Allowed manager actions</strong>
+  return `<section class="my-task-action-area workboard-actions"><strong>Owner Review</strong>
     ${actions.includes("REQUEST_REVISION") || actions.includes("APPROVE_WORK") ? `<label><span>Review note</span><textarea id="workboard-review-note" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReviewNote)}</textarea></label>` : ""}
     ${actions.includes("ASSIGN") ? `<label><span>Assign user</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
     ${actions.includes("CANCEL") || actions.includes("REOPEN") ? `<label><span>Reason</span><textarea id="workboard-reason" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReason)}</textarea></label>` : ""}
     <div class="my-task-action-buttons sticky-actions">
-      ${actions.includes("EDIT_DRAFT") ? `<button data-workboard-edit-draft="${escapeHtml(task.id)}" type="button">EDIT DRAFT</button>` : ""}
+      ${actions.includes("EDIT_DRAFT") ? `<button data-workboard-edit-draft="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">EDIT DRAFT</button>` : ""}
       ${actions.includes("ASSIGN") ? `<button data-workboard-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ASSIGN</button>` : ""}
       ${actions.includes("APPROVE_DRAFT") ? `<button class="primary" data-workboard-approve-draft="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE DRAFT</button>` : ""}
       ${actions.includes("REQUEST_REVISION") ? `<button data-workboard-request-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">REQUEST REVISION</button>` : ""}
@@ -2324,9 +2355,32 @@ function canOpsPrepareProof(item) {
 
 function canOpsRequestPayment(item) {
   const state = getOpsNormalizedCustomerState(item);
-  return state.quote === "approved" && state.artwork === "approved" && state.payment !== "confirmed";
+  return state.quote === "approved" && state.artwork === "approved" && !isOpsPaymentConfirmed(state.payment);
 }
 
+
+function isOpsPaymentConfirmed(value) {
+  return ["confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(String(value || "").trim().toLowerCase());
+}
+
+function getOpsPaymentTypeLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "down_payment") return "50% Down Payment";
+  if (key === "full") return "Full Payment";
+  if (key === "shop") return "Pay at Shop";
+  return "Not selected";
+}
+
+function getOpsPaymentMethodLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "online") return "Pay Online";
+  if (key === "cash") return "Cash at Shop";
+  if (key === "gcash") return "GCash at Shop";
+  if (key === "bank_transfer") return "Bank Transfer";
+  if (key === "card") return "Card";
+  if (key === "other") return "Other";
+  return "Not selected";
+}
 function getOpsInquiryCurrentTask(item) {
   const state = getOpsNormalizedCustomerState(item);
   if (["submitted", "under_review", "revision_requested"].includes(state.artwork)) return { stage: "artwork", text: state.artwork === "revision_requested" ? "Review requested artwork changes" : "Review uploaded artwork" };
@@ -2338,8 +2392,9 @@ function getOpsInquiryCurrentTask(item) {
   if (canOpsPrepareProof(item) && hasOpsFinalProof(item)) return { stage: "artwork", text: "Send approved design" };
   if (state.artwork === "approval_required") return { stage: "artwork", text: "Waiting for customer artwork approval" };
   if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment receipt" };
+  if (canOpsRequestPayment(item) && ["pay_at_shop", "payment_pending_at_shop"].includes(state.payment)) return { stage: "payment", text: "Confirm shop payment" };
   if (canOpsRequestPayment(item)) return { stage: "payment", text: "Request payment" };
-  if (state.payment === "confirmed" && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
+  if (isOpsPaymentConfirmed(state.payment) && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
   if (canEditOpsCustomerTracking(item)) return { stage: "fulfillment", text: "Update customer tracking" };
   return { stage: "inquiry", text: item.next || "Review inquiry" };
 }
@@ -2349,7 +2404,7 @@ function getOpsInquiryStages(item) {
   const state = getOpsNormalizedCustomerState(item);
   const quoteComplete = ["ready", "approved"].includes(state.quote) || Boolean(item.quotePublishedAt);
   const artworkComplete = state.artwork === "approved";
-  const paymentComplete = state.payment === "confirmed";
+  const paymentComplete = isOpsPaymentConfirmed(state.payment);
   const productionActive = ["printing", "embroidery", "screen_printing", "qc", "ready", "in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(state.production) || state.status === "won";
   const fulfillmentActive = canEditOpsCustomerTracking(item) || ["ready_for_pickup", "out_for_delivery", "delivered", "completed"].includes(item.trackingSubstatus);
   const stageState = (key, complete, unlocked) => {
@@ -2516,10 +2571,10 @@ function renderMvpArtworkAction(item) {
     : "";
 
   if (!hasArtwork) {
-    return `<section class="mvp-drawer-section mvp-artwork-access"><h3>Artwork</h3><strong>NO ARTWORK</strong><span>No customer artwork file or supported URL is saved for this inquiry.</span></section>`;
+    return `<span class="mvp-artwork-empty">No customer artwork file or supported URL is saved.</span>`;
   }
 
-  return `<section class="mvp-drawer-section mvp-artwork-access"><h3>Artwork</h3><strong>${escapeHtml(getOpsCustomerActionLabel("artwork", status || "missing"))}</strong><button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>${renderIcon("external-link", "ops-button-icon")}${isLoading ? "OPENING..." : "VIEW ARTWORK"}</button>${message}</section>`;
+  return `<button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>${renderIcon("external-link", "ops-button-icon")}${isLoading ? "OPENING..." : "VIEW ARTWORK"}</button>${message}`;
 }
 
 async function openOpsArtwork(inquiryId) {
@@ -2592,6 +2647,13 @@ const opsCustomerActionLabels = {
     proof_submitted: "Receipt Received",
     under_review: "Receipt Under Review",
     confirmed: "Payment Confirmed",
+    paid: "Fully Paid",
+    full_payment_confirmed: "Full Payment Confirmed",
+    down_payment_confirmed: "Down Payment Confirmed",
+    partially_paid: "Partially Paid",
+    pay_at_shop: "Pay at Shop",
+    payment_pending_at_shop: "Pending at Shop",
+    correction_required: "Correction Required",
   },
 };
 
@@ -2695,24 +2757,26 @@ function renderOpsPaymentStage(item) {
   const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
   body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
 
-  if (status === "confirmed") {
-    body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
+  if (isOpsPaymentConfirmed(status)) {
+    body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
   } else if (!canOpsRequestPayment(item)) {
     body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
-  } else if (status === "required") {
+  } else if (["pay_at_shop", "payment_pending_at_shop"].includes(status)) {
+    body += `<div class="ops-stage-mini-grid"><div><span>Selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Customer status</span><strong>PAY AT SHOP</strong></div><div><span>Amount to collect</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div></div><p class="ops-stage-muted"><strong>SHOP PAYMENT PENDING</strong>Confirm only after staff receives payment at the shop.</p><div class="ops-customer-action-form compact"><label><span>Cash amount received</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? item.amountDue ?? "")}" /></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM CASH PAYMENT", action: "confirm_cash_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
+  } else if (["required", "correction_required"].includes(status)) {
     body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>PAYMENT REQUESTED</strong></div></div><p class="ops-stage-muted"><strong>${item.paymentRejectedAt ? "NEW RECEIPT NEEDED" : "PAYMENT REQUESTED"}</strong>Awaiting receipt.</p>`;
   } else if (["proof_submitted", "under_review"].includes(status)) {
     const receipt = item.paymentProofPath ? renderOpsAssetButton({ label: isReceiptLoading ? "LOADING..." : receiptUnavailable ? "TRY AGAIN" : "REVIEW RECEIPT", asset: "payment-proof", id: item.id, disabled: isReceiptLoading }) : `<span class="ops-customer-empty">No receipt uploaded.</span>`;
     const receiptPreview = receiptOpened ? `<figure class="ops-payment-receipt-preview"><img alt="Uploaded payment receipt for ${escapeHtml(item.id)}" src="${escapeHtml(request.signedUrl)}" /><figcaption>Receipt opened for ${escapeHtml(item.id)}</figcaption></figure>` : "";
     const receiptError = receiptUnavailable ? `<p class="ops-customer-action-message error">RECEIPT UNAVAILABLE</p>` : "";
-    body += `<div class="ops-stage-mini-grid"><div><span>Inquiry reference</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>RECEIPT RECEIVED</strong></div><div><span>Uploaded</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div><div><span>Receipt file</span><strong>${escapeHtml(item.paymentProofPath || "-")}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Reason for new receipt</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div>${receiptPreview}${receiptError}<div class="ops-stage-actions">${receipt}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}${renderOpsActionButton({ label: "REQUEST NEW RECEIPT", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading })}</div>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Inquiry reference</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Selected amount</span><strong>${formatOpsValue(item.paymentSelectedAmount ?? item.amountDue)}</strong></div><div><span>Payment type</span><strong>${escapeHtml(getOpsPaymentTypeLabel(item.paymentType))}</strong></div><div><span>Reference</span><strong>${escapeHtml(item.paymentReference || "-")}</strong></div><div><span>Customer note</span><strong>${escapeHtml(item.paymentCustomerNote || "-")}</strong></div><div><span>Uploaded</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div><div><span>Receipt file</span><strong>${escapeHtml(item.paymentReceiptFilename || item.paymentProofPath || "-")}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentSelectedAmount ?? item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Reason for new receipt</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div>${receiptPreview}${receiptError}<div class="ops-stage-actions">${receipt}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}${renderOpsActionButton({ label: "REQUEST NEW RECEIPT", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading })}</div>`;
   } else {
-    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "proof_submitted", "under_review", "confirmed"].includes(status) })}</div>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentSelectedAmount ?? item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "correction_required", "proof_submitted", "under_review", "pay_at_shop", "payment_pending_at_shop", "confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(status) })}</div>`;
   }
 
   if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW RECEIPT NEEDED</strong>${escapeHtml(item.paymentReviewNote || "Replacement receipt requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
 
-  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && status !== "confirmed", body });
+  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && !isOpsPaymentConfirmed(status), body });
 }
 function renderOpsProductionStage(item) {
   const current = getOpsInquiryCurrentTask(item).stage === "production";
@@ -2858,7 +2922,7 @@ function setOpsCustomerActionInlineMessage(sourceElement, message, status = "err
 function getOpsActionLoadingLabel(action) {
   if (action === "publish_quote") return "SENDING...";
   if (action === "require_payment") return "REQUESTING...";
-  if (action === "confirm_payment") return "CONFIRMING...";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING...";
   if (action === "request_new_payment_proof") return "REQUESTING...";
   return "SAVING...";
 }
@@ -2866,7 +2930,7 @@ function getOpsActionLoadingLabel(action) {
 function getOpsActionSavingMessage(action) {
   if (action === "publish_quote") return "SENDING QUOTE...";
   if (action === "require_payment") return "REQUESTING PAYMENT...";
-  if (action === "confirm_payment") return "CONFIRMING PAYMENT...";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING PAYMENT...";
   if (action === "request_new_payment_proof") return "REQUESTING NEW RECEIPT...";
   return "SAVING CUSTOMER ACTION...";
 }
@@ -2875,7 +2939,7 @@ function getOpsActionSuccessMessage(action) {
   if (action === "save_quote_draft") return "QUOTE DRAFT SAVED.";
   if (action === "publish_quote") return "QUOTE PUBLISHED FOR CUSTOMER.";
   if (action === "require_payment") return "PAYMENT REQUESTED.";
-  if (action === "confirm_payment") return "PAYMENT CONFIRMED.";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "PAYMENT CONFIRMED.";
   if (action === "request_new_payment_proof") return "NEW RECEIPT NEEDED.";
   return "CUSTOMER ACTION SAVED.";
 }
@@ -3193,11 +3257,14 @@ function todayIsoDate() {
 }
 function renderOpsOdooAction(item) {
   if (opsSoDraft?.id === item.id) {
-    const value = opsSoDraft.value ?? "";
     const isSaving = opsSoSavingId === item.id;
-    return `<div class="ops-so-editor"><span>Customer confirmed? Enter the Odoo SO number</span><input class="ops-so-input" data-ops-so-input="${item.id}" value="${escapeHtml(value)}" placeholder="e.g. SO-2216" ${isSaving ? "disabled" : ""} /><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${value.trim() && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : "Confirm Odoo SO & Create Order"}</button><button class="ops-light-button mini" data-ops-cancel-so type="button" ${isSaving ? "disabled" : ""}>Cancel</button></div></div>`;
+    return `<div class="ops-so-editor ops-order-confirm-card"><strong>CREATE CONFIRMED ORDER?</strong><p>This approved inquiry will be added to Orders.</p><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>${isSaving ? "CREATING..." : "CONFIRM &amp; CREATE ORDER"}</button><button class="ops-light-button mini" data-ops-cancel-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>CANCEL</button></div></div>`;
   }
-  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">Confirm Odoo SO &amp; Create Order</button>`;
+  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">CREATE ORDER</button>`;
+}
+
+function createConfirmedOrderReference(item) {
+  return String(item.odooSO || item.orderCode || item.orderReference || item.reference || item.id || "").trim();
 }
 
 function renderOpsProductionCard(item) {
@@ -3317,8 +3384,8 @@ function normalizeOpsDate(value) {
 
 async function confirmOpsSO(id) {
   if (opsSoSavingId) return;
-  const so = (opsSoDraft?.value || "").trim();
   const current = opsInquiries.find((item) => item.id === id);
+  const so = current ? createConfirmedOrderReference(current) : "";
   if (!so || !current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
   opsSoSavingId = id;
 
@@ -4217,8 +4284,7 @@ function renderCatalogDrawer(selectedProduct) {
                 ${renderCatalogDetailRow("Linked product", sourceProduct.product)}
                 ${renderCatalogDetailRow("Internal code", sourceProduct.code, true)}
                 ${renderCatalogDetailRow("Availability", sourceProduct.status || "Available")}
-              </div>
-              <button class="note-button catalog-secondary-action" data-route-target="/products" type="button">Open Products record</button>`
+              </div>`
             : `<div class="catalog-source-empty"><strong>No source Product linked</strong><span>This Catalog item can still be edited, but staff should confirm the matching internal Product record before publishing.</span></div>`}
         </section>
 
@@ -5057,7 +5123,6 @@ function renderClientPanel() {
         <a class="primary-drawer-action" href="https://${clientProgram.domain}" target="_blank" rel="noreferrer">Open Portal</a>
         <details class="drawer-more-actions"><summary>More Actions</summary><div>
           <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
-          <button data-route-target="/products" type="button">View Products</button>
           <button data-route-target="/orders" type="button">View Orders</button>
           <button disabled title="Editing requires a connected client management backend." type="button">Edit Client</button>
         </div></details>
@@ -5193,11 +5258,9 @@ function renderSidebar(currentRoute) {
     { label: "Overview", path: "/overview" },
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
-    { label: "Clients", path: "/clients" },
-    { label: "Products", path: "/products" },
     { label: "Production", path: "/production", icon: "factory" },
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
-  ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
     { label: "Catalog", path: "/catalog" },
     ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
     { label: "Settings", path: "/settings" },
@@ -5305,7 +5368,7 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
   ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
-  ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
   return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
 }
@@ -5314,7 +5377,7 @@ function renderGlobalSearchHint() {
   if (!normalized) return "";
 
   if ("urban coffee".includes(normalized)) {
-    return `<button class="search-suggestion" data-route-target="/clients" type="button">Open Clients</button>`;
+    return `<button class="search-suggestion" data-route-target="/orders" type="button">Search Orders</button>`;
   }
 
   if (
@@ -5322,7 +5385,7 @@ function renderGlobalSearchHint() {
     "embroidered staff cap".includes(normalized) ||
     normalized.includes("cap")
   ) {
-    return `<button class="search-suggestion" data-route-target="/products" type="button">Open Products</button>`;
+    return `<button class="search-suggestion" data-route-target="/orders" type="button">Search Orders</button>`;
   }
 
   if ("orders".includes(normalized) || "reorder".includes(normalized) || normalized.includes("trry-uc")) {
@@ -6457,17 +6520,10 @@ function bindOpsBoardEvents() {
   });
   document.querySelectorAll("[data-ops-add-so]").forEach((button) => {
     button.addEventListener("click", () => {
-      opsSoDraft = { id: button.dataset.opsAddSo, value: "" };
+      if (button.disabled || opsSoSavingId) return;
+      opsSoDraft = { id: button.dataset.opsAddSo };
       render();
-      document.querySelector(`[data-ops-so-input="${button.dataset.opsAddSo}"]`)?.focus();
-    });
-  });
-
-  document.querySelectorAll("[data-ops-so-input]").forEach((input) => {
-    input.addEventListener("input", (event) => {
-      opsSoDraft = { id: input.dataset.opsSoInput, value: event.target.value };
-      render();
-      const soField = document.querySelector(`[data-ops-so-input="${input.dataset.opsSoInput}"]`); if (soField) { soField.focus(); soField.setSelectionRange?.(soField.value.length, soField.value.length); }
+      document.querySelector(`[data-ops-confirm-so="${button.dataset.opsAddSo}"]`)?.focus();
     });
   });
 
@@ -6481,9 +6537,12 @@ function bindOpsBoardEvents() {
     });
   });
 
-  document.querySelector("[data-ops-cancel-so]")?.addEventListener("click", () => {
-    opsSoDraft = null;
-    render();
+  document.querySelectorAll("[data-ops-cancel-so]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (opsSoSavingId) return;
+      opsSoDraft = null;
+      render();
+    });
   });
 }
 async function copyToClipboard(value) {
@@ -6561,15 +6620,15 @@ function getSearchRoute(value) {
   if (!normalized) return null;
 
   if ("urban coffee".includes(normalized)) {
-    return { path: "/clients", clientQuery: "Urban Coffee" };
+    return { path: "/orders", orderQuery: value.trim() };
   }
 
   if ("admin polo uniform".includes(normalized)) {
-    return { path: "/products", productQuery: "Admin Polo" };
+    return { path: "/orders", orderQuery: value.trim() };
   }
 
   if ("embroidered staff cap".includes(normalized) || normalized.includes("cap")) {
-    return { path: "/products", productQuery: "Cap" };
+    return { path: "/orders", orderQuery: value.trim() };
   }
 
   if (normalized.includes("trry-uc") || "orders".includes(normalized) || "reorder".includes(normalized)) {
@@ -6755,6 +6814,10 @@ function getCurrentRoute() {
 
 function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (parkedAdminRoutes.has(path)) {
+    window.history.replaceState({}, "", defaultRoutePath);
+    return defaultRoutePath;
+  }
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   return routes[path] ? path : defaultRoutePath;
@@ -6768,6 +6831,7 @@ function navigateTo(path) {
 function normalizeRoutePath(path) {
   const url = new URL(String(path || defaultRoutePath), window.location.origin);
   const routePath = url.pathname.replace(/\/+$/, "") || "/";
+  if (parkedAdminRoutes.has(routePath)) return defaultRoutePath;
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;

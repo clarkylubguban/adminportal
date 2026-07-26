@@ -6,9 +6,10 @@ const QUOTE_STAGES = {
 };
 
 const INQUIRY_QUEUES = [
-  ["new", "NEW INQUIRY"],
+  ["all", "NEW"],
+  ["new", "NEEDS QUOTE"],
   ["sent", "QUOTE SENT"],
-  ["follow_due", "FOLLOW-UP DUE"],
+  ["follow_due", "FOLLOW-UP"],
   ["approved", "APPROVED"],
   ["lost", "LOST"],
 ];
@@ -58,12 +59,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   const paymentLabel = (item) => {
     const value = key(item.paymentStatus);
-    if (["confirmed", "paid"].includes(value)) return "Paid";
-    if (["proof_submitted", "under_review"].includes(value)) return "Proof Submitted";
-    if (["required", "awaiting_payment"].includes(value)) return "Awaiting Payment";
+    if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return "Paid";
+    if (["down_payment_confirmed", "partially_paid"].includes(value)) return "Down Payment Confirmed";
+    if (["proof_submitted", "under_review"].includes(value)) return "For Verification";
+    if (value === "correction_required") return "Correction Required";
+    if (["pay_at_shop", "payment_pending_at_shop"].includes(value)) return "Pay at Shop";
+    if (["required", "awaiting_payment"].includes(value)) return "Payment Required";
     return "Not Yet Requested";
   };
-
   const productionStage = (item) => {
     const value = key(item.productionStage);
     if (PRODUCTION_STAGES.some(([stage]) => stage === value)) return value;
@@ -170,17 +173,17 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const production = countBy(PRODUCTION_STAGES.map(([value]) => value), productionJobs, productionStage);
     const inProgress = ACTIVE_STAGES.reduce((sum, value) => sum + production[value], 0);
     const followUpsDue = inquiries.filter(isFollowUpDue).length;
-    const awaitingPayment = orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length;
-    const paymentProofs = orders.filter((item) => paymentLabel(item) === "Proof Submitted").length;
+    const awaitingPayment = orders.filter((item) => ["Payment Required", "Pay at Shop", "Correction Required"].includes(paymentLabel(item))).length;
+    const paymentProofs = orders.filter((item) => paymentLabel(item) === "For Verification").length;
     const blockedOrders = orders.filter((item) => blockedReason(item)).length;
     const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
     const priorities = buildPriorities(orders, inquiries);
     const bottlenecks = buildBottlenecks({ inquiries, orders, productionJobs, pipeline });
 
     return `<main class="mvp-page ops-board-page mvp-overview-page">
-      ${pageTitle("Overview", "What needs attention today", new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}
+      ${pageTitle("Overview", "OVERVIEW", new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }))}
       ${notices}
-      ${metricSection("Attention Snapshot", [
+      ${metricSection("Operational Summary", [
         metric("Needs Quote", pipeline.new, "/inquiries?stage=new", "Inquiries", pipeline.new ? "warning" : ""),
         metric("Follow-up Due", followUpsDue, "/inquiries?stage=follow_due", "Inquiries", followUpsDue ? "warning" : ""),
         metric("Confirmed Orders", orders.length, "/orders", "Orders"),
@@ -191,7 +194,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         metric("Overdue Jobs", overdueProduction, "/production?due=overdue", "Production", overdueProduction ? "danger" : ""),
       ], "attention")}
       <section class="mvp-overview-grid phase3">
-        <div class="mvp-section mvp-priority-section"><div class="mvp-section-title"><h2>Today's Priorities</h2><span>${priorities.length}</span></div><div class="mvp-priority-list">${priorities.length ? priorities.map(priorityRow).join("") : empty("NO PRIORITIES REQUIRE ATTENTION")}</div></div>
+        <div class="mvp-section mvp-priority-section"><div class="mvp-section-title"><h2>Attention Needed</h2><span>${priorities.length}</span></div><div class="mvp-priority-list">${priorities.length ? priorities.map(priorityRow).join("") : empty("No urgent items.")}</div></div>
         <div class="mvp-side-stack">
           ${bottleneckSection(bottlenecks)}
           ${moduleEntrySection({ inquiries: inquiries.length, orders: orders.length, productionJobs: productionJobs.length, inProgress })}
@@ -209,7 +212,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         const route = isReleasedToProduction(item) ? `/production?order=${encodeURIComponent(item.id)}` : `/orders?order=${encodeURIComponent(item.id)}`;
         rows.push(priority(item, blocked ? `Blocked: ${blocked}` : "Order is overdue", dueState.label, route, dueState.key === "overdue" ? "danger" : "warning"));
       }
-      else if (paymentLabel(item) === "Proof Submitted") rows.push(priority(item, "Payment proof submitted / verify payment", "Needs review", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
+      else if (paymentLabel(item) === "For Verification") rows.push(priority(item, "Payment proof submitted / verify payment", "Needs review", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
       else if (dueState.key === "today" || productionStage(item) === "ready") rows.push(priority(item, productionStage(item) === "ready" ? "Ready for release" : "Due today", dueState.label, `/orders?order=${encodeURIComponent(item.id)}`, ""));
     });
     inquiries.forEach((item) => {
@@ -230,8 +233,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return Number.isFinite(follow.getTime()) && follow < today;
     }).length;
     const quoteBacklog = pipeline.new || 0;
-    const awaitingPayment = orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length;
-    const paymentProofs = orders.filter((item) => paymentLabel(item) === "Proof Submitted").length;
+    const awaitingPayment = orders.filter((item) => ["Payment Required", "Pay at Shop", "Correction Required"].includes(paymentLabel(item))).length;
+    const paymentProofs = orders.filter((item) => paymentLabel(item) === "For Verification").length;
     const artworkAttention = orders.filter((item) => !isOrderClosed(item) && ["revision", "pending", "not_set"].includes(orderArtworkKey(item))).length;
     const blockedRelease = orders.filter((item) => blockedReason(item)).length;
     const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
@@ -252,7 +255,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function bottleneckSection(items) {
-    return `<section class="mvp-section mvp-bottleneck-section"><div class="mvp-section-title"><h2>Bottlenecks</h2><span>${items.length}</span></div><div class="mvp-bottleneck-list">${items.length ? items.map(bottleneckRow).join("") : empty("NO CURRENT BOTTLENECKS")}</div></section>`;
+    return `<section class="mvp-section mvp-bottleneck-section"><div class="mvp-section-title"><h2>Blocked / Waiting</h2><span>${items.length}</span></div><div class="mvp-bottleneck-list">${items.length ? items.map(bottleneckRow).join("") : empty("No current blockers.")}</div></section>`;
   }
 
   function bottleneckRow(item) {
@@ -260,7 +263,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function moduleEntrySection(counts) {
-    return `<section class="mvp-section mvp-module-entry-section"><div class="mvp-section-title"><h2>Open Next</h2></div><div class="mvp-module-links">
+    return `<section class="mvp-section mvp-module-entry-section"><div class="mvp-section-title"><h2>Active Operations</h2></div><div class="mvp-module-links">
       ${moduleEntry("Inquiries", counts.inquiries, "Quotation and follow-up pipeline", "/inquiries")}
       ${moduleEntry("Orders", counts.orders, "Payment, artwork, and release readiness", "/orders")}
       ${moduleEntry("Production", counts.productionJobs, `${counts.inProgress} actively in production`, "/production")}
@@ -287,34 +290,31 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     });
     const selected = inquiries.find((item) => item.id === (state.inquiryId || query("inquiry")));
     return `<main class="mvp-page ops-board-page mvp-inquiries-page">
-      ${pageTitle("Inquiries", "Inquiry Pipeline", `${inquiries.length} inquiries`)}
-      <p class="mvp-rule">NO QUOTATION / NO WORK</p>${notices}
+      ${pageTitle("Inquiries", "INQUIRIES", `${rows.length} shown / ${inquiries.length} total`)}
+      ${notices}
+      <div class="mvp-stage-cards">${INQUIRY_QUEUES.map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="${stageFilter === value ? "active" : ""}"><span>${label}</span><strong>${inquiryStageCount(value, inquiries)}</strong></button>`).join("")}</div>
       ${filterBar("inquiry", items, ["owner", "service", "due"])}
-      <div class="mvp-stage-cards">${INQUIRY_QUEUES.map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="${stageFilter === value ? "active" : ""}"><span>${label}</span><strong>${value === "follow_due" ? inquiries.filter(isFollowUpDue).length : inquiries.filter((item) => quoteStage(item) === value).length}</strong></button>`).join("")}</div>
       ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOdoo, renderArtwork)}
     </main>`;
   }
 
   function inquiryTable(items) {
-    const headers = ["Code", "Customer", "Phone", "Item", "Request", "Service", "Qty", "Quote Status", "Next Follow-up", "Owner"];
+    const headers = ["Code", "Customer", "Inquiry", "Service", "Quantity", "Quote Status", "Follow-up", "Owner"];
     const desktopRows = items.map((item) => {
       const stage = quoteStage(item);
-      const phone = String(item.contact || "").trim();
       return row("inquiry", item.id, [
         copyButton(item.id, item.id, "inquiry code"),
-        strong(item.customer || "Unnamed customer"),
-        phone ? copyButton(phone, phone.replace(/\D/g, ""), "phone number") : cell(displayDash()),
-        itemCell(item),
-        requestCell(item),
+        customerCell(item),
+        inquirySummaryCell(item),
         cell(serviceDisplay(item)),
         cell(item.qty || displayDash()),
-        status(QUOTE_STAGES[stage], stage),
+        status(quoteListStatusLabel(stage), stage),
         followUpCell(item),
         cell(owner(item)),
       ]);
     });
     const mobileCards = items.map((item) => inquiryMobileCard(item, quoteStage(item))).join("");
-    return `${table("inquiry", headers, desktopRows, "NO INQUIRIES MATCH THIS FILTER")}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("NO INQUIRIES MATCH THIS FILTER")}</section>`;
+    return `${table("inquiry", headers, desktopRows, "No inquiries found.")}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("No inquiries found.")}</section>`;
   }
 
   function inquiryDrawer(item, renderQuote, renderOdoo, renderArtwork) {
@@ -326,24 +326,23 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return drawer("inquiry locked", item, QUOTE_STAGES[stage], `
       <section class="mvp-inquiry-locked-shell">
         ${inquiryLockedHeader(item, stage)}
-        ${inquirySummaryCards(item, stage)}
         ${inquiryTabs(activeTab)}
-        <div class="mvp-inquiry-tab-panel">${inquiryTabContent(item, activeTab, renderArtwork)}</div>
+        ${inquiryTabPanels(item, activeTab, stage, renderArtwork)}
         ${workflowPanel}
-        ${customerCommunication(item)}
       </section>
     `, inquiryActionBar(item, action));
   }
 
   function inquiryLockedHeader(item, stage) {
-    const stamp = inquiryTimestamp(item);
-    return `<div class="mvp-inquiry-locked-header"><span class="mvp-inquiry-status-pill ${stage}">${html(QUOTE_STAGES[stage])}</span><div class="mvp-inquiry-number-row"><h2>${html(item.id)}</h2>${copyButton(item.id, item.id, "inquiry number")}</div><div class="mvp-inquiry-meta"><span>${html(stamp.date)}</span><i></i><span>${html(stamp.time)}</span><i></i><span>via ${html(sourceLabel(item))}</span></div></div>`;
+    const contact = String(item.contact || "").trim() || "Contact not set";
+    const company = String(item.company || "").trim();
+    return `<div class="mvp-inquiry-locked-header"><span class="mvp-inquiry-status-pill ${stage}">${html(QUOTE_STAGES[stage])}</span><div class="mvp-inquiry-customer-row"><h2>${html(item.customer || "Unnamed customer")}</h2>${company ? `<small>${html(company)}</small>` : ""}</div><div class="mvp-inquiry-number-row"><span>Inquiry Reference</span>${copyButton(item.id, item.id, "inquiry number")}</div><div class="mvp-inquiry-meta"><span>${html(contact)}</span></div></div>`;
   }
 
   function inquirySummaryCards(item, stage) {
     const follow = followUpSummary(item);
     const quote = quotationSummary(item, stage);
-    return `<div class="mvp-inquiry-summary-grid">${summaryCard("Customer", customerInitials(item), item.customer || "Unnamed customer", item.contact || "No phone")}${summaryCard("Service", "", serviceChips(item), "")}${summaryCard("Quantity", "", item.sizeBreakdown || item.qty || "Not set", "")}${summaryCard("Assigned To", ownerInitials(item), owner(item), assignmentSubtitle(item))}${summaryCard("Follow-up", "", follow.title, follow.sub, "wide")}${summaryCard("Quotation", "", quote.title, quote.sub, "wide")}</div>`;
+    return `<div class="mvp-inquiry-summary-grid">${summaryCard("Customer", "", item.customer || "Unnamed customer", item.contact || "No phone")}${summaryCard("Service", "", serviceChips(item), "")}${summaryCard("Quantity", "", item.sizeBreakdown || item.qty || "Not set", "")}${summaryCard("Assigned To", "", owner(item), assignmentSubtitle(item))}${summaryCard("Follow-up", "", follow.title, follow.sub, "wide")}${summaryCard("Quotation", "", quote.title, quote.sub, "wide")}</div>`;
   }
 
   function summaryCard(label, badge, title, subtitle, className = "") {
@@ -356,31 +355,30 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<nav class="mvp-inquiry-tabs" aria-label="Inquiry drawer tabs">${tabs.map(([id, label]) => `<button type="button" data-mvp-inquiry-tab="${id}" class="${activeTab === id ? "active" : ""}">${html(label)}</button>`).join("")}</nav>`;
   }
 
-  function inquiryTabContent(item, activeTab, renderArtwork) {
-    if (activeTab === "request") return inquiryRequestTab(item, renderArtwork);
-    if (activeTab === "notes") return inquiryNotesTab(item);
-    if (activeTab === "history") return inquiryHistoryTab(item);
-    return inquiryDetailsTab(item, renderArtwork);
+  function inquiryTabPanels(item, activeTab, stage, renderArtwork) {
+    const panels = [
+      ["details", inquiryDetailsTab(item)],
+      ["request", inquiryRequestTab(item, renderArtwork)],
+      ["notes", inquiryNotesTab(item)],
+      ["history", inquiryHistoryTab(item)],
+    ];
+    return panels.map(([id, content]) => `<div class="mvp-inquiry-tab-panel" data-mvp-inquiry-panel="${id}" ${activeTab === id ? "" : "hidden"}>${content}</div>`).join("");
   }
 
-  function inquiryDetailsTab(item, renderArtwork) {
-    return `<div class="mvp-inquiry-detail-list">${detailLine("Contact", item.contact || "Not set")}${detailLine("Inquiry Reference", item.id)}${detailLine("Needed Date", shortDate(item.dueDate))}${detailLine("Internal Status", internalStatus(item))}${detailLine("Next Action", item.next || "Review inquiry", true)}${followUpSection(item)}${detailLine("Customer Message", customerNotes(item) || "No customer message provided.", true)}${artworkPreviewLine(item, renderArtwork)}</div>`;
+  function inquiryDetailsTab(item) {
+    return `<div class="mvp-inquiry-detail-list">${detailLine("Contact", item.contact || "Not set")}${item.company ? detailLine("Company", item.company) : ""}${detailLine("Inquiry Reference", item.id)}${detailLine("Needed Date", item.dueDate ? shortDate(item.dueDate) : "Not set")}${detailLine("Internal Status", internalStatus(item))}${detailLine("Next Action", item.next || "Review inquiry", true)}${inquiryFollowUpSection(item)}</div>`;
   }
+
   function inquiryRequestTab(item, renderArtwork) {
-    return `<div class="mvp-inquiry-detail-list">${detailLine("Item", itemDisplay(item))}${detailLine("Color", messageValue(item.message, ["Color", "Colour"]) || "Not specified")}${detailLine("Size", item.sizeBreakdown || messageValue(item.message, ["Size", "Sizes"]) || "Not specified")}${detailLine("Placement", messageValue(item.message, ["Placement", "Print Placement", "Logo Placement"]) || "Not specified")}${artworkPreviewLine(item, renderArtwork)}${detailLine("Attachments", artworkState(item))}${detailLine("Customer Notes", customerNotes(item) || "No customer notes.", true)}</div>`;
+    return `<div class="mvp-inquiry-detail-list">${detailLine("Item / Garment", itemDisplay(item))}${detailLine("Service", serviceDisplay(item))}${detailLine("Color", messageValue(item.message, ["Color", "Colour"]) || "Not specified")}${detailLine("Size", item.sizeBreakdown || messageValue(item.message, ["Size", "Sizes"]) || "Not specified")}${detailLine("Quantity", item.qty || "Not set")}${detailLine("Placement", messageValue(item.message, ["Placement", "Print Placement", "Logo Placement"]) || "Not specified")}${detailLine("Production Requirements", messageValue(item.message, ["Requirements", "Production Requirements", "Other Requirements"]) || "Not specified", true)}${artworkPreviewLine(item, renderArtwork)}</div>`;
   }
 
   function inquiryNotesTab(item) {
-    return `<div class="mvp-inquiry-detail-list"><section class="mvp-internal-update-note"><h3>ADD INTERNAL UPDATE</h3><p>Staff only — not visible to the customer.</p></section>${detailLine("Customer Message", customerNotes(item) || "No customer message provided.", true)}${detailLine("Designer Notes", item.designerNotes || "No designer notes.", true)}${detailLine("Quotation Notes", item.quoteNotes || "No quotation notes.", true)}${detailLine("Production Notes", item.productionNote || item.internalNote || "No production notes.", true)}</div>`;
-  }
-  function inquiryHistoryTab(item) {
-    return `<ol class="mvp-inquiry-history">${inquiryHistory(item).map((row) => `<li><strong>${html(row.title)}</strong><span>${html(row.meta)}</span></li>`).join("")}</ol>`;
+    return `<div class="mvp-inquiry-detail-list">${customerMessageSection(item)}${detailLine("Designer Notes", item.designerNotes || "No designer notes.", true)}${detailLine("Quotation Notes", item.quoteNotes || "No quotation notes.", true)}${detailLine("Internal Note", item.productionNote || item.internalNote || "No internal note.", true)}${detailLine("Internal Communication", item.next || "Review inquiry", true)}<section class="mvp-note-entry-box"><label><span>Add Note</span><textarea rows="3" placeholder="Add an internal note" disabled></textarea></label><button type="button" disabled>Add Note</button></section></div>`;
   }
 
-  function customerCommunication(item) {
-    const link = customerLink(item);
-    const message = "We'll continue assisting you here on Messenger.\n\nIf no one has replied yet,\nyou may also check your inquiry progress using the customer link.";
-    return `<section class="mvp-customer-comm"><h3>Customer Communication</h3><div class="mvp-comm-row"><span>Inquiry Number</span><div class="mvp-comm-value"><strong>${html(item.id)}</strong>${copyButton("Copy", item.id, "inquiry number")}</div></div><div class="mvp-comm-row"><span>Customer Link</span><div class="mvp-comm-value"><strong>${html(link)}</strong>${copyButton("Copy", link, "customer link")}</div></div><p>${html(message)}</p><div class="mvp-comm-actions"><button type="button" data-mvp-copy="${html(message)}"><span>Copy Customer Message</span></button><button type="button" data-mvp-open-messenger>Open Messenger</button></div><label class="mvp-comm-check"><input type="checkbox" /> <span>Mark message as sent</span></label></section>`;
+  function inquiryHistoryTab(item) {
+    return `<ol class="mvp-inquiry-history">${inquiryHistory(item).map((row) => `<li><strong>${html(row.title)}</strong><span>${html(row.meta)}</span></li>`).join("")}</ol>`;
   }
 
   function inquiryActionBar(item, action) {
@@ -397,7 +395,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryPrimaryAction(item, stage, renderOdoo) {
     if (stage === "new") return { kind: "quote", label: "Create Quotation", hint: "Next step" };
     if (stage === "sent") return { kind: "wait", label: "Waiting for Approval", hint: "Quote sent", disabled: true };
-    if (stage === "approved" && !item.odooSO) return { kind: "so", label: "Create Sales Order", hint: "Next step", disabled: typeof renderOdoo !== "function" };
+    if (stage === "approved" && !item.odooSO) return { kind: "so", label: "Create Order", hint: "Next step", disabled: typeof renderOdoo !== "function" };
     if (stage === "approved" && item.odooSO) return { kind: "release", label: "Release to Production", hint: "Next step", route: `/orders?order=${encodeURIComponent(item.id)}` };
     if (confirmed(item)) return { kind: "production", label: "View Production", hint: "Open job", route: `/production?order=${encodeURIComponent(item.id)}` };
     return { kind: "quote", label: "Create Quotation", hint: "Next step" };
@@ -407,10 +405,27 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<div class="mvp-inquiry-detail-line ${multiline ? "wide" : ""}"><span>${html(label)}</span><strong>${html(value || "Not set")}</strong></div>`;
   }
 
-  function artworkPreviewLine(item, renderArtwork) {
-    return `<div class="mvp-inquiry-detail-line wide"><span>Artwork Preview</span><strong>${html(artworkState(item))}</strong>${typeof renderArtwork === "function" ? renderArtwork(item) : ""}</div>`;
+  function customerMessageSection(item) {
+    return `<section class="mvp-customer-message-section"><h3>CUSTOMER MESSAGE</h3><p>${html(customerNotes(item) || "No customer message provided.")}</p></section>`;
   }
 
+  function artworkPreviewLine(item, renderArtwork) {
+    return `<section class="mvp-inquiry-artwork-preview"><div class="mvp-artwork-preview-box"><span>ARTWORK / REFERENCE</span><strong>${html(artworkState(item))}</strong></div><p>${html(artworkFilenameSummary(item))}</p>${typeof renderArtwork === "function" ? renderArtwork(item) : ""}</section>`;
+  }
+
+  function artworkFilenameSummary(item) {
+    const explicit = String(item.artworkFilename || item.artworkFileName || item.fileName || "").trim();
+    if (explicit) return explicit;
+    const url = String(item.artworkUrl || "").trim();
+    if (!url) return "No filename saved";
+    try {
+      const parsed = new URL(url, window.location.origin);
+      const name = decodeURIComponent(parsed.pathname.split("/").filter(Boolean).pop() || "").trim();
+      return name || "Artwork link saved";
+    } catch {
+      return url.split("/").filter(Boolean).pop() || "Artwork link saved";
+    }
+  }
   function inquiryTimestamp(item) {
     const raw = item.createdAt || item.created_at || item.quoteSentAt || item.updatedAt || new Date().toISOString();
     const date = new Date(raw);
@@ -427,19 +442,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return source || "Website";
   }
 
-  function customerInitials(item) {
-    return String(item.customer || "Customer").split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("") || "C";
-  }
-
-  function ownerInitials(item) {
-    const value = owner(item);
-    return ["Unassigned", "Inactive user (historical)"].includes(value) ? "" : value.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("");
-  }
-
   function assignmentSubtitle(item) {
     const value = owner(item);
     if (value.includes(" - ")) return value.split(" - ").slice(1).join(" - ");
-    return value === "Unassigned" ? "No owner" : "Assigned owner";
+    return value === "Unassigned" ? "" : "Assigned owner";
   }
 
   function serviceChips(item) {
@@ -448,15 +454,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function followUpSummary(item) {
-    if (!item.followUpDate) return { title: "Not set", sub: "No follow-up" };
+    if (!item.followUpDate) return { title: "Not set", sub: "" };
     return { title: followUpLabel(item), sub: shortDate(item.followUpDate) };
   }
 
   function quotationSummary(item, stage) {
     const amount = Number(item.quotedAmount) > 0 ? money(item.quotedAmount) : "Not Created";
     if (stage === "approved") return { title: amount, sub: "Approved" };
-    if (stage === "sent") return { title: amount, sub: "Quote Sent" };
-    if (item.quoteStatus === "draft" || amount !== "Not Created") return { title: amount, sub: item.quotePublishedAt ? "Quote Sent" : "Draft" };
+    if (stage === "sent") return { title: amount, sub: "" };
+    if (item.quoteStatus === "draft" || amount !== "Not Created") return { title: amount, sub: item.quotePublishedAt ? "" : "Draft" };
     return { title: "Not Created", sub: "Unquoted" };
   }
 
@@ -509,7 +515,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return !search || [orderReference(item), sourceInquiryReference(item), item.id, item.customer, item.contact, item.service, product(item), item.odooSO, orderOwner(item)].join(" ").toLowerCase().includes(search);
     });
     const selected = orders.find((item) => item.id === (state.orderId || orderQuery));
-    return `<main class="mvp-page ops-board-page mvp-orders-page">${pageTitle("Orders", "Confirmed Orders", `${orders.length} orders`)}<p class="mvp-rule">NO CONFIRMED ORDER / DO NOT PRINT</p>${notices}${schemaNotice}
+    return `<main class="mvp-page ops-board-page mvp-orders-page">${pageTitle("Orders", "ORDERS", `${rows.length} shown / ${orders.length} total`)}${notices}${schemaNotice}
       ${orderMetrics(orders)}${filterBar("order", items, ["payment", "artwork", "due", "production", "owner"])}${ordersTable(rows)}${orderCards(rows)}${orderDrawer(selected, renderPayment, renderTracking)}
     </main>`;
   }
@@ -519,36 +525,46 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function ordersTable(items) {
-    return table("orders", ["Order", "Customer", "Item", "Qty", "Readiness", "Payment", "Due Date", "Production", "Owner"], items.map((item) => {
+    return table("orders", ["Order", "Customer", "Item / Service", "Quantity", "Payment", "Production", "Due Date", "Owner"], items.map((item) => {
       const dueState = due(item);
-      const readiness = readinessState(item);
       const payment = paymentState(item);
       const production = productionDisplay(item);
       return row("order", item.id, [
-        copyButton(orderReference(item), orderReference(item), "order reference"),
-        strong(item.customer || "Unnamed customer"),
-        cell(itemDisplay(item)),
-        cell(item.qty || "-"),
-        readinessCell(readiness),
+        orderReferenceCell(item),
+        orderCustomerCell(item),
+        orderItemCell(item),
+        cell(quantityDisplay(item)),
         status(payment.label, payment.tone),
+        status(production.label, production.tone),
         `<span class="mvp-due ${dueState.key}" title="${html(dueState.label)}">${html(dueShortLabel(dueState, item))}</span>`,
-        productionCell(production),
         cell(orderOwner(item)),
       ]);
-    }), "NO ORDERS MATCH THIS FILTER");
+    }), "No orders found.");
   }
 
   function orderCards(items) {
-    return `<section class="mvp-order-card-list">${items.length ? items.map(orderMobileCard).join("") : empty("NO ORDERS MATCH THIS FILTER")}</section>`;
+    return `<section class="mvp-order-card-list">${items.length ? items.map(orderMobileCard).join("") : empty("No orders found.")}</section>`;
   }
 
   function orderMobileCard(item) {
-    const readiness = readinessState(item);
     const payment = paymentState(item);
     const production = productionDisplay(item);
     const dueState = due(item);
-    const action = orderActionRequired(item) ? `<span class="mvp-order-action-required">ACTION REQUIRED</span>` : "";
-    return `<article class="mvp-order-mobile-card" data-mvp-open="order" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-order-mobile-header"><div>${copyButton(orderReference(item), orderReference(item), "order reference")}<strong>${html(item.customer || "Unnamed customer")}</strong></div>${status(production.label, production.tone)}</div><div class="mvp-order-mobile-summary"><strong>${html(itemDisplay(item))} ${String.fromCharCode(183)} ${html(item.qty || "-")}</strong><span>${html(readiness.summary)}</span>${status(payment.label, payment.tone)}</div><div class="mvp-order-mobile-meta"><span>Due: ${html(dueShortLabel(dueState, item))}</span><span>Owner: ${html(orderOwner(item))}</span>${action}</div></article>`;
+    return `<article class="mvp-order-mobile-card" data-mvp-open="order" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-order-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(orderReference(item))}</small></div><b class="mvp-mobile-open">OPEN</b></div><div class="mvp-order-mobile-summary"><strong>${html(itemDisplay(item))}</strong><span>${html([serviceDisplay(item), quantityDisplay(item)].filter(Boolean).join(" / "))}</span></div><div class="mvp-order-mobile-statuses">${status(payment.label, payment.tone)}${status(production.label, production.tone)}</div><div class="mvp-order-mobile-meta"><span>Due: ${html(dueShortLabel(dueState, item))}</span><span>Owner: ${html(orderOwner(item))}</span></div></article>`;
+  }
+
+  function orderReferenceCell(item) {
+    return `<span class="mvp-order-ref-cell"><strong>${html(orderReference(item))}</strong>${sourceInquiryReference(item) !== "Not linked" ? `<small>${html(sourceInquiryReference(item))}</small>` : ""}</span>`;
+  }
+
+  function orderCustomerCell(item) {
+    const phone = String(item.contact || "").trim();
+    return `<span class="mvp-order-customer-cell"><strong>${html(item.customer || "Unnamed customer")}</strong>${phone ? `<small>${html(phone)}</small>` : ""}</span>`;
+  }
+
+  function orderItemCell(item) {
+    const service = serviceDisplay(item);
+    return `<span class="mvp-order-item-cell"><strong>${html(itemDisplay(item))}</strong>${service && service !== "-" ? `<small>${html(service)}</small>` : ""}</span>`;
   }
 
   function orderDrawer(item, renderPayment, renderTracking) {
@@ -590,9 +606,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function paymentSatisfiesProductionGate(item) {
     const value = key(item.paymentStatus);
-    return ["confirmed", "paid"].includes(value);
+    const total = amount(item.quotedAmount || item.amountDue);
+    const verified = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
+    if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return total > 0 && verified >= total;
+    if (["down_payment_confirmed", "partially_paid"].includes(value)) return total >= 1000 && verified >= Math.round(total * 50) / 100;
+    return false;
   }
-
   function isReleasedToProduction(item) {
     if (!confirmed(item)) return false;
     const status = key(item.status);
@@ -627,8 +646,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function paymentState(item) {
     const value = key(item.paymentStatus);
     const dueAmount = amount(item.amountDue || item.quotedAmount);
-    const paidAmount = amount(item.paymentConfirmedAmount);
-    if (["confirmed", "paid"].includes(value)) return { key: "paid", label: "PAID", tone: "completed" };
+    const paidAmount = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
+    if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return { key: "paid", label: "PAID", tone: "completed" };
+    if (["down_payment_confirmed", "partially_paid"].includes(value)) return { key: "partial", label: "DOWN PAYMENT CONFIRMED", tone: "ready" };
+    if (["pay_at_shop", "payment_pending_at_shop"].includes(value)) return { key: "shop", label: "PAY AT SHOP", tone: "payment" };
+    if (["correction_required"].includes(value)) return { key: "correction", label: "CORRECTION REQUIRED", tone: "overdue" };
     if (["proof_submitted", "under_review"].includes(value)) return { key: "verification", label: "FOR VERIFICATION", tone: "payment" };
     if (["50_dp", "50%_dp", "half_down", "half_deposit"].includes(value) || key(item.paymentLabel) === "50%_dp" || key(item.paymentLabel) === "50_dp") return { key: "deposit", label: paidAmount && dueAmount && paidAmount * 2 === dueAmount ? "50% DP" : "PARTIAL", tone: "payment" };
     if (["partial", "deposit", "down_payment"].includes(value)) return { key: "partial", label: "PARTIAL", tone: "payment" };
@@ -640,10 +662,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderPaymentSummary(item) {
     const total = amount(item.quotedAmount);
     const dueAmount = amount(item.amountDue || item.quotedAmount);
-    const paid = amount(item.paymentConfirmedAmount);
-    const balance = Math.max(dueAmount - paid, 0);
+    const selected = amount(item.paymentSelectedAmount);
+    const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
+    const balance = Math.max(total - paid, 0);
     const payment = paymentState(item);
-    return detailSection("Payment", [["Payment State", payment.label], ["Amount Due", money(dueAmount)], ["Amount Received", money(paid)], ["Balance", money(balance)], ["Verification State", ["verification", "paid"].includes(payment.key) ? payment.label : "Not verified"]]);
+    return detailSection("Payment", [["Payment State", payment.label], ["Payment Method", paymentMethodLabel(item.paymentMethod)], ["Payment Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Quote Total", money(total)], ["Amount Due", money(dueAmount)], ["Amount Verified", money(paid)], ["Balance", money(balance)], ["Verified At", dateTime(item.paymentVerifiedAt || item.paymentConfirmedAt)]]);
   }
   function productionDisplay(item) {
     const stage = productionStage(item);
@@ -738,7 +761,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       if (methodQuery && method !== methodQuery) return false;
       if (blockerQuery === "blocked" && !blocker) return false;
       if (blockerQuery === "clear" && blocker) return false;
-      if (state.production.stage !== "all" && stage !== state.production.stage) return false;
+      if (state.production.stage === "in_progress" && !ACTIVE_STAGES.includes(stage)) return false;
+      if (state.production.stage !== "all" && state.production.stage !== "in_progress" && stage !== state.production.stage) return false;
       if (state.production.staff !== "all" && (item.assignedUserId || "") !== state.production.staff) return false;
       if (state.production.method !== "all" && method !== state.production.method) return false;
       if (state.production.due !== "all" && dueState.key !== state.production.due) return false;
@@ -758,52 +782,77 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ready: productionJobs.filter((item) => productionStage(item) === "ready").length,
       completed: productionJobs.filter((item) => productionStage(item) === "completed").length,
     };
-    return `<main class="mvp-page ops-board-page mvp-production-page">${pageTitle("Production", "PRODUCTION", `${rows.length} jobs`)}<p class="mvp-rule">RELEASED ORDERS ONLY</p>${notices}${schemaNotice}
+    return `<main class="mvp-page ops-board-page mvp-production-page">${pageTitle("Production", "PRODUCTION", `${rows.length} shown / ${productionJobs.length} total`)}${notices}${schemaNotice}
       <div class="mvp-metrics production">${metric("ACTIVE JOBS", counts.active, "/production", "Released")}${metric("UNASSIGNED", counts.unassigned, "/production?staff=Not%20Yet%20Assigned", "Needs staff", "warning")}${metric("DUE TODAY", counts.today, "/production?due=today", "Today", "lime")}${metric("OVERDUE", counts.overdue, "/production?due=overdue", "Past due", "danger")}${metric("BLOCKED", counts.blocked, "/production?blocker=blocked", "Has blocker", "warning")}${metric("READY", counts.ready, "/production?stage=ready", "Fulfillment")}${metric("COMPLETED", counts.completed, "/production?stage=completed", "Closed")}</div>
-      ${filterBar("production", productionJobs, ["staff", "method", "stage", "due", "blocker"])}${productionTable(rows, productionJobs.length)}${productionCards(rows, productionJobs.length)}${productionDrawer(selected)}
+      ${productionStageTabs(productionJobs, stageQuery)}${filterBar("production", productionJobs, ["staff", "method", "due", "blocker"])}${productionTable(rows, productionJobs.length)}${productionCards(rows, productionJobs.length)}${productionDrawer(selected)}
     </main>`;
   }
 
+
+  function productionStageTabs(items, stageQuery = "") {
+    const active = stageQuery || state.production.stage;
+    const tabs = [
+      ["all", "All", items.length],
+      ["queued", "Queue", items.filter((item) => productionStage(item) === "queued").length],
+      ["in_progress", "In Progress", items.filter((item) => ACTIVE_STAGES.includes(productionStage(item))).length],
+      ["qc", "Quality Check", items.filter((item) => productionStage(item) === "qc").length],
+      ["ready", "Ready", items.filter((item) => productionStage(item) === "ready").length],
+      ["completed", "Completed", items.filter((item) => productionStage(item) === "completed").length],
+    ];
+    return `<nav class="mvp-production-stage-tabs" aria-label="Production status filters">${tabs.map(([value, label, count]) => `<button type="button" data-mvp-production-stage="${html(value)}" class="${active === value || (!active && value === "all") ? "active" : ""}"><span>${html(label)}</span><strong>${count}</strong></button>`).join("")}</nav>`;
+  }
   function productionTable(items, totalJobs = 0) {
-    const emptyLabel = totalJobs ? "NO PRODUCTION JOBS MATCH THESE FILTERS" : "NO RELEASED PRODUCTION JOBS";
-    const emptyText = totalJobs ? "" : `<small>Orders will appear here after they pass the current release requirements.</small>`;
-    if (!items.length) return productionEmptyTable(emptyLabel, totalJobs);
-    return table("production", ["Job", "Customer", "Item", "Method", "Qty", "Current Stage", "Assigned", "Due Date", "Blocker", "Fulfillment"], items.map((item) => {
+    if (!items.length) return productionEmptyTable(totalJobs);
+    return table("production", ["Order / Job", "Customer", "Service / Item", "Quantity", "Assigned To", "Production Stage", "Due Date", "Blocked / Attention"], items.map((item) => {
       const stage = productionStage(item);
       const blocker = productionBlocker(item);
       const dueState = due(item);
       return row("production", item.id, [
-        copyButton(jobReference(item), jobReference(item), "job reference"),
-        strong(item.customer || "Unnamed customer"),
-        cell(itemDisplay(item)),
-        cell(productionMethod(item)),
+        productionReferenceCell(item),
+        productionCustomerCell(item),
+        productionItemCell(item),
         cell(quantityDisplay(item)),
-        status(stageLabel(stage), stage),
         cell(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item)),
+        status(stageLabel(stage), stage),
         `<span class="mvp-due ${dueState.key}" title="${html(dueState.label)}">${html(dueShortLabel(dueState, item))}</span>`,
-        `<span class="mvp-blocker-cell" title="${html(blocker || "Not blocked")}">${html(blocker || "Not blocked")}</span>`,
-        cell(fulfillment(item).toUpperCase()),
+        productionAttentionCell(blocker),
       ]);
-    }), `${emptyLabel}${emptyText}`);
+    }), "No production jobs found.");
   }
 
   function productionCards(items, totalJobs = 0) {
-    const emptyLabel = totalJobs ? "NO PRODUCTION JOBS MATCH THESE FILTERS" : "NO RELEASED PRODUCTION JOBS";
-    const emptyText = totalJobs ? "" : `<small>Orders will appear here after they pass the current release requirements.</small>`;
-    return `<section class="mvp-production-card-list">${items.length ? items.map(productionMobileCard).join("") : `<p class="mvp-empty">${html(emptyLabel)}${emptyText}</p>`}</section>`;
+    return `<section class="mvp-production-card-list">${items.length ? items.map(productionMobileCard).join("") : empty("No production jobs found.")}</section>`;
   }
 
-  function productionEmptyTable(label, totalJobs) {
-    const support = totalJobs ? "" : `<small>Orders will appear here after they pass the current release requirements.</small>`;
-    return `<section class="mvp-table-wrap"><div class="mvp-table production" role="table"><div class="mvp-table-head" role="row">${["Job", "Customer", "Item", "Method", "Qty", "Current Stage", "Assigned", "Due Date", "Blocker", "Fulfillment"].map((header) => `<span role="columnheader">${header}</span>`).join("")}</div><div role="rowgroup"><p class="mvp-empty">${html(label)}${support}</p></div></div></section>`;
+  function productionEmptyTable(totalJobs) {
+    return `<section class="mvp-table-wrap"><div class="mvp-table production" role="table"><div class="mvp-table-head" role="row">${["Order / Job", "Customer", "Service / Item", "Quantity", "Assigned To", "Production Stage", "Due Date", "Blocked / Attention"].map((header) => `<span role="columnheader">${header}</span>`).join("")}</div><div role="rowgroup"><p class="mvp-empty">No production jobs found.</p></div></div></section>`;
   }
 
   function productionMobileCard(item) {
     const stage = productionStage(item);
     const dueState = due(item);
     const blocker = productionBlocker(item);
-    const ready = stage === "ready" ? productionDisplay(item).label : "";
-    return `<article class="mvp-production-mobile-card" data-mvp-open="production" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-production-mobile-header"><div>${copyButton(jobReference(item), jobReference(item), "job reference")}<strong>${html(item.customer || "Unnamed customer")}</strong></div>${status(stageLabel(stage), stage)}</div><div class="mvp-production-mobile-job"><strong>${html(itemDisplay(item))}</strong><span>${html(productionMethod(item))} ${String.fromCharCode(183)} ${html(quantityDisplay(item))}</span></div><div class="mvp-production-mobile-ops"><span>Assigned: ${html(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item))}</span><span>Due: ${html(dueShortLabel(dueState, item))}</span><span>Blocker: ${html(blocker || "Not blocked")}</span><span>Fulfillment: ${html(ready || fulfillment(item).toUpperCase())}</span></div></article>`;
+    return `<article class="mvp-production-mobile-card" data-mvp-open="production" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-production-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(jobReference(item))}</small></div><b class="mvp-mobile-open">OPEN</b></div><div class="mvp-production-mobile-job"><strong>${html(itemDisplay(item))}</strong><span>${html([productionMethod(item), quantityDisplay(item)].filter(Boolean).join(" / "))}</span></div><div class="mvp-production-mobile-statuses">${status(stageLabel(stage), stage)}<span class="mvp-due ${dueState.key}">${html(dueShortLabel(dueState, item))}</span></div><div class="mvp-production-mobile-ops"><span>Assigned: ${html(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item))}</span>${blocker ? `<span class="mvp-mobile-blocker">Blocked: ${html(blocker)}</span>` : ""}</div></article>`;
+  }
+
+  function productionReferenceCell(item) {
+    const orderRef = orderReference(item);
+    const jobRef = jobReference(item);
+    return `<span class="mvp-production-ref-cell"><strong>${html(jobRef)}</strong>${orderRef !== jobRef ? `<small>${html(orderRef)}</small>` : ""}</span>`;
+  }
+
+  function productionCustomerCell(item) {
+    const contact = String(item.contact || "").trim();
+    return `<span class="mvp-production-customer-cell"><strong>${html(item.customer || "Unnamed customer")}</strong>${contact ? `<small>${html(contact)}</small>` : ""}</span>`;
+  }
+
+  function productionItemCell(item) {
+    const method = productionMethod(item);
+    return `<span class="mvp-production-item-cell"><strong>${html(itemDisplay(item))}</strong>${method && method !== "Not set" ? `<small>${html(method)}</small>` : ""}</span>`;
+  }
+
+  function productionAttentionCell(blocker) {
+    return `<span class="mvp-blocker-cell" title="${html(blocker || "Not blocked")}">${blocker ? `<b>BLOCKED</b><small>${html(blocker)}</small>` : "Clear"}</span>`;
   }
 
   function productionDrawer(item) {
@@ -862,6 +911,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function bind({ root = document, rerender, navigate, copy, saveProduction, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; clearQuery(); rerender(); }));
+    root.querySelectorAll("[data-mvp-production-stage]").forEach((button) => button.addEventListener("click", () => { state.production.stage = button.dataset.mvpProductionStage; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-filter]").forEach((field) => {
       const [scope, name] = field.dataset.mvpFilter.split(":");
       field.addEventListener(field.type === "search" ? "input" : "change", () => { state[scope][name] = field.value; clearQuery(); rerender(); if (field.type === "search") focusAtEnd(field.dataset.mvpFilter); });
@@ -873,7 +923,18 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     });
     root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => { const restore = state.returnFocus; state.inquiryId = null; state.orderId = null; state.productionId = null; state.returnFocus = null; clearQuery(); rerender(); requestAnimationFrame(() => { if (restore) root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]`)?.focus(); }); }));
     root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); button.dataset.copied = "true"; const label = button.querySelector("small"); if (label) label.textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const nextLabel = button.querySelector("small"); if (nextLabel) nextLabel.textContent = "Copy"; }, 1300); }));
-    root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); state.inquiryTab = button.dataset.mvpInquiryTab; state.inquiryMoreOpen = false; rerender(); }));
+    root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const tab = button.dataset.mvpInquiryTab;
+      if (!["details", "request", "notes", "history"].includes(tab)) return;
+      state.inquiryTab = tab;
+      state.inquiryMoreOpen = false;
+      const drawer = button.closest(".mvp-drawer");
+      const shell = button.closest(".mvp-inquiry-locked-shell") || drawer?.querySelector(".mvp-inquiry-locked-shell");
+      drawer?.querySelector(".mvp-more-menu")?.remove();
+      shell?.querySelectorAll("[data-mvp-inquiry-tab]").forEach((tabButton) => tabButton.classList.toggle("active", tabButton.dataset.mvpInquiryTab === tab));
+      shell?.querySelectorAll("[data-mvp-inquiry-panel]").forEach((panel) => { panel.hidden = panel.dataset.mvpInquiryPanel !== tab; });
+    }));
     root.querySelectorAll("[data-mvp-primary-action]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); if (button.disabled) return; state.inquiryActionId = state.inquiryActionId === button.dataset.mvpPrimaryAction ? null : button.dataset.mvpPrimaryAction; state.inquiryMoreOpen = false; rerender(); }));
     root.querySelectorAll("[data-mvp-more-toggle]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); state.inquiryMoreOpen = !state.inquiryMoreOpen; rerender(); }));
     root.querySelectorAll("[data-mvp-open-messenger]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); window.open("https://www.messenger.com/", "_blank", "noopener,noreferrer"); }));
@@ -945,7 +1006,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const values = state[scope];
     const services = [...new Set(items.map((item) => item.service).filter(Boolean))].sort();
     const people = assignmentFilterOptions();
-    const controls = [`<label class="mvp-search"><span aria-hidden="true">?</span><input type="search" data-mvp-filter="${scope}:search" value="${html(values.search)}" placeholder="Search code, customer, product..." /></label>`];
+    const placeholder = scope === "inquiry" ? "Search inquiries by code, customer, or product..." : scope === "order" ? "Search order, customer, or reference..." : scope === "production" ? "Search order, customer, service, or assignee" : "Search code, customer, product...";
+    const controls = [`<label class="mvp-search"><span aria-hidden="true">?</span><input type="search" data-mvp-filter="${scope}:search" value="${html(values.search)}" placeholder="${html(placeholder)}" /></label>`];
     if (fields.includes("owner")) controls.push(select(scope, "owner", "All Owners", people, values.owner, true));
     if (fields.includes("staff")) controls.push(select(scope, "staff", "All Staff", people, values.staff, true));
     if (fields.includes("method")) controls.push(select(scope, "method", "All Methods", productionMethods(items), values.method));
@@ -953,7 +1015,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (fields.includes("stage")) controls.push(select(scope, "stage", "All Stages", PRODUCTION_STAGES, values.stage));
     if (fields.includes("production")) controls.push(select(scope, "production", "All Production", PRODUCTION_STAGES, values.production));
     if (fields.includes("artwork")) controls.push(select(scope, "artwork", "All Artwork", [["approved", "Art approved"], ["pending", "Art pending"], ["revision", "Revision needed"], ["not_set", "Not set"]], values.artwork));
-    if (fields.includes("payment")) controls.push(select(scope, "payment", "All Payments", scope === "order" ? ["NOT SET", "UNPAID", "FOR VERIFICATION", "PARTIAL", "50% DP", "PAID"] : ["Not Yet Requested", "Awaiting Payment", "Proof Submitted", "Paid"], values.payment));
+    if (fields.includes("payment")) controls.push(select(scope, "payment", "All Payments", scope === "order" ? ["NOT SET", "UNPAID", "FOR VERIFICATION", "PARTIAL", "50% DP", "PAID"] : ["Not Yet Requested", "Payment Required", "Pay at Shop", "Correction Required", "For Verification", "Down Payment Confirmed", "Paid"], values.payment));
     if (fields.includes("fulfillment")) controls.push(select(scope, "fulfillment", "All Fulfillment", [["pickup", "Pickup"], ["delivery", "Delivery"]], values.fulfillment));
     if (fields.includes("blocker")) controls.push(select(scope, "blocker", "All Blockers", [["blocked", "Blocked"], ["clear", "Not blocked"]], values.blocker));
     if (fields.includes("due")) controls.push(select(scope, "due", scope === "inquiry" ? "All Follow-up" : "All Dates", [["overdue", "Overdue"], ["today", "Due today"], ["week", "This week"]], values.due));
@@ -1016,10 +1078,33 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function priorityRow(item) { return `<button type="button" data-mvp-route="${html(item.route)}"><code>${html(item.code)}</code><strong>${html(item.customer)}</strong><span>${html(item.reason)}</span><b class="${item.tone}">${html(item.when)}</b><i>View</i></button>`; }
   function countBy(keys, items, getter) { return Object.fromEntries(keys.map((value) => [value, items.filter((item) => getter(item) === value).length])); }
   function inquiryMobileCard(item, stage) {
-    const serviceQty = `${serviceDisplay(item)} ${String.fromCharCode(183)} ${item.qty || "-"}`;
-    const requestSummary = `${fulfillment(item).toUpperCase()} ${String.fromCharCode(183)} ${artworkState(item)}`;
-    return `<article class="mvp-inquiry-mobile-card" data-mvp-open="inquiry" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-inquiry-mobile-header"><div>${copyButton(item.id, item.id, "inquiry code")}<strong>${html(item.customer || "Unnamed customer")}</strong></div>${status(QUOTE_STAGES[stage], stage)}</div><div class="mvp-inquiry-mobile-request"><strong>${html(itemDisplay(item))}</strong><span>${html(serviceQty)}</span><span>${html(requestSummary)}</span><b>${html(quoteAmount(item))}</b></div><div class="mvp-inquiry-mobile-meta"><span>Follow-up: ${html(followUpLabel(item))}</span><span>Owner: ${html(owner(item))}</span></div></article>`;
+    const qty = item.qty ? `Qty ${item.qty}` : "";
+    const ownerText = owner(item);
+    const follow = followUpLabel(item);
+    return `<article class="mvp-inquiry-mobile-card" data-mvp-open="inquiry" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-inquiry-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(item.id)}</small></div>${status(quoteListStatusLabel(stage), stage)}</div><div class="mvp-inquiry-mobile-request"><strong>${html(itemDisplay(item))}</strong><span>${html([serviceDisplay(item), qty].filter(Boolean).join(" / "))}</span></div><div class="mvp-inquiry-mobile-meta"><span>${html(follow === displayDash() ? ownerText : `Follow-up: ${follow}`)}</span><b class="mvp-mobile-open">OPEN</b></div></article>`;
   }
+
+  function customerCell(item) {
+    const phone = String(item.contact || "").trim();
+    return `<span class="mvp-customer-cell"><strong>${html(item.customer || "Unnamed customer")}</strong>${phone ? `<small>${html(phone)}</small>` : ""}</span>`;
+  }
+
+  function inquirySummaryCell(item) {
+    const meta = [fulfillment(item), artworkState(item), quoteAmount(item)].filter((value) => value && value !== displayDash()).join(" / ");
+    return `<span class="mvp-inquiry-summary-cell"><strong>${html(itemDisplay(item))}</strong>${meta ? `<small>${html(meta)}</small>` : ""}</span>`;
+  }
+
+  function inquiryStageCount(value, inquiries) {
+    if (value === "all") return inquiries.length;
+    if (value === "follow_due") return inquiries.filter(isFollowUpDue).length;
+    return inquiries.filter((item) => quoteStage(item) === value).length;
+  }
+
+  function quoteListStatusLabel(stage) {
+    if (stage === "new") return "NEEDS QUOTE";
+    return QUOTE_STAGES[stage] || "NEW";
+  }
+
   function itemDisplay(item) {
     return normalizeItemForDisplay(cleanCustomerSuppliedLabel(product(item)), serviceDisplay(item));
   }
@@ -1096,20 +1181,22 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const today = new Date(`${todayIso()}T00:00:00`);
     return Number.isFinite(follow.getTime()) && follow <= today;
   }
-  function followUpSection(item) {
+  function inquiryFollowUpSection(item) {
     const ownerDisabled = assignmentControlsDisabled();
     const ownerHelp = assignmentNotice();
     const dueActive = isFollowUpDue(item);
-    return `<section class="mvp-drawer-section mvp-internal-section mvp-follow-up-section"><h3>FOLLOW-UP</h3><div class="mvp-internal-controls">
+    const followSummary = item.followUpDate ? shortDate(item.followUpDate) : "Not scheduled";
+    return `<section class="mvp-follow-up-section wide"><h3>FOLLOW-UP</h3><div class="mvp-follow-up-controls">
       <label><span>Owner</span><select data-mvp-inquiry-owner="${html(item.id)}" ${ownerDisabled ? "disabled" : ""}>${assignmentSelectOptions(item.ownerUserId, item.owner || item.ownerId, "Unassigned")}</select>${ownerHelp}</label>
-      <label><span>Next Follow-up</span><input data-mvp-follow-date-input="${html(item.id)}" type="date" value="${html(item.followUpDate || "")}" /><small class="mvp-field-summary">${html(item.followUpDate ? shortDate(item.followUpDate) : "Not scheduled")}</small></label>
-      <div class="mvp-follow-presets"><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="0">Today</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="1">Tomorrow</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="3">+3 Days</button></div>
-      <div class="mvp-follow-actions"><button class="mvp-secondary-action" type="button" data-mvp-save-follow="${html(item.id)}">Save Owner & Date</button><button class="mvp-ghost-action" type="button" data-mvp-clear-follow="${html(item.id)}">Clear Follow-up</button></div>
-    </div>${dueActive ? recordFollowUpBox(item) : ""}<div class="mvp-detail-grid"><div><span>Priority</span><strong>${html(item.priority || "Normal")}</strong></div><div><span>Last Update</span><strong>${html(dateTime(item.updatedAt))}</strong></div></div></section>`;
+      <label><span>Next Follow-up</span><input data-mvp-follow-date-input="${html(item.id)}" type="date" value="${html(item.followUpDate || "")}" /></label>
+      <div class="mvp-follow-presets" aria-label="Quick follow-up dates"><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="0">Today</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="1">Tomorrow</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="3">+3 Days</button></div>
+      <div class="mvp-follow-actions"><button class="mvp-secondary-action" type="button" data-mvp-save-follow="${html(item.id)}">SAVE OWNER &amp; DATE</button><button class="mvp-ghost-action" type="button" data-mvp-clear-follow="${html(item.id)}">CLEAR FOLLOW-UP</button></div>
+    </div><div class="mvp-follow-summary-row"><div><span>Owner</span><strong>${html(owner(item) || "Unassigned")}</strong></div><div><span>Follow-up</span><strong>${html(followSummary)}</strong></div><div><span>Priority</span><strong>${html(item.priority || "Normal")}</strong></div><div><span>Last Update</span><strong>${html(dateTime(item.updatedAt))}</strong></div></div>${dueActive ? recordFollowUpBox(item) : ""}</section>`;
   }
   function recordFollowUpBox(item) {
     return `<details class="mvp-record-follow" open><summary>RECORD FOLLOW-UP</summary><div><label><span>Result</span><select data-mvp-follow-outcome="${html(item.id)}"><option value="">Select result</option><option value="no_response">NO RESPONSE</option><option value="customer_considering">CUSTOMER CONSIDERING</option><option value="quotation_approved">QUOTATION APPROVED</option><option value="not_proceeding">NOT PROCEEDING</option><option value="converted_to_order">CONVERTED TO ORDER</option></select></label><label><span>New follow-up date</span><input data-mvp-follow-reschedule="${html(item.id)}" type="date" /></label><button class="mvp-primary-action" type="button" data-mvp-record-follow="${html(item.id)}">Record Result & Reschedule</button><p class="mvp-inline-note" data-mvp-follow-message="${html(item.id)}">No Response and Customer Considering require a new date. Approval, Lost, and conversion use the existing protected workflow actions.</p></div></details>`;
-  }  function copyButton(label, value, aria) { return `<button class="mvp-copy" type="button" data-mvp-copy="${html(value)}" aria-label="Copy ${html(aria)} ${html(label)}"><span>${html(label)}</span><small>Copy</small></button>`; }
+  }
+  function copyButton(label, value, aria) { return `<button class="mvp-copy" type="button" data-mvp-copy="${html(value)}" aria-label="Copy ${html(aria)} ${html(label)}"><span>${html(label)}</span><small>Copy</small></button>`; }
   function strong(value) { return `<strong title="${html(value)}">${html(value)}</strong>`; }
   function cell(value) { return `<span title="${html(value)}">${html(value)}</span>`; }
   function status(label, tone) { return `<b class="mvp-status ${tone}" title="${html(label)}">${html(label)}</b>`; }
@@ -1118,7 +1205,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryDue(item) { if (!item.followUpDate) return "none"; const date = new Date(`${item.followUpDate}T00:00:00`); const today = new Date(`${todayIso()}T00:00:00`); if (date < today) return "overdue"; if (+date === +today) return "today"; return "week"; }
   function fulfillment(item) { const value = key(item.fulfillmentMethod); return value === "pickup" ? "Pickup" : value === "delivery" ? "Delivery" : "Not set"; }
   function tracking(item) { const labels = { ready_for_pickup: "Ready for Pickup", out_for_delivery: "Out for Delivery", delivered: "Delivered", completed: "Completed" }; return labels[key(item.trackingSubstatus)] || "Not set"; }
-  function paymentSummary(item) { const total = amount(item.quotedAmount); const paid = amount(item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Total Amount", money(total)], ["Amount Paid", money(paid)], ["Balance", money(balance)]]); }
+  function paymentSummary(item) { const total = amount(item.quotedAmount); const selected = amount(item.paymentSelectedAmount); const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Method", paymentMethodLabel(item.paymentMethod)], ["Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Total Amount", money(total)], ["Amount Verified", money(paid)], ["Balance", money(balance)]]); }
+  function paymentTypeLabel(value) { const text = key(value); if (text === "down_payment") return "50% Down Payment"; if (text === "full") return "Full Payment"; if (text === "shop") return "Pay at Shop"; return "Not selected"; }
+  function paymentMethodLabel(value) { const text = key(value); if (text === "online") return "Pay Online"; if (text === "cash") return "Cash at Shop"; if (text === "gcash") return "GCash"; if (text === "bank_transfer") return "Bank Transfer"; if (text === "card") return "Card"; if (text === "other") return "Other"; return "Not selected"; }
   function amount(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
   function messageValue(message, labels) { for (const label of labels) { const match = String(message || "").match(new RegExp(`^${label}:\\s*(.+)$`, "im")); if (match?.[1]?.trim()) return match[1].trim(); } return ""; }
   function customerNotes(item) {

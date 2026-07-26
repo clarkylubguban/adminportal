@@ -29,6 +29,17 @@ const CUSTOMER_ACTION_SELECT = [
   "artwork_approved_at",
   "artwork_revision_request",
   "payment_status",
+  "payment_method",
+  "payment_type",
+  "payment_selected_amount",
+  "payment_reference",
+  "payment_customer_note",
+  "payment_receipt_filename",
+  "payment_receipt_content_type",
+  "payment_receipt_size",
+  "payment_verified_amount",
+  "payment_verified_at",
+  "payment_verified_by",
   "payment_label",
   "payment_instructions",
   "payment_proof_path",
@@ -127,7 +138,7 @@ export default async function handler(request, response) {
     }
 
     const now = new Date().toISOString();
-    const updates = buildUpdates(action, body, inquiry, now);
+    const updates = buildUpdates(action, body, inquiry, now, adminUser);
 
     if (updates?.error) {
       sendJson(response, 400, { ok: false, error: updates.error });
@@ -159,7 +170,7 @@ export default async function handler(request, response) {
       status: error?.status || error?.statusCode,
     });
 
-    const schemaMissing = /quoted_amount|quote_status|quote_published_at|artwork_status|payment_status|payment_review_note|payment_rejected_at|schema cache|could not find/i.test(String(error?.message || ""));
+    const schemaMissing = /quoted_amount|quote_status|quote_published_at|artwork_status|payment_status|payment_review_note|payment_rejected_at|payment_selected_amount|payment_type|payment_method|payment_verified_by|schema cache|could not find/i.test(String(error?.message || ""));
     sendJson(response, schemaMissing ? 503 : 500, {
       ok: false,
       error: schemaMissing
@@ -184,11 +195,11 @@ async function readAdminUser(supabase, userId) {
     .eq("user_id", userId)
     .maybeSingle();
 
-  const { data, error } = await query("id,role,is_active");
+  const { data, error } = await query("id,user_id,role,is_active");
   if (!error) return data;
   if (!isMissingAdminProfileColumn(error)) throw error;
 
-  const fallback = await query("id,role");
+  const fallback = await query("id,user_id,role");
   if (fallback.error) throw fallback.error;
   return fallback.data;
 }
@@ -203,7 +214,7 @@ function isMissingAdminProfileColumn(error) {
   return /is_active|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
 }
 
-function buildUpdates(action, body, inquiry, now) {
+function buildUpdates(action, body, inquiry, now, adminUser = null) {
   if (isProductionActive(inquiry.production_stage)) return null;
 
   const quoteValues = getQuoteValues(body);
@@ -272,10 +283,10 @@ function buildUpdates(action, body, inquiry, now) {
     if (
       inquiry.quote_status !== "approved"
       || inquiry.artwork_status !== "approved"
-      || !["required", "proof_submitted", "under_review"].includes(String(inquiry.payment_status || ""))
+      || !["required", "proof_submitted", "under_review", "correction_required"].includes(String(inquiry.payment_status || ""))
     ) return null;
     if (paymentReviewNote.length < 5) return { error: "receipt request reason required" };
-    return { payment_status: "required", payment_review_note: paymentReviewNote, payment_rejected_at: now };
+    return { payment_status: "correction_required", payment_review_note: paymentReviewNote, payment_rejected_at: now };
   }
 
   if (action === "confirm_payment") {
@@ -288,10 +299,41 @@ function buildUpdates(action, body, inquiry, now) {
       || confirmedAmount <= 0
     ) return null;
 
+    const confirmation = getConfirmedPaymentState(inquiry, confirmedAmount);
+    if (!confirmation.ok) return { error: confirmation.error };
+
     return {
-      payment_status: "confirmed",
+      payment_status: confirmation.status,
       payment_confirmed_amount: confirmedAmount,
       payment_confirmed_at: now,
+      payment_verified_amount: confirmedAmount,
+      payment_verified_at: now,
+      payment_verified_by: adminUser?.user_id || null,
+      payment_review_note: null,
+      payment_rejected_at: null,
+    };
+  }
+
+  if (action === "confirm_cash_payment") {
+    if (
+      inquiry.quote_status !== "approved"
+      || inquiry.artwork_status !== "approved"
+      || !["pay_at_shop", "payment_pending_at_shop"].includes(String(inquiry.payment_status || ""))
+    ) return null;
+    const cashAmount = Number.isFinite(confirmedAmount) && confirmedAmount > 0 ? confirmedAmount : Number(inquiry.quoted_amount);
+    const confirmation = getConfirmedPaymentState({ ...inquiry, payment_type: "full" }, cashAmount);
+    if (!confirmation.ok) return { error: confirmation.error };
+    return {
+      payment_method: inquiry.payment_method || "cash",
+      payment_type: "full",
+      payment_status: confirmation.status,
+      payment_confirmed_amount: cashAmount,
+      payment_confirmed_at: now,
+      payment_verified_amount: cashAmount,
+      payment_verified_at: now,
+      payment_verified_by: adminUser?.user_id || null,
+      payment_review_note: null,
+      payment_rejected_at: null,
     };
   }
 
@@ -458,6 +500,17 @@ function getSafeInquiry(row) {
     artworkApprovedAt: cleanText(row.artwork_approved_at, 80),
     artworkRevisionRequest: cleanText(row.artwork_revision_request, 1000),
     paymentStatus: cleanText(row.payment_status, 80),
+    paymentMethod: cleanText(row.payment_method, 80),
+    paymentType: cleanText(row.payment_type, 80),
+    paymentSelectedAmount: numberOrNull(row.payment_selected_amount),
+    paymentReference: cleanText(row.payment_reference, 120),
+    paymentCustomerNote: cleanText(row.payment_customer_note, 1000),
+    paymentReceiptFilename: cleanText(row.payment_receipt_filename, 180),
+    paymentReceiptContentType: cleanText(row.payment_receipt_content_type, 120),
+    paymentReceiptSize: numberOrNull(row.payment_receipt_size),
+    paymentVerifiedAmount: numberOrNull(row.payment_verified_amount),
+    paymentVerifiedAt: cleanText(row.payment_verified_at, 80),
+    paymentVerifiedBy: cleanText(row.payment_verified_by, 80),
     paymentLabel: cleanText(row.payment_label, 120),
     paymentInstructions: cleanText(row.payment_instructions, 2000),
     paymentProofSubmittedAt: cleanText(row.payment_proof_submitted_at, 80),
@@ -508,6 +561,24 @@ function getMoney(value) {
     if (normalized && Number.isFinite(Number(normalized))) return Number(normalized);
   }
   return NaN;
+}
+
+function getConfirmedPaymentState(inquiry, amount) {
+  const total = Number(inquiry.quoted_amount);
+  if (!Number.isFinite(total) || total <= 0) return { ok: false, error: "valid quote total required" };
+  const roundedAmount = roundMoney(amount);
+  const fullAmount = roundMoney(total);
+  const downAmount = roundMoney(total * 0.5);
+  const paymentType = String(inquiry.payment_type || "").trim().toLowerCase();
+  if (roundedAmount >= fullAmount) return { ok: true, status: "paid" };
+  if (total >= 1000 && (paymentType === "down_payment" || roundedAmount >= downAmount) && roundedAmount >= downAmount) {
+    return { ok: true, status: "down_payment_confirmed" };
+  }
+  return { ok: false, error: total >= 1000 ? "confirmed amount must match the 50% down payment or full quote total" : "confirmed amount must match the full quote total" };
+}
+
+function roundMoney(value) {
+  return Math.round(Number(value) * 100) / 100;
 }
 function numberOrNull(value) {
   const number = getMoney(value);
