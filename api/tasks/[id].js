@@ -53,7 +53,11 @@ export default function handler(request, response) {
     });
   }
 
-  return route.handler(rewriteAction ? withoutRoutingParams(request, url) : request, response);
+  if (rewriteAction) {
+    return withRoutingParamsRemoved(request, url, () => route.handler(request, response));
+  }
+
+  return route.handler(request, response);
 }
 
 function getQueryValue(request, url, key) {
@@ -61,16 +65,22 @@ function getQueryValue(request, url, key) {
   return Array.isArray(raw) ? raw[0] : raw;
 }
 
-function withoutRoutingParams(request, url) {
+function withRoutingParamsRemoved(request, url, callback) {
+  const originalUrl = request.url;
+  const hadQuery = Object.prototype.hasOwnProperty.call(request, "query");
+  const originalQuery = request.query;
   const query = { ...Object.fromEntries(url.searchParams.entries()), ...(request.query || {}) };
   delete query._taskAction;
 
   const cleanUrl = new URL(url);
   cleanUrl.searchParams.delete("_taskAction");
 
-  return {
-    ...request,
-    url: `${cleanUrl.pathname}${cleanUrl.search}`,
-    query,
-  };
+  request.url = `${cleanUrl.pathname}${cleanUrl.search}`;
+  request.query = query;
+
+  return Promise.resolve(callback()).finally(() => {
+    request.url = originalUrl;
+    if (hadQuery) request.query = originalQuery;
+    else delete request.query;
+  });
 }

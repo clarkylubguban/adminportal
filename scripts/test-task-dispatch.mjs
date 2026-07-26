@@ -94,7 +94,8 @@ for (const url of [
 process.stdout.write(`PASS task route dispatch preserved ${collectionRoutes.length + catchAllRoutes.length} task URLs with safe 404/405 responses\n`);
 
 async function invoke(handler, method, url) {
-  const request = { method, url, query: {}, headers: {} };
+  const request = { method, url, query: {} };
+  Object.defineProperty(request, "headers", { value: {}, enumerable: false });
   const response = responseFixture();
   await handler(request, response);
   return { status: response.statusCode, body: response.body, headers: response.headers };
@@ -108,4 +109,6 @@ function responseFixture() {
     end(value) { this.body = JSON.parse(value); },
   };
 }
+
+
 
