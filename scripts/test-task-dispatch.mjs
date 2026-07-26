@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import collectionHandler from "../api/tasks/index.js";
-import taskHandler from "../api/tasks/[...path].js";
+import taskHandler from "../api/tasks/[id].js";
 import myTasksHandler from "../api/my-tasks.js";
 
 const TASK_ID = "10000000-0000-4000-8000-000000000001";
@@ -44,6 +44,23 @@ for (const [method, url] of catchAllRoutes) {
   assert.equal(result.body.error.code, "AUTH_REQUIRED", `${method} ${url} should reach authenticated task handler`);
 }
 
+
+const rewriteRoutes = [
+  ["GET", `/api/tasks/${TASK_ID}?_taskAction=history`],
+  ["POST", `/api/tasks/${TASK_ID}?_taskAction=start`],
+  ["POST", `/api/tasks/${TASK_ID}?_taskAction=time-entry-correct&entryId=${ENTRY_ID}`],
+];
+
+for (const [method, url] of rewriteRoutes) {
+  const result = await invoke(taskHandler, method, url);
+  assert.notEqual(result.status, 404, `${method} ${url} was not dispatched from rewrite parameters`);
+  assert.equal(result.status, 401, `${method} ${url} should preserve auth gate`);
+  assert.equal(result.body.error.code, "AUTH_REQUIRED", `${method} ${url} should reach authenticated task handler`);
+}
+
+const unknownRewriteAction = await invoke(taskHandler, "POST", `/api/tasks/${TASK_ID}?_taskAction=unsupported`);
+assert.equal(unknownRewriteAction.status, 404);
+assert.equal(unknownRewriteAction.body.error.code, "NOT_FOUND");
 const myTasks = await invoke(myTasksHandler, "GET", "/api/my-tasks");
 assert.equal(myTasks.status, 401);
 assert.equal(myTasks.body.error.code, "AUTH_REQUIRED");
@@ -91,3 +108,4 @@ function responseFixture() {
     end(value) { this.body = JSON.parse(value); },
   };
 }
+

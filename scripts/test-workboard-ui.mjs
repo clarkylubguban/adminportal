@@ -48,7 +48,7 @@ for (const required of [
 }
 
 assert.ok(localDev.includes("handleTaskApiRoute"), "missing local task route dispatcher");
-assert.ok(localDev.includes("../api/tasks/[...path].js"), "missing local task catch-all dispatch");
+assert.ok(localDev.includes("../api/tasks/[id].js"), "missing local task catch-all dispatch");
 assert.ok(localDev.includes("../api/tasks/index.js"), "missing local task collection dispatch");
 
 for (const forbidden of [

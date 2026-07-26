@@ -111,7 +111,7 @@ async function handleTaskApiRoute(routePath, request, response) {
   }
 
   if (routePath.startsWith("/api/tasks/")) {
-    const { default: handleTaskRequest } = await import("../api/tasks/[...path].js");
+    const { default: handleTaskRequest } = await import("../api/tasks/[id].js");
     await handleTaskRequest(request, response);
     return true;
   }

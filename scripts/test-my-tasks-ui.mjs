@@ -45,7 +45,7 @@ assert.ok(service.includes("Idempotency-Key"));
 assert.ok(localDev.includes("handleTaskApiRoute"));
 assert.ok(localDev.includes("/api/my-tasks"));
 assert.ok(localDev.includes("../api/my-tasks.js"));
-assert.ok(localDev.includes("../api/tasks/[...path].js"));
+assert.ok(localDev.includes("../api/tasks/[id].js"));
 assert.ok(localDev.includes("VITE_ENABLE_TASK_DOMAIN"));
 assert.ok(build.includes("VITE_ENABLE_TASK_DOMAIN"));
 

@@ -4,6 +4,66 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/tasks/:id/history",
+      "destination": "/api/tasks/:id?_taskAction=history"
+    },
+    {
+      "source": "/api/tasks/:id/time-entries",
+      "destination": "/api/tasks/:id?_taskAction=time-entries"
+    },
+    {
+      "source": "/api/tasks/:id/draft",
+      "destination": "/api/tasks/:id?_taskAction=draft"
+    },
+    {
+      "source": "/api/tasks/:id/assign",
+      "destination": "/api/tasks/:id?_taskAction=assign"
+    },
+    {
+      "source": "/api/tasks/:id/approve-draft",
+      "destination": "/api/tasks/:id?_taskAction=approve-draft"
+    },
+    {
+      "source": "/api/tasks/:id/start",
+      "destination": "/api/tasks/:id?_taskAction=start"
+    },
+    {
+      "source": "/api/tasks/:id/submit",
+      "destination": "/api/tasks/:id?_taskAction=submit"
+    },
+    {
+      "source": "/api/tasks/:id/submit-without-time",
+      "destination": "/api/tasks/:id?_taskAction=submit-without-time"
+    },
+    {
+      "source": "/api/tasks/:id/start-revision",
+      "destination": "/api/tasks/:id?_taskAction=start-revision"
+    },
+    {
+      "source": "/api/tasks/:id/request-revision",
+      "destination": "/api/tasks/:id?_taskAction=request-revision"
+    },
+    {
+      "source": "/api/tasks/:id/approve",
+      "destination": "/api/tasks/:id?_taskAction=approve"
+    },
+    {
+      "source": "/api/tasks/:id/cancel",
+      "destination": "/api/tasks/:id?_taskAction=cancel"
+    },
+    {
+      "source": "/api/tasks/:id/reopen",
+      "destination": "/api/tasks/:id?_taskAction=reopen"
+    },
+    {
+      "source": "/api/tasks/:id/archive",
+      "destination": "/api/tasks/:id?_taskAction=archive"
+    },
+    {
+      "source": "/api/tasks/:id/time-entries/:entryId/correct",
+      "destination": "/api/tasks/:id?_taskAction=time-entry-correct&entryId=:entryId"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
