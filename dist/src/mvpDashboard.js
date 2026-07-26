@@ -334,9 +334,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryLockedHeader(item, stage) {
-    const contact = String(item.contact || "").trim() || "Contact not set";
     const company = String(item.company || "").trim();
-    return `<div class="mvp-inquiry-locked-header"><span class="mvp-inquiry-status-pill ${stage}">${html(QUOTE_STAGES[stage])}</span><div class="mvp-inquiry-customer-row"><h2>${html(item.customer || "Unnamed customer")}</h2>${company ? `<small>${html(company)}</small>` : ""}</div><div class="mvp-inquiry-number-row"><span>Inquiry Reference</span>${copyButton(item.id, item.id, "inquiry number")}</div><div class="mvp-inquiry-meta"><span>${html(contact)}</span></div></div>`;
+    return `<div class="mvp-inquiry-locked-header"><span class="mvp-inquiry-status-pill ${stage}">${html(QUOTE_STAGES[stage])}</span><div class="mvp-inquiry-customer-row"><h2>${html(item.customer || "Unnamed customer")}</h2>${company ? `<small>${html(company)}</small>` : ""}</div><div class="mvp-inquiry-number-row"><span>Inquiry Reference</span>${copyButton(item.id, item.id, "inquiry number")}</div><div class="mvp-inquiry-meta">${contactActionButton(item)}</div></div>`;
   }
 
   function inquirySummaryCards(item, stage) {
@@ -366,15 +365,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryDetailsTab(item) {
-    return `<div class="mvp-inquiry-detail-list">${detailLine("Contact", item.contact || "Not set")}${item.company ? detailLine("Company", item.company) : ""}${detailLine("Inquiry Reference", item.id)}${detailLine("Needed Date", item.dueDate ? shortDate(item.dueDate) : "Not set")}${detailLine("Internal Status", internalStatus(item))}${detailLine("Next Action", item.next || "Review inquiry", true)}${inquiryFollowUpSection(item)}</div>`;
+    return `<div class="mvp-inquiry-detail-list">${inquiryDetailSection("CUSTOMER INFORMATION", `${detailLine("Contact", contactDisplay(item))}${item.company ? detailLine("Company", item.company) : ""}`)}${inquiryDetailSection("INQUIRY CONTEXT", `${detailLine("Inquiry Reference", item.id)}${detailLine("Needed Date", item.dueDate ? shortDate(item.dueDate) : "Not set")}${detailLine("Internal Status", internalStatus(item))}`)}${inquiryDetailSection("NEXT ACTION", detailLine("Current Next Action", item.next || "Review inquiry", true))}${inquiryFollowUpSection(item)}</div>`;
   }
 
   function inquiryRequestTab(item, renderArtwork) {
-    return `<div class="mvp-inquiry-detail-list">${detailLine("Item / Garment", itemDisplay(item))}${detailLine("Service", serviceDisplay(item))}${detailLine("Color", messageValue(item.message, ["Color", "Colour"]) || "Not specified")}${detailLine("Size", item.sizeBreakdown || messageValue(item.message, ["Size", "Sizes"]) || "Not specified")}${detailLine("Quantity", item.qty || "Not set")}${detailLine("Placement", messageValue(item.message, ["Placement", "Print Placement", "Logo Placement"]) || "Not specified")}${detailLine("Production Requirements", messageValue(item.message, ["Requirements", "Production Requirements", "Other Requirements"]) || "Not specified", true)}${artworkPreviewLine(item, renderArtwork)}</div>`;
+    return `<div class="mvp-inquiry-detail-list">${inquiryDetailSection("REQUEST DETAILS", `${detailLine("Item / Garment", itemDisplay(item))}${detailLine("Service", serviceDisplay(item))}${detailLine("Color", messageValue(item.message, ["Color", "Colour"]) || "Not specified")}${detailLine("Size", item.sizeBreakdown || messageValue(item.message, ["Size", "Sizes"]) || "Not specified")}${detailLine("Quantity", item.qty || "Not set")}${detailLine("Placement", messageValue(item.message, ["Placement", "Print Placement", "Logo Placement"]) || "Not specified")}`)}${inquiryDetailSection("PRODUCTION REQUIREMENTS", detailLine("Requirements", messageValue(item.message, ["Requirements", "Production Requirements", "Other Requirements"]) || "Not specified", true))}${artworkPreviewLine(item, renderArtwork)}</div>`;
   }
 
   function inquiryNotesTab(item) {
-    return `<div class="mvp-inquiry-detail-list">${customerMessageSection(item)}${followUpUpdatesSection(item)}${detailLine("Designer Notes", item.designerNotes || "No designer notes.", true)}${detailLine("Quotation Notes", item.quoteNotes || "No quotation notes.", true)}${detailLine("Internal Note", item.productionNote || item.internalNote || "No internal note.", true)}${detailLine("Internal Communication", item.next || "Review inquiry", true)}</div>`;
+    return `<div class="mvp-inquiry-detail-list">${customerMessageSection(item)}${followUpUpdatesSection(item)}${inquiryDetailSection("STAFF NOTES", `${detailLine("Designer Notes", item.designerNotes || "No designer notes.", true)}${detailLine("Quotation Notes", item.quoteNotes || "No quotation notes.", true)}${detailLine("Internal Note", item.productionNote || item.internalNote || "No internal note.", true)}`)}</div>`;
   }
 
   function inquiryHistoryTab(item) {
@@ -403,6 +402,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function detailLine(label, value, multiline = false) {
     return `<div class="mvp-inquiry-detail-line ${multiline ? "wide" : ""}"><span>${html(label)}</span><strong>${html(value || "Not set")}</strong></div>`;
+  }
+  function inquiryDetailSection(title, rows) {
+    return `<section class="mvp-inquiry-detail-section"><h3>${html(title)}</h3><div class="mvp-inquiry-detail-grid">${rows}</div></section>`;
   }
 
   function followUpUpdatesSection(item) {
@@ -486,6 +488,29 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function customerLink(item) {
     return `trryapparel.com/inquiry/${encodeURIComponent(item.id)}`;
+  }
+
+  function contactDisplay(item) {
+    const contact = String(item.contact || "").trim();
+    if (!contact) return "Not set";
+    return validContactUrl(contact) ? "Saved contact link" : contact;
+  }
+
+  function contactActionButton(item) {
+    const contact = String(item.contact || "").trim();
+    if (!contact) return `<span class="mvp-contact-unavailable">Contact not set</span>`;
+    const url = validContactUrl(contact);
+    if (url) return `<button class="mvp-contact-action" type="button" data-mvp-contact-url="${html(url)}">OPEN CONTACT</button>`;
+    return `<button class="mvp-contact-action" type="button" data-mvp-open-messenger="${html(item.id)}">OPEN CONTACT</button>`;
+  }
+
+  function validContactUrl(value) {
+    try {
+      const url = new URL(String(value || "").trim());
+      return ["http:", "https:"].includes(url.protocol) ? url.href : "";
+    } catch {
+      return "";
+    }
   }
 
   function inquiryHistory(item) {
@@ -957,6 +982,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     root.querySelectorAll("[data-mvp-primary-action]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); if (button.disabled) return; state.inquiryActionId = state.inquiryActionId === button.dataset.mvpPrimaryAction ? null : button.dataset.mvpPrimaryAction; state.inquiryMoreOpen = false; rerender(); }));
     root.querySelectorAll("[data-mvp-more-toggle]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); state.inquiryMoreOpen = !state.inquiryMoreOpen; rerender(); }));
     root.querySelectorAll("[data-mvp-open-messenger]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); window.open("https://www.messenger.com/", "_blank", "noopener,noreferrer"); }));
+    root.querySelectorAll("[data-mvp-contact-url]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); window.open(button.dataset.mvpContactUrl, "_blank", "noopener,noreferrer"); }));
     root.querySelectorAll('[data-mvp-note-toggle]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); const wrap = button.closest('.mvp-note-wrap'); const expanded = wrap?.classList.toggle('expanded'); button.textContent = expanded ? 'SHOW LESS' : 'SHOW FULL NOTE'; }));
     root.querySelectorAll('[data-mvp-follow-preset]').forEach((button) => button.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -1218,16 +1244,16 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryFollowUpSection(item) {
     const ownerDisabled = assignmentControlsDisabled();
     const ownerHelp = assignmentNotice();
-    const followSummary = item.followUpDate ? shortDate(item.followUpDate) : "Not scheduled";
     const canRecord = canRecordFollowUp(item);
     const recordOpen = state.inquiryFollowUpRecordId === item.id;
+    const context = [`Priority: ${item.priority || "Normal"}`, item.updatedAt ? `Last update: ${dateTime(item.updatedAt)}` : ""].filter(Boolean).join(" / ");
     return `<section class="mvp-follow-up-section wide"><h3>FOLLOW-UP</h3><div class="mvp-follow-up-controls">
       <label><span>Owner</span><select data-mvp-inquiry-owner="${html(item.id)}" ${ownerDisabled ? "disabled" : ""}>${assignmentSelectOptions(item.ownerUserId, item.owner || item.ownerId, "Unassigned")}</select>${ownerHelp}</label>
       <label><span>Next Follow-up</span><input data-mvp-follow-date-input="${html(item.id)}" type="date" value="${html(item.followUpDate || "")}" /></label>
       <div class="mvp-follow-presets" aria-label="Quick follow-up dates"><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="0">Today</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="1">Tomorrow</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="3">+3 Days</button></div>
       <p class="mvp-follow-schedule-message" data-mvp-follow-schedule-message="${html(item.id)}"></p>
       <div class="mvp-follow-actions"><button class="mvp-secondary-action" type="button" data-mvp-save-follow="${html(item.id)}">SAVE FOLLOW-UP SCHEDULE</button><button class="mvp-ghost-action" type="button" data-mvp-clear-follow="${html(item.id)}">CLEAR FOLLOW-UP</button></div>
-    </div><div class="mvp-follow-summary-row"><div><span>Owner</span><strong>${html(owner(item) || "Unassigned")}</strong></div><div><span>Follow-up</span><strong>${html(followSummary)}</strong></div><div><span>Priority</span><strong>${html(item.priority || "Normal")}</strong></div><div><span>Last Update</span><strong>${html(dateTime(item.updatedAt))}</strong></div></div>${canRecord ? `<button class="mvp-ghost-action mvp-record-follow-toggle" type="button" data-mvp-open-follow-record="${html(item.id)}">RECORD FOLLOW-UP</button>${recordOpen ? recordFollowUpBox(item) : ""}` : `<p class="mvp-inline-note">Follow-up recording is closed for lost, cancelled, or converted inquiries.</p>`}</section>`;
+    </div>${context ? `<p class="mvp-follow-context">${html(context)}</p>` : ""}${canRecord ? `<button class="mvp-ghost-action mvp-record-follow-toggle" type="button" data-mvp-open-follow-record="${html(item.id)}">RECORD FOLLOW-UP</button>${recordOpen ? recordFollowUpBox(item) : ""}` : `<p class="mvp-inline-note">Follow-up recording is closed for lost, cancelled, or converted inquiries.</p>`}</section>`;
   }
   function recordFollowUpBox(item) {
     return `<div class="mvp-record-follow" data-mvp-follow-record-panel="${html(item.id)}"><label><span>Result</span><select data-mvp-follow-outcome="${html(item.id)}"><option value="">Select result</option><option value="no_response">No response</option><option value="customer_considering">Customer considering</option><option value="customer_replied_action_needed">Customer replied / action needed</option></select></label><label><span>Follow-up Note</span><textarea data-mvp-follow-note="${html(item.id)}" rows="3" placeholder="Example: Customer requested another day to decide."></textarea><small>Staff only - not visible to the customer.</small></label><label><span>Next Follow-up Date</span><input data-mvp-follow-reschedule="${html(item.id)}" type="date" /></label><button class="mvp-primary-action" type="button" data-mvp-record-follow="${html(item.id)}">SAVE FOLLOW-UP UPDATE</button><p class="mvp-inline-note" data-mvp-follow-message="${html(item.id)}">No response and Customer considering require a new date.</p></div>`;
