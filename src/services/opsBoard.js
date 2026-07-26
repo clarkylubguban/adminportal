@@ -176,6 +176,68 @@ export async function updateOpsInquiryFields(
     : null;
 }
 
+async function attachFollowUpEvents(inquiries, accessToken) {
+  if (!inquiries.length) return inquiries;
+  try {
+    const ids = inquiries.map((item) => item.id).filter(Boolean);
+    if (!ids.length) return inquiries;
+    const events = await readSupabaseTableWithAuth(
+      "inquiry_follow_up_events",
+      {
+        select: "id,inquiry_id,outcome,note,next_follow_up_date,created_by_user_id,created_at",
+        inquiry_id: `in.(${ids.map((id) => String(id).replace(/[^A-Za-z0-9_-]/g, "")).filter(Boolean).join(",")})`,
+        order: "created_at.desc",
+      },
+      accessToken
+    );
+    const userIds = [...new Set((events || []).map((event) => event.created_by_user_id).filter(Boolean))];
+    const users = await readFollowUpUsers(userIds, accessToken);
+    const byInquiry = new Map();
+    for (const event of events || []) {
+      const row = mapFollowUpEvent(event, users.get(event.created_by_user_id));
+      const list = byInquiry.get(row.inquiryId) || [];
+      list.push(row);
+      byInquiry.set(row.inquiryId, list);
+    }
+    return inquiries.map((item) => ({ ...item, followUpEvents: byInquiry.get(item.id) || [] }));
+  } catch (error) {
+    const message = String(error?.message || error || "");
+    if (/inquiry_follow_up_events|could not find|does not exist|schema cache|42p01|PGRST205/i.test(message)) {
+      return inquiries.map((item) => ({ ...item, followUpEvents: [] }));
+    }
+    throw error;
+  }
+}
+
+async function readFollowUpUsers(userIds, accessToken) {
+  if (!userIds.length) return new Map();
+  try {
+    const rows = await readSupabaseTableWithAuth(
+      "admin_users",
+      {
+        select: "user_id,email,display_name,role",
+        user_id: `in.(${userIds.map((id) => String(id).replace(/[^A-Za-z0-9-]/g, "")).filter(Boolean).join(",")})`,
+      },
+      accessToken
+    );
+    return new Map((rows || []).map((row) => [row.user_id, row]));
+  } catch {
+    return new Map();
+  }
+}
+
+function mapFollowUpEvent(row, user) {
+  return {
+    id: getFirstValue(row, ["id"]),
+    inquiryId: getFirstValue(row, ["inquiry_id", "inquiryId"]),
+    outcome: getFirstValue(row, ["outcome"]),
+    note: getFirstValue(row, ["note"]),
+    nextFollowUpDate: normalizeDate(getFirstValue(row, ["next_follow_up_date", "nextFollowUpDate"])),
+    createdByUserId: getFirstValue(row, ["created_by_user_id", "createdByUserId"]),
+    createdByName: user?.display_name || user?.email || "Staff",
+    createdAt: getFirstValue(row, ["created_at", "createdAt"]),
+  };
+}
 export function mapOpsRowToInquiry(row) {
   return {
     id: getFirstValue(row, ["id"]),

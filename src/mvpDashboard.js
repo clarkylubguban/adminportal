@@ -374,11 +374,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryNotesTab(item) {
-    return `<div class="mvp-inquiry-detail-list">${customerMessageSection(item)}${detailLine("Designer Notes", item.designerNotes || "No designer notes.", true)}${detailLine("Quotation Notes", item.quoteNotes || "No quotation notes.", true)}${detailLine("Internal Note", item.productionNote || item.internalNote || "No internal note.", true)}${detailLine("Internal Communication", item.next || "Review inquiry", true)}<section class="mvp-note-entry-box"><label><span>Add Note</span><textarea rows="3" placeholder="Add an internal note" disabled></textarea></label><button type="button" disabled>Add Note</button></section></div>`;
+    return `<div class="mvp-inquiry-detail-list">${customerMessageSection(item)}${followUpUpdatesSection(item)}${detailLine("Designer Notes", item.designerNotes || "No designer notes.", true)}${detailLine("Quotation Notes", item.quoteNotes || "No quotation notes.", true)}${detailLine("Internal Note", item.productionNote || item.internalNote || "No internal note.", true)}${detailLine("Internal Communication", item.next || "Review inquiry", true)}</div>`;
   }
 
   function inquiryHistoryTab(item) {
-    return `<ol class="mvp-inquiry-history">${inquiryHistory(item).map((row) => `<li><strong>${html(row.title)}</strong><span>${html(row.meta)}</span></li>`).join("")}</ol>`;
+    return `<ol class="mvp-inquiry-history">${inquiryHistory(item).map((row) => `<li><strong>${html(row.title)}</strong><span>${html(row.meta)}</span>${row.note ? `<p>${html(row.note)}</p>` : ""}${row.next ? `<small>${html(row.next)}</small>` : ""}</li>`).join("")}</ol>`;
   }
 
   function inquiryActionBar(item, action) {
@@ -405,6 +405,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<div class="mvp-inquiry-detail-line ${multiline ? "wide" : ""}"><span>${html(label)}</span><strong>${html(value || "Not set")}</strong></div>`;
   }
 
+  function followUpUpdatesSection(item) {
+    const events = Array.isArray(item.followUpEvents) ? item.followUpEvents : [];
+    return `<section class="mvp-follow-up-updates"><h3>FOLLOW-UP UPDATES</h3>${events.length ? events.map((event) => `<article><strong>${html(followUpOutcomeLabel(event.outcome))}</strong><span>${html(event.createdByName || "Staff")} / ${html(dateTime(event.createdAt))}</span><p>${html(event.note || "No note saved.")}</p>${event.nextFollowUpDate ? `<small>Next scheduled follow-up: ${html(shortDate(event.nextFollowUpDate))}</small>` : ""}</article>`).join("") : `<p>No follow-up updates recorded.</p>`}</section>`;
+  }
   function customerMessageSection(item) {
     return `<section class="mvp-customer-message-section"><h3>CUSTOMER MESSAGE</h3><p>${html(customerNotes(item) || "No customer message provided.")}</p></section>`;
   }
@@ -487,6 +491,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryHistory(item) {
     const rows = [];
     if (item.updatedAt) rows.push({ title: "Last Updated", meta: dateTime(item.updatedAt) });
+    (Array.isArray(item.followUpEvents) ? item.followUpEvents : []).forEach((event) => {
+      rows.push({
+        title: `Follow-up: ${followUpOutcomeLabel(event.outcome)}`,
+        meta: `${event.createdByName || "Staff"} / ${dateTime(event.createdAt)}`,
+        note: event.note || "No note saved.",
+        next: event.nextFollowUpDate ? `Next scheduled follow-up: ${shortDate(event.nextFollowUpDate)}` : "",
+      });
+    });
     if (item.quotePublishedAt) rows.push({ title: "Quote Sent", meta: dateTime(item.quotePublishedAt) });
     if (item.quoteApprovedAt) rows.push({ title: "Customer Approved", meta: dateTime(item.quoteApprovedAt) });
     if (item.odooSO) rows.push({ title: "SO Created", meta: item.odooSO });
@@ -494,6 +506,13 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return rows;
   }
 
+  function followUpOutcomeLabel(outcome) {
+    const value = key(outcome);
+    if (value === "no_response") return "No response";
+    if (value === "customer_considering") return "Customer considering";
+    if (value === "customer_replied_action_needed") return "Customer replied / action needed";
+    return "Follow-up update";
+  }
   function renderOrders({ items, notices = "", schemaNotice = "", renderPayment, renderTracking }) {
     const orders = items.filter(confirmed);
     const stageQuery = query("stage");
@@ -908,7 +927,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, saveProduction, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
+  function bind({ root = document, rerender, navigate, copy, saveProduction, saveInquiryFollowUp, saveInquiryFollowUpEvent }) {
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-production-stage]").forEach((button) => button.addEventListener("click", () => { state.production.stage = button.dataset.mvpProductionStage; clearQuery(); rerender(); }));
@@ -917,7 +936,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       field.addEventListener(field.type === "search" ? "input" : "change", () => { state[scope][name] = field.value; clearQuery(); rerender(); if (field.type === "search") focusAtEnd(field.dataset.mvpFilter); });
     });
     root.querySelectorAll("[data-mvp-open]").forEach((element) => {
-      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = "details"; state.inquiryActionId = null; state.inquiryMoreOpen = false; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
+      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = "details"; state.inquiryActionId = null; state.inquiryMoreOpen = false; state.inquiryFollowUpRecordId = null; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
       element.addEventListener("click", (event) => { if (event.target.closest("[data-mvp-copy]")) return; event.stopPropagation(); open(); });
       element.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); open(); } });
     });
@@ -967,19 +986,34 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       await saveInquiryFollowUp?.(id, { ownerUserId: ownerValue === "__legacy__" ? undefined : ownerValue || null, followUpDate: null });
       rerender();
     }));
+    root.querySelectorAll('[data-mvp-open-follow-record]').forEach((button) => button.addEventListener('click', (event) => {
+      event.stopPropagation();
+      const id = button.dataset.mvpOpenFollowRecord;
+      state.inquiryFollowUpRecordId = state.inquiryFollowUpRecordId === id ? null : id;
+      rerender();
+    }));
     root.querySelectorAll('[data-mvp-record-follow]').forEach((button) => button.addEventListener('click', async () => {
       if (button.disabled) return;
       const id = button.dataset.mvpRecordFollow;
       const outcome = root.querySelector(`[data-mvp-follow-outcome="${CSS.escape(id)}"]`)?.value || '';
-      const reschedule = root.querySelector(`[data-mvp-follow-reschedule="${CSS.escape(id)}"]`)?.value || null;
+      const note = root.querySelector(`[data-mvp-follow-note="${CSS.escape(id)}"]`)?.value.trim() || '';
+      const nextFollowUpDate = root.querySelector(`[data-mvp-follow-reschedule="${CSS.escape(id)}"]`)?.value || null;
       const message = root.querySelector(`[data-mvp-follow-message="${CSS.escape(id)}"]`);
+      const requiresDate = ["no_response", "customer_considering"].includes(outcome);
       if (!outcome) { if (message) message.textContent = 'Select a follow-up result.'; return; }
-      if (["no_response", "customer_considering"].includes(outcome) && !reschedule) { if (message) message.textContent = 'Choose a new follow-up date for this result.'; return; }
+      if (!note) { if (message) message.textContent = 'Add a staff-only follow-up note before saving.'; return; }
+      if (requiresDate && !nextFollowUpDate) { if (message) message.textContent = 'Choose a new follow-up date for this result.'; return; }
       button.disabled = true;
       button.textContent = 'Saving...';
-      if (["no_response", "customer_considering"].includes(outcome)) await saveInquiryFollowUp?.(id, { followUpDate: reschedule });
-      else await handleInquiryFollowUpOutcome?.(id, outcome);
-      rerender();
+      try {
+        await saveInquiryFollowUpEvent?.(id, { outcome, note, nextFollowUpDate });
+        state.inquiryFollowUpRecordId = null;
+        rerender();
+      } catch (error) {
+        if (message) message.textContent = error.message || 'Unable to save follow-up update.';
+        button.disabled = false;
+        button.textContent = 'SAVE FOLLOW-UP UPDATE';
+      }
     }));
     root.querySelectorAll("[data-mvp-save-production]").forEach((button) => button.addEventListener("click", async () => {
       if (button.disabled) return;
@@ -1184,26 +1218,32 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryFollowUpSection(item) {
     const ownerDisabled = assignmentControlsDisabled();
     const ownerHelp = assignmentNotice();
-    const dueActive = isFollowUpDue(item);
     const followSummary = item.followUpDate ? shortDate(item.followUpDate) : "Not scheduled";
+    const canRecord = canRecordFollowUp(item);
+    const recordOpen = state.inquiryFollowUpRecordId === item.id;
     return `<section class="mvp-follow-up-section wide"><h3>FOLLOW-UP</h3><div class="mvp-follow-up-controls">
       <label><span>Owner</span><select data-mvp-inquiry-owner="${html(item.id)}" ${ownerDisabled ? "disabled" : ""}>${assignmentSelectOptions(item.ownerUserId, item.owner || item.ownerId, "Unassigned")}</select>${ownerHelp}</label>
       <label><span>Next Follow-up</span><input data-mvp-follow-date-input="${html(item.id)}" type="date" value="${html(item.followUpDate || "")}" /></label>
       <div class="mvp-follow-presets" aria-label="Quick follow-up dates"><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="0">Today</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="1">Tomorrow</button><button type="button" data-mvp-follow-preset="${html(item.id)}" data-mvp-follow-days="3">+3 Days</button></div>
-      <div class="mvp-follow-actions"><button class="mvp-secondary-action" type="button" data-mvp-save-follow="${html(item.id)}">SAVE OWNER &amp; DATE</button><button class="mvp-ghost-action" type="button" data-mvp-clear-follow="${html(item.id)}">CLEAR FOLLOW-UP</button></div>
-    </div><div class="mvp-follow-summary-row"><div><span>Owner</span><strong>${html(owner(item) || "Unassigned")}</strong></div><div><span>Follow-up</span><strong>${html(followSummary)}</strong></div><div><span>Priority</span><strong>${html(item.priority || "Normal")}</strong></div><div><span>Last Update</span><strong>${html(dateTime(item.updatedAt))}</strong></div></div>${dueActive ? recordFollowUpBox(item) : ""}</section>`;
+      <p class="mvp-follow-schedule-message" data-mvp-follow-schedule-message="${html(item.id)}"></p>
+      <div class="mvp-follow-actions"><button class="mvp-secondary-action" type="button" data-mvp-save-follow="${html(item.id)}">SAVE FOLLOW-UP SCHEDULE</button><button class="mvp-ghost-action" type="button" data-mvp-clear-follow="${html(item.id)}">CLEAR FOLLOW-UP</button></div>
+    </div><div class="mvp-follow-summary-row"><div><span>Owner</span><strong>${html(owner(item) || "Unassigned")}</strong></div><div><span>Follow-up</span><strong>${html(followSummary)}</strong></div><div><span>Priority</span><strong>${html(item.priority || "Normal")}</strong></div><div><span>Last Update</span><strong>${html(dateTime(item.updatedAt))}</strong></div></div>${canRecord ? `<button class="mvp-ghost-action mvp-record-follow-toggle" type="button" data-mvp-open-follow-record="${html(item.id)}">RECORD FOLLOW-UP</button>${recordOpen ? recordFollowUpBox(item) : ""}` : `<p class="mvp-inline-note">Follow-up recording is closed for lost, cancelled, or converted inquiries.</p>`}</section>`;
   }
   function recordFollowUpBox(item) {
-    return `<details class="mvp-record-follow" open><summary>RECORD FOLLOW-UP</summary><div><label><span>Result</span><select data-mvp-follow-outcome="${html(item.id)}"><option value="">Select result</option><option value="no_response">NO RESPONSE</option><option value="customer_considering">CUSTOMER CONSIDERING</option><option value="quotation_approved">QUOTATION APPROVED</option><option value="not_proceeding">NOT PROCEEDING</option><option value="converted_to_order">CONVERTED TO ORDER</option></select></label><label><span>New follow-up date</span><input data-mvp-follow-reschedule="${html(item.id)}" type="date" /></label><button class="mvp-primary-action" type="button" data-mvp-record-follow="${html(item.id)}">Record Result & Reschedule</button><p class="mvp-inline-note" data-mvp-follow-message="${html(item.id)}">No Response and Customer Considering require a new date. Approval, Lost, and conversion use the existing protected workflow actions.</p></div></details>`;
-  }
-  function copyButton(label, value, aria) { return `<button class="mvp-copy" type="button" data-mvp-copy="${html(value)}" aria-label="Copy ${html(aria)} ${html(label)}"><span>${html(label)}</span><small>Copy</small></button>`; }
+    return `<div class="mvp-record-follow" data-mvp-follow-record-panel="${html(item.id)}"><label><span>Result</span><select data-mvp-follow-outcome="${html(item.id)}"><option value="">Select result</option><option value="no_response">No response</option><option value="customer_considering">Customer considering</option><option value="customer_replied_action_needed">Customer replied / action needed</option></select></label><label><span>Follow-up Note</span><textarea data-mvp-follow-note="${html(item.id)}" rows="3" placeholder="Example: Customer requested another day to decide."></textarea><small>Staff only - not visible to the customer.</small></label><label><span>Next Follow-up Date</span><input data-mvp-follow-reschedule="${html(item.id)}" type="date" /></label><button class="mvp-primary-action" type="button" data-mvp-record-follow="${html(item.id)}">SAVE FOLLOW-UP UPDATE</button><p class="mvp-inline-note" data-mvp-follow-message="${html(item.id)}">No response and Customer considering require a new date.</p></div>`;
+  }  function copyButton(label, value, aria) { return `<button class="mvp-copy" type="button" data-mvp-copy="${html(value)}" aria-label="Copy ${html(aria)} ${html(label)}"><span>${html(label)}</span><small>Copy</small></button>`; }
   function strong(value) { return `<strong title="${html(value)}">${html(value)}</strong>`; }
   function cell(value) { return `<span title="${html(value)}">${html(value)}</span>`; }
   function status(label, tone) { return `<b class="mvp-status ${tone}" title="${html(label)}">${html(label)}</b>`; }
   function empty(label) { return `<p class="mvp-empty">${html(label)}</p>`; }
   function stationFor(item) { const value = String(item.service || "").toLowerCase(); return value.includes("embro") ? "embroidery" : value.includes("screen") ? "screen_printing" : "printing"; }
   function inquiryDue(item) { if (!item.followUpDate) return "none"; const date = new Date(`${item.followUpDate}T00:00:00`); const today = new Date(`${todayIso()}T00:00:00`); if (date < today) return "overdue"; if (+date === +today) return "today"; return "week"; }
-  function fulfillment(item) { const value = key(item.fulfillmentMethod); return value === "pickup" ? "Pickup" : value === "delivery" ? "Delivery" : "Not set"; }
+  function canRecordFollowUp(item) {
+    const status = key(item.status);
+    if (["lost", "cancelled", "canceled", "won"].includes(status)) return false;
+    if (confirmed(item) || String(item.odooSO || "").trim()) return false;
+    return true;
+  }  function fulfillment(item) { const value = key(item.fulfillmentMethod); return value === "pickup" ? "Pickup" : value === "delivery" ? "Delivery" : "Not set"; }
   function tracking(item) { const labels = { ready_for_pickup: "Ready for Pickup", out_for_delivery: "Out for Delivery", delivered: "Delivered", completed: "Completed" }; return labels[key(item.trackingSubstatus)] || "Not set"; }
   function paymentSummary(item) { const total = amount(item.quotedAmount); const selected = amount(item.paymentSelectedAmount); const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Method", paymentMethodLabel(item.paymentMethod)], ["Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Total Amount", money(total)], ["Amount Verified", money(paid)], ["Balance", money(balance)]]); }
   function paymentTypeLabel(value) { const text = key(value); if (text === "down_payment") return "50% Down Payment"; if (text === "full") return "Full Payment"; if (text === "shop") return "Pay at Shop"; return "Not selected"; }

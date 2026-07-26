@@ -3427,7 +3427,19 @@ async function requestOpsWorkflowAction(inquiryId, body) {
   if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Workflow update failed.");
   return payload;
 }
-function getAssignmentUserById(userId) {
+async function requestInquiryFollowUpEvent(inquiryId, body) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/follow-ups`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Follow-up update failed.");
+  return payload;
+}function getAssignmentUserById(userId) {
   return assignmentUsers.find((user) => user.userId === userId) || null;
 }
 
