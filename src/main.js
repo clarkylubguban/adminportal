@@ -456,6 +456,7 @@ let workboardTasks = [];
 let workboardLoadState = "idle";
 let workboardLoadError = "";
 let workboardFilterStatus = "active";
+let workboardFilterDue = "";
 let workboardFilterPriority = "";
 let workboardFilterSource = "";
 let workboardFilterAssignee = "";
@@ -1230,6 +1231,44 @@ function compareTaskDate(a, b) {
   return Date.parse(a.submissionDeadline || a.scheduledDate || a.updatedAt || 0) - Date.parse(b.submissionDeadline || b.scheduledDate || b.updatedAt || 0);
 }
 
+function sortWorkboardTasks(tasks) {
+  return [...tasks].sort((a, b) => compareWorkboardTasks(a, b));
+}
+
+function compareWorkboardTasks(a, b) {
+  const groupA = getWorkboardDisplayGroup(a);
+  const groupB = getWorkboardDisplayGroup(b);
+  if (groupA === "completed" && groupB === "completed") return compareTaskRecentDate(a, b, "completedAt");
+  if (groupA === "cancelled" && groupB === "cancelled") return compareTaskRecentDate(a, b, "cancelledAt");
+  const weight = getWorkboardSortWeight(a) - getWorkboardSortWeight(b);
+  if (weight) return weight;
+  return compareTaskDate(a, b) || compareTaskRecentDate(a, b, "updatedAt");
+}
+
+function compareTaskRecentDate(a, b, preferredKey = "updatedAt") {
+  return Date.parse(b[preferredKey] || b.updatedAt || b.createdAt || 0) - Date.parse(a[preferredKey] || a.updatedAt || a.createdAt || 0);
+}
+
+function getWorkboardSortWeight(task) {
+  const group = getWorkboardDisplayGroup(task);
+  if (group === "todo") {
+    if (isTaskOverdue(task)) return 0;
+    if (["URGENT", "HIGH"].includes(task.priority)) return 10;
+    return 20;
+  }
+  if (group === "in_progress") {
+    if (task.status === "FOR_REVIEW") return 0;
+    if (task.status === "NEEDS_REVISION") return 10;
+    if (isTaskOverdue(task) || isTaskDueToday(task)) return 20;
+    return 30;
+  }
+  if (group === "drafts") {
+    if (task.draftApprovalRequired) return 0;
+    return 10;
+  }
+  return 50;
+}
+
 function isTaskOverdue(task, now = Date.now()) {
   const due = Date.parse(task.submissionDeadline || "");
   return Number.isFinite(due) && due < startOfToday(now) && !["DONE", "CANCELLED"].includes(task.status);
@@ -1306,7 +1345,7 @@ async function loadWorkboardTasks({ silent = false } = {}) {
   }
   try {
     const response = await getWorkboardTasks(adminAuthSession, getWorkboardApiFilters());
-    workboardTasks = sortMyTasks(response.tasks || []);
+    workboardTasks = sortWorkboardTasks(response.tasks || []);
     workboardLoadState = "ready";
     workboardLoadError = "";
     syncMyTasksTimerTick();
@@ -1319,22 +1358,13 @@ async function loadWorkboardTasks({ silent = false } = {}) {
 }
 
 function getWorkboardApiFilters() {
-  const statusMap = {
-    draft: "DRAFT",
-    to_do: "TO_DO",
-    in_progress: "IN_PROGRESS",
-    for_review: "FOR_REVIEW",
-    needs_revision: "NEEDS_REVISION",
-    done: "DONE",
-    cancelled: "CANCELLED",
-  };
   return {
-    status: statusMap[workboardFilterStatus] || "",
+    status: "",
     priority: workboardFilterPriority,
     sourceType: workboardFilterSource,
     assignedUserId: workboardFilterAssignee,
     reviewerUserId: workboardFilterReviewer,
-    archived: workboardFilterStatus === "archived" ? "true" : "false",
+    archived: "false",
     search: workboardSearch.trim(),
     pageSize: 100,
   };
@@ -1343,8 +1373,12 @@ function getWorkboardApiFilters() {
 function getVisibleWorkboardTasks() {
   const normalized = workboardSearch.trim().toLowerCase();
   return workboardTasks.filter((task) => {
-    if (workboardFilterStatus === "active" && ["DONE", "CANCELLED"].includes(task.status)) return false;
-    if (workboardFilterStatus === "overdue" && !isTaskOverdue(task)) return false;
+    if (workboardFilterStatus === "active" && ["DRAFT", "CANCELLED"].includes(task.status)) return false;
+    if (workboardFilterStatus === "draft" && task.status !== "DRAFT") return false;
+    if (workboardFilterStatus === "cancelled" && task.status !== "CANCELLED") return false;
+    if (workboardFilterDue === "overdue" && !isTaskOverdue(task)) return false;
+    if (workboardFilterDue === "today" && !isTaskDueToday(task)) return false;
+    if (workboardFilterDue === "unscheduled" && (task.submissionDeadline || task.scheduledDate)) return false;
     if (normalized) return [task.taskCode, task.title, task.sourceType, task.priority, task.status, getUserLabel(task.assignedUser), getUserLabel(task.reviewerUser)].join(" ").toLowerCase().includes(normalized);
     return true;
   });
@@ -1357,11 +1391,12 @@ function renderWorkboardPage() {
   const visibleTasks = getVisibleWorkboardTasks();
   return `<section class="mvp-page workboard-page">
     <div class="mvp-page-title">
-      <div><span>WORKBOARD</span><h1>WORKBOARD</h1><p>${visibleTasks.length} shown / ${workboardTasks.length} total</p></div>
+      <div><span>WORKBOARD</span><h1>WORKBOARD</h1><p>${escapeHtml(getWorkboardViewLabel())} / ${visibleTasks.length} shown / ${workboardTasks.length} total</p></div>
       <button class="ops-gold-button" data-workboard-create type="button">CREATE TASK</button>
     </div>
     ${renderWorkboardStateNotice()}
     ${renderWorkboardSummary()}
+    ${renderWorkboardViewControls()}
     ${renderWorkboardFilters()}
     ${workboardLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Workboard</strong><span>Checking task records.</span></div>` : ""}
     ${workboardLoadState === "ready" ? renderWorkboardTaskList(visibleTasks) : ""}
@@ -1378,29 +1413,47 @@ function renderWorkboardStateNotice() {
 }
 
 function renderWorkboardSummary() {
-  const counts = {
-    drafts: workboardTasks.filter((task) => task.status === "DRAFT").length,
-    todo: workboardTasks.filter((task) => task.status === "TO_DO").length,
-    progress: workboardTasks.filter((task) => task.status === "IN_PROGRESS").length,
-    review: workboardTasks.filter((task) => task.status === "FOR_REVIEW").length,
-    revision: workboardTasks.filter((task) => task.status === "NEEDS_REVISION").length,
-    overdue: workboardTasks.filter((task) => isTaskOverdue(task)).length,
-    done: workboardTasks.filter((task) => task.status === "DONE").length,
-  };
+  const counts = getWorkboardCounts(workboardTasks);
   return `<div class="workboard-summary">
-    ${renderMyTaskMetric("Drafts", counts.drafts, "Planning")}
-    ${renderMyTaskMetric("To Do", counts.todo, "Queued")}
-    ${renderMyTaskMetric("In Progress", counts.progress, "Running")}
-    ${renderMyTaskMetric("Waiting Review", counts.review, "Owner/Admin")}
-    ${renderMyTaskMetric("Needs Revision", counts.revision, "Returned")}
-    ${renderMyTaskMetric("Overdue", counts.overdue, "Needs attention")}
-    ${renderMyTaskMetric("Approved", counts.done, "Completed")}
+    ${renderMyTaskMetric("Active Board", counts.active, "Three columns")}
+    ${renderMyTaskMetric("To Do", counts.todo, "Ready to start")}
+    ${renderMyTaskMetric("In Progress", counts.inProgress, "Active/review/revision")}
+    ${renderMyTaskMetric("Completed", counts.completed, "Approved work")}
+    ${renderMyTaskMetric("Drafts", counts.drafts, "Planning queue")}
+    ${renderMyTaskMetric("Cancelled", counts.cancelled, "Archive")}
   </div>`;
+}
+
+function getWorkboardCounts(tasks) {
+  return {
+    active: tasks.filter((task) => !["DRAFT", "CANCELLED"].includes(task.status)).length,
+    todo: tasks.filter((task) => task.status === "TO_DO").length,
+    inProgress: tasks.filter((task) => ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"].includes(task.status)).length,
+    completed: tasks.filter((task) => task.status === "DONE").length,
+    drafts: tasks.filter((task) => task.status === "DRAFT").length,
+    cancelled: tasks.filter((task) => task.status === "CANCELLED").length,
+  };
+}
+
+function renderWorkboardViewControls() {
+  const counts = getWorkboardCounts(workboardTasks);
+  const controls = [
+    ["active", "ACTIVE BOARD", counts.active],
+    ["draft", "DRAFTS", counts.drafts],
+    ["cancelled", "CANCELLED", counts.cancelled],
+  ];
+  return `<nav class="workboard-view-controls" aria-label="Workboard views">${controls.map(([value, label, count]) => `<button class="${workboardFilterStatus === value ? "active" : ""}" data-workboard-view="${escapeHtml(value)}" type="button"><span>${escapeHtml(label)}</span><b>${escapeHtml(count)}</b></button>`).join("")}</nav>`;
+}
+
+function getWorkboardViewLabel() {
+  if (workboardFilterStatus === "draft") return "Draft planning queue";
+  if (workboardFilterStatus === "cancelled") return "Cancelled archive";
+  return "Active board";
 }
 
 function renderWorkboardFilters() {
   return `<div class="workboard-filters">
-    ${renderWorkboardSelect("workboard-status-filter", workboardFilterStatus, [["active", "Active"], ["draft", "Draft"], ["to_do", "To Do"], ["in_progress", "In Progress"], ["for_review", "For Review"], ["needs_revision", "Needs Revision"], ["overdue", "Overdue"], ["done", "Done"], ["cancelled", "Cancelled"], ["archived", "Archived"]])}
+    ${renderWorkboardSelect("workboard-due-filter", workboardFilterDue, [["", "All due states"], ["overdue", "Overdue"], ["today", "Due today"], ["unscheduled", "No date"]])}
     ${renderWorkboardSelect("workboard-priority-filter", workboardFilterPriority, [["", "All priorities"], ["URGENT", "Urgent"], ["HIGH", "High"], ["MEDIUM", "Medium"], ["LOW", "Low"]])}
     ${renderWorkboardSelect("workboard-source-filter", workboardFilterSource, [["", "All sources"], ["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]])}
     ${renderWorkboardUserSelect("workboard-assignee-filter", workboardFilterAssignee, "All assignees")}
@@ -1409,7 +1462,6 @@ function renderWorkboardFilters() {
     <button data-workboard-clear type="button">CLEAR</button>
   </div>`;
 }
-
 function renderWorkboardSelect(id, value, options) {
   return `<select id="${escapeHtml(id)}">${options.map(([optionValue, label]) => `<option value="${escapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`;
 }
@@ -1420,29 +1472,59 @@ function renderWorkboardUserSelect(id, value, label) {
 }
 
 function renderWorkboardTaskList(tasks) {
-  if (!tasks.length) return `<div class="my-tasks-empty"><strong>${workboardTasks.length ? "No tasks match your filters" : "No task records yet"}</strong><span>${workboardTasks.length ? "Try another status or search term." : "Create a manual task draft when planning is ready."}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
+  if (!tasks.length && workboardFilterStatus !== "active") {
+    const emptyText = workboardFilterStatus === "draft" ? "No drafts waiting in planning." : workboardFilterStatus === "cancelled" ? "No cancelled tasks." : workboardTasks.length ? "No tasks match your filters." : "No task records yet.";
+    const emptyHint = workboardTasks.length ? "Try another filter or search term." : "Create a manual task draft when planning is ready.";
+    return `<div class="my-tasks-empty"><strong>${escapeHtml(emptyText)}</strong><span>${escapeHtml(emptyHint)}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
+  }
   const groups = getWorkboardStatusGroups(tasks);
-  return `<section class="workboard-board" aria-label="Workboard task groups">${groups.map(renderWorkboardGroup).join("")}</section>`;
+  return `<section class="workboard-board ${workboardFilterStatus !== "active" ? "supporting" : ""}" aria-label="Workboard task groups">${groups.map(renderWorkboardGroup).join("")}</section>`;
 }
 
 function getWorkboardStatusGroups(tasks) {
-  const definitions = [
-    ["DRAFT", "Draft", "No draft tasks."],
-    ["FOR_REVIEW", "Waiting for Review", "Nothing waiting for review."],
-    ["NEEDS_REVISION", "Needs Revision", "No tasks need revision."],
-    ["TO_DO", "To Do", "No queued tasks."],
-    ["IN_PROGRESS", "In Progress", "No tasks in progress."],
-    ["DONE", "Approved", "No approved tasks."],
-    ["CANCELLED", "Cancelled", "No cancelled tasks."],
-  ];
-  const important = new Set(["DRAFT", "FOR_REVIEW", "NEEDS_REVISION"]);
-  return definitions
-    .map(([status, label, emptyText]) => ({ status, label, emptyText, tasks: tasks.filter((task) => task.status === status) }))
-    .filter((group) => group.tasks.length || important.has(group.status) || (workboardFilterStatus !== "active" && tasks.some((task) => task.status === group.status)));
+  const definitions = workboardFilterStatus === "draft"
+    ? [{ key: "drafts", label: "DRAFT PLANNING QUEUE", emptyText: "No drafts waiting in planning.", statuses: ["DRAFT"] }]
+    : workboardFilterStatus === "cancelled"
+      ? [{ key: "cancelled", label: "CANCELLED ARCHIVE", emptyText: "No cancelled tasks.", statuses: ["CANCELLED"] }]
+      : [
+          { key: "todo", label: "TO DO", emptyText: "No tasks ready to start.", statuses: ["TO_DO"] },
+          { key: "in_progress", label: "IN PROGRESS", emptyText: "No active work.", statuses: ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"] },
+          { key: "completed", label: "COMPLETED", emptyText: "No completed tasks yet.", statuses: ["DONE"] },
+        ];
+  return definitions.map((definition) => {
+    const groupTasks = tasks.filter((task) => definition.statuses.includes(task.status)).sort((a, b) => compareWorkboardTasks(a, b));
+    return { ...definition, tasks: groupTasks };
+  });
+}
+
+function getWorkboardDisplayGroup(task) {
+  if (task.status === "DRAFT") return "drafts";
+  if (task.status === "CANCELLED") return "cancelled";
+  if (task.status === "TO_DO") return "todo";
+  if (["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"].includes(task.status)) return "in_progress";
+  if (task.status === "DONE") return "completed";
+  return "todo";
+}
+
+function getWorkboardDisplayStatus(task) {
+  if (task.status === "FOR_REVIEW") return { key: "waiting-review", label: "WAITING FOR REVIEW" };
+  if (task.status === "NEEDS_REVISION") return { key: "needs-revision", label: "NEEDS REVISION" };
+  if (task.status === "IN_PROGRESS") return { key: "in-progress", label: "IN PROGRESS" };
+  if (task.status === "DONE") return { key: "completed", label: "COMPLETED" };
+  if (task.status === "DRAFT") return { key: "draft", label: "DRAFT" };
+  if (task.status === "CANCELLED") return { key: "cancelled", label: "CANCELLED" };
+  return { key: "to-do", label: "TO DO" };
+}
+
+function renderWorkboardDisplayStatus(task) {
+  const state = getWorkboardDisplayStatus(task);
+  return `<span class="workboard-task-state workboard-task-state--${escapeHtml(state.key)}" data-workboard-task-state="${escapeHtml(state.key)}">${escapeHtml(state.label)}</span>`;
 }
 
 function renderWorkboardGroup(group) {
-  return `<section class="workboard-group ${statusToClass(group.status)}"><header><div><strong>${escapeHtml(group.label)}</strong><span>${group.tasks.length}</span></div></header><div class="workboard-group-list">${group.tasks.length ? group.tasks.map(renderWorkboardCard).join("") : `<p class="workboard-empty">${escapeHtml(group.emptyText)}</p>`}</div></section>`;
+  const visibleCards = group.key === "completed" ? group.tasks.slice(0, 8) : group.tasks;
+  const more = group.key === "completed" && group.tasks.length > visibleCards.length ? `<p class="workboard-more">${escapeHtml(group.tasks.length - visibleCards.length)} older completed tasks hidden. Count includes all completed work.</p>` : "";
+  return `<section class="workboard-group ${escapeHtml(group.key.replace(/_/g, "-"))}" data-workboard-column="${escapeHtml(group.key)}"><header><div><strong>${escapeHtml(group.label)}</strong><span>${group.tasks.length}</span></div></header><div class="workboard-group-list">${visibleCards.length ? visibleCards.map(renderWorkboardCard).join("") + more : `<p class="workboard-empty">${escapeHtml(group.emptyText)}</p>`}</div></section>`;
 }
 function renderWorkboardRow(task) {
   const latest = getWorkboardPrimaryAction(task);
@@ -1450,7 +1532,7 @@ function renderWorkboardRow(task) {
     <td><button class="workboard-task-link" data-workboard-open="${escapeHtml(task.id)}" type="button"><span>${escapeHtml(task.taskCode || "TASK")}</span><strong>${escapeHtml(task.title || "Untitled task")}</strong></button></td>
     <td>${escapeHtml(formatSourceType(task.sourceType))}</td>
     <td>${renderTaskPriority(task.priority)}</td>
-    <td>${renderTaskStatus(task.status)}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</td>
+    <td>${renderWorkboardDisplayStatus(task)}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</td>
     <td>${escapeHtml(getUserLabel(task.assignedUser))}</td>
     <td>${escapeHtml(getUserLabel(task.reviewerUser))}</td>
     <td>${escapeHtml(formatTaskDue(task))}</td>
@@ -1460,15 +1542,30 @@ function renderWorkboardRow(task) {
 }
 
 function renderWorkboardCard(task) {
-  const objective = String(task.brief || formatSourceType(task.sourceType) || "No brief provided.").trim();
-  const dueLabel = formatTaskDue(task);
-  return `<button class="workboard-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""} ${statusToClass(task.status)}" data-workboard-open="${escapeHtml(task.id)}" type="button">
-    <span class="workboard-card-top"><code>${escapeHtml(task.taskCode || "TASK")}</code>${renderTaskStatus(task.status)}</span>
+  const displayStatus = getWorkboardDisplayStatus(task);
+  const source = formatWorkboardCardSource(task);
+  const attention = getWorkboardAttentionMessage(task);
+  return `<button class="workboard-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""} ${escapeHtml(displayStatus.key)}" data-workboard-open="${escapeHtml(task.id)}" type="button">
+    ${renderWorkboardDisplayStatus(task)}
     <strong>${escapeHtml(task.title || "Untitled task")}</strong>
-    <small>${escapeHtml(objective)}</small>
-    <span class="workboard-card-meta">${renderTaskPriority(task.priority)}<b>${escapeHtml(getUserLabel(task.assignedUser))}</b></span>
-    <span class="workboard-card-footer"><em>${escapeHtml(dueLabel)}</em><i>${escapeHtml(getWorkboardPrimaryAction(task) || "OPEN")}</i></span>
+    <span class="workboard-card-reference"><code>${escapeHtml(task.taskCode || "TASK")}</code>${source ? `<em>${escapeHtml(source)}</em>` : ""}</span>
+    <span class="workboard-card-meta"><b>${escapeHtml(getUserLabel(task.assignedUser))}</b>${renderTaskPriority(task.priority)}</span>
+    <span class="workboard-card-date">${escapeHtml(formatTaskDue(task))}${task.openTimeEntry ? ` / ${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}` : ""}</span>
+    ${attention ? `<span class="workboard-card-attention">${escapeHtml(attention)}</span>` : ""}
   </button>`;
+}
+
+function formatWorkboardCardSource(task) {
+  if (task.sourceRecordType && task.sourceRecordId) return `${formatSourceType(task.sourceType)} / ${task.sourceRecordType}:${task.sourceRecordId}`;
+  if (task.sourceType && task.sourceType !== "MANUAL") return formatSourceType(task.sourceType);
+  return "";
+}
+
+function getWorkboardAttentionMessage(task) {
+  if (task.status === "FOR_REVIEW") return `Reviewer attention: ${getUserLabel(task.reviewerUser)}`;
+  if (task.status === "NEEDS_REVISION") return "Revision requested. Open drawer for latest review note.";
+  if (isTaskOverdue(task)) return "Deadline needs attention.";
+  return "";
 }
 function getWorkboardPrimaryAction(task) {
   const actions = task.allowedActions || [];
@@ -1673,7 +1770,7 @@ async function openWorkboardTask(taskId) {
   try {
     selectedTaskDetail = await getTaskDetail(taskId, adminAuthSession);
     taskDetailLoadState = "ready";
-    workboardTasks = sortMyTasks(workboardTasks.map((item) => item.id === selectedTaskDetail.task.id ? selectedTaskDetail.task : item));
+    workboardTasks = sortWorkboardTasks(workboardTasks.map((item) => item.id === selectedTaskDetail.task.id ? selectedTaskDetail.task : item));
     syncMyTasksTimerTick();
   } catch (error) {
     taskDetailLoadState = "error";
@@ -2109,7 +2206,7 @@ function applyTaskCommandResponse(response) {
     history: response.history || selectedTaskDetail?.history || [],
   };
   myTasks = sortMyTasks(upsertTaskRecord(myTasks, response.task));
-  workboardTasks = sortMyTasks(upsertTaskRecord(workboardTasks, response.task));
+  workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, response.task));
   taskFallbackOpen = false;
   taskSubmissionNote = "";
   taskProofUrl = "";
@@ -2127,7 +2224,7 @@ async function refreshTaskAfterConflict(taskId) {
     const detail = await getTaskDetail(taskId, adminAuthSession);
     selectedTaskDetail = detail;
     myTasks = sortMyTasks(upsertTaskRecord(myTasks, detail.task));
-    workboardTasks = sortMyTasks(upsertTaskRecord(workboardTasks, detail.task));
+    workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, detail.task));
   } catch {
     await loadMyTasks({ silent: true });
   }
@@ -5729,14 +5826,15 @@ function bindWorkboardEvents() {
   document.querySelectorAll("[data-workboard-open]").forEach((button) => button.addEventListener("click", () => openWorkboardTask(button.dataset.workboardOpen)));
   document.querySelectorAll("[data-workboard-close]").forEach((button) => button.addEventListener("click", closeWorkboardDrawer));
   document.querySelectorAll("[data-workboard-edit-draft]").forEach((button) => button.addEventListener("click", () => openWorkboardEditDraft(button.dataset.workboardEditDraft)));
+  document.querySelectorAll("[data-workboard-view]").forEach((button) => button.addEventListener("click", () => { workboardFilterStatus = button.dataset.workboardView; loadWorkboardTasks(); }));
 
-  const status = document.getElementById("workboard-status-filter");
+  const due = document.getElementById("workboard-due-filter");
   const priority = document.getElementById("workboard-priority-filter");
   const source = document.getElementById("workboard-source-filter");
   const assignee = document.getElementById("workboard-assignee-filter");
   const reviewer = document.getElementById("workboard-reviewer-filter");
   const search = document.getElementById("workboard-search");
-  status?.addEventListener("change", (event) => { workboardFilterStatus = event.target.value; loadWorkboardTasks(); });
+  due?.addEventListener("change", (event) => { workboardFilterDue = event.target.value; render(); });
   priority?.addEventListener("change", (event) => { workboardFilterPriority = event.target.value; loadWorkboardTasks(); });
   source?.addEventListener("change", (event) => { workboardFilterSource = event.target.value; loadWorkboardTasks(); });
   assignee?.addEventListener("change", (event) => { workboardFilterAssignee = event.target.value; loadWorkboardTasks(); });
@@ -5748,6 +5846,7 @@ function bindWorkboardEvents() {
   });
   document.querySelectorAll("[data-workboard-clear]").forEach((button) => button.addEventListener("click", () => {
     workboardFilterStatus = "active";
+    workboardFilterDue = "";
     workboardFilterPriority = "";
     workboardFilterSource = "";
     workboardFilterAssignee = "";

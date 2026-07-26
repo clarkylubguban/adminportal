@@ -25948,3 +25948,271 @@ textarea,
     max-width: 100%;
   }
 }
+
+/* Phase 3 - simplified three-column Workboard Kanban. */
+.workboard-summary {
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.workboard-summary article:nth-child(4),
+.workboard-summary article:nth-child(5),
+.workboard-summary article:nth-child(6),
+.workboard-summary article:last-child {
+  box-shadow: inset 3px 0 0 transparent;
+}
+
+.workboard-summary article:nth-child(3) {
+  box-shadow: inset 3px 0 0 #98c7ff;
+}
+
+.workboard-summary article:nth-child(4) {
+  box-shadow: inset 3px 0 0 #b7eb18;
+}
+
+.workboard-view-controls {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.workboard-view-controls button {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #dfe3ea;
+  border-radius: 6px;
+  box-shadow: none;
+  color: #111827;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 8px;
+  min-height: 38px;
+  padding: 0 11px;
+}
+
+.workboard-view-controls button.active {
+  background: #111827;
+  border-color: #111827;
+  color: #ffffff;
+}
+
+.workboard-view-controls span,
+.workboard-view-controls b {
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  line-height: 1;
+}
+
+.workboard-view-controls b {
+  align-items: center;
+  background: rgba(221, 255, 79, 0.25);
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-flex;
+  justify-content: center;
+  min-height: 22px;
+  min-width: 26px;
+  padding: 0 7px;
+}
+
+.workboard-board {
+  grid-template-columns: repeat(3, minmax(260px, 1fr));
+}
+
+.workboard-board.supporting {
+  grid-template-columns: minmax(0, 760px);
+  overflow: visible;
+}
+
+.workboard-group.todo header {
+  box-shadow: inset 3px 0 0 #8aa4bf;
+}
+
+.workboard-group.in-progress header {
+  box-shadow: inset 3px 0 0 #78a8ff;
+}
+
+.workboard-group.completed header {
+  box-shadow: inset 3px 0 0 #b7eb18;
+}
+
+.workboard-group.drafts header {
+  box-shadow: inset 3px 0 0 #9ca3af;
+}
+
+.workboard-group.cancelled header {
+  box-shadow: inset 3px 0 0 #a4a7ad;
+}
+
+.workboard-task-card {
+  box-shadow: none;
+  gap: 7px;
+  min-height: 132px;
+  padding: 10px;
+}
+
+.workboard-task-card.waiting-review {
+  border-color: #f0b45c;
+}
+
+.workboard-task-card.needs-revision,
+.workboard-task-card.overdue {
+  border-color: #e34f6f;
+}
+
+.workboard-task-card.completed {
+  border-color: #9ad414;
+}
+
+.workboard-task-state {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 900;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1;
+  min-height: 23px;
+  padding: 0 8px;
+  text-transform: uppercase;
+  width: max-content;
+}
+
+.workboard-task-state--to-do {
+  background: #eef5fb;
+  color: #3f5874;
+}
+
+.workboard-task-state--in-progress {
+  background: #eaf2ff;
+  color: #17427f;
+}
+
+.workboard-task-state--waiting-review {
+  background: #fff1df;
+  color: #8a4b00;
+}
+
+.workboard-task-state--needs-revision {
+  background: #fee8ef;
+  color: #9f1239;
+}
+
+.workboard-task-state--completed {
+  background: #efffd0;
+  color: #173f12;
+}
+
+.workboard-task-state--draft {
+  background: #f3f4f6;
+  color: #374151;
+}
+
+.workboard-task-state--cancelled {
+  background: #f2f3f5;
+  color: #5b616b;
+}
+
+.workboard-card-reference,
+.workboard-card-date,
+.workboard-card-attention {
+  color: #4b5563;
+  display: flex;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-weight: 800;
+  gap: 6px;
+  line-height: 1.3;
+  min-width: 0;
+}
+
+.workboard-card-reference code {
+  color: #111827;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.workboard-card-reference em,
+.workboard-card-date {
+  font-style: normal;
+}
+
+.workboard-card-meta {
+  justify-content: flex-start;
+}
+
+.workboard-card-meta b {
+  flex: 1 1 auto;
+}
+
+.workboard-card-attention {
+  background: #fffaf0;
+  border: 1px solid #f4d7a1;
+  border-radius: 6px;
+  color: #7a3d00;
+  padding: 7px;
+}
+
+.workboard-task-card.needs-revision .workboard-card-attention,
+.workboard-task-card.overdue .workboard-card-attention {
+  background: #fff5f7;
+  border-color: #f5bccb;
+  color: #9f1239;
+}
+
+.workboard-more {
+  color: #6b7280;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.35;
+  margin: 0;
+  padding: 4px 2px 0;
+}
+
+@media (max-width: 1120px) {
+  .workboard-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .workboard-board {
+    grid-template-columns: repeat(3, minmax(240px, 1fr));
+    overflow-x: auto;
+  }
+}
+
+@media (max-width: 760px) {
+  .workboard-summary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workboard-view-controls {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .workboard-view-controls button {
+    justify-content: center;
+    padding: 0 6px;
+  }
+
+  .workboard-board,
+  .workboard-board.supporting {
+    grid-template-columns: 1fr;
+    overflow: visible;
+  }
+}
+
+@media (max-width: 430px) {
+  .workboard-view-controls {
+    grid-template-columns: 1fr;
+  }
+
+  .workboard-task-state,
+  .workboard-task-card .my-task-priority,
+  .workboard-drawer .my-task-priority {
+    font-size: 9px;
+  }
+}
