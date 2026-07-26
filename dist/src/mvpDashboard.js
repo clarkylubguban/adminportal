@@ -5,6 +5,14 @@ const QUOTE_STAGES = {
   lost: "LOST",
 };
 
+const QUOTE_DISPLAY_STATUSES = {
+  needs_quote: "NEEDS QUOTE",
+  quote_sent: "QUOTE SENT",
+  follow_up: "FOLLOW-UP",
+  approved: "APPROVED",
+  lost: "LOST",
+};
+
 const INQUIRY_QUEUES = [
   ["all", "NEW"],
   ["new", "NEEDS QUOTE"],
@@ -47,6 +55,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (status === "won" || quote === "approved") return "approved";
     if (item.quotePublishedAt || status === "sent" || status === "followup" || quote === "ready") return "sent";
     return "new";
+  };
+
+  const resolveQuoteDisplayStatus = (item) => {
+    const workflowStage = quoteStage(item);
+    if (workflowStage === "lost") return "lost";
+    if (workflowStage === "approved") return "approved";
+    if (workflowStage === "sent" && String(item.followUpDate || "").trim()) return "follow_up";
+    if (workflowStage === "sent") return "quote_sent";
+    return "needs_quote";
   };
 
   const artworkLabel = (item) => {
@@ -300,20 +317,17 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function inquiryTable(items) {
     const headers = ["Code", "Customer", "Inquiry", "Service", "Quantity", "Quote Status", "Follow-up", "Owner"];
-    const desktopRows = items.map((item) => {
-      const stage = quoteStage(item);
-      return row("inquiry", item.id, [
-        copyButton(item.id, item.id, "inquiry code"),
-        customerCell(item),
-        inquirySummaryCell(item),
-        cell(serviceDisplay(item)),
-        cell(item.qty || displayDash()),
-        status(quoteListStatusLabel(stage), stage),
-        followUpCell(item),
-        cell(owner(item)),
-      ]);
-    });
-    const mobileCards = items.map((item) => inquiryMobileCard(item, quoteStage(item))).join("");
+    const desktopRows = items.map((item) => row("inquiry", item.id, [
+      copyButton(item.id, item.id, "inquiry code"),
+      customerCell(item),
+      inquirySummaryCell(item),
+      cell(serviceDisplay(item)),
+      cell(item.qty || displayDash()),
+      quoteStatusBadge(item),
+      followUpCell(item),
+      cell(owner(item)),
+    ]));
+    const mobileCards = items.map((item) => inquiryMobileCard(item)).join("");
     return `${table("inquiry", headers, desktopRows, "No inquiries found.")}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("No inquiries found.")}</section>`;
   }
 
@@ -335,7 +349,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function inquiryLockedHeader(item, stage) {
     const company = String(item.company || "").trim();
-    return `<div class="mvp-inquiry-locked-header"><span class="mvp-inquiry-status-pill ${stage}">${html(QUOTE_STAGES[stage])}</span><div class="mvp-inquiry-customer-row"><h2>${html(item.customer || "Unnamed customer")}</h2>${company ? `<small>${html(company)}</small>` : ""}</div><div class="mvp-inquiry-number-row"><span>Inquiry Reference</span>${copyButton(item.id, item.id, "inquiry number")}</div><div class="mvp-inquiry-meta">${contactActionButton(item)}</div></div>`;
+    return `<div class="mvp-inquiry-locked-header">${quoteStatusBadge(item)}<div class="mvp-inquiry-customer-row"><h2>${html(item.customer || "Unnamed customer")}</h2>${company ? `<small>${html(company)}</small>` : ""}</div><div class="mvp-inquiry-number-row"><span>Inquiry Reference</span>${copyButton(item.id, item.id, "inquiry number")}</div><div class="mvp-inquiry-meta">${contactActionButton(item)}</div></div>`;
   }
 
   function inquirySummaryCards(item, stage) {
@@ -1137,11 +1151,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function priority(item, reason, when, route, tone) { return { code: item.id, customer: item.customer || "Unnamed", reason, when, route, tone }; }
   function priorityRow(item) { return `<button type="button" data-mvp-route="${html(item.route)}"><code>${html(item.code)}</code><strong>${html(item.customer)}</strong><span>${html(item.reason)}</span><b class="${item.tone}">${html(item.when)}</b><i>View</i></button>`; }
   function countBy(keys, items, getter) { return Object.fromEntries(keys.map((value) => [value, items.filter((item) => getter(item) === value).length])); }
-  function inquiryMobileCard(item, stage) {
+  function inquiryMobileCard(item) {
     const qty = item.qty ? `Qty ${item.qty}` : "";
     const ownerText = owner(item);
     const follow = followUpLabel(item);
-    return `<article class="mvp-inquiry-mobile-card" data-mvp-open="inquiry" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-inquiry-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(item.id)}</small></div>${status(quoteListStatusLabel(stage), stage)}</div><div class="mvp-inquiry-mobile-request"><strong>${html(itemDisplay(item))}</strong><span>${html([serviceDisplay(item), qty].filter(Boolean).join(" / "))}</span></div><div class="mvp-inquiry-mobile-meta"><span>${html(follow === displayDash() ? ownerText : `Follow-up: ${follow}`)}</span><b class="mvp-mobile-open">OPEN</b></div></article>`;
+    return `<article class="mvp-inquiry-mobile-card" data-mvp-open="inquiry" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-inquiry-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(item.id)}</small></div>${quoteStatusBadge(item)}</div><div class="mvp-inquiry-mobile-request"><strong>${html(itemDisplay(item))}</strong><span>${html([serviceDisplay(item), qty].filter(Boolean).join(" / "))}</span></div><div class="mvp-inquiry-mobile-meta"><span>${html(follow === displayDash() ? ownerText : `Follow-up: ${follow}`)}</span><b class="mvp-mobile-open">OPEN</b></div></article>`;
   }
 
   function customerCell(item) {
@@ -1160,9 +1174,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return inquiries.filter((item) => quoteStage(item) === value).length;
   }
 
-  function quoteListStatusLabel(stage) {
-    if (stage === "new") return "NEEDS QUOTE";
-    return QUOTE_STAGES[stage] || "NEW";
+  function quoteStatusBadge(item) {
+    const statusKey = resolveQuoteDisplayStatus(item);
+    const label = QUOTE_DISPLAY_STATUSES[statusKey] || QUOTE_DISPLAY_STATUSES.needs_quote;
+    const className = `quote-status-badge quote-status-badge--${statusKey.replace(/_/g, "-")}`;
+    return `<span class="${className}" data-quote-status="${html(statusKey)}" title="Quote status: ${html(label)}">${html(label)}</span>`;
   }
 
   function itemDisplay(item) {

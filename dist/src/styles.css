@@ -25866,3 +25866,85 @@ textarea,
     padding-bottom: 168px !important;
   }
 }
+
+/* Phase 2 - reusable inquiry quote-status badges. */
+.quote-status-badge {
+  align-items: center;
+  border: 1px solid currentColor;
+  border-radius: var(--trry-radius-sm, 4px);
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-family: var(--trry-font-ui);
+  font-size: 10px;
+  font-weight: 800;
+  justify-content: center;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  min-height: 24px;
+  min-width: 92px;
+  padding: 0 9px;
+  text-align: center;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.quote-status-badge--needs-quote {
+  background: #eaf2ff;
+  border-color: #8bb7f0;
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.05);
+  color: #17427f;
+}
+
+.quote-status-badge--quote-sent {
+  background: #fff1df;
+  border-color: #f2a65a;
+  box-shadow: 0 0 0 2px rgba(194, 95, 0, 0.05);
+  color: #7a3d00;
+}
+
+.quote-status-badge--follow-up {
+  background: #fff7d6;
+  border-color: #e1b13a;
+  box-shadow: 0 0 0 2px rgba(168, 106, 0, 0.06);
+  color: #704c00;
+}
+
+.quote-status-badge--approved {
+  background: #efffd0;
+  border-color: #6da51d;
+  box-shadow: 0 0 0 2px rgba(109, 165, 29, 0.07);
+  color: #173f12;
+}
+
+.quote-status-badge--lost {
+  background: #fee8ef;
+  border-color: #d92d54;
+  box-shadow: 0 0 0 2px rgba(217, 45, 84, 0.06);
+  color: #8f1232;
+}
+
+.mvp-table .quote-status-badge,
+.mvp-inquiry-mobile-card .quote-status-badge {
+  justify-self: start;
+}
+
+.mvp-inquiry-mobile-header .quote-status-badge {
+  justify-self: end;
+}
+
+.mvp-drawer.inquiry.locked .mvp-inquiry-locked-header > .quote-status-badge {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+@media (max-width: 430px) {
+  .quote-status-badge {
+    font-size: 9px;
+    min-width: 84px;
+    padding: 0 7px;
+  }
+
+  .mvp-inquiry-mobile-header .quote-status-badge {
+    max-width: 100%;
+  }
+}
