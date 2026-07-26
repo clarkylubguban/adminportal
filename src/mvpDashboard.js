@@ -181,45 +181,260 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return text ? text.charAt(0).toUpperCase() + text.slice(1) : "Staff";
   }
 
-  function renderOverview({ items, notices = "" }) {
+  function renderOverview({ items, tasks = [], taskLoadState = "idle", taskError = "", taskRoute = "/workboard", notices = "" }) {
     const rows = Array.isArray(items) ? items : [];
+    const taskRows = Array.isArray(tasks) ? tasks : [];
     const inquiries = rows.filter((item) => !confirmed(item));
     const orders = rows.filter(confirmed);
     const pipeline = countBy(Object.keys(QUOTE_STAGES), inquiries, quoteStage);
     const productionJobs = orders.filter(isReleasedToProduction);
     const production = countBy(PRODUCTION_STAGES.map(([value]) => value), productionJobs, productionStage);
     const inProgress = ACTIVE_STAGES.reduce((sum, value) => sum + production[value], 0);
-    const followUpsDue = inquiries.filter(isFollowUpDue).length;
-    const awaitingPayment = orders.filter((item) => ["Payment Required", "Pay at Shop", "Correction Required"].includes(paymentLabel(item))).length;
-    const paymentProofs = orders.filter((item) => paymentLabel(item) === "For Verification").length;
-    const blockedOrders = orders.filter((item) => blockedReason(item)).length;
-    const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
-    const priorities = buildPriorities(orders, inquiries);
-    const bottlenecks = buildBottlenecks({ inquiries, orders, productionJobs, pipeline });
+    const monthlySeries = buildMonthlyInquirySeries(rows, 12);
+    const recentInquiries = getRecentInquiries(rows, 6);
+    const priorities = buildOverviewPriorities({ inquiries, tasks: taskRows, taskLoadState, taskError, taskRoute });
+    const alerts = buildOperationalAlerts({ inquiries, orders, productionJobs, pipeline });
 
-    return `<main class="mvp-page ops-board-page mvp-overview-page">
-      ${pageTitle("Overview", "OVERVIEW", new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }))}
+    return `<main class="mvp-page ops-board-page mvp-overview-page overview-dashboard-page">
+      ${pageTitle("Overview", "OVERVIEW", new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}
       ${notices}
-      ${metricSection("Operational Summary", [
-        metric("Needs Quote", pipeline.new, "/inquiries?stage=new", "Inquiries", pipeline.new ? "warning" : ""),
-        metric("Follow-up Due", followUpsDue, "/inquiries?stage=follow_due", "Inquiries", followUpsDue ? "warning" : ""),
-        metric("Confirmed Orders", orders.length, "/orders", "Orders"),
-        metric("Awaiting Payment", awaitingPayment, "/orders?payment=awaiting", "Orders", awaitingPayment ? "warning" : ""),
-        metric("Payment Review", paymentProofs, "/orders", "Orders", paymentProofs ? "warning" : ""),
-        metric("Blocked Release", blockedOrders, "/orders", "Orders", blockedOrders ? "danger" : ""),
-        metric("Released Jobs", productionJobs.length, "/production", "Production"),
-        metric("Overdue Jobs", overdueProduction, "/production?due=overdue", "Production", overdueProduction ? "danger" : ""),
-      ], "attention")}
-      <section class="mvp-overview-grid phase3">
-        <div class="mvp-section mvp-priority-section"><div class="mvp-section-title"><h2>Attention Needed</h2><span>${priorities.length}</span></div><div class="mvp-priority-list">${priorities.length ? priorities.map(priorityRow).join("") : empty("No urgent items.")}</div></div>
-        <div class="mvp-side-stack">
-          ${bottleneckSection(bottlenecks)}
-          ${moduleEntrySection({ inquiries: inquiries.length, orders: orders.length, productionJobs: productionJobs.length, inProgress })}
-        </div>
+      ${renderOverviewCoreSummary({ rows, inquiries, orders, pipeline, productionJobs, inProgress })}
+      <section class="overview-main-grid">
+        ${renderMonthlyInquiryPanel(monthlySeries)}
+        ${renderMonthlyComparisonPanel(monthlySeries)}
       </section>
+      <section class="overview-secondary-grid">
+        ${renderRecentInquiries(recentInquiries)}
+        ${renderOverviewPriorities(priorities, taskLoadState, taskError)}
+      </section>
+      ${renderOperationalAlerts(alerts)}
+      ${moduleEntrySection({ inquiries: inquiries.length, orders: orders.length, productionJobs: productionJobs.length, inProgress })}
     </main>`;
   }
 
+  function renderOverviewCoreSummary({ rows, inquiries, orders, pipeline, productionJobs, inProgress }) {
+    const currentMonthCount = countInquiriesThisMonth(rows);
+    const followUpsDue = inquiries.filter(isFollowUpDue).length;
+    const activeOrders = orders.filter((item) => !isOrderClosed(item)).length;
+    const cards = [
+      overviewSummaryCard("INQUIRIES THIS MONTH", currentMonthCount, "Created this calendar month", "/inquiries"),
+      overviewSummaryCard("NEEDS QUOTE", pipeline.new || 0, "Matches the Needs Quote queue", "/inquiries?stage=new", pipeline.new ? "warning" : ""),
+      overviewSummaryCard("FOLLOW-UP DUE", followUpsDue, "Due today or overdue", "/inquiries?stage=follow_due", followUpsDue ? "warning" : ""),
+      overviewSummaryCard("ACTIVE ORDERS", activeOrders, "Confirmed and still open", "/orders"),
+      overviewSummaryCard("IN PRODUCTION", inProgress, `${productionJobs.length} released job${productionJobs.length === 1 ? "" : "s"}`, "/production"),
+    ];
+    return `<section class="overview-core-summary" aria-labelledby="overview-core-summary-title"><div class="mvp-section-title"><h2 id="overview-core-summary-title">Core Summary</h2></div><div class="overview-summary-cards">${cards.join("")}</div></section>`;
+  }
+
+  function overviewSummaryCard(label, value, detail, route, tone = "") {
+    const routeAttr = route ? ` data-mvp-route="${html(route)}"` : "";
+    return `<button class="overview-summary-card ${html(tone)}" type="button"${routeAttr}><span>${html(label)}</span><strong>${html(value)}</strong><small>${html(detail)}</small></button>`;
+  }
+
+  function countInquiriesThisMonth(items) {
+    const now = new Date();
+    const keyValue = monthKey(now.getFullYear(), now.getMonth() + 1);
+    return items.filter((item) => getInquiryCreatedMonthKey(item) === keyValue).length;
+  }
+
+  function buildMonthlyInquirySeries(items, monthCount = 12, now = new Date()) {
+    const safeCount = Math.max(1, Number(monthCount) || 12);
+    const current = new Date(now.getFullYear(), now.getMonth(), 1);
+    const months = Array.from({ length: safeCount }, (_, index) => {
+      const date = new Date(current.getFullYear(), current.getMonth() - (safeCount - 1 - index), 1);
+      const keyValue = monthKey(date.getFullYear(), date.getMonth() + 1);
+      return {
+        key: keyValue,
+        label: date.toLocaleDateString("en-US", { month: "short", year: "numeric" }),
+        shortLabel: date.toLocaleDateString("en-US", { month: "short" }),
+        count: 0,
+        current: index === safeCount - 1,
+      };
+    });
+    const visible = new Map(months.map((month) => [month.key, month]));
+    let validTimestampCount = 0;
+    for (const item of items) {
+      const keyValue = getInquiryCreatedMonthKey(item);
+      if (!keyValue) continue;
+      validTimestampCount += 1;
+      const bucket = visible.get(keyValue);
+      if (bucket) bucket.count += 1;
+    }
+    return { months, validTimestampCount, visibleTotal: months.reduce((sum, month) => sum + month.count, 0) };
+  }
+
+  function getInquiryCreatedMonthKey(item) {
+    const parsed = getInquiryCreatedDate(item);
+    return parsed ? monthKey(parsed.year, parsed.month) : "";
+  }
+
+  function getInquiryCreatedDate(item) {
+    const raw = String(item?.createdAt || item?.created_at || "").trim();
+    if (!raw) return null;
+    const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (!match) return null;
+    const year = Number(match[1]);
+    const month = Number(match[2]);
+    const day = Number(match[3]);
+    if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day) || month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const date = new Date(year, month - 1, day);
+    if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+    return { year, month, day, date };
+  }
+
+  function monthKey(year, month) {
+    return `${year}-${String(month).padStart(2, "0")}`;
+  }
+
+  function renderMonthlyInquiryPanel(series) {
+    return `<section class="overview-chart-panel" aria-labelledby="overview-chart-title"><div class="overview-panel-header"><div><h2 id="overview-chart-title">Monthly Inquiries</h2><p>Latest 12 calendar months by inquiry creation date.</p></div></div>${renderMonthlyInquiryChart(series)}</section>`;
+  }
+
+  function renderMonthlyInquiryChart(series) {
+    if (!series.validTimestampCount) return `<div class="overview-chart-empty"><strong>Monthly history unavailable</strong><span>Inquiry creation timestamps are missing, so no trend is shown.</span></div>`;
+    if (!series.visibleTotal) return `<div class="overview-chart-empty"><strong>No inquiries in the latest 12 months</strong><span>Older records are excluded from this chart.</span></div>`;
+    const months = series.months;
+    const width = 760;
+    const height = 250;
+    const pad = { left: 42, right: 18, top: 26, bottom: 42 };
+    const max = Math.max(1, ...months.map((month) => month.count));
+    const usableWidth = width - pad.left - pad.right;
+    const usableHeight = height - pad.top - pad.bottom;
+    const xFor = (index) => pad.left + (months.length === 1 ? usableWidth / 2 : (usableWidth * index) / (months.length - 1));
+    const yFor = (value) => pad.top + usableHeight - (usableHeight * value) / max;
+    const points = months.map((month, index) => ({ ...month, x: xFor(index), y: yFor(month.count) }));
+    const path = points.map((point, index) => `${index ? "L" : "M"}${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+    const grid = [0, Math.ceil(max / 2), max].filter((value, index, all) => all.indexOf(value) === index);
+    const pointNodes = points.map((point) => `<g class="overview-chart-point ${point.current ? "current" : ""}" tabindex="0" role="listitem" aria-label="${html(point.label)}: ${point.count} inquiries"><title>${html(point.label)}: ${point.count} ${point.count === 1 ? "inquiry" : "inquiries"}</title><circle cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="4.5"></circle><text x="${point.x.toFixed(1)}" y="${Math.max(14, point.y - 10).toFixed(1)}">${point.count}</text></g>`).join("");
+    const labels = points.map((point, index) => `<text class="overview-chart-month ${point.current ? "current" : ""}" x="${point.x.toFixed(1)}" y="226">${html(index % 2 === 0 || point.current ? point.shortLabel : "")}</text>`).join("");
+    const gridNodes = grid.map((value) => { const y = yFor(value); return `<g><line x1="${pad.left}" x2="${width - pad.right}" y1="${y.toFixed(1)}" y2="${y.toFixed(1)}"></line><text x="12" y="${(y + 4).toFixed(1)}">${value}</text></g>`; }).join("");
+    return `<div class="overview-chart-wrap"><svg class="overview-inquiry-chart" viewBox="0 0 ${width} ${height}" role="img" aria-labelledby="overview-chart-svg-title overview-chart-svg-desc" preserveAspectRatio="xMidYMid meet"><title id="overview-chart-svg-title">Monthly inquiry volume</title><desc id="overview-chart-svg-desc">Line chart showing inquiry counts for the latest 12 calendar months, ending with the current month.</desc><g class="overview-chart-grid">${gridNodes}</g><path class="overview-chart-line" d="${path}" fill="none"></path><g role="list">${pointNodes}</g><g>${labels}</g></svg><p class="overview-chart-sr">${html(months.map((month) => `${month.label}: ${month.count}`).join("; "))}</p></div>`;
+  }
+
+  function renderMonthlyComparisonPanel(series) {
+    const current = series.months.at(-1) || { label: "Current month", count: 0 };
+    const previous = series.months.at(-2) || { label: "Previous month", count: 0 };
+    const comparison = monthlyComparisonText(current.count, previous.count);
+    return `<section class="overview-month-compare" aria-labelledby="overview-month-compare-title"><span>Current Month</span><h2 id="overview-month-compare-title">${html(current.count)}</h2><strong>${html(current.label)}</strong><p>${html(comparison)}</p></section>`;
+  }
+
+  function monthlyComparisonText(current, previous) {
+    if (previous > 0) {
+      const change = Math.round(((current - previous) / previous) * 100);
+      if (change > 0) return `${change}% increase vs previous month`;
+      if (change < 0) return `${Math.abs(change)}% decrease vs previous month`;
+      return "No change from previous month";
+    }
+    if (current > 0) return "New activity vs previous month";
+    return "No change from previous month";
+  }
+
+  function getRecentInquiries(items, limit = 6) {
+    return items
+      .map((item) => ({ item, created: getInquiryCreatedDate(item) }))
+      .filter((row) => row.created)
+      .sort((a, b) => b.created.date - a.created.date)
+      .slice(0, limit)
+      .map((row) => row.item);
+  }
+
+  function renderRecentInquiries(items) {
+    return `<section class="overview-list-section overview-recent-inquiries" aria-labelledby="overview-recent-title"><div class="overview-panel-header"><div><h2 id="overview-recent-title">Recent Inquiries</h2><p>Latest records by creation date.</p></div><button type="button" data-mvp-route="/inquiries">Open</button></div><div class="overview-compact-list">${items.length ? items.map(recentInquiryRow).join("") : empty("No inquiries recorded yet.")}</div></section>`;
+  }
+
+  function recentInquiryRow(item) {
+    const created = getInquiryCreatedDate(item);
+    const qty = item.qty && item.qty !== "-" ? `Qty ${item.qty}` : "";
+    return `<button class="overview-inquiry-row" type="button" data-mvp-route="/inquiries?inquiry=${encodeURIComponent(item.id)}"><span><strong>${html(item.customer || item.company || "Unnamed customer")}</strong><small>${html([itemDisplay(item), serviceDisplay(item), qty].filter((value) => value && value !== "-").join(" / ") || "Inquiry")}</small></span>${quoteStatusBadge(item)}<code>${html(item.id)}</code><time>${html(created ? created.date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "Date unavailable")}</time></button>`;
+  }
+
+  function buildOverviewPriorities({ inquiries, tasks, taskLoadState, taskError, taskRoute }) {
+    const rows = [];
+    const today = new Date(`${todayIso()}T00:00:00`);
+    inquiries.forEach((item) => {
+      if (!isFollowUpDue(item)) return;
+      const follow = new Date(`${item.followUpDate}T00:00:00`);
+      const overdue = Number.isFinite(follow.getTime()) && follow < today;
+      rows.push({ kind: "FOLLOW-UP", title: item.customer || item.company || "Unnamed customer", reason: overdue ? "Overdue customer follow-up" : "Customer follow-up due today", when: overdue ? `Since ${shortDate(item.followUpDate)}` : "Today", route: `/inquiries?inquiry=${encodeURIComponent(item.id)}`, tone: overdue ? "danger" : "warning", weight: overdue ? 0 : 40 });
+    });
+    if (["ready", "loading"].includes(taskLoadState)) {
+      tasks.forEach((task) => {
+        const status = String(task.status || "");
+        if (status === "FOR_REVIEW") rows.push(taskPriority(task, "Task waiting for review", "WAITING FOR REVIEW", taskRoute, "warning", 10));
+        else if (status === "NEEDS_REVISION") rows.push(taskPriority(task, "Task needs revision", "NEEDS REVISION", taskRoute, "danger", 20));
+        else if (["TO_DO", "IN_PROGRESS"].includes(status) && isTaskItemOverdue(task)) rows.push(taskPriority(task, "Active task is overdue", formatTaskDueText(task), taskRoute, "danger", 30));
+        else if (["TO_DO", "IN_PROGRESS"].includes(status) && isTaskItemDueToday(task)) rows.push(taskPriority(task, "Task due today", "Today", taskRoute, "warning", 50));
+      });
+    }
+    return rows.sort((a, b) => a.weight - b.weight).slice(0, 6).map((item) => ({ ...item, taskError }));
+  }
+
+  function taskPriority(task, reason, when, taskRoute, tone, weight) {
+    return { kind: "TASK", title: task.title || task.taskCode || "Task", reason, when, route: taskRoute || "/workboard", code: task.taskCode || "TASK", tone, weight };
+  }
+
+  function renderOverviewPriorities(items, taskLoadState, taskError) {
+    const taskNotice = taskLoadState === "loading" ? `<p class="overview-inline-note">Loading task attention items...</p>` : taskLoadState === "error" || taskLoadState === "forbidden" ? `<p class="overview-inline-warning">Task attention unavailable: ${html(taskError || "Unable to load tasks.")}</p>` : "";
+    return `<section class="overview-list-section overview-priority-section" aria-labelledby="overview-priority-title"><div class="overview-panel-header"><div><h2 id="overview-priority-title">Important Tasks and Follow-ups</h2><p>Attention Needed</p></div></div>${taskNotice}<div class="overview-compact-list">${items.length ? items.map(overviewPriorityRow).join("") : empty("No priority tasks or follow-ups.")}</div></section>`;
+  }
+
+  function overviewPriorityRow(item) {
+    return `<button class="overview-priority-row ${html(item.tone)}" type="button" data-mvp-route="${html(item.route)}"><b>${html(item.kind)}</b><span><strong>${html(item.title)}</strong><small>${html(item.code ? `${item.code} / ${item.reason}` : item.reason)}</small></span><time>${html(item.when)}</time></button>`;
+  }
+
+  function isTaskItemOverdue(task) {
+    const dueAt = Date.parse(task.submissionDeadline || "");
+    return Number.isFinite(dueAt) && dueAt < new Date(`${todayIso()}T00:00:00`).getTime() && !["DONE", "CANCELLED"].includes(task.status);
+  }
+
+  function isTaskItemDueToday(task) {
+    const raw = task.submissionDeadline || task.scheduledDate || "";
+    const date = Date.parse(raw);
+    if (!Number.isFinite(date)) return false;
+    const start = new Date(`${todayIso()}T00:00:00`).getTime();
+    return date >= start && date < start + 86400000;
+  }
+
+  function formatTaskDueText(task) {
+    const raw = task.submissionDeadline || task.scheduledDate || "";
+    if (!raw) return "No date";
+    const date = new Date(raw);
+    return Number.isNaN(date.getTime()) ? "No date" : date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  }
+
+  function buildOperationalAlerts({ inquiries, orders, productionJobs, pipeline }) {
+    const today = new Date(`${todayIso()}T00:00:00`);
+    const overdueFollowUps = inquiries.filter((item) => {
+      if (!isFollowUpDue(item)) return false;
+      const follow = new Date(`${item.followUpDate}T00:00:00`);
+      return Number.isFinite(follow.getTime()) && follow < today;
+    }).length;
+    const quoteBacklog = pipeline.new || 0;
+    const paymentProofs = orders.filter((item) => paymentLabel(item) === "For Verification").length;
+    const artworkAttention = orders.filter((item) => !isOrderClosed(item) && ["revision", "pending", "not_set"].includes(orderArtworkKey(item))).length;
+    const blockedRelease = orders.filter((item) => blockedReason(item)).length;
+    const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
+    return [
+      operationalAlert("Blocked order release", blockedRelease, "Production release requirements are incomplete.", "/orders", "danger", 0),
+      operationalAlert("Overdue follow-ups", overdueFollowUps, "Customer follow-ups are past their scheduled date.", "/inquiries?stage=follow_due", "danger", 10),
+      operationalAlert("Overdue production", overdueProduction, "Released production jobs are past due.", "/production?due=overdue", "danger", 20),
+      operationalAlert("Payment proof for verification", paymentProofs, "Receipts or payment proof need owner review.", "/orders", "warning", 30),
+      operationalAlert("Quotation backlog", quoteBacklog, "New inquiries still need quotation action.", "/inquiries?stage=new", "warning", 40),
+      operationalAlert("Artwork attention", artworkAttention, "Artwork is missing, pending, or needs revision on open orders.", "/orders", "warning", 50),
+    ].filter((item) => item.count > 0).sort((a, b) => a.weight - b.weight).slice(0, 5);
+  }
+
+  function operationalAlert(title, count, detail, route, tone, weight) {
+    return { title, count, detail, route, tone, weight };
+  }
+
+  function renderOperationalAlerts(alerts) {
+    return `<section class="overview-alerts-section" aria-labelledby="overview-alerts-title"><div class="overview-panel-header"><div><h2 id="overview-alerts-title">Operational Alerts</h2><p>Aggregate conditions that need attention.</p></div></div><div class="overview-alert-list">${alerts.length ? alerts.map(operationalAlertRow).join("") : `<p class="overview-healthy-state"><strong>Operational alerts are clear.</strong><span>No current blockers or overdue aggregate conditions.</span></p>`}</div></section>`;
+  }
+
+  function operationalAlertRow(item) {
+    return `<button class="overview-alert-row ${html(item.tone)}" type="button" data-mvp-route="${html(item.route)}"><span><strong>${html(item.title)}</strong><small>${html(item.detail)}</small></span><b>${html(item.count)}</b></button>`;
+  }
   function buildPriorities(orders, inquiries) {
     const rows = [];
     orders.forEach((item) => {

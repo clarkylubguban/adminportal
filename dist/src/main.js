@@ -453,6 +453,9 @@ let taskFallbackOpen = false;
 let myTasksClock = Date.now();
 let myTasksTickHandle = null;
 let workboardTasks = [];
+let overviewTasks = [];
+let overviewTaskLoadState = "idle";
+let overviewTaskLoadError = "";
 let workboardLoadState = "idle";
 let workboardLoadError = "";
 let workboardFilterStatus = "active";
@@ -1051,6 +1054,7 @@ function startAdminDataLoading() {
   loadAdminClients();
   loadCatalogProducts();
   if (isTaskFeatureUiEnabled()) loadMyTasks();
+  if (isTaskFeatureUiEnabled()) loadOverviewTasks();
 }
 
 async function loadAssignmentUsers() {
@@ -1170,6 +1174,28 @@ function canViewMyTasksRoute() {
   return isTaskFeatureUiEnabled() && ["owner", "admin", "staff"].includes(adminUser?.role);
 }
 
+async function loadOverviewTasks({ silent = false } = {}) {
+  if (!isTaskFeatureUiEnabled() || !adminAuthSession?.access_token) return;
+  if (!silent) {
+    overviewTaskLoadState = "loading";
+    overviewTaskLoadError = "";
+    render();
+  }
+  try {
+    const response = canViewWorkboardRoute()
+      ? await getWorkboardTasks(adminAuthSession, { archived: "false", pageSize: 100 })
+      : await getMyTasks(adminAuthSession, { pageSize: 100 });
+    overviewTasks = canViewWorkboardRoute() ? sortWorkboardTasks(response.tasks || []) : sortMyTasks(response.tasks || []);
+    overviewTaskLoadState = "ready";
+    overviewTaskLoadError = "";
+    syncMyTasksTimerTick();
+  } catch (error) {
+    overviewTaskLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : "error";
+    overviewTaskLoadError = getTaskErrorMessage(error);
+    overviewTasks = [];
+  }
+  render();
+}
 async function loadMyTasks({ silent = false } = {}) {
   if (!canViewMyTasksRoute() || !adminAuthSession?.access_token) return;
   if (!silent) {
@@ -2207,6 +2233,7 @@ function applyTaskCommandResponse(response) {
   };
   myTasks = sortMyTasks(upsertTaskRecord(myTasks, response.task));
   workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, response.task));
+  overviewTasks = canViewWorkboardRoute() ? sortWorkboardTasks(upsertTaskRecord(overviewTasks, response.task)) : sortMyTasks(upsertTaskRecord(overviewTasks, response.task));
   taskFallbackOpen = false;
   taskSubmissionNote = "";
   taskProofUrl = "";
@@ -2225,6 +2252,7 @@ async function refreshTaskAfterConflict(taskId) {
     selectedTaskDetail = detail;
     myTasks = sortMyTasks(upsertTaskRecord(myTasks, detail.task));
     workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, detail.task));
+    overviewTasks = canViewWorkboardRoute() ? sortWorkboardTasks(upsertTaskRecord(overviewTasks, detail.task)) : sortMyTasks(upsertTaskRecord(overviewTasks, detail.task));
   } catch {
     await loadMyTasks({ silent: true });
   }
