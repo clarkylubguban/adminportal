@@ -47,18 +47,9 @@ for (const required of [
   assert.ok(service.includes(required), `missing Workboard service helper: ${required}`);
 }
 
-for (const required of [
-  "/api/tasks/[id]/draft.js",
-  "/api/tasks/[id]/assign.js",
-  "/api/tasks/[id]/approve-draft.js",
-  "/api/tasks/[id]/request-revision.js",
-  "/api/tasks/[id]/approve.js",
-  "/api/tasks/[id]/cancel.js",
-  "/api/tasks/[id]/reopen.js",
-  "/api/tasks/[id]/archive.js",
-]) {
-  assert.ok(localDev.includes(required), `missing local task dispatch: ${required}`);
-}
+assert.ok(localDev.includes("handleTaskApiRoute"), "missing local task route dispatcher");
+assert.ok(localDev.includes("../api/tasks/[...path].js"), "missing local task catch-all dispatch");
+assert.ok(localDev.includes("../api/tasks/index.js"), "missing local task collection dispatch");
 
 for (const forbidden of [
   "Auto Plan Today",

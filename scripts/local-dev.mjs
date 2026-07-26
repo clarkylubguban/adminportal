@@ -69,12 +69,7 @@ async function handleRequest(request, response) {
     }
 
 
-    const taskHandlerPath = getTaskApiHandlerPath(routePath);
-    if (taskHandlerPath) {
-      const { default: handleTaskRequest } = await import(taskHandlerPath);
-      await handleTaskRequest(request, response);
-      return;
-    }
+    if (await handleTaskApiRoute(routePath, request, response)) return;
 
     if (routePath === "/src/env.js") {
       response.writeHead(200, { "Content-Type": contentTypes[".js"] });
@@ -102,26 +97,26 @@ async function handleRequest(request, response) {
   }
 }
 
+async function handleTaskApiRoute(routePath, request, response) {
+  if (routePath === "/api/my-tasks") {
+    const { default: handleMyTasksRequest } = await import("../api/my-tasks.js");
+    await handleMyTasksRequest(request, response);
+    return true;
+  }
 
-function getTaskApiHandlerPath(routePath) {
-  if (routePath === "/api/my-tasks") return "../api/my-tasks.js";
-  if (routePath === "/api/tasks") return "../api/tasks/index.js";
-  if (/^\/api\/tasks\/[^/]+$/.test(routePath)) return "../api/tasks/[id]/index.js";
-  if (/^\/api\/tasks\/[^/]+\/draft$/.test(routePath)) return "../api/tasks/[id]/draft.js";
-  if (/^\/api\/tasks\/[^/]+\/assign$/.test(routePath)) return "../api/tasks/[id]/assign.js";
-  if (/^\/api\/tasks\/[^/]+\/approve-draft$/.test(routePath)) return "../api/tasks/[id]/approve-draft.js";
-  if (/^\/api\/tasks\/[^/]+\/start$/.test(routePath)) return "../api/tasks/[id]/start.js";
-  if (/^\/api\/tasks\/[^/]+\/submit$/.test(routePath)) return "../api/tasks/[id]/submit.js";
-  if (/^\/api\/tasks\/[^/]+\/submit-without-time$/.test(routePath)) return "../api/tasks/[id]/submit-without-time.js";
-  if (/^\/api\/tasks\/[^/]+\/start-revision$/.test(routePath)) return "../api/tasks/[id]/start-revision.js";
-  if (/^\/api\/tasks\/[^/]+\/request-revision$/.test(routePath)) return "../api/tasks/[id]/request-revision.js";
-  if (/^\/api\/tasks\/[^/]+\/approve$/.test(routePath)) return "../api/tasks/[id]/approve.js";
-  if (/^\/api\/tasks\/[^/]+\/cancel$/.test(routePath)) return "../api/tasks/[id]/cancel.js";
-  if (/^\/api\/tasks\/[^/]+\/reopen$/.test(routePath)) return "../api/tasks/[id]/reopen.js";
-  if (/^\/api\/tasks\/[^/]+\/archive$/.test(routePath)) return "../api/tasks/[id]/archive.js";
-  if (/^\/api\/tasks\/[^/]+\/history$/.test(routePath)) return "../api/tasks/[id]/history.js";
-  if (/^\/api\/tasks\/[^/]+\/time-entries$/.test(routePath)) return "../api/tasks/[id]/time-entries/index.js";
-  return "";
+  if (routePath === "/api/tasks") {
+    const { default: handleTasksRequest } = await import("../api/tasks/index.js");
+    await handleTasksRequest(request, response);
+    return true;
+  }
+
+  if (routePath.startsWith("/api/tasks/")) {
+    const { default: handleTaskRequest } = await import("../api/tasks/[...path].js");
+    await handleTaskRequest(request, response);
+    return true;
+  }
+
+  return false;
 }
 function normalizeRoutePath(pathname) {
   if (pathname === "/") return "/";

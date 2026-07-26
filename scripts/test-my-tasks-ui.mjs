@@ -42,9 +42,10 @@ assert.ok(css.includes("@media (max-width: 768px)"));
 assert.ok(service.includes("/api/my-tasks"));
 assert.ok(service.includes("submit-without-time"));
 assert.ok(service.includes("Idempotency-Key"));
-assert.ok(localDev.includes("getTaskApiHandlerPath"));
+assert.ok(localDev.includes("handleTaskApiRoute"));
 assert.ok(localDev.includes("/api/my-tasks"));
-assert.ok(localDev.includes("/api/tasks/[id]/submit-without-time.js"));
+assert.ok(localDev.includes("../api/my-tasks.js"));
+assert.ok(localDev.includes("../api/tasks/[...path].js"));
 assert.ok(localDev.includes("VITE_ENABLE_TASK_DOMAIN"));
 assert.ok(build.includes("VITE_ENABLE_TASK_DOMAIN"));
 
