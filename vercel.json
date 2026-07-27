@@ -4,6 +4,34 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/admin-users/:id",
+      "destination": "/api/admin-users?adminUserId=:id"
+    },
+    {
+      "source": "/api/work-chat/bootstrap",
+      "destination": "/api/work-chat?_wcAction=bootstrap"
+    },
+    {
+      "source": "/api/work-chat/channels/:channelId/messages",
+      "destination": "/api/work-chat?_wcAction=channel-messages&channelId=:channelId"
+    },
+    {
+      "source": "/api/work-chat/channels/:channelId/read",
+      "destination": "/api/work-chat?_wcAction=channel-read&channelId=:channelId"
+    },
+    {
+      "source": "/api/work-chat/order-threads",
+      "destination": "/api/work-chat?_wcAction=order-threads"
+    },
+    {
+      "source": "/api/work-chat/attachments/prepare",
+      "destination": "/api/work-chat?_wcAction=attachment-prepare"
+    },
+    {
+      "source": "/api/work-chat/attachments/:attachmentId/url",
+      "destination": "/api/work-chat?_wcAction=attachment-url&attachmentId=:attachmentId"
+    },
+    {
       "source": "/api/tasks/:id/history",
       "destination": "/api/tasks/:id?_taskAction=history"
     },

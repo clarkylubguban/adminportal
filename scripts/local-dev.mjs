@@ -38,15 +38,9 @@ async function handleRequest(request, response) {
     const pathname = decodeURIComponent(url.pathname);
     const routePath = normalizeRoutePath(pathname);
 
-    if (/^\/api\/admin-users\/?$/.test(routePath)) {
-      const { default: handleAdminUsersRequest } = await import("../api/admin-users/index.js");
+    if (/^\/api\/admin-users(\/[^/]+)?\/?$/.test(routePath)) {
+      const { default: handleAdminUsersRequest } = await import("../api/admin-users.js");
       await handleAdminUsersRequest(request, response);
-      return;
-    }
-
-    if (/^\/api\/admin-users\/[^/]+\/?$/.test(routePath)) {
-      const { default: handleAdminUserRequest } = await import("../api/admin-users/[id].js");
-      await handleAdminUserRequest(request, response);
       return;
     }
 
@@ -80,6 +74,7 @@ async function handleRequest(request, response) {
 
 
     if (await handleTaskApiRoute(routePath, request, response)) return;
+    if (await handleWorkChatApiRoute(routePath, request, response)) return;
 
     if (routePath === "/src/env.js") {
       response.writeHead(200, { "Content-Type": contentTypes[".js"] });
@@ -127,6 +122,13 @@ async function handleTaskApiRoute(routePath, request, response) {
   }
 
   return false;
+}
+
+async function handleWorkChatApiRoute(routePath, request, response) {
+  if (!routePath.startsWith("/api/work-chat")) return false;
+  const { default: handleWorkChatRequest } = await import("../api/work-chat.js");
+  await handleWorkChatRequest(request, response);
+  return true;
 }
 function normalizeRoutePath(pathname) {
   if (pathname === "/") return "/";

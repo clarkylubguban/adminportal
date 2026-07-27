@@ -15,6 +15,26 @@ export function isSupabaseReady() {
   const config = getSupabaseConfig();
   return Boolean(config.useSupabaseData && config.url && config.anonKey);
 }
+export function createBrowserSupabaseClient(accessToken = "") {
+  if (!isSupabaseReady() || !window.supabase?.createClient) return null;
+
+  const config = getSupabaseConfig();
+  const client = window.supabase.createClient(config.url, config.anonKey, {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+    global: {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    },
+  });
+
+  if (accessToken && typeof client.realtime?.setAuth === "function") {
+    client.realtime.setAuth(accessToken);
+  }
+
+  return client;
+}
 
 export async function readSupabaseTable(tableName, params = {}) {
   return readSupabaseTableRequest(tableName, params);

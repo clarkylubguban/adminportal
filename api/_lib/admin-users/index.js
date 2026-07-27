@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "../_lib/supabaseServer.js";
+import { createServerSupabaseClient } from "../supabaseServer.js";
 import {
   allowedCreateRole,
   canUseStaffAccess,
@@ -12,7 +12,7 @@ import {
   readJsonBody,
   sanitizeAdminUser,
   sendJson,
-} from "../_lib/adminAccess.js";
+} from "../adminAccess.js";
 
 export default async function handler(request, response) {
   const token = getBearerToken(request);
