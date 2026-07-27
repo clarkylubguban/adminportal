@@ -2,6 +2,94 @@
 
 Date: 2026-07-27
 
+## Phase 6B Credentialed QA Addendum
+
+Test timestamp: 2026-07-27 Asia/Manila
+
+| Item | Result |
+| --- | --- |
+| Phase 6B starting commit | `ddba7ce0f9802736d25f701ff481d16a7bdf5b5d` |
+| Phase 6B tested app commit | `ddba7ce0f9802736d25f701ff481d16a7bdf5b5d` |
+| Phase 6B tested deployment | `dpl_CU5muBgwtQ2pyZLsADissqeYyMN6` |
+| Phase 6B staging URL | `https://adminportal-staging.vercel.app` |
+| Browser session availability | BLOCKED - the only available Codex in-app browser profile opened staging at the login screen, and there were no prepared open tabs to claim. |
+| Account roles found in staging DB | Owner only. No Admin or Staff rows exist in `public.admin_users` at Phase 6B check time. |
+| Credentials/tokens/cookies handling | PASS - no passwords, tokens, cookies, or session credentials were requested, inspected, printed, logged, committed, or documented. |
+
+Confirmed Admin Portal role rows at Phase 6B check time:
+
+| Role | Count | Notes |
+| --- | ---: | --- |
+| owner | 2 | Both rows exist in Auth and `public.admin_users`; both active and email-confirmed. |
+| admin | 0 | Blocks Admin credentialed QA. |
+| staff | 0 | Blocks Staff and two-session Work Chat QA. |
+
+Phase 6B live credentialed QA status:
+
+| Phase | Status | Result |
+| --- | --- | --- |
+| Phase A - Work Chat two-session QA | BLOCKED | Requires authenticated Owner and Staff sessions. Only available browser profile showed the login page; no Staff profile exists in staging DB. |
+| Phase B - Mentions | BLOCKED | Requires a real synthetic Staff account/session and Owner session. No Staff profile exists. |
+| Phase C - Attachments | BLOCKED | Requires authenticated Work Chat session to prepare/upload/send files and verify signed URLs against real linked attachments. |
+| Phase D - Order Threads | BLOCKED | Requires authenticated Admin Portal session and synthetic confirmed order interaction. |
+| Phase E - Disabled User | BLOCKED | Requires synthetic Staff account/session. No Staff profile exists; no real Owner accounts were disabled. |
+| Phase F - Role and Permission QA | BLOCKED | Owner/Admin/Staff browser sessions were not available; Admin and Staff rows are absent. Anonymous Work Chat API/table probes passed. |
+| Phase G - Full Authenticated Visual QA | BLOCKED | Requires authenticated staging UI access across roles. The available browser profile is logged out. |
+| Phase H - Workflow Regression via UI | BLOCKED | Requires authenticated staging UI access. Automated non-credentialed regressions passed again. |
+| Phase I - Security Follow-up | PASS with attachment caveat | RLS/grants/RPC/storage/realtime checks passed. Anonymous bucket list returned HTTP 200 with body `[]` and exposed no object names. Actual anonymous object access against a real QA attachment remains BLOCKED because no authenticated attachment could be created. |
+
+Phase 6B security follow-up:
+
+| Check | Status | Evidence |
+| --- | --- | --- |
+| RLS on all Work Chat tables | PASS | RLS remains enabled for channels, messages, mentions, reads, attachments, and prepared attachments. |
+| Authenticated browser has no direct writes | PASS | `authenticated` has SELECT only on Work Chat tables; write grants remain service-role only. |
+| Service-role-only Work Chat RPCs | PASS | `work_chat_send_message` and `work_chat_mark_read` EXECUTE grants remain service-role only. |
+| Private `work-chat-files` bucket | PASS | Bucket is private with 10 MB file size limit and expected allowed MIME types. |
+| Messages and mentions in Realtime publication | PASS | `work_chat_messages` and `work_chat_mentions` remain in `supabase_realtime`. |
+| Anonymous Work Chat API access | PASS | Anonymous `/api/work-chat/bootstrap` returned HTTP 401. |
+| Anonymous direct chat table read | PASS | Anonymous `work_chat_messages` REST SELECT returned HTTP 401/permission denied. |
+| Anonymous bucket list probe | PASS | `storage/v1/object/list/work-chat-files` returned HTTP 200 with body `[]`; no object names or storage paths were exposed. |
+| Anonymous object access against real QA attachment | BLOCKED | No real QA attachment exists and authenticated attachment creation was blocked by missing sessions. |
+
+Phase 6B automated regression rerun:
+
+| Command | Status |
+| --- | --- |
+| `npm.cmd run build` | PASS |
+| `node .\scripts\test-work-chat-mvp.mjs` | PASS |
+| `node .\scripts\test-overview-dashboard.mjs` | PASS |
+| `node .\scripts\test-workboard-ui.mjs` | PASS |
+| `node .\scripts\test-my-tasks-ui.mjs` | PASS |
+| `node .\scripts\test-task-api.mjs` | PASS |
+| `node .\scripts\test-task-service.mjs` | PASS |
+| `node .\scripts\test-task-dispatch.mjs` | PASS |
+| `node .\scripts\test-task-gateway-http.mjs` | PASS |
+| `node .\scripts\test-workboard-http.mjs` | PASS |
+| `node .\scripts\test-my-tasks-http.mjs` | PASS |
+| `node .\scripts\test-workboard-browser.mjs` | PASS |
+| `node .\scripts\test-my-tasks-browser.mjs` | PASS |
+| `git diff --check` | PASS |
+
+Phase 6B screenshots path:
+
+| Script | Path |
+| --- | --- |
+| Workboard browser QA | `C:\tmp\trry-admin-staging\qa-screens\phase-11-workboard` |
+| My Tasks browser QA | `C:\tmp\trry-admin-staging\qa-screens\phase-10-1-my-tasks` |
+
+Phase 6B defects found and fixes:
+
+| Item | Status | Notes |
+| --- | --- | --- |
+| Application defects found | NOT APPLICABLE | No reproducible app defect could be confirmed because credentialed live QA was blocked before feature interaction. |
+| Code fixes | NOT APPLICABLE | No code changes were made. |
+| Documentation update | PASS | This Phase 6B addendum records the fresh deployment, role/session blocker, automated test rerun, and security follow-up. |
+
+Phase 6B production-readiness recommendation: NOT APPROVED FOR PHASE 7
+
+Reason: critical credentialed QA remains BLOCKED. The Phase 6B premise says authenticated Owner/Admin/Staff sessions are prepared, but from this Codex environment no prepared browser tabs are available, the only browser profile is logged out, and staging `public.admin_users` contains no Admin or Staff rows. Production remained untouched.
+
 ## Environment
 
 | Item | Result |
