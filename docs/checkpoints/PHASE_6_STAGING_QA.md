@@ -2,6 +2,39 @@
 
 Date: 2026-07-27
 
+## Phase 6C Credentialed QA Resume
+
+Test timestamp: 2026-07-27 Asia/Manila
+
+| Item | Result |
+| --- | --- |
+| Phase 6C starting commit | `f14922bab18bc372141bb5c8f9d2f30cd8c9beec` |
+| Phase 6C tested app commit | `f14922bab18bc372141bb5c8f9d2f30cd8c9beec` |
+| Phase 6C tested deployment | `dpl_EHRED5MYmkaUMFqEbqLgc3eMxQ3M` |
+| Phase 6C staging URL | `https://adminportal-staging.vercel.app` |
+| Browser sessions | BLOCKED - no prepared authenticated tabs were visible to claim in the available Codex in-app browser; opening staging in the available profile showed the login screen. |
+| Staging role rows | BLOCKED - `public.admin_users` still contains only Owner rows; no Admin or Staff rows exist to support the requested Synthetic Admin/Staff QA. |
+| Credential handling | PASS - no passwords, tokens, cookies, or session credentials were requested, inspected, printed, stored, or documented. |
+
+Phase 6C remaining credentialed test status:
+
+| Priority | Status | Exact reason |
+| --- | --- | --- |
+| Owner/Staff two-session Work Chat Realtime | BLOCKED | Requires authenticated Owner and Staff sessions; no prepared tabs are available and no Staff row exists in staging DB. |
+| Unread counts and read markers | BLOCKED | Requires authenticated Owner and Staff sessions. |
+| @mentions | BLOCKED | Requires a real active Staff profile/session to select and receive mentions. |
+| Attachments and signed URLs | BLOCKED | Requires authenticated Work Chat session to create a real QA attachment. |
+| Order Threads and idempotency | BLOCKED | Requires authenticated Admin Portal session. |
+| Disabled Staff enforcement and restore | BLOCKED | Requires synthetic Staff account/session; no Staff row exists. |
+| Owner/Admin/Staff permission QA | BLOCKED | Admin and Staff rows/sessions are absent; available browser profile is logged out. |
+| Full authenticated desktop/tablet/390px visual QA | BLOCKED | Requires authenticated Admin Portal access. |
+| Inquiry follow-up and workflow regressions | BLOCKED | Requires authenticated Admin Portal access. |
+| Customer/anonymous isolation checks | BLOCKED for customer, PASS for anonymous API probes from Phase 6B | Customer session/UI was not available. Anonymous Work Chat API/table and bucket-list probes were already documented as non-exposing in Phase 6B. |
+
+Phase 6C recommendation: NOT APPROVED FOR PHASE 7
+
+Reason: every critical credentialed test remains blocked by unavailable authenticated browser sessions and missing Admin/Staff staging role rows. Production Supabase, production Vercel, main, and the pending payment migration were not touched.
+
 ## Phase 6B Credentialed QA Addendum
 
 Test timestamp: 2026-07-27 Asia/Manila
