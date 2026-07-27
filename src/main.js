@@ -18,6 +18,16 @@ import {
   submitTaskWithoutRecordedTime,
   updateTaskDraft,
 } from "./services/tasks.js";
+import {
+  createWorkChatOrderThread,
+  getWorkChatBootstrap,
+  getWorkChatMessages,
+  markWorkChatRead,
+  openWorkChatAttachment,
+  prepareWorkChatAttachment,
+  sendWorkChatMessage,
+  subscribeToWorkChatMessages,
+} from "./services/workChat.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
@@ -91,6 +101,11 @@ const lucideIcons = {
   "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M19 8v6"></path><path d="M22 11h-6"></path>',
   "package-plus": '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 8v8"></path><path d="M8 12h8"></path>',
   sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.064 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.064a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path><path d="M4 17v2"></path><path d="M5 18H3"></path>',
+  "message-circle": '<path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>',
+  send: '<path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path>',
+  paperclip: '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.828 2.828L18.828 9A4 4 0 1 0 13.172 3.343L4.757 11.757a6 6 0 1 0 8.486 8.486L20 13.486"></path>',
+  at: '<circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>',
+  hash: '<line x1="4" x2="20" y1="9" y2="9"></line><line x1="4" x2="20" y1="15" y2="15"></line><line x1="10" x2="8" y1="3" y2="21"></line><line x1="16" x2="14" y1="3" y2="21"></line>',
 };
 
 function renderIcon(name, className = "") {
@@ -471,6 +486,38 @@ let workboardCommandError = "";
 let workboardReviewNote = "";
 let workboardReason = "";
 let workboardDraftForm = createEmptyWorkboardDraft();
+const WORK_CHAT_STANDARD_KEYS = ["general", "front-desk", "production"];
+const WORK_CHAT_MAX_ATTACHMENTS = 5;
+const WORK_CHAT_MAX_FILE_BYTES = 10 * 1024 * 1024;
+let workChatState = createWorkChatInitialState();
+let workChatSubscription = null;
+
+function createWorkChatInitialState() {
+  return {
+    initialized: false,
+    loadState: "idle",
+    messageLoadState: "idle",
+    realtimeStatus: "idle",
+    isOpen: false,
+    activeChannelId: "",
+    activeView: "channel",
+    channels: [],
+    orderThreads: [],
+    mentionMessages: [],
+    activeUsers: [],
+    messagesByChannel: {},
+    unreadByChannel: {},
+    globalUnreadCount: 0,
+    unreadMentionCount: 0,
+    composerBody: "",
+    mentionedUserIds: [],
+    pendingAttachments: [],
+    attachmentUploadState: "idle",
+    sending: false,
+    error: "",
+    orderSearch: "",
+  };
+}
 
 const routes = {
   "/": "Overview",
@@ -570,6 +617,7 @@ function render() {
         ${renderFooter()}
       </section>
       ${renderMobileBottomNav(currentRoute)}
+      ${renderWorkChatShell()}
     </div>
   `;
 
@@ -3912,6 +3960,7 @@ function renderOrderDashboardDrawer(item) {
       <div><span>Production</span><strong>${escapeHtml(getOrderProductionStageLabel(stage))}</strong></div>
       <div class="wide"><span>Customer Message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div>
     </div>
+    <div class="order-dashboard-chat-action"><button class="ops-light-button mini" data-work-chat-open-order-thread="${escapeHtml(item.id)}" type="button">Open Order Thread</button></div>
     ${renderOrderProductionEditor(item)}
     ${renderOpsCustomerTracking(item)}
   </aside>`;
@@ -5390,6 +5439,355 @@ function renderProductImageManager(product) {
   `;
 }
 
+
+
+function canUseWorkChat() {
+  return isSupabaseReady() && Boolean(adminAuthSession?.access_token && adminUser);
+}
+function renderWorkChatShell() {
+  if (!canUseWorkChat()) return "";
+  const unread = Number(workChatState.globalUnreadCount || 0);
+  const activeChannel = getActiveWorkChatChannel();
+  const messages = workChatState.activeView === "mentions" ? workChatState.mentionMessages : (activeChannel ? workChatState.messagesByChannel[activeChannel.id] || [] : []);
+  const drawer = workChatState.isOpen ? `
+    <aside class="work-chat-drawer" aria-label="Work Chat">
+      <header class="work-chat-header">
+        <div>
+          <span>WORK CHAT</span>
+          <strong>${escapeHtml(workChatState.activeView === "mentions" ? "MENTIONS" : activeChannel?.name || "GENERAL")}</strong>
+        </div>
+        <button class="work-chat-close" data-work-chat-close type="button" aria-label="Close Work Chat">X</button>
+      </header>
+      <section class="work-chat-body">
+        <nav class="work-chat-nav" aria-label="Work Chat channels">
+          <div class="work-chat-nav-group">
+            <span>Channels</span>
+            ${workChatState.channels.map(renderWorkChatChannelButton).join("")}
+            ${renderWorkChatMentionsButton()}
+          </div>
+          <div class="work-chat-nav-group order">
+            <span>Order Threads</span>
+            <input id="work-chat-order-search" value="${escapeHtml(workChatState.orderSearch)}" placeholder="Find order thread" type="search" />
+            <div class="work-chat-order-list">
+              ${getVisibleWorkChatOrderThreads().map(renderWorkChatChannelButton).join("") || `<p>No order threads yet.</p>`}
+            </div>
+          </div>
+        </nav>
+        <main class="work-chat-conversation">
+          ${renderWorkChatStatus()}
+          <div class="work-chat-messages" data-work-chat-messages>
+            ${messages.length ? messages.map(renderWorkChatMessage).join("") : renderWorkChatEmpty(workChatState.activeView === "mentions" ? { channelType: "MENTIONS" } : activeChannel)}
+          </div>
+          ${workChatState.activeView === "mentions" ? "" : renderWorkChatComposer(activeChannel)}
+        </main>
+      </section>
+    </aside>` : "";
+
+  return `
+    <button class="work-chat-launcher" data-work-chat-open type="button" aria-label="Open Work Chat">
+      ${renderIcon("message-circle", "work-chat-launcher-icon")}
+      ${unread ? `<span class="work-chat-unread">${unread > 99 ? "99+" : unread}</span>` : ""}
+    </button>
+    ${drawer}`;
+}
+
+function renderWorkChatChannelButton(channel) {
+  const unread = Number(workChatState.unreadByChannel[channel.id] || 0);
+  const active = workChatState.activeView === "channel" && channel.id === workChatState.activeChannelId;
+  const iconName = channel.channelType === "ORDER" ? "factory" : "hash";
+  return `<button class="work-chat-channel ${active ? "active" : ""}" data-work-chat-channel="${escapeHtml(channel.id)}" type="button">
+    ${renderIcon(iconName, "work-chat-channel-icon")}
+    <span>${escapeHtml(channel.name)}</span>
+    ${unread ? `<b>${unread > 99 ? "99+" : unread}</b>` : ""}
+  </button>`;
+}
+
+
+function renderWorkChatMentionsButton() {
+  const unread = Number(workChatState.unreadMentionCount || 0);
+  const active = workChatState.activeView === "mentions";
+  return `<button class="work-chat-channel ${active ? "active" : ""}" data-work-chat-mentions type="button">
+    ${renderIcon("at", "work-chat-channel-icon")}
+    <span>MENTIONS</span>
+    ${unread ? `<b>${unread > 99 ? "99+" : unread}</b>` : ""}
+  </button>`;
+}
+function renderWorkChatStatus() {
+  if (workChatState.error) return `<p class="work-chat-error" role="alert">${escapeHtml(workChatState.error)}</p>`;
+  if (workChatState.loadState === "loading") return `<p class="work-chat-note">Loading Work Chat...</p>`;
+  if (workChatState.realtimeStatus === "unavailable") return `<p class="work-chat-note">Realtime is unavailable. Messages refresh when you open a channel.</p>`;
+  return "";
+}
+
+function renderWorkChatEmpty(channel) {
+  const text = channel?.channelType === "ORDER" ? "No messages in this order thread yet." : channel?.channelType === "MENTIONS" ? "No mentions yet." : "No messages in this channel yet.";
+  return `<div class="work-chat-empty"><strong>${escapeHtml(text)}</strong><span>Start the conversation below.</span></div>`;
+}
+
+function renderWorkChatMessage(message) {
+  const mine = message.senderUserId === adminUser?.userId;
+  const contextLabel = message.channel?.name && workChatState.activeView === "mentions" ? `<button class="work-chat-source" data-work-chat-source-channel="${escapeHtml(message.channelId)}" type="button">${escapeHtml(message.channel.name)}</button>` : "";
+  const attachments = message.attachments?.length
+    ? `<div class="work-chat-attachments">${message.attachments.map((attachment) => `<button data-work-chat-attachment="${escapeHtml(attachment.id)}" type="button">${renderIcon("paperclip")}<span>${escapeHtml(attachment.filename)}</span></button>`).join("")}</div>`
+    : "";
+  return `<article class="work-chat-message ${mine ? "mine" : ""}">
+    <header><strong>${escapeHtml(message.sender?.displayName || "Staff")}</strong><span>${escapeHtml(formatWorkChatDateTime(message.createdAt))}</span></header>
+    ${contextLabel}
+    ${message.body ? `<p>${formatWorkChatBody(message.body)}</p>` : ""}
+    ${attachments}
+  </article>`;
+}
+
+function renderWorkChatComposer(channel) {
+  if (!channel) return `<div class="work-chat-composer disabled">Select a channel to send messages.</div>`;
+  const canSend = !workChatState.sending && (workChatState.composerBody.trim() || workChatState.pendingAttachments.length);
+  return `<form class="work-chat-composer" id="work-chat-composer">
+    ${renderWorkChatMentionChoices()}
+    ${workChatState.pendingAttachments.length ? `<div class="work-chat-pending-files">${workChatState.pendingAttachments.map((file) => `<span>${renderIcon("paperclip")} ${escapeHtml(file.filename)} <button data-work-chat-remove-attachment="${escapeHtml(file.id)}" type="button" aria-label="Remove ${escapeHtml(file.filename)}">X</button></span>`).join("")}</div>` : ""}
+    <textarea id="work-chat-body" maxlength="4000" placeholder="Message ${escapeHtml(channel.name)}" rows="3">${escapeHtml(workChatState.composerBody)}</textarea>
+    <div class="work-chat-composer-actions">
+      <label class="work-chat-file-button">${renderIcon("paperclip")}<input id="work-chat-file" type="file" multiple /></label>
+      <span>${workChatState.attachmentUploadState === "uploading" ? "Uploading..." : `${workChatState.composerBody.length}/4000`}</span>
+      <button class="work-chat-send" type="submit" ${canSend ? "" : "disabled"}>${renderIcon("send")} Send</button>
+    </div>
+  </form>`;
+}
+
+function renderWorkChatMentionChoices() {
+  const query = getWorkChatMentionQuery();
+  if (!query) return "";
+  const matches = workChatState.activeUsers
+    .filter((user) => user.userId !== adminUser?.userId)
+    .filter((user) => (user.displayName || user.email || "").toLowerCase().includes(query.toLowerCase()))
+    .slice(0, 5);
+  if (!matches.length) return "";
+  return `<div class="work-chat-mentions" role="listbox">${matches.map((user) => `<button data-work-chat-mention="${escapeHtml(user.userId)}" type="button">${renderIcon("at")}<span>${escapeHtml(user.displayName || user.email)}</span></button>`).join("")}</div>`;
+}
+
+function getVisibleWorkChatOrderThreads() {
+  const query = workChatState.orderSearch.trim().toLowerCase();
+  return workChatState.orderThreads.filter((channel) => !query || [channel.name, channel.sourceRecordId].join(" ").toLowerCase().includes(query));
+}
+
+function getActiveWorkChatChannel() {
+  const allChannels = [...workChatState.channels, ...workChatState.orderThreads];
+  return allChannels.find((channel) => channel.id === workChatState.activeChannelId) || allChannels[0] || null;
+}
+
+async function initializeWorkChat() {
+  if (!canUseWorkChat() || workChatState.loadState === "loading" || workChatState.initialized) return;
+  workChatState.loadState = "loading";
+  workChatState.error = "";
+  try {
+    const payload = await getWorkChatBootstrap(adminAuthSession);
+    workChatState = {
+      ...workChatState,
+      initialized: true,
+      loadState: "ready",
+      channels: normalizeWorkChatChannels(payload.channels).sort(sortStandardWorkChatChannels),
+      orderThreads: normalizeWorkChatChannels(payload.orderThreads),
+      activeUsers: payload.activeUsers || [],
+      unreadByChannel: payload.unreadByChannel || {},
+      globalUnreadCount: payload.globalUnreadCount || 0,
+      unreadMentionCount: payload.unreadMentionCount || 0,
+      mentionMessages: payload.mentionMessages || [],
+      mentionMessages: payload.mentionMessages || [],
+      activeChannelId: workChatState.activeChannelId || payload.defaultChannelId || payload.channels?.[0]?.id || "",
+    };
+    startWorkChatRealtime();
+    if (workChatState.isOpen && workChatState.activeChannelId) await loadWorkChatChannelMessages(workChatState.activeChannelId);
+  } catch (error) {
+    console.error("Unable to initialize Work Chat.", error);
+    workChatState.loadState = "error";
+    workChatState.error = error.message || "Unable to load Work Chat.";
+  }
+  render();
+}
+
+async function loadWorkChatChannelMessages(channelId, { force = false } = {}) {
+  if (!channelId || (!force && workChatState.messagesByChannel[channelId]?.length)) return;
+  workChatState.messageLoadState = "loading";
+  workChatState.error = "";
+  try {
+    const payload = await getWorkChatMessages(channelId, adminAuthSession);
+    workChatState.messagesByChannel = { ...workChatState.messagesByChannel, [channelId]: payload.messages || [] };
+    workChatState.messageLoadState = "ready";
+    await markLatestWorkChatMessageRead(channelId);
+  } catch (error) {
+    console.error("Unable to load Work Chat messages.", error);
+    workChatState.messageLoadState = "error";
+    workChatState.error = error.message || "Unable to load messages.";
+  }
+}
+
+function startWorkChatRealtime() {
+  if (workChatSubscription || !canUseWorkChat()) return;
+  workChatSubscription = subscribeToWorkChatMessages(adminAuthSession, async (row) => {
+    if (!row?.channel_id) return;
+    const known = workChatState.messagesByChannel[row.channel_id]?.some((message) => message.id === row.id);
+    if (known) return;
+    if (workChatState.isOpen && row.channel_id === workChatState.activeChannelId) {
+      await loadWorkChatChannelMessages(row.channel_id, { force: true });
+      render();
+      return;
+    }
+    if (row.sender_user_id !== adminUser?.userId) {
+      workChatState.unreadByChannel = {
+        ...workChatState.unreadByChannel,
+        [row.channel_id]: Number(workChatState.unreadByChannel[row.channel_id] || 0) + 1,
+      };
+      workChatState.globalUnreadCount = Number(workChatState.globalUnreadCount || 0) + 1;
+      render();
+    }
+  }, (status) => {
+    workChatState.realtimeStatus = status;
+  });
+}
+
+function resetWorkChatState() {
+  if (workChatSubscription) {
+    workChatSubscription.unsubscribe();
+    workChatSubscription = null;
+  }
+  workChatState = createWorkChatInitialState();
+}
+
+async function openWorkChat(channelId = "") {
+  workChatState.isOpen = true;
+  if (channelId) workChatState.activeChannelId = channelId;
+  workChatState.activeView = "channel";
+  workChatState.activeView = "channel";
+  render();
+  await initializeWorkChat();
+  const activeChannel = getActiveWorkChatChannel();
+  if (activeChannel) {
+    workChatState.activeChannelId = activeChannel.id;
+    await loadWorkChatChannelMessages(activeChannel.id);
+    render();
+    window.requestAnimationFrame(() => document.getElementById("work-chat-body")?.focus());
+  }
+}
+
+async function openWorkChatOrderThread(orderId) {
+  if (!orderId) return;
+  workChatState.isOpen = true;
+  workChatState.error = "";
+  render();
+  try {
+    const payload = await createWorkChatOrderThread(orderId, adminAuthSession);
+    const channel = payload.channel;
+    workChatState.orderThreads = upsertWorkChatChannel(workChatState.orderThreads, channel);
+    workChatState.activeChannelId = channel.id;
+    workChatState.activeView = "channel";
+    workChatState.activeView = "channel";
+    await loadWorkChatChannelMessages(channel.id, { force: true });
+  } catch (error) {
+    console.error("Unable to open order thread.", error);
+    workChatState.error = error.message || "Unable to open order thread.";
+  }
+  render();
+}
+
+async function submitWorkChatComposer() {
+  const channelId = workChatState.activeChannelId;
+  if (!channelId || workChatState.sending) return;
+  const body = workChatState.composerBody.trim();
+  const attachmentIds = workChatState.pendingAttachments.map((attachment) => attachment.id);
+  if (!body && !attachmentIds.length) return;
+  workChatState.sending = true;
+  workChatState.error = "";
+  render();
+  try {
+    const payload = await sendWorkChatMessage(channelId, {
+      body,
+      mentionedUserIds: workChatState.mentionedUserIds,
+      attachmentIds,
+    }, adminAuthSession);
+    const previous = workChatState.messagesByChannel[channelId] || [];
+    workChatState.messagesByChannel = { ...workChatState.messagesByChannel, [channelId]: [...previous, payload.message].filter(Boolean) };
+    workChatState.composerBody = "";
+    workChatState.mentionedUserIds = [];
+    workChatState.pendingAttachments = [];
+    await markLatestWorkChatMessageRead(channelId);
+  } catch (error) {
+    console.error("Unable to send Work Chat message.", error);
+    workChatState.error = error.message || "Unable to send message.";
+  }
+  workChatState.sending = false;
+  render();
+}
+
+async function addWorkChatFiles(files) {
+  const incoming = [...files].slice(0, WORK_CHAT_MAX_ATTACHMENTS - workChatState.pendingAttachments.length);
+  if (!incoming.length) return;
+  workChatState.attachmentUploadState = "uploading";
+  workChatState.error = "";
+  render();
+  try {
+    for (const file of incoming) {
+      if (file.size > WORK_CHAT_MAX_FILE_BYTES) throw new Error(`${file.name} exceeds the 10 MB limit.`);
+      const attachment = await prepareWorkChatAttachment(file, adminAuthSession);
+      workChatState.pendingAttachments = [...workChatState.pendingAttachments, attachment];
+    }
+  } catch (error) {
+    console.error("Unable to attach Work Chat file.", error);
+    workChatState.error = error.message || "Unable to attach file.";
+  }
+  workChatState.attachmentUploadState = "idle";
+  render();
+}
+
+async function markLatestWorkChatMessageRead(channelId) {
+  const messages = workChatState.messagesByChannel[channelId] || [];
+  const latestMessage = messages[messages.length - 1];
+  if (!latestMessage) return;
+  workChatState.unreadByChannel = { ...workChatState.unreadByChannel, [channelId]: 0 };
+  workChatState.globalUnreadCount = Object.values(workChatState.unreadByChannel).reduce((sum, value) => sum + Number(value || 0), 0);
+  await markWorkChatRead(channelId, latestMessage.id, adminAuthSession);
+}
+
+function selectWorkChatMention(userId) {
+  const user = workChatState.activeUsers.find((item) => item.userId === userId);
+  if (!user) return;
+  workChatState.mentionedUserIds = [...new Set([...workChatState.mentionedUserIds, userId])];
+  workChatState.composerBody = replaceWorkChatMentionQuery(workChatState.composerBody, `@${user.displayName || user.email} `);
+  render();
+  focusFieldAtEnd("work-chat-body");
+}
+
+function getWorkChatMentionQuery() {
+  const match = workChatState.composerBody.match(/(^|\s)@([A-Za-z0-9._-]{0,32})$/);
+  return match ? match[2] : "";
+}
+
+function replaceWorkChatMentionQuery(body, replacement) {
+  return body.replace(/(^|\s)@([A-Za-z0-9._-]{0,32})$/, (match, prefix) => `${prefix}${replacement}`);
+}
+
+function normalizeWorkChatChannels(channels = []) {
+  return (channels || []).filter(Boolean).map((channel) => ({ ...channel, name: channel.name || channel.channelKey || "Channel" }));
+}
+
+function sortStandardWorkChatChannels(a, b) {
+  return WORK_CHAT_STANDARD_KEYS.indexOf(a.channelKey) - WORK_CHAT_STANDARD_KEYS.indexOf(b.channelKey);
+}
+
+function upsertWorkChatChannel(channels, channel) {
+  if (!channel?.id) return channels;
+  const next = channels.filter((item) => item.id !== channel.id);
+  return [channel, ...next];
+}
+
+function formatWorkChatDateTime(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function formatWorkChatBody(value) {
+  return escapeHtml(value).replace(/(^|\s)@([A-Za-z][A-Za-z0-9 ._-]{1,48})/g, '$1<span class="work-chat-mention">@$2</span>');
+}
 function renderSidebar(currentRoute) {
   const navItems = [
     { label: "Overview", path: "/overview" },
@@ -5978,6 +6376,104 @@ function bindMyTasksEvents() {
     taskCommandError = "";
   });
 }
+
+function bindWorkChatEvents() {
+  document.querySelector("[data-work-chat-open]")?.addEventListener("click", async () => {
+    await openWorkChat();
+  });
+
+  document.querySelector("[data-work-chat-close]")?.addEventListener("click", () => {
+    workChatState.isOpen = false;
+    render();
+  });
+
+  document.querySelectorAll("[data-work-chat-channel]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      workChatState.activeView = "channel";
+      workChatState.activeChannelId = button.dataset.workChatChannel;
+      workChatState.error = "";
+      render();
+      await loadWorkChatChannelMessages(workChatState.activeChannelId);
+      render();
+    });
+  });
+
+  document.querySelector("[data-work-chat-mentions]")?.addEventListener("click", () => {
+    workChatState.activeView = "mentions";
+    workChatState.error = "";
+    render();
+  });
+
+  document.querySelectorAll("[data-work-chat-source-channel]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      workChatState.activeView = "channel";
+      workChatState.activeChannelId = button.dataset.workChatSourceChannel;
+      render();
+      await loadWorkChatChannelMessages(workChatState.activeChannelId, { force: true });
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-work-chat-open-order-thread]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await openWorkChatOrderThread(button.dataset.workChatOpenOrderThread);
+    });
+  });
+
+  document.getElementById("work-chat-order-search")?.addEventListener("input", (event) => {
+    workChatState.orderSearch = event.target.value;
+    render();
+    focusFieldAtEnd("work-chat-order-search");
+  });
+
+  document.getElementById("work-chat-body")?.addEventListener("input", (event) => {
+    workChatState.composerBody = event.target.value;
+    workChatState.error = "";
+    render();
+    focusFieldAtEnd("work-chat-body");
+  });
+
+  document.getElementById("work-chat-file")?.addEventListener("change", async (event) => {
+    await addWorkChatFiles(event.target.files || []);
+  });
+
+  document.getElementById("work-chat-composer")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitWorkChatComposer();
+  });
+
+  document.querySelectorAll("[data-work-chat-mention]").forEach((button) => {
+    button.addEventListener("click", () => selectWorkChatMention(button.dataset.workChatMention));
+  });
+
+  document.querySelectorAll("[data-work-chat-remove-attachment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      workChatState.pendingAttachments = workChatState.pendingAttachments.filter((attachment) => attachment.id !== button.dataset.workChatRemoveAttachment);
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-work-chat-attachment]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      try {
+        await openWorkChatAttachment(button.dataset.workChatAttachment, adminAuthSession);
+      } catch (error) {
+        workChatState.error = error.message || "Unable to open attachment.";
+        render();
+      }
+    });
+  });
+
+  document.removeEventListener("keydown", handleWorkChatEscape);
+  document.addEventListener("keydown", handleWorkChatEscape);
+}
+
+function handleWorkChatEscape(event) {
+  if (event.key !== "Escape" || !workChatState.isOpen) return;
+  workChatState.isOpen = false;
+  render();
+}
 function bindEvents() {
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -6096,6 +6592,7 @@ function bindEvents() {
     handleInquiryFollowUpOutcome: handleMvpInquiryFollowUpOutcome,
   });
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
+  document.body.classList.toggle("work-chat-open", workChatState.isOpen);
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
   bindOpsBoardEvents();
   bindOrderDashboardEvents();
