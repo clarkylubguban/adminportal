@@ -2,6 +2,96 @@
 
 Date: 2026-07-27
 
+## Phase 6D Programmatic QA Attempt
+
+Test timestamp: 2026-07-27 Asia/Manila
+
+| Item | Result |
+| --- | --- |
+| Phase 6D starting commit | `1dcc0647f838521622743fb5e75a9caf0e31461a` |
+| Phase 6D tested app commit | `1dcc0647f838521622743fb5e75a9caf0e31461a` |
+| Phase 6D tested deployment | `dpl_6fNiYUPUa5J6wZTenxngAGzJuhPT` |
+| Phase 6D staging URL | `https://adminportal-staging.vercel.app` |
+| Supabase URL verification | PASS - project URL resolves to `https://fszkypwovpdthqfobxrk.supabase.co`. |
+| Service-role environment | BLOCKED - `SUPABASE_SERVICE_ROLE_KEY` is not present in process env, Vercel CLI is not installed, no local `.vercel` project metadata exists, and the exposed Vercel/Supabase connectors do not provide secret environment variables or service-role keys. |
+| Synthetic Auth users | BLOCKED - official Supabase Auth Admin API requires the staging service-role key; direct `auth.users` SQL insertion was not used. |
+| Temporary secrets/files | PASS - no secret files were created; no credentials, tokens, cookies, service-role keys, or signed URLs were printed, stored, or committed. |
+| Production isolation | PASS - production Supabase/Vercel, `main`, and the pending payment migration were not touched. |
+
+Phase 6D synthetic account target status:
+
+| Account | Intended role | Status | Reason |
+| --- | --- | --- | --- |
+| `clarkylubguban+qa-owner-staging@gmail.com` | owner | BLOCKED | Could not create/reset through Auth Admin API without staging service-role key. |
+| `clarkylubguban+qa-admin-staging@gmail.com` | admin | BLOCKED | Could not create/reset through Auth Admin API without staging service-role key. |
+| `clarkylubguban+qa-staff-staging@gmail.com` | staff | BLOCKED | Could not create/reset through Auth Admin API without staging service-role key. |
+
+Phase 6D database state observed:
+
+| Table | Rows | Notes |
+| --- | ---: | --- |
+| `public.admin_users` | 2 | Existing Owner rows only; no synthetic Admin/Staff rows available for credentialed QA. |
+| `public.work_chat_channels` | 3 | Default channels only. |
+| `public.work_chat_messages` | 0 | No credentialed QA messages created. |
+| `public.work_chat_mentions` | 0 | No credentialed QA mentions created. |
+| `public.work_chat_attachments` | 0 | No credentialed QA attachments created. |
+| `public.work_chat_prepared_attachments` | 0 | No prepared uploads created. |
+
+Phase 6D remaining credentialed test status:
+
+| Area | Status | Exact reason |
+| --- | --- | --- |
+| Programmatic Owner/Admin/Staff sessions | BLOCKED | Requires Auth Admin-created/reset users and in-memory passwords; service-role env is unavailable. |
+| Work Chat Realtime two-session QA | BLOCKED | Requires programmatic QA Owner and QA Staff sessions. |
+| Unread counts and read markers | BLOCKED | Requires programmatic QA Owner and QA Staff sessions. |
+| @mentions | BLOCKED | Requires canonical QA Staff user. |
+| Attachments and signed URLs | BLOCKED | Requires authenticated Work Chat session and real QA attachment. |
+| Order Threads and idempotency | BLOCKED | Requires authenticated Admin Portal session. |
+| Disabled Staff enforcement | BLOCKED | Requires synthetic QA Staff row/session. |
+| Owner/Admin/Staff permission QA | BLOCKED | Requires programmatic QA Owner/Admin/Staff sessions. |
+| Full authenticated visual QA | BLOCKED | Requires authenticated browser contexts. |
+| Workflow regression through staging UI | BLOCKED | Requires authenticated browser context. |
+| Customer/anonymous isolation | BLOCKED for customer, PASS for prior anonymous API/storage probes | Customer session not available; anonymous Work Chat API/table and bucket-list probes remain documented in Phase 6B. |
+
+Phase 6D automated regression rerun:
+
+| Command | Status | Notes |
+| --- | --- | --- |
+| `npm.cmd run build` | PASS | Build validation passed. |
+| `node .\scripts\test-work-chat-mvp.mjs` | PASS | Static Work Chat verification passed. |
+| `node .\scripts\test-overview-dashboard.mjs` | PASS | Overview fixtures passed. |
+| `node .\scripts\test-workboard-ui.mjs` | PASS | Workboard UI contracts passed. |
+| `node .\scripts\test-my-tasks-ui.mjs` | PASS | My Tasks UI contracts passed. |
+| `node .\scripts\test-task-api.mjs` | PASS | 18 task API suites passed. |
+| `node .\scripts\test-task-service.mjs` | PASS | Task service suites passed. |
+| `node .\scripts\test-task-dispatch.mjs` | PASS | Task dispatch routes passed. |
+| `node .\scripts\test-task-gateway-http.mjs` | PASS | Local HTTP task gateway passed. |
+| `node .\scripts\test-workboard-http.mjs` | PASS | Workboard HTTP route passed. |
+| `node .\scripts\test-my-tasks-http.mjs` | PASS | My Tasks HTTP route passed. |
+| `node .\scripts\test-workboard-browser.mjs` | PASS after rerun | First run failed once at `typed title present before submit`; immediate rerun passed. No code change was made because the failure did not reproduce. |
+| `node .\scripts\test-my-tasks-browser.mjs` | PASS | Browser desktop/mobile My Tasks QA passed. |
+| `git diff --check` | PASS | Only line-ending warnings for generated `dist` files were emitted. |
+
+Phase 6D screenshots path:
+
+| Script | Path |
+| --- | --- |
+| Workboard browser QA | `C:\tmp\trry-admin-staging\qa-screens\phase-11-workboard` |
+| My Tasks browser QA | `C:\tmp\trry-admin-staging\qa-screens\phase-10-1-my-tasks` |
+
+Phase 6D cleanup:
+
+| Item | Status |
+| --- | --- |
+| Temporary env/secret files removed | NOT APPLICABLE - none were created. |
+| In-memory QA credentials cleared | NOT APPLICABLE - none were generated. |
+| Disposable unlinked uploads removed | NOT APPLICABLE - no uploads were created. |
+| Synthetic accounts kept for future QA | NOT APPLICABLE - accounts could not be created. |
+
+Phase 6D production-readiness recommendation: NOT APPROVED FOR PHASE 7
+
+Reason: critical credentialed QA remains BLOCKED because the staging service-role key is genuinely unavailable through the permitted environment/tooling surfaces. Without it, synthetic Auth Admin account creation/reset and programmatic authenticated sessions cannot be performed.
+
 ## Phase 6C Credentialed QA Resume
 
 Test timestamp: 2026-07-27 Asia/Manila
