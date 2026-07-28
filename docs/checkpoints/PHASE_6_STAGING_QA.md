@@ -2,6 +2,73 @@
 
 Date: 2026-07-27
 
+## Phase 6F Authenticated Staging QA Completion
+
+Test timestamp: 2026-07-28 Asia/Manila
+
+| Item | Result |
+| --- | --- |
+| Phase 6F starting commit | `0b89693650438f25a69dc6a4e8468093dc2ad2ea` |
+| Phase 6F tested staging URL | `https://adminportal-staging.vercel.app` |
+| Supabase URL verification | PASS - credentialed QA process used staging ref `fszkypwovpdthqfobxrk` only. |
+| QA account file handling | PASS - `C:\tmp\trry-admin-staging-qa-secrets\qa-accounts.env` was read only inside the temporary QA process. No passwords, tokens, cookies, access tokens, refresh tokens, signed URLs, or browser storage were printed, logged, screenshot, stored in repo, or committed. |
+| Prepared synthetic accounts | PASS - QA Owner, QA Admin, and QA Staff signed in programmatically and matched expected active roles through staging bootstrap. Account reset was not required. |
+| Production/main/payment isolation | PASS - production Supabase, production Vercel, `main`, and the pending payment migration were not touched. |
+
+Phase 6F critical credentialed test status:
+
+| Priority | Status | Evidence |
+| --- | --- | --- |
+| Owner/Staff Work Chat Realtime and exact-once delivery | PASS | Owner and Staff each received exactly one Realtime INSERT from the other active session. |
+| Global/per-channel unread and read markers | PASS | Staff global and general-channel unread increased for Owner message and cleared after mark-read. |
+| @mentions | PASS | Selected Staff mention produced Staff-scoped unread mention behavior; plain `@` text did not create a mention; Owner read did not clear Staff mention. |
+| Attachments and signed URL security | PASS | PNG, PDF, and TXT were prepared, uploaded, linked, and retrievable by active Staff through signed URL endpoint; anonymous signed URL request for the real QA attachment returned 401; disallowed/empty/oversized file classes returned 400. |
+| Order Threads and idempotency | PASS | Confirmed order thread creation was idempotent for `TRRY-STG-1003`; no Odoo Sales Order number was required; unknown/non-won probe was rejected. |
+| Disabled Staff enforcement and restore active | PASS | Owner disabled QA Staff; Staff Work Chat and My Tasks access were blocked while inactive; Owner restored Staff active and Staff bootstrap succeeded again. |
+| Owner/Admin/Staff permission QA | PASS | Owner can manage Admin/Staff, Admin can manage Staff only, Staff cannot access Staff Access or manager Workboard scope, and Staff can access My Tasks. |
+| Desktop/tablet/390px visual QA | PASS | Authenticated Chrome/CDP sweeps rendered Owner/Admin/Staff routes with no horizontal overflow at 1366px, 820px, and 390px. |
+| Inquiry follow-up workflow regression | PASS | Authenticated task/admin workflow reads succeeded; anonymous customer follow-up endpoint returned 401. |
+| Orders, Production, Workboard, My Tasks, Calendar, and Settings regression | PASS | Authenticated route sweep covered Orders, Production, Workboard, My Tasks, Settings, and the parked Calendar sidebar item. |
+| Customer and anonymous isolation | PASS | Anonymous Work Chat bootstrap returned 401; anonymous direct Work Chat REST read returned 401/403; anonymous bucket-list did not expose objects; customer-actions asset/post and follow-up probes returned 401, and workflow mutation probe was rejected before mutation. |
+
+Phase 6F authenticated screenshots:
+
+| Coverage | Path |
+| --- | --- |
+| Owner/Admin/Staff desktop, tablet, and 390px route screenshots | `C:\tmp\trry-admin-staging\qa-screens\phase-6-live` |
+
+Phase 6F automated regression rerun:
+
+| Command | Status | Notes |
+| --- | --- | --- |
+| `npm.cmd run build` | PASS | Build validation passed. |
+| `node .\scripts\test-work-chat-mvp.mjs` | PASS | Static Work Chat verification passed. |
+| `node .\scripts\test-overview-dashboard.mjs` | PASS | Overview fixtures passed. |
+| `node .\scripts\test-workboard-ui.mjs` | PASS | Workboard UI contracts passed. |
+| `node .\scripts\test-my-tasks-ui.mjs` | PASS | My Tasks UI contracts passed. |
+| `node .\scripts\test-task-api.mjs` | PASS | Task API suites passed. |
+| `node .\scripts\test-task-service.mjs` | PASS | Task service suites passed. |
+| `node .\scripts\test-task-dispatch.mjs` | PASS | Task dispatch routes passed. |
+| `node .\scripts\test-task-gateway-http.mjs` | PASS | Local HTTP task gateway passed. |
+| `node .\scripts\test-workboard-http.mjs` | PASS | Workboard HTTP route passed. |
+| `node .\scripts\test-my-tasks-http.mjs` | PASS | My Tasks HTTP route passed. |
+| `node .\scripts\test-workboard-browser.mjs` | PASS | Browser desktop/mobile Workboard QA passed. |
+| `node .\scripts\test-my-tasks-browser.mjs` | PASS after rerun | First run failed once at `catalog route loaded`; immediate rerun passed. No code change was made because the failure did not reproduce. |
+| `git diff --check` | PASS | Only line-ending warnings for generated `dist` files were emitted. |
+
+Phase 6F cleanup:
+
+| Item | Status |
+| --- | --- |
+| Credentials/tokens/browser storage | PASS - remained in memory/browser runtime only and were not printed, logged, committed, or documented. |
+| Staff active status | PASS - QA Staff was restored active after disabled-user enforcement test. |
+| Temporary QA runner | PASS - remains outside repo at `C:\tmp\trry-admin-staging-qa-runner`; contains no credential values. |
+| QA attachments/messages | PASS - retained as staging QA evidence only; no signed URLs or storage paths were documented. |
+
+Phase 6F production-readiness recommendation: APPROVED FOR PHASE 7
+
+Reason: all critical authenticated staging QA items passed with the recreated QA Owner/Admin/Staff accounts, all automated regressions passed, and staging/production isolation constraints were respected.
+
 ## Phase 6E QA Account File Resume
 
 Test timestamp: 2026-07-28 Asia/Manila
