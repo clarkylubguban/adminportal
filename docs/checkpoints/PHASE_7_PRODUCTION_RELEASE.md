@@ -243,3 +243,57 @@ Automated regression:
 Note: `scripts/test-my-tasks-browser.mjs` failed once on a transient Settings-route load assertion and passed on immediate rerun.
 
 Phase 7D recommendation: GO after the Phase 7C.1 staging commit is pushed to `origin/staging`. Phase 7D must apply only migration `006` to production as the forward correction before merging the updated staging release to `main`.
+
+## Phase 7D.1 Work Chat Launcher Hotfix
+
+Status: HOTFIX DEPLOYED; RELEASE COMPLETION STILL BLOCKED FOR PRODUCTION ADMIN/STAFF SMOKE.
+
+Hotfix commit:
+
+- `c31da4a153c9cdeb76e2dff8f053b04ac2d16b63` - `Fix Work Chat launcher binding`
+
+Scope:
+
+- `src/main.js` now binds Work Chat launcher events during global event binding.
+- Work Chat launcher click and keyboard activation are explicitly handled in `bindWorkChatEvents()`.
+- Generated `dist/src/main.js` was rebuilt from source.
+- `scripts/test-work-chat-mvp.mjs` now statically asserts the Work Chat binder is wired.
+- `scripts/test-work-chat-launcher-browser.mjs` adds browser coverage for launcher open, close, keyboard activation, route navigation, duplicate-drawer protection, and 390px layout.
+
+Verification before production:
+
+- PASS: `npm run build`
+- PASS: Full automated regression suite used for Phase 7D.1, including Work Chat, Overview, Workboard, My Tasks, task API/service/dispatch/gateway, and ops workflow tests.
+- PASS: `git diff --check`
+- PASS: Staging deployment `dpl_HKJEdz9tQLobk7AVDehjtkUqdx4h` reached `READY`.
+- PASS: Staging Owner/Admin/Staff Work Chat launcher hotfix smoke using synthetic staging accounts. Credentials were read only inside the temporary QA process and were not printed, stored, screenshotted, or committed.
+
+Production deployment:
+
+- Previous production deployment: `dpl_nitJ9u3qywDA8JvXWNFXEHAwDaVY`
+- Hotfix production deployment: `dpl_349VPfKCxW3NHyg5xvJHzWgrfWHC`
+- Production commit: `c31da4a153c9cdeb76e2dff8f053b04ac2d16b63`
+- Production state: `READY`
+- Production aliases include `admin.trryapparel.com`.
+
+Production smoke:
+
+- PASS: Owner authenticated session loaded `https://admin.trryapparel.com/overview` without redirecting to login.
+- PASS: Owner Work Chat launcher is present.
+- PASS: Owner click opens the Work Chat drawer.
+- PASS: Owner drawer loads expected channels after bootstrap: General, Front Desk, Production, Mentions.
+- PASS: Owner Escape closes the drawer.
+- PASS: Owner close button closes the drawer.
+- PASS: Owner launcher opens across Overview, Inquiries, Orders, Production, Workboard, My Tasks, Settings, and Staff routes.
+- PASS: Payment API remains parked; production payment endpoint returned the expected unavailable response.
+- PASS: Vercel production deployment is `READY` and post-smoke runtime requests returned 200 responses.
+- WARN: Vercel logged Node `DEP0169` deprecation warnings on successful `/api/work-chat/bootstrap` and `/api/admin-users` requests. No request failure or release-blocking runtime error was observed from this warning.
+
+Remaining blockers:
+
+- BLOCKED: Production Admin smoke was not completed because no authenticated production Admin session or production Admin credentials were available. Staging accounts must not be used against production.
+- BLOCKED: Production Staff smoke was not completed because no authenticated production Staff session or production Staff credentials were available. Staging accounts must not be used against production.
+- BLOCKED: Production Work Chat realtime/exact-once delivery, cross-role unread counts, read markers, mentions, and attachment flows require at least two authenticated production internal-user sessions. Only an authenticated production Owner session was available during Phase 7D.1.
+- BLOCKED: Authenticated production 390px browser smoke could not be performed in the available in-app Owner session because the connector did not expose viewport resizing for that authenticated tab. The same 390px path passed in local and staging credentialed hotfix QA.
+
+Do not mark Phase 7 production release complete until the remaining production Admin/Staff and cross-session Work Chat smoke tests pass with real production internal-user sessions.
