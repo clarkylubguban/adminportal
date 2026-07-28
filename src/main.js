@@ -215,13 +215,15 @@ let productImages = products.flatMap((product) =>
 const OPS_LIME = "#DDFF4F";
 const OPS_INK = "#111111";
 const OPS_RED = "#E23F32";
+const CUSTOMER_PAYMENT_WORKFLOW_ENABLED = false;
+const PAYMENT_CUSTOMER_ACTIONS = new Set(["require_payment", "mark_payment_under_review", "request_new_payment_proof", "confirm_payment", "confirm_cash_payment"]);
 
 const opsStatus = {
   new: { label: "New / Inquiry Received", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
   quote: { label: "New Inquiry", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
   sent: { label: "Quote Sent", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
   followup: { label: "Follow Up", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
-  won: { label: "Won / Odoo Created", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
+  won: { label: "Won / TRRY Order", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
   lost: { label: "Lost", dot: OPS_RED, bg: "#FFF5F4", text: OPS_RED },
 };
 
@@ -245,7 +247,7 @@ const opsStatusNameToKey = {
   "Need Details": "followup",
   "Quote Sent": "sent",
   "Follow Up": "followup",
-  "Won / Odoo Created": "won",
+  "Won / TRRY Order": "won",
   Lost: "lost",
 };
 
@@ -288,7 +290,7 @@ const opsProduction = [
 const opsPriorities = [
   { text: "Follow up pending quotation - St. Michael's College Org", tag: "Quote Sent", tone: "sent" },
   { text: "Ask missing details - Brgy. Hinaplanon needs sizes + logo file", tag: "Follow Up", tone: "followup" },
-  { text: "Create Odoo Sales Order - Iligan Riders Club confirmed 60 pcs", tag: "Confirmed", tone: "won" },
+  { text: "Create TRRY order - Iligan Riders Club confirmed 60 pcs", tag: "Confirmed", tone: "won" },
   { text: "Check production queue - embroidery due this week", tag: "Production", tone: "followup" },
 ];
 
@@ -2355,7 +2357,7 @@ function renderMvpInquiriesPage() {
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
     renderQuote: renderOpsQuoteStage,
-    renderOdoo: renderOpsOdooAction,
+    renderOrder: renderOpsOrderAction,
     renderArtwork: renderMvpArtworkAction,
   });
 }
@@ -2406,7 +2408,7 @@ function getOpsCounts() {
     quotesDue: opsInquiries.filter((item) => item.status === "quote").length,
     followUps: opsInquiries.filter((item) => item.status === "sent" || item.status === "followup").length,
     prodToday: opsProduction.filter((item) => item.name !== "Ready for Pickup").reduce((total, item) => total + item.jobs, 0),
-    converted: opsInquiries.filter((item) => item.status === "won" && item.odooSO).length,
+    converted: opsInquiries.filter((item) => item.status === "won").length,
   };
 }
 
@@ -2442,8 +2444,8 @@ function getOpsPriorityItems() {
     .forEach((item) => addInquiry(item, "New Inquiry", "new", `${item.customer} - prepare quotation`));
 
   opsInquiries
-    .filter((item) => /confirm/i.test(item.next || "") && !item.odooSO)
-    .forEach((item) => addInquiry(item, "Need SO", "sent", `${item.customer} - add Odoo SO number`));
+    .filter((item) => /confirm/i.test(item.next || "") && item.status !== "won")
+    .forEach((item) => addInquiry(item, "Ready", "sent", `${item.customer} - confirm TRRY order`));
 
   const limited = selected.slice(0, 6).map((item, index) => ({ ...item, number: index + 1 }));
 
@@ -2527,6 +2529,7 @@ function canOpsPrepareProof(item) {
 }
 
 function canOpsRequestPayment(item) {
+  if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) return false;
   const state = getOpsNormalizedCustomerState(item);
   return state.quote === "approved" && state.artwork === "approved" && !isOpsPaymentConfirmed(state.payment);
 }
@@ -2567,7 +2570,7 @@ function getOpsInquiryCurrentTask(item) {
   if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment receipt" };
   if (canOpsRequestPayment(item) && ["pay_at_shop", "payment_pending_at_shop"].includes(state.payment)) return { stage: "payment", text: "Confirm shop payment" };
   if (canOpsRequestPayment(item)) return { stage: "payment", text: "Request payment" };
-  if (isOpsPaymentConfirmed(state.payment) && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
+  if (state.quote === "approved" && state.status !== "won") return { stage: "production", text: "Create TRRY order" };
   if (canEditOpsCustomerTracking(item)) return { stage: "fulfillment", text: "Update customer tracking" };
   return { stage: "inquiry", text: item.next || "Review inquiry" };
 }
@@ -2722,7 +2725,7 @@ function renderOpsInquiryDetails(item) {
   ].filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "" && String(value).trim() !== "-");
 
   const summaryRows = rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${label === "Estimated value" ? value : escapeHtml(value)}</strong></div>`).join("");
-  const notesPair = `<div class="ops-summary-odoo-notes-row ${notesAreLong ? "wide" : ""}"><div><span>Odoo SO:</span><strong>${escapeHtml(item.odooSO || "Not created")}</strong></div><div class="ops-summary-customer-notes"><span>CUSTOMER NOTES</span><strong>${escapeHtml(customerNotes)}</strong></div></div>`;
+  const notesPair = `<div class="ops-summary-odoo-notes-row ${notesAreLong ? "wide" : ""}"><div><span>Historical SO:</span><strong>${escapeHtml(item.odooSO || "Not recorded")}</strong></div><div class="ops-summary-customer-notes"><span>CUSTOMER NOTES</span><strong>${escapeHtml(customerNotes)}</strong></div></div>`;
   return `<section class="ops-inquiry-summary"><div class="ops-summary-grid">${summaryRows}${notesPair}</div><details class="ops-submission-details"><summary>CUSTOMER SUBMISSION</summary><p>${escapeHtml(item.message || "No message saved.")}</p></details></section>`;
 }
 function renderOpsArtworkAction(item) {
@@ -2930,7 +2933,9 @@ function renderOpsPaymentStage(item) {
   const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
   body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
 
-  if (isOpsPaymentConfirmed(status)) {
+  if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) {
+    body += `<p class="ops-stage-muted"><strong>PAYMENT WORKFLOW PARKED</strong>Payment history remains visible, but payment actions do not block order conversion or production in this release.</p>`;
+  } else if (isOpsPaymentConfirmed(status)) {
     body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
   } else if (!canOpsRequestPayment(item)) {
     body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
@@ -2956,24 +2961,24 @@ function renderOpsProductionStage(item) {
   if (item.status === "sent") {
     return renderOpsStageShell({
       key: "production",
-      title: "Production / Odoo",
-      status: item.odooSO ? "Odoo created" : "Sales order needed",
+      title: "Production / Order",
+      status: item.status === "won" ? "TRRY order created" : "Order needed",
       current,
-      body: renderOpsOdooAction(item),
+      body: renderOpsOrderAction(item),
     });
   }
-  if (item.odooSO) {
+  if (item.status === "won") {
     return renderOpsStageShell({
       key: "production",
-      title: "Production / Odoo",
-      status: "Odoo created",
+      title: "Production / Order",
+      status: "TRRY order created",
       current,
-      body: `<p class="ops-stage-complete">Sales Order ${escapeHtml(item.odooSO)} is recorded.</p>`,
+      body: `<p class="ops-stage-complete">TRRY order ${escapeHtml(createConfirmedOrderReference(item))} is recorded.</p>`,
     });
   }
   return renderOpsStageShell({
     key: "production",
-    title: "Production / Odoo",
+    title: "Production / Order",
     status: "Locked",
     locked: true,
     current,
@@ -3149,6 +3154,10 @@ async function requestOpsCustomerAction(inquiryId, body) {
 
 async function saveOpsCustomerAction(inquiryId, action, sourceElement) {
   if (!inquiryId || !action || sourceElement?.disabled) return;
+  if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED && PAYMENT_CUSTOMER_ACTIONS.has(action)) {
+    setOpsCustomerActionInlineMessage(sourceElement, "PAYMENT WORKFLOW IS PARKED FOR THIS RELEASE.", "error");
+    return;
+  }
 
   const body = getOpsCustomerActionFormPayload(action, sourceElement);
   const validationMessage = getOpsQuoteValidationMessage(action, body);
@@ -3312,7 +3321,7 @@ function renderOpsStaffActions(item, statusKey) {
   const actions = getOpsStatusActions(statusKey);
 
   if (actions.length === 0) {
-    const finalText = statusKey === "won" ? "Closed - Odoo SO created" : "Closed - lost inquiry";
+    const finalText = statusKey === "won" ? "Closed - TRRY order created" : "Closed - lost inquiry";
     return `<div class="ops-card-final">${finalText}</div>`;
   }
 
@@ -3328,7 +3337,7 @@ function getOpsStatusActions(statusKey) {
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
     ],
     quote: [
-      { to: "sent", label: "Quote Sent", next: "Quote sent - wait for confirmation or add Odoo SO when confirmed" },
+      { to: "sent", label: "Quote Sent", next: "Quote sent - wait for customer approval" },
       { to: "followup", label: "Follow Up", next: "Follow up before sending quote" },
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
     ],
@@ -3337,7 +3346,7 @@ function getOpsStatusActions(statusKey) {
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
     ],
     followup: [
-      { to: "won", label: "Won", next: "Customer confirmed - move to Odoo sales order" },
+      { to: "won", label: "Won", next: "Customer confirmed - create TRRY order" },
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
       { to: "new", label: "Back to New Inquiry", next: "Prepare quote after follow-up" },
     ],
@@ -3428,7 +3437,7 @@ async function moveOpsInquiry(id, targetStatus) {
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
-function renderOpsOdooAction(item) {
+function renderOpsOrderAction(item) {
   if (opsSoDraft?.id === item.id) {
     const isSaving = opsSoSavingId === item.id;
     return `<div class="ops-so-editor ops-order-confirm-card"><strong>CREATE CONFIRMED ORDER?</strong><p>This approved inquiry will be added to Orders.</p><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>${isSaving ? "CREATING..." : "CONFIRM &amp; CREATE ORDER"}</button><button class="ops-light-button mini" data-ops-cancel-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>CANCEL</button></div></div>`;
@@ -3437,7 +3446,7 @@ function renderOpsOdooAction(item) {
 }
 
 function createConfirmedOrderReference(item) {
-  return String(item.odooSO || item.orderCode || item.orderReference || item.reference || item.id || "").trim();
+  return String(item.orderCode || item.orderReference || item.reference || item.id || item.odooSO || "").trim();
 }
 
 function renderOpsProductionCard(item) {
@@ -3558,20 +3567,19 @@ function normalizeOpsDate(value) {
 async function confirmOpsSO(id) {
   if (opsSoSavingId) return;
   const current = opsInquiries.find((item) => item.id === id);
-  const so = current ? createConfirmedOrderReference(current) : "";
-  if (!so || !current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
+  if (!current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
   opsSoSavingId = id;
 
   if (shouldLoadSupabaseOps) {
     try {
-      const payload = await requestOpsWorkflowAction(id, { action: "confirm_order", odooSO: so });
+      const payload = await requestOpsWorkflowAction(id, { action: "confirm_order" });
       const savedInquiry = payload.inquiry;
       if (!savedInquiry) throw new Error("Order conversion returned no saved inquiry.");
       opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...savedInquiry } : item);
       opsLoadState = opsLoadState === "empty" ? "success" : opsLoadState;
       opsLoadError = "";
     } catch (error) {
-      console.error("Unable to save Ops Board Odoo SO.", error);
+      console.error("Unable to create TRRY order.", error);
       opsLoadState = "error";
       opsLoadError = error.message;
       opsSoSavingId = null;
@@ -3580,7 +3588,7 @@ async function confirmOpsSO(id) {
   }
 
   if (!shouldLoadSupabaseOps) {
-    opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", odooSO: so, next: "Odoo Sales Order recorded" } : item);
+    opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", next: "TRRY order confirmed - ready for production handoff" } : item);
   }
   opsSoDraft = null;
   opsSoSavingId = null;
@@ -3765,11 +3773,11 @@ function renderOrderDashboardPage() {
           <div>
             <p class="ops-date-line">ORDER DASHBOARD</p>
             <h1>Confirmed Orders</h1>
-            <p class="subtitle">Internal production view for Won inquiries and Odoo sales orders only.</p>
+            <p class="subtitle">Internal production view for confirmed TRRY orders.</p>
           </div>
           <div class="ops-rule-card">
-            <strong>Odoo stays source of truth</strong>
-            <span>Accounting, payment, inventory, costing, and invoicing remain outside this dashboard.</span>
+            <strong>TRRY order workflow</strong>
+            <span>Production handoff is managed here while accounting and invoicing remain outside this dashboard.</span>
           </div>
         </header>
         ${renderOpsPersistenceNotice()}
@@ -3830,7 +3838,7 @@ function renderOrderDashboardFilters() {
   ];
 
   return `<section class="order-dashboard-filters" aria-label="Order dashboard filters">
-    <label class="order-dashboard-search">${renderIcon("search", "search-icon")}<input id="order-dashboard-search" value="${escapeHtml(orderDashboardFilters.search)}" placeholder="Search order, customer, Odoo SO..." type="search" /></label>
+    <label class="order-dashboard-search">${renderIcon("search", "search-icon")}<input id="order-dashboard-search" value="${escapeHtml(orderDashboardFilters.search)}" placeholder="Search order or customer..." type="search" /></label>
     <select data-order-dashboard-filter="stage">${stageOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.stage === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
     <select data-order-dashboard-filter="staff"><option value="all">All Staff</option>${staffOptions.map((staff) => `<option value="${escapeHtml(staff.value)}" ${orderDashboardFilters.staff === staff.value ? "selected" : ""}>${escapeHtml(staff.label)}</option>`).join("")}</select>
     <select data-order-dashboard-filter="fulfillment">${fulfillmentOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.fulfillment === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
@@ -3932,7 +3940,7 @@ function renderOrderDashboardCard(item) {
     <strong>${escapeHtml(item.customer || "Unnamed customer")}</strong>
     <small>${escapeHtml(item.service || "-")} / ${escapeHtml(item.qty || "-")}</small>
     <div class="order-dashboard-meta"><span>${escapeHtml(getOrderProductionStageLabel(stage))}</span><span>${escapeHtml(getOpsFulfillmentLabel(item))}</span><span>${escapeHtml(getOrderDueLabel(item))}</span></div>
-    <div class="order-dashboard-meta"><span>Staff: ${escapeHtml(getOrderAssignedStaff(item))}</span><span>Odoo: ${escapeHtml(item.odooSO || "-")}</span></div>
+    <div class="order-dashboard-meta"><span>Staff: ${escapeHtml(getOrderAssignedStaff(item))}</span><span>Order: ${escapeHtml(createConfirmedOrderReference(item) || "-")}</span></div>
   </button>`;
 }
 
@@ -3951,7 +3959,7 @@ function renderOrderDashboardDrawer(item) {
     <header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer || "Order")}</h2></div><button class="ops-drawer-close" data-order-dashboard-close type="button" aria-label="Close order details">X</button></header>
     <div class="ops-ticket-details">
       <div><span>Status</span><strong>${escapeHtml(opsStatus[item.status]?.label || item.status || "Won")}</strong></div>
-      <div><span>Odoo SO</span><strong>${escapeHtml(item.odooSO || "-")}</strong></div>
+      <div><span>Historical SO</span><strong>${escapeHtml(item.odooSO || "-")}</strong></div>
       <div><span>Product</span><strong>${escapeHtml(item.service || "-")}</strong></div>
       <div><span>Quantity</span><strong>${escapeHtml(item.qty || "-")}</strong></div>
       <div><span>Needed Date</span><strong>${escapeHtml(getOrderDueLabel(item))}</strong></div>

@@ -96,7 +96,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   const confirmed = (item) => {
     const status = key(item.status);
     if (["lost", "cancelled", "canceled"].includes(status)) return false;
-    return Boolean(String(item.odooSO || "").trim()) && (status === "won" || key(item.quoteStatus) === "approved");
+    return status === "won" && key(item.quoteStatus) === "approved";
   };
 
   const blockedReason = (item) => {
@@ -105,7 +105,6 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const artwork = artworkLabel(item);
     if (artwork === "No Artwork") return "No artwork";
     if (artwork !== "Artwork Approved") return "Awaiting customer artwork approval";
-    if (Number(item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) return "Payment requirement not completed";
     return "";
   };
 
@@ -444,7 +443,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         const route = isReleasedToProduction(item) ? `/production?order=${encodeURIComponent(item.id)}` : `/orders?order=${encodeURIComponent(item.id)}`;
         rows.push(priority(item, blocked ? `Blocked: ${blocked}` : "Order is overdue", dueState.label, route, dueState.key === "overdue" ? "danger" : "warning"));
       }
-      else if (paymentLabel(item) === "For Verification") rows.push(priority(item, "Payment proof submitted / verify payment", "Needs review", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
+      else if (paymentLabel(item) === "For Verification") rows.push(priority(item, "Payment proof submitted / parked for later review", "Parked", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
       else if (dueState.key === "today" || productionStage(item) === "ready") rows.push(priority(item, productionStage(item) === "ready" ? "Ready for release" : "Due today", dueState.label, `/orders?order=${encodeURIComponent(item.id)}`, ""));
     });
     inquiries.forEach((item) => {
@@ -474,8 +473,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return [
       bottleneck("Overdue follow-ups", overdueFollowUps, "Customer follow-ups are past their scheduled date.", "/inquiries?stage=follow_due", "danger"),
       bottleneck("Quotation queue", quoteBacklog, "New inquiries still need quotation action.", "/inquiries?stage=new", quoteBacklog ? "warning" : ""),
-      bottleneck("Payment waiting", awaitingPayment, "Confirmed orders still need payment completion.", "/orders?payment=awaiting", awaitingPayment ? "warning" : ""),
-      bottleneck("Payment proof review", paymentProofs, "Receipts or payment proof need owner review.", "/orders", paymentProofs ? "warning" : ""),
+      bottleneck("Payment parked", awaitingPayment, "Payment workflow is parked for this release.", "/orders?payment=awaiting", awaitingPayment ? "warning" : ""),
+      bottleneck("Payment proof parked", paymentProofs, "Receipts or payment proof stay visible but do not block production.", "/orders", paymentProofs ? "warning" : ""),
       bottleneck("Artwork attention", artworkAttention, "Artwork is missing, pending, or needs revision on open orders.", "/orders", artworkAttention ? "warning" : ""),
       bottleneck("Blocked release", blockedRelease, "Production release requirements are not fully satisfied.", "/orders", blockedRelease ? "danger" : ""),
       bottleneck("Overdue production", overdueProduction, "Released production jobs are past due.", "/production?due=overdue", overdueProduction ? "danger" : ""),
@@ -506,7 +505,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<button type="button" class="mvp-module-link" data-mvp-route="${html(route)}"><span><strong>${html(label)}</strong><small>${html(detail)}</small></span><b>${count}</b></button>`;
   }
   return { state, renderOverview, renderInquiries, renderOrders, renderProduction, bind, helpers: { confirmed, productionStage, stageLabel } };
-  function renderInquiries({ items, notices = "", renderQuote, renderOdoo, renderArtwork }) {
+  function renderInquiries({ items, notices = "", renderQuote, renderOrder, renderArtwork }) {
     const inquiries = items.filter((item) => !confirmed(item));
     const stageFilter = query("stage") || state.inquiry.stage;
     const search = state.inquiry.search.toLowerCase();
@@ -526,7 +525,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ${notices}
       <div class="mvp-stage-cards">${INQUIRY_QUEUES.map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="${stageFilter === value ? "active" : ""}"><span>${label}</span><strong>${inquiryStageCount(value, inquiries)}</strong></button>`).join("")}</div>
       ${filterBar("inquiry", items, ["owner", "service", "due"])}
-      ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOdoo, renderArtwork)}
+      ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOrder, renderArtwork)}
     </main>`;
   }
 
@@ -546,12 +545,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `${table("inquiry", headers, desktopRows, "No inquiries found.")}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("No inquiries found.")}</section>`;
   }
 
-  function inquiryDrawer(item, renderQuote, renderOdoo, renderArtwork) {
+  function inquiryDrawer(item, renderQuote, renderOrder, renderArtwork) {
     if (!item) return "";
     const stage = quoteStage(item);
-    const action = inquiryPrimaryAction(item, stage, renderOdoo);
+    const action = inquiryPrimaryAction(item, stage, renderOrder);
     const activeTab = ["details", "request", "notes", "history"].includes(state.inquiryTab) ? state.inquiryTab : "details";
-    const workflowPanel = state.inquiryActionId === item.id ? inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) : "";
+    const workflowPanel = state.inquiryActionId === item.id ? inquiryWorkflowPanel(item, action, renderQuote, renderOrder) : "";
     return drawer("inquiry locked", item, QUOTE_STAGES[stage], `
       <section class="mvp-inquiry-locked-shell">
         ${inquiryLockedHeader(item, stage)}
@@ -613,18 +612,18 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<div class="mvp-inquiry-action-bar"><button type="button" class="mvp-action-secondary" data-mvp-inquiry-tab="notes">Edit Inquiry</button><div class="mvp-more-wrap"><button type="button" class="mvp-action-secondary" data-mvp-more-toggle>More</button>${state.inquiryMoreOpen ? `<div class="mvp-more-menu"><button type="button" data-mvp-inquiry-tab="request">View Request</button><button type="button" data-mvp-inquiry-tab="history">View History</button></div>` : ""}</div><button type="button" class="mvp-action-primary" data-mvp-primary-action="${html(item.id)}" ${action.disabled ? "disabled" : ""}><span>${html(action.label)}</span><small>${html(action.hint)}</small></button></div>`;
   }
 
-  function inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) {
+  function inquiryWorkflowPanel(item, action, renderQuote, renderOrder) {
     if (action.kind === "quote" && typeof renderQuote === "function") return `<section class="mvp-workflow-panel">${renderQuote(item).replace(/<details class="ops-quote-editor"(?! open)/, '<details class="ops-quote-editor" open')}</section>`;
-    if (action.kind === "so" && typeof renderOdoo === "function") return `<section class="mvp-workflow-panel">${renderOdoo(item)}</section>`;
+    if (action.kind === "order" && typeof renderOrder === "function") return `<section class="mvp-workflow-panel">${renderOrder(item)}</section>`;
     if (action.route) return `<section class="mvp-workflow-panel"><button class="mvp-primary-action" type="button" data-mvp-route="${html(action.route)}">${html(action.label)}</button></section>`;
     return `<section class="mvp-workflow-panel"><p>${html(action.hint)}</p></section>`;
   }
 
-  function inquiryPrimaryAction(item, stage, renderOdoo) {
+  function inquiryPrimaryAction(item, stage, renderOrder) {
     if (stage === "new") return { kind: "quote", label: "Create Quotation", hint: "Next step" };
     if (stage === "sent") return { kind: "wait", label: "Waiting for Approval", hint: "Quote sent", disabled: true };
-    if (stage === "approved" && !item.odooSO) return { kind: "so", label: "Create Order", hint: "Next step", disabled: typeof renderOdoo !== "function" };
-    if (stage === "approved" && item.odooSO) return { kind: "release", label: "Release to Production", hint: "Next step", route: `/orders?order=${encodeURIComponent(item.id)}` };
+    if (stage === "approved" && !confirmed(item)) return { kind: "order", label: "Create Order", hint: "Next step", disabled: typeof renderOrder !== "function" };
+    if (stage === "approved" && confirmed(item)) return { kind: "release", label: "Release to Production", hint: "Next step", route: `/orders?order=${encodeURIComponent(item.id)}` };
     if (confirmed(item)) return { kind: "production", label: "View Production", hint: "Open job", route: `/production?order=${encodeURIComponent(item.id)}` };
     return { kind: "quote", label: "Create Quotation", hint: "Next step" };
   }
@@ -704,12 +703,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function statusSubtitle(item, stage) {
     if (stage === "new") return "Unquoted";
     if (stage === "sent") return "Waiting approval";
-    if (stage === "approved") return item.odooSO ? "SO created" : "Needs SO";
+    if (stage === "approved") return confirmed(item) ? "Order created" : "Ready to convert";
     return item.status || "Review";
   }
 
   function internalStatus(item) {
-    if (item.odooSO) return "Sales Order Created";
+    if (confirmed(item)) return "Order Created";
     if (quoteStage(item) === "sent") return "Pending Approval";
     if (quoteStage(item) === "new") return "Pending Quotation";
     return QUOTE_STAGES[quoteStage(item)];
@@ -755,7 +754,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     });
     if (item.quotePublishedAt) rows.push({ title: "Quote Sent", meta: dateTime(item.quotePublishedAt) });
     if (item.quoteApprovedAt) rows.push({ title: "Customer Approved", meta: dateTime(item.quoteApprovedAt) });
-    if (item.odooSO) rows.push({ title: "SO Created", meta: item.odooSO });
+    if (confirmed(item)) rows.push({ title: "Order Created", meta: orderReference(item) });
     rows.push({ title: "Inquiry Created", meta: inquiryTimestamp(item).date });
     return rows;
   }
@@ -848,10 +847,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const production = productionDisplay(item);
     const block = blockedReason(item);
     const gate = productionGate(item);
-    const canOpenProduction = Boolean(item.odooSO);
+    const canOpenProduction = true;
     const action = orderFooterAction(item, gate);
     return drawer("order", item, production.label, `
-      ${detailSection("Overview", [["Order Reference", orderReference(item)], ["Source Inquiry", sourceInquiryReference(item)], ["Odoo SO", item.odooSO || "Not set"], ["Customer", item.customer], ["Item", itemDisplay(item)], ["Quantity", item.sizeBreakdown || item.qty], ["Confirmed", dateTime(item.quoteApprovedAt || item.updatedAt)], ["Due Date", dueShortLabel(due(item), item)]])}
+      ${detailSection("Overview", [["Order Reference", orderReference(item)], ["Source Inquiry", sourceInquiryReference(item)], ["Historical SO", item.odooSO || "Not set"], ["Customer", item.customer], ["Item", itemDisplay(item)], ["Quantity", item.sizeBreakdown || item.qty], ["Confirmed", dateTime(item.quoteApprovedAt || item.updatedAt)], ["Due Date", dueShortLabel(due(item), item)]])}
       ${detailSection("Readiness", [["Artwork Status", readiness.artwork], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Revision Requirement", key(item.artworkStatus) === "revision_requested" ? "Revision needed" : "None"], ["Payment Readiness", payment.label], ["Blocked Reason", block || "None"]])}
       ${orderPaymentSummary(item)}
       ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", tracking(item)], ["Contact", item.contact || "Not set"]])}
@@ -877,14 +876,6 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text) ? "" : text;
   }
 
-  function paymentSatisfiesProductionGate(item) {
-    const value = key(item.paymentStatus);
-    const total = amount(item.quotedAmount || item.amountDue);
-    const verified = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
-    if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return total > 0 && verified >= total;
-    if (["down_payment_confirmed", "partially_paid"].includes(value)) return total >= 1000 && verified >= Math.round(total * 50) / 100;
-    return false;
-  }
   function isReleasedToProduction(item) {
     if (!confirmed(item)) return false;
     const status = key(item.status);
@@ -964,11 +955,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderActionRequired(item) {
     if (isOrderClosed(item)) return false;
     const dueState = due(item);
-    return Boolean(blockedReason(item) || dueState.key === "today" || dueState.key === "overdue" || orderArtworkKey(item) !== "approved" || paymentState(item).key !== "paid");
+    return Boolean(blockedReason(item) || dueState.key === "today" || dueState.key === "overdue" || orderArtworkKey(item) !== "approved");
   }
 
   function readyForProduction(item) {
-    return Boolean(productionStage(item) === "queued" && item.odooSO && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && !["Unassigned", "Not Yet Assigned"].includes(assigned(item)) && paymentSatisfiesProductionGate(item) && !blockedReason(item));
+    return Boolean(productionStage(item) === "queued" && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && !["Unassigned", "Not Yet Assigned"].includes(assigned(item)) && !blockedReason(item));
   }
 
   function readinessCell(readiness) {
@@ -1147,9 +1138,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         <label><span>Assigned Staff</span><select data-mvp-production-staff="${html(item.id)}" ${editorEnabled && !assignmentDisabled ? "" : "disabled"}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select>${assignmentHelp}</label>
         <label><span>Current Stage</span><strong>${stageLabel(stage)}</strong></label>
         <label><span>Next Stage</span><strong>${next ? stageLabel(next) : stage === "completed" ? "Completed" : released ? "None" : "Not available"}</strong></label>
-        <label><span>Production Blocker</span><select data-mvp-production-blocked="${html(item.id)}" ${editorEnabled ? "" : "disabled"}><option value="">Not blocked</option>${["No artwork", "Awaiting customer artwork approval", "Payment requirement not completed", "Materials unavailable"].map((reason) => `<option ${item.blockedReason === reason ? "selected" : ""}>${reason}</option>`).join("")}</select></label><label class="wide"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>${html(item.productionNote || "")}</textarea></label>
+        <label><span>Production Blocker</span><select data-mvp-production-blocked="${html(item.id)}" ${editorEnabled ? "" : "disabled"}><option value="">Not blocked</option>${["No artwork", "Awaiting customer artwork approval", "Materials unavailable"].map((reason) => `<option ${item.blockedReason === reason ? "selected" : ""}>${reason}</option>`).join("")}</select></label><label class="wide"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>${html(item.productionNote || "")}</textarea></label>
       </div><button class="mvp-secondary-action" type="button" data-mvp-save-production="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>Save Assignment &amp; Note</button>${blocker ? `<p class="mvp-blocked">BLOCKER: ${html(blocker)}</p>` : ""}</section>
-      ${detailSection("Release Context", [["Artwork Status", artworkLabel(item)], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Payment Status", paymentState(item).label], ["Odoo SO", item.odooSO || "Not set"], ["Source Order", orderReference(item)], ["Released", released ? dateTime(item.productionUpdatedAt || item.updatedAt) : "Not released"]])}
+      ${detailSection("Release Context", [["Artwork Status", artworkLabel(item)], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Payment Status", paymentState(item).label], ["Historical SO", item.odooSO || "Not set"], ["Source Order", orderReference(item)], ["Released", released ? dateTime(item.productionUpdatedAt || item.updatedAt) : "Not released"]])}
       ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", stage === "ready" || tracking(item) !== "Not set" ? tracking(item) : "Not set"], ["Readiness", stage === "ready" ? productionDisplay(item).label : "Not ready"]])}
     `, footer);
   }
@@ -1170,13 +1161,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function productionGate(item) {
     const missing = [];
-    if (!item.odooSO) missing.push("Odoo SO");
     if (!product(item) || product(item) === "Not set") missing.push("product");
     if (!item.service || !item.qty) missing.push("service and quantity");
     if (!item.dueDate) missing.push("due date");
     if (artworkLabel(item) !== "Artwork Approved") missing.push("artwork approval");
     if (["Not Yet Assigned", "Unassigned"].includes(assigned(item))) missing.push("assigned staff");
-    if (Number(item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) missing.push("payment");
     if (item.blockedReason && !missing.length) missing.push(item.blockedReason);
     return missing;
   }
@@ -1498,7 +1487,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function canRecordFollowUp(item) {
     const status = key(item.status);
     if (["lost", "cancelled", "canceled", "won"].includes(status)) return false;
-    if (confirmed(item) || String(item.odooSO || "").trim()) return false;
+    if (confirmed(item)) return false;
     return true;
   }  function fulfillment(item) { const value = key(item.fulfillmentMethod); return value === "pickup" ? "Pickup" : value === "delivery" ? "Delivery" : "Not set"; }
   function tracking(item) { const labels = { ready_for_pickup: "Ready for Pickup", out_for_delivery: "Out for Delivery", delivered: "Delivered", completed: "Completed" }; return labels[key(item.trackingSubstatus)] || "Not set"; }

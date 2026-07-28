@@ -146,7 +146,7 @@ export async function confirmOpsInquiryOdooSO(
     mapInquiryUpdatesToOpsRow({
       status: "won",
       odooSO,
-      next: "Odoo Sales Order recorded",
+      next: "TRRY order confirmed - ready for production handoff",
     }),
     getAccessToken(authSession)
   );

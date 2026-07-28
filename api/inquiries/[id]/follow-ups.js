@@ -127,7 +127,7 @@ function toClientEvent(row, adminUser = null) {
 function canRecordFollowUp(inquiry) {
   const status = normalizeKey(inquiry.status);
   if (["lost", "cancelled", "canceled", "won"].includes(status)) return false;
-  if (String(inquiry.odoo_so || "").trim()) return false;
+  if (String(inquiry.status || "").trim().toLowerCase() === "won") return false;
   return true;
 }
 

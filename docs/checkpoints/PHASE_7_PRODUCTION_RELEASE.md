@@ -159,3 +159,87 @@ A controlled cherry-pick/release branch is not required unless the release owner
 GO for Phase 7B controlled production merge preparation after the Phase 7A guard/documentation commit is pushed to `origin/staging`.
 
 Do not apply the parked payment migration, do not enable `ENABLE_CUSTOMER_PAYMENT_WORKFLOW`, do not push directly to `main` outside the controlled Phase 7B process, and do not modify production Supabase or Vercel settings as part of Phase 7A.
+
+## Phase 7C Release Attempt
+
+Status: STOPPED before `main` merge and before any production Vercel deployment.
+
+Production Supabase project `wcgtwfctpnwgpglywvvx` received and verified only the approved Phase 7 migrations:
+
+1. `inquiry_follow_up_events`
+2. `work_chat_mvp`
+3. `work_chat_allowed_attachment_types`
+4. `work_chat_active_user_invoker`
+
+Production `main` remained at `1585ec333df72c8f1553e9ae5eaaae035c219e80`, and no production Vercel deployment was triggered.
+
+During the final Phase 7C gate, production migration history showed a pre-existing record named `complete_payment_workflow` with version `20260726082535`. That migration was not applied during Phase 7C, but its historical production presence meant Phase 7C could not truthfully confirm that payment workflow migration history was absent. The release was stopped for forward correction.
+
+No production migration-history record was deleted, edited, reversed, or falsified.
+
+## Phase 7C.1 Odoo and Payment Gate Correction
+
+Status: STAGING QA COMPLETE.
+
+New corrective migration:
+
+- `supabase/migrations/202607280006_remove_odoo_dependency_and_park_payment_gate.sql`
+
+Behavior:
+
+- Replaces `public.enforce_ops_inquiry_mvp_workflow()` with a forward-only correction.
+- Order conversion rejects lost/cancelled inquiries, requires `quote_status = approved`, and requires a positive `quoted_amount`.
+- Order conversion no longer inspects or requires `odoo_so`.
+- Production stage changes require a confirmed TRRY order (`status = won`) and approved quote.
+- Production no longer inspects or requires `odoo_so`.
+- Production no longer calls `trry_payment_gate_satisfied` and does not require payment confirmation while the customer payment workflow is parked.
+- Product/service, quantity, due date, artwork approval, assigned staff, active blocker, valid-stage-transition, and ready/completed lock rules remain enforced.
+- Existing payment columns, payment functions, Odoo fields, and historical values remain untouched.
+
+Application changes:
+
+- `api/_lib/opsWorkflow.js` now confirms a TRRY order directly with `status = won` and `next_action = TRRY order confirmed - ready for production handoff`.
+- `api/inquiries/[id]/follow-ups.js` now treats `status = won` as the follow-up cutoff instead of checking `odoo_so`.
+- `src/mvpDashboard.js` now treats confirmed orders as `status = won` plus approved quote, and removes Odoo/payment from production readiness.
+- `src/main.js` replaces active Odoo prompts with TRRY order language, disables customer payment actions with `CUSTOMER_PAYMENT_WORKFLOW_ENABLED = false`, and renders payment as parked.
+- `src/services/opsBoard.js` updates the legacy confirm helper message to TRRY order language.
+- Generated `dist/src/*` assets were rebuilt from source.
+
+Staging migration verification on `fszkypwovpdthqfobxrk`:
+
+- `remove_odoo_dependency_and_park_payment_gate` recorded.
+- `ops_inquiries_mvp_workflow_guard` trigger still exists.
+- Current trigger function no longer contains `odoo_so`.
+- Current trigger function no longer calls `trry_payment_gate_satisfied`.
+- Current trigger function no longer contains the obsolete confirmed-Odoo message.
+- Staging migrations `inquiry_follow_up_events`, `work_chat_mvp`, `work_chat_allowed_attachment_types`, and `work_chat_active_user_invoker` remain intact.
+- Staging does not have the same recorded `complete_payment_workflow` migration-history entry that production has; production's historical record remains a production-only release note and must not be falsified.
+
+Focused staging QA:
+
+- PASS: Approved inquiry with positive quote and blank/null `odoo_so` converts directly to `won`.
+- PASS: Lost inquiry cannot convert.
+- PASS: Unapproved quote cannot convert.
+- PASS: Zero quote cannot convert.
+- PASS: Confirmed TRRY order with blank/null `odoo_so` can enter production when normal production requirements are complete.
+- PASS: Valid production stage progression still works.
+- PASS: Missing product/quantity/due date/artwork/assigned staff prevents production.
+- PASS: Active blocker prevents production.
+- PASS: Invalid stage transition is rejected.
+- PASS: Ready/completed production detail locks remain enforced.
+- PASS: Payment endpoint returns disabled response when the feature flag is absent.
+
+Automated regression:
+
+- PASS: `node .\scripts\test-ops-workflow-direct-order.mjs`
+- PASS: `npm run build`
+- PASS: Work Chat static verification
+- PASS: Overview dashboard test
+- PASS: Workboard UI/HTTP/browser tests
+- PASS: My Tasks UI/HTTP/browser tests after immediate rerun
+- PASS: Task API, service, dispatch, and gateway tests
+- PASS: `git diff --check`
+
+Note: `scripts/test-my-tasks-browser.mjs` failed once on a transient Settings-route load assertion and passed on immediate rerun.
+
+Phase 7D recommendation: GO after the Phase 7C.1 staging commit is pushed to `origin/staging`. Phase 7D must apply only migration `006` to production as the forward correction before merging the updated staging release to `main`.
