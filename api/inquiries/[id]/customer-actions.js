@@ -49,6 +49,30 @@ const CUSTOMER_ACTION_SELECT = [
   "payment_review_note",
   "payment_rejected_at",
 ].join(",");
+const PARKED_PAYMENT_FIELDS = [
+  "payment_method",
+  "payment_type",
+  "payment_selected_amount",
+  "payment_reference",
+  "payment_customer_note",
+  "payment_receipt_filename",
+  "payment_receipt_content_type",
+  "payment_receipt_size",
+  "payment_verified_amount",
+  "payment_verified_at",
+  "payment_verified_by",
+];
+const CUSTOMER_ACTION_LEGACY_SELECT = CUSTOMER_ACTION_SELECT
+  .split(",")
+  .filter((field) => !PARKED_PAYMENT_FIELDS.includes(field))
+  .join(",");
+const PAYMENT_ACTIONS = new Set([
+  "require_payment",
+  "mark_payment_under_review",
+  "request_new_payment_proof",
+  "confirm_payment",
+  "confirm_cash_payment",
+]);
 
 export default async function handler(request, response) {
   const inquiryReference = getInquiryReference(request);
@@ -93,15 +117,15 @@ export default async function handler(request, response) {
 
     const body = await readJsonBody(request);
     const action = cleanText(body.action, 80);
-    const { data: inquiry, error: lookupError } = await supabase
-      .from("ops_inquiries")
-      .select(CUSTOMER_ACTION_SELECT)
-      .eq("id", inquiryReference)
-      .maybeSingle();
+    const { inquiry, selectFields, paymentWorkflowReady, error: lookupError } = await readCustomerActionInquiry(supabase, inquiryReference);
 
     if (lookupError) throw lookupError;
     if (!inquiry) {
       sendJson(response, 404, { ok: false, error: "inquiry not found" });
+      return;
+    }
+    if (!paymentWorkflowReady && PAYMENT_ACTIONS.has(action)) {
+      sendJson(response, 503, { ok: false, error: "payment fields are not ready" });
       return;
     }
 
@@ -154,7 +178,7 @@ export default async function handler(request, response) {
       .from("ops_inquiries")
       .update({ ...updates, updated_at: now })
       .eq("id", inquiryReference)
-      .select(CUSTOMER_ACTION_SELECT)
+      .select(selectFields)
       .single();
 
     if (updateError) throw updateError;
@@ -338,6 +362,24 @@ function buildUpdates(action, body, inquiry, now, adminUser = null) {
   }
 
   return null;
+}
+
+async function readCustomerActionInquiry(supabase, inquiryReference) {
+  const read = (selectFields) => supabase
+    .from("ops_inquiries")
+    .select(selectFields)
+    .eq("id", inquiryReference)
+    .maybeSingle();
+  const full = await read(CUSTOMER_ACTION_SELECT);
+  if (!isMissingParkedPaymentColumn(full.error)) {
+    return { inquiry: full.data, selectFields: CUSTOMER_ACTION_SELECT, paymentWorkflowReady: true, error: full.error };
+  }
+  const legacy = await read(CUSTOMER_ACTION_LEGACY_SELECT);
+  return { inquiry: legacy.data, selectFields: CUSTOMER_ACTION_LEGACY_SELECT, paymentWorkflowReady: false, error: legacy.error };
+}
+
+function isMissingParkedPaymentColumn(error) {
+  return /payment_selected_amount|payment_type|payment_method|payment_reference|payment_customer_note|payment_receipt|payment_verified|payment_verified_by|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
 }
 
 function isProductionActive(value) {

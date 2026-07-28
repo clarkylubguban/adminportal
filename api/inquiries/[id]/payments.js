@@ -18,6 +18,10 @@ const PAYMENT_SELECT = [
 ].join(",");
 
 export default async function handler(request, response) {
+  if (process.env.ENABLE_CUSTOMER_PAYMENT_WORKFLOW !== "true") {
+    return sendJson(response, 404, { ok: false, error: "payment workflow is not available" });
+  }
+
   const inquiryReference = getInquiryReference(request);
   if (!/^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(inquiryReference)) {
     return sendJson(response, 400, { ok: false, error: "invalid inquiry reference" });

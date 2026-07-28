@@ -8,6 +8,7 @@ const WORKFLOW_SELECT = [
   "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status", "payment_verified_amount", "payment_confirmed_amount",
   "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "blocked_reason",
 ].join(",");
+const WORKFLOW_LEGACY_SELECT = WORKFLOW_SELECT.replace("payment_verified_amount,", "");
 
 export default async function handler(request, response) {
   const inquiryReference = getInquiryReference(request);
@@ -24,7 +25,7 @@ export default async function handler(request, response) {
     if (!WRITE_ROLES.has(adminUser.role)) return sendJson(response, 403, { ok: false, error: "write access required" });
 
     const body = await readJsonBody(request);
-    const { data: inquiry, error: lookupError } = await supabase.from("ops_inquiries").select(WORKFLOW_SELECT).eq("id", inquiryReference).maybeSingle();
+    const { inquiry, selectFields, error: lookupError } = await readWorkflowInquiry(supabase, inquiryReference);
     if (lookupError) throw lookupError;
     if (!inquiry) return sendJson(response, 404, { ok: false, error: "inquiry not found" });
 
@@ -41,7 +42,7 @@ export default async function handler(request, response) {
       .from("ops_inquiries")
       .update({ ...result.updates, updated_at: now })
       .eq("id", inquiryReference)
-      .select(WORKFLOW_SELECT)
+      .select(selectFields)
       .single();
     if (updateError) throw updateError;
 
@@ -51,6 +52,24 @@ export default async function handler(request, response) {
     const schemaMissing = /production_stage|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
     sendJson(response, schemaMissing ? 503 : 500, { ok: false, error: schemaMissing ? "workflow fields are not ready" : "workflow update failed" });
   }
+}
+
+async function readWorkflowInquiry(supabase, inquiryReference) {
+  const read = (selectFields) => supabase
+    .from("ops_inquiries")
+    .select(selectFields)
+    .eq("id", inquiryReference)
+    .maybeSingle();
+  const full = await read(WORKFLOW_SELECT);
+  if (!isMissingParkedPaymentColumn(full.error)) {
+    return { inquiry: full.data, selectFields: WORKFLOW_SELECT, error: full.error };
+  }
+  const legacy = await read(WORKFLOW_LEGACY_SELECT);
+  return { inquiry: legacy.data, selectFields: WORKFLOW_LEGACY_SELECT, error: legacy.error };
+}
+
+function isMissingParkedPaymentColumn(error) {
+  return /payment_verified_amount|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
 }
 
 async function getAuthorizedAdmin(supabase, token) {
