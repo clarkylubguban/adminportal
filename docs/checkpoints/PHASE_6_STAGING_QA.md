@@ -2,6 +2,48 @@
 
 Date: 2026-07-27
 
+## Phase 6E QA Account File Resume
+
+Test timestamp: 2026-07-28 Asia/Manila
+
+| Item | Result |
+| --- | --- |
+| Phase 6E starting commit | `d0a3861963c47bf4bcf42ba00691a8cc55ad8ccb` |
+| Phase 6E staging URL | `https://adminportal-staging.vercel.app` |
+| Supabase URL verification | PASS - QA process refused non-staging Supabase refs and used only `https://fszkypwovpdthqfobxrk.supabase.co`. |
+| QA account file handling | PASS - the QA account file was read only inside the temporary QA runner; no passwords, tokens, cookies, browser storage, service keys, or signed URLs were printed, committed, or documented. |
+| QA account file contents needed for reset | BLOCKED - both discovered QA account file variants contain role email/password keys but no staging service-role key, so official Supabase Auth Admin API account reset could not be performed. |
+| Prepared account sign-in | BLOCKED - staging Supabase Auth rejected the Owner credentials from the QA account file with `Invalid login credentials`; Admin/Staff credentialed tests were not attempted after Owner session setup failed. |
+| Existing browser profile probe | BLOCKED - `C:\tmp\trry-phase6-chrome-profile`, `C:\tmp\trry-phase7-chrome-profile`, `C:\tmp\trry-admin-cdp-profile`, `C:\tmp\trry-phase5-chrome-profile`, and `C:\tmp\trry-phase4-chrome-profile` were launched through Edge and Chrome without reading storage values; none contained a stored Admin Portal session for the staging origin. |
+| Production/main/payment isolation | PASS - production Supabase, production Vercel, `main`, and the pending payment migration were not touched. |
+
+Phase 6E remaining credentialed test status:
+
+| Priority | Status | Exact reason |
+| --- | --- | --- |
+| Owner/Staff two-session Work Chat Realtime | BLOCKED | Requires authenticated Owner and Staff sessions. The QA Owner sign-in failed, no service-role key was available to reset it, and no prepared local profile exposed a staging Admin Portal session. |
+| Unread counts and read markers | BLOCKED | Requires authenticated Owner/Staff sessions. |
+| @mentions | BLOCKED | Requires authenticated Owner/Staff sessions and a live Staff profile/session. |
+| Attachments and signed URLs | BLOCKED | Requires authenticated Work Chat session to prepare, upload, link, and request a real signed attachment URL. |
+| Order Threads and idempotency | BLOCKED | Requires authenticated Admin Portal Owner/Admin session. |
+| Disabled Staff enforcement and restore | BLOCKED | Requires authenticated Owner plus active Staff profile/session, or a staging service-role key to reset/restore the Staff profile safely. |
+| Owner/Admin/Staff permission QA | BLOCKED | Requires authenticated Owner/Admin/Staff sessions. |
+| Full authenticated desktop/tablet/390px visual QA | BLOCKED | Requires authenticated Owner/Admin/Staff browser contexts. |
+| Inquiry follow-up and workflow regressions | BLOCKED for credentialed UI/API flows | Authenticated Admin Portal session setup failed. Existing non-credentialed automated workflow regressions remain documented in Phase 6D. |
+| Customer/anonymous isolation checks | BLOCKED for customer, PASS for prior anonymous API/storage probes | No customer session was supplied. Anonymous Work Chat API/table and empty bucket-list probes remain documented from Phase 6B/6D. |
+
+Phase 6E temporary QA runner:
+
+| Item | Status |
+| --- | --- |
+| Temporary runner location | `C:\tmp\trry-admin-staging-qa-runner` |
+| Secret material in runner/scripts | PASS - no credential values were written into the runner. |
+| Screenshots created | NOT APPLICABLE - authenticated browser contexts could not be established. |
+
+Phase 6E production-readiness recommendation: NOT APPROVED FOR PHASE 7
+
+Reason: critical credentialed QA is still blocked. The supplied QA account file does not include a staging service-role key for account reset, and the supplied Owner credentials are rejected by staging Auth. No available local browser profile provides a usable authenticated staging session.
+
 ## Phase 6D Programmatic QA Attempt
 
 Test timestamp: 2026-07-27 Asia/Manila
