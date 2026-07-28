@@ -49,6 +49,7 @@ assertIncludes(contents.main, [
   "renderWorkChatShell", "WORK CHAT", "renderWorkChatMentionsButton",
   "Open Order Thread", "resetWorkChatState", "initializeWorkChat",
   "data-work-chat-open-order-thread", "data-work-chat-mentions",
+  "bindWorkChatEvents();",
 ]);
 
 assertIncludes(contents.css, [

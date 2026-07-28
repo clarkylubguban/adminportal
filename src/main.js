@@ -6386,8 +6386,15 @@ function bindMyTasksEvents() {
 }
 
 function bindWorkChatEvents() {
-  document.querySelector("[data-work-chat-open]")?.addEventListener("click", async () => {
+  const openLauncher = async () => {
     await openWorkChat();
+  };
+  const launcher = document.querySelector("[data-work-chat-open]");
+  launcher?.addEventListener("click", openLauncher);
+  launcher?.addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    await openLauncher();
   });
 
   document.querySelector("[data-work-chat-close]")?.addEventListener("click", () => {
@@ -6606,6 +6613,7 @@ function bindEvents() {
   bindOrderDashboardEvents();
   bindWorkboardEvents();
   bindMyTasksEvents();
+  bindWorkChatEvents();
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCatalogKey = button.dataset.catalogTab;
