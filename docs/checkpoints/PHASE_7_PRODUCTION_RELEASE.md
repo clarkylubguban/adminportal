@@ -297,3 +297,37 @@ Remaining blockers:
 - BLOCKED: Authenticated production 390px browser smoke could not be performed in the available in-app Owner session because the connector did not expose viewport resizing for that authenticated tab. The same 390px path passed in local and staging credentialed hotfix QA.
 
 Do not mark Phase 7 production release complete until the remaining production Admin/Staff and cross-session Work Chat smoke tests pass with real production internal-user sessions.
+
+## Phase 7E Production Acceptance Attempt
+
+Status: BLOCKED; RELEASE NOT COMPLETE.
+
+Date: 2026-07-29
+
+Final state checks:
+
+- PASS: `origin/main` remains `c31da4a153c9cdeb76e2dff8f053b04ac2d16b63`.
+- PASS: `origin/staging` remains at the documentation-only checkpoint head before this note: `b5d10ec85a691052032e22abedcba805bd402d1b`.
+- PASS: Production deployment `dpl_349VPfKCxW3NHyg5xvJHzWgrfWHC` is `READY`.
+- PASS: Production deployment aliases include `admin.trryapparel.com`.
+- PASS: Payment endpoint remains parked and returned HTTP 404 with `payment workflow is not available`.
+- PASS: No production runtime error groups were reported for the final pre-test window.
+- PASS: No tracked QA account file, browser storage, cookies, screenshots, or local QA artifact files were found. Only `.env.example` matched the tracked environment-file scan.
+
+Blocked production acceptance scope:
+
+- BLOCKED: The required production QA account file was not present at `C:\tmp\trry-admin-production-qa-secrets\qa-accounts.env`.
+- BLOCKED: The parent directory `C:\tmp\trry-admin-production-qa-secrets` was also not present.
+- BLOCKED: Isolated production Admin and Staff browser contexts could not be created without the production QA account file.
+- BLOCKED: Production Admin role smoke could not be completed.
+- BLOCKED: Production Staff role smoke could not be completed.
+- BLOCKED: Cross-session Work Chat realtime exact-once delivery, unread/read markers, mentions, attachment security, and authenticated 390px Admin/Staff responsive QA could not be completed.
+
+Runtime note:
+
+- The only recent production runtime status-code count observed during this attempt was one HTTP 404 from the intentional parked-payment probe. No sustained 5xx condition or runtime error group was observed.
+
+Release decision:
+
+- RELEASE NOT COMPLETE.
+- Do not mark Phase 7 complete until the production QA account file is restored and the Admin/Staff cross-session acceptance smoke passes with real production internal-user sessions.
