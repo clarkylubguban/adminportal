@@ -64,34 +64,31 @@ const CUSTOMER_ACTION_SELECT = [
   "payment_review_note",
   "payment_rejected_at",
 ].join(",");
-const PARKED_PAYMENT_FIELDS = [
-  "payment_method",
-  "payment_type",
+const ONLINE_PAYMENT_FIELDS = [
   "payment_selected_amount",
   "payment_reference",
   "payment_customer_note",
   "payment_receipt_filename",
   "payment_receipt_content_type",
   "payment_receipt_size",
+];
+const SHOP_PAYMENT_FIELDS = [
+  "payment_method",
+  "payment_type",
   "payment_verified_amount",
   "payment_verified_at",
   "payment_verified_by",
   "payment_selected_at",
   "payment_internal_note",
 ];
+const SHOP_PAYMENT_SELECT = CUSTOMER_ACTION_SELECT
+  .split(",")
+  .filter((field) => !ONLINE_PAYMENT_FIELDS.includes(field))
+  .join(",");
 const CUSTOMER_ACTION_LEGACY_SELECT = CUSTOMER_ACTION_SELECT
   .split(",")
-  .filter((field) => !PARKED_PAYMENT_FIELDS.includes(field))
+  .filter((field) => !ONLINE_PAYMENT_FIELDS.includes(field) && !SHOP_PAYMENT_FIELDS.includes(field))
   .join(",");
-const PAYMENT_ACTIONS = new Set([
-  "require_payment",
-  "mark_payment_under_review",
-  "request_new_payment_proof",
-  "confirm_payment",
-  "confirm_shop_payment",
-  "confirm_cash_payment",
-]);
-
 export default async function handler(request, response) {
   const inquiryReference = getInquiryReference(request);
 
@@ -140,31 +137,41 @@ export default async function handler(request, response) {
 
     const body = await readJsonBody(request);
     const action = cleanText(body.action, 80);
-    const { inquiry, selectFields, paymentWorkflowReady, error: lookupError } = await readCustomerActionInquiry(supabase, inquiryReference);
+    if (ONLINE_PAYMENT_ACTIONS.has(action) && process.env.ENABLE_CUSTOMER_PAYMENT_WORKFLOW !== "true") {
+      sendJson(response, 404, { ok: false, error: "online payment workflow is not available" });
+      return;
+    }
+    if (SHOP_PAYMENT_ACTIONS.has(action) && process.env.ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW !== "true") {
+      sendJson(response, 404, { ok: false, error: "Pay at Shop confirmation is not available" });
+      return;
+    }
+    if (SHOP_PAYMENT_ACTIONS.has(action) && !SHOP_PAYMENT_WRITE_ROLES.has(adminUser.role)) {
+      sendJson(response, 403, { ok: false, error: "Owner or Admin confirmation required" });
+      return;
+    }
+
+    const {
+      inquiry,
+      selectFields,
+      paymentWorkflowReady,
+      shopPaymentWorkflowReady,
+      error: lookupError,
+    } = await readCustomerActionInquiry(supabase, inquiryReference);
 
     if (lookupError) throw lookupError;
     if (!inquiry) {
       sendJson(response, 404, { ok: false, error: "inquiry not found" });
       return;
     }
-    if (!paymentWorkflowReady && PAYMENT_ACTIONS.has(action)) {
+    if (SHOP_PAYMENT_ACTIONS.has(action) && !shopPaymentWorkflowReady) {
       sendJson(response, 503, { ok: false, error: "payment fields are not ready" });
       return;
     }
-    if (ONLINE_PAYMENT_ACTIONS.has(action) && process.env.ENABLE_CUSTOMER_PAYMENT_WORKFLOW !== "true") {
-      sendJson(response, 404, { ok: false, error: "online payment workflow is not available" });
+    if (ONLINE_PAYMENT_ACTIONS.has(action) && !paymentWorkflowReady) {
+      sendJson(response, 503, { ok: false, error: "payment fields are not ready" });
       return;
     }
     if (SHOP_PAYMENT_ACTIONS.has(action)) {
-      if (process.env.ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW !== "true") {
-        sendJson(response, 404, { ok: false, error: "Pay at Shop confirmation is not available" });
-        return;
-      }
-      if (!SHOP_PAYMENT_WRITE_ROLES.has(adminUser.role)) {
-        sendJson(response, 403, { ok: false, error: "Owner or Admin confirmation required" });
-        return;
-      }
-
       await handleShopPaymentConfirmation({
         response,
         supabase,
@@ -567,10 +574,32 @@ async function readCustomerActionInquiry(supabase, inquiryReference) {
     .maybeSingle();
   const full = await read(CUSTOMER_ACTION_SELECT);
   if (!isMissingParkedPaymentColumn(full.error)) {
-    return { inquiry: full.data, selectFields: CUSTOMER_ACTION_SELECT, paymentWorkflowReady: true, error: full.error };
+    return {
+      inquiry: full.data,
+      selectFields: CUSTOMER_ACTION_SELECT,
+      paymentWorkflowReady: true,
+      shopPaymentWorkflowReady: true,
+      error: full.error,
+    };
+  }
+  const shop = await read(SHOP_PAYMENT_SELECT);
+  if (!isMissingParkedPaymentColumn(shop.error)) {
+    return {
+      inquiry: shop.data,
+      selectFields: SHOP_PAYMENT_SELECT,
+      paymentWorkflowReady: false,
+      shopPaymentWorkflowReady: true,
+      error: shop.error,
+    };
   }
   const legacy = await read(CUSTOMER_ACTION_LEGACY_SELECT);
-  return { inquiry: legacy.data, selectFields: CUSTOMER_ACTION_LEGACY_SELECT, paymentWorkflowReady: false, error: legacy.error };
+  return {
+    inquiry: legacy.data,
+    selectFields: CUSTOMER_ACTION_LEGACY_SELECT,
+    paymentWorkflowReady: false,
+    shopPaymentWorkflowReady: false,
+    error: legacy.error,
+  };
 }
 
 function isMissingParkedPaymentColumn(error) {
