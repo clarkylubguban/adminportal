@@ -331,3 +331,42 @@ Release decision:
 
 - RELEASE NOT COMPLETE.
 - Do not mark Phase 7 complete until the production QA account file is restored and the Admin/Staff cross-session acceptance smoke passes with real production internal-user sessions.
+
+## Phase 7E Production Acceptance Resume
+
+Status: BLOCKED; RELEASE NOT COMPLETE.
+
+Date: 2026-07-29
+
+Resume state checks:
+
+- PASS: Starting staging head was `1ef7c174f008bb56f577fef522473e9d5d070df9`.
+- PASS: `origin/main` remains `c31da4a153c9cdeb76e2dff8f053b04ac2d16b63`.
+- PASS: Production deployment `dpl_349VPfKCxW3NHyg5xvJHzWgrfWHC` remains `READY`.
+- PASS: Production deployment aliases include `admin.trryapparel.com`.
+- PASS: The production app public Supabase configuration points at the expected production project ref. No environment values were printed.
+- PASS: The production QA account file now exists and contains the expected QA Admin and QA Staff credential key names.
+- PASS: Payment endpoint remains parked and returned HTTP 404 with `payment workflow is not available`.
+- PASS: No production runtime error groups were reported during the resumed acceptance window.
+
+Credentialed acceptance result:
+
+- BLOCKED: QA Admin login against production Supabase Auth returned HTTP 400 with sanitized code `invalid_credentials`.
+- BLOCKED: QA Staff login against production Supabase Auth returned HTTP 400 with sanitized code `invalid_credentials`.
+- BLOCKED: Isolated production Admin and Staff browser contexts could not be created because both credentialed logins failed.
+- BLOCKED: Admin role smoke, Staff role smoke, cross-session Work Chat realtime exact-once, unread/read markers, mentions, attachment security, authenticated 390px QA, and remaining credentialed module/permission regression could not be completed.
+
+Runtime note:
+
+- Production deployment health remained stable during the resumed attempt. Vercel reported no runtime error groups; grouped runtime logs showed successful traffic in the selected window and no sustained 5xx condition.
+
+Security note:
+
+- The credential file was read only inside temporary QA processes.
+- Passwords, tokens, cookies, browser storage, signed URLs, and environment values were not printed, stored, committed, or documented.
+- No production migrations, production settings, payment enablement, Odoo restoration, or customer workflow record mutations were performed.
+
+Release decision:
+
+- RELEASE NOT COMPLETE.
+- The next Phase 7E resume needs production QA Admin and Staff credentials that successfully authenticate against production Supabase Auth before the remaining acceptance tests can run.
