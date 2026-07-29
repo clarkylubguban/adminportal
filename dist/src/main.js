@@ -627,6 +627,7 @@ function render() {
       ${renderMobileBottomNav(currentRoute)}
       ${renderWorkChatShell()}
     </div>
+    ${renderActiveOpsShopPaymentDialog()}
   `;
 
   bindEvents();
@@ -3009,6 +3010,12 @@ function renderOpsShopPaymentDialog(item) {
   return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog" role="alertdialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">Confirm ${escapeHtml(formatOpsValue(confirmation.receivedAmount))} received at shop?</h3><dl><div><dt>Payment method</dt><dd>${escapeHtml(getOpsPaymentMethodLabel(confirmation.paymentMethod))}</dd></div>${confirmation.internalNote ? `<div><dt>Internal note</dt><dd>${escapeHtml(confirmation.internalNote)}</dd></div>` : ""}</dl><p>This records the payment as final. Editing and reversal are outside this workflow.</p>${confirmation.error ? `<p class="ops-customer-action-message error">${escapeHtml(confirmation.error)}</p>` : ""}<div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button" ${saving ? "disabled" : ""}>CANCEL</button><button class="ops-gold-button mini" data-ops-confirm-shop-payment="${escapeHtml(item.id)}" type="button" ${saving ? "disabled" : ""}>${saving ? "CONFIRMING..." : "CONFIRM PAYMENT"}</button></div></section>`;
 }
 
+function renderActiveOpsShopPaymentDialog() {
+  const inquiryId = opsShopPaymentConfirmation?.inquiryId;
+  const item = inquiryId ? opsInquiries.find((inquiry) => inquiry.id === inquiryId) : null;
+  return item ? renderOpsShopPaymentDialog(item) : "";
+}
+
 function renderOpsPaymentStage(item) {
   const request = opsCustomerActionRequests[item.id] || {};
   const isLoading = request.status === "loading";
@@ -3063,7 +3070,7 @@ function renderOpsPaymentStage(item) {
   const locked = !isOpsShopPaymentPending(item)
     && !canOpsRequestPayment(item)
     && !isOpsPaymentConfirmed(status);
-  return `${renderOpsStageShell({ key: "payment", title: "Payment", status: stageStatus, current, locked, body })}${renderOpsShopPaymentDialog(item)}`;
+  return renderOpsStageShell({ key: "payment", title: "Payment", status: stageStatus, current, locked, body });
 }
 function renderOpsProductionStage(item) {
   const current = getOpsInquiryCurrentTask(item).stage === "production";
