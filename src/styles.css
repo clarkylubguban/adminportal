@@ -26803,3 +26803,262 @@ textarea,
   .work-chat-nav-group { min-width: 150px; }
   .work-chat-message { max-width: 94%; }
 }
+.ops-board-page .ops-shop-payment-state {
+  display: grid;
+  gap: 10px;
+}
+
+.ops-board-page .ops-shop-payment-state h4 {
+  margin: 0;
+  color: #111111;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+.ops-board-page .ops-payment-state-badge {
+  justify-self: start;
+  border: 1px solid #111111;
+  border-radius: 3px;
+  padding: 4px 7px;
+  color: #111111;
+  font-size: 10px;
+  font-weight: 900;
+  line-height: 1;
+  letter-spacing: 0;
+}
+
+.ops-board-page .ops-payment-state-badge.pending {
+  background: #fff3bf;
+}
+
+.ops-board-page .ops-payment-state-badge.confirmed {
+  background: #ddff4f;
+}
+
+.ops-board-page .ops-shop-payment-warning {
+  margin: 0;
+  border-left: 3px solid #e23f32;
+  padding: 9px 10px;
+  background: #fff7f5;
+  color: #3c1712;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+}
+
+.ops-board-page .ops-shop-payment-form select {
+  width: 100%;
+  min-height: 40px;
+  border: 1px solid #b7b7b7;
+  border-radius: 3px;
+  padding: 8px 10px;
+  background: #ffffff;
+  color: #111111;
+  font: inherit;
+}
+
+.ops-board-page .ops-shop-payment-form label > small {
+  color: #6c6c6c;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.ops-board-page .ops-payment-history {
+  display: grid;
+  gap: 9px;
+  border-top: 1px solid #d9d9d9;
+  padding-top: 12px;
+}
+
+.ops-board-page .ops-payment-history > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ops-board-page .ops-payment-history > header strong {
+  color: #111111;
+  font-size: 11px;
+  letter-spacing: 0;
+}
+
+.ops-board-page .ops-payment-history ol {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ops-board-page .ops-payment-history li {
+  display: grid;
+  grid-template-columns: 10px minmax(0, 1fr);
+  gap: 9px;
+  min-width: 0;
+  padding: 0 0 14px;
+}
+
+.ops-board-page .ops-payment-history li > span {
+  position: relative;
+  width: 8px;
+  height: 8px;
+  margin-top: 4px;
+  border: 2px solid #111111;
+  border-radius: 50%;
+  background: #ddff4f;
+}
+
+.ops-board-page .ops-payment-history li:not(:last-child) > span::after {
+  position: absolute;
+  top: 8px;
+  left: 2px;
+  width: 2px;
+  height: calc(100% + 31px);
+  background: #cccccc;
+  content: "";
+}
+
+.ops-board-page .ops-payment-history li > div {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ops-board-page .ops-payment-history li strong,
+.ops-board-page .ops-payment-history li b,
+.ops-board-page .ops-payment-history li small,
+.ops-board-page .ops-payment-history li time,
+.ops-board-page .ops-payment-history li p {
+  overflow-wrap: anywhere;
+  letter-spacing: 0;
+}
+
+.ops-board-page .ops-payment-history li strong {
+  font-size: 11px;
+}
+
+.ops-board-page .ops-payment-history li b,
+.ops-board-page .ops-payment-history li small,
+.ops-board-page .ops-payment-history li time,
+.ops-board-page .ops-payment-history li p {
+  margin: 0;
+  color: #555555;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.ops-payment-dialog-backdrop {
+  position: fixed;
+  z-index: 180;
+  inset: 0;
+  background: rgb(17 17 17 / 56%);
+}
+
+.ops-payment-dialog {
+  position: fixed;
+  z-index: 181;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: min(430px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  gap: 14px;
+  overflow: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid #111111;
+  border-radius: 6px;
+  padding: 22px;
+  background: #ffffff;
+  box-shadow: 0 22px 70px rgb(0 0 0 / 30%);
+}
+
+.ops-payment-dialog > span {
+  color: #555555;
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.ops-payment-dialog h3,
+.ops-payment-dialog p {
+  margin: 0;
+  letter-spacing: 0;
+}
+
+.ops-payment-dialog h3 {
+  color: #111111;
+  font-size: 20px;
+  line-height: 1.25;
+}
+
+.ops-payment-dialog > p {
+  color: #555555;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ops-payment-dialog dl {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+}
+
+.ops-payment-dialog dl div {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 12px;
+  border-top: 1px solid #e4e4e4;
+  padding-top: 8px;
+}
+
+.ops-payment-dialog dt,
+.ops-payment-dialog dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.ops-payment-dialog dt {
+  color: #666666;
+}
+
+.ops-payment-dialog dd {
+  color: #111111;
+  font-weight: 800;
+}
+
+.ops-payment-dialog > div:last-child {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (max-width: 520px) {
+  .ops-payment-dialog {
+    width: calc(100vw - 20px);
+    max-height: calc(100vh - 20px);
+    padding: 16px;
+  }
+
+  .ops-payment-dialog h3 {
+    font-size: 17px;
+  }
+
+  .ops-payment-dialog dl div {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+
+  .ops-payment-dialog > div:last-child {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .ops-payment-dialog > div:last-child button {
+    min-width: 0;
+    width: 100%;
+  }
+}

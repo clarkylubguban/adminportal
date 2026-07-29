@@ -76,13 +76,13 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   const paymentLabel = (item) => {
     const value = key(item.paymentStatus);
+    if (key(item.paymentType) === "shop" && ["confirmed", "paid", "full_payment_confirmed"].includes(value)) return "Paid at Shop";
     if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return "Paid";
-    if (["down_payment_confirmed", "partially_paid"].includes(value)) return "Down Payment Confirmed";
-    if (["proof_submitted", "under_review"].includes(value)) return "For Verification";
-    if (value === "correction_required") return "Correction Required";
+    if (["down_payment_confirmed", "partially_paid"].includes(value)) return "Partially Paid";
+    if (value === "proof_submitted") return "Receipt Submitted";
+    if (value === "under_review") return "Payment Review";
     if (["pay_at_shop", "payment_pending_at_shop"].includes(value)) return "Pay at Shop";
-    if (["required", "awaiting_payment"].includes(value)) return "Payment Required";
-    return "Not Yet Requested";
+    return "Unpaid";
   };
   const productionStage = (item) => {
     const value = key(item.productionStage);
@@ -911,16 +911,18 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const value = key(item.paymentStatus);
     const dueAmount = amount(item.amountDue || item.quotedAmount);
     const paidAmount = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
+    if (key(item.paymentType) === "shop" && ["confirmed", "paid", "full_payment_confirmed"].includes(value)) return { key: "paid_shop", label: "PAID AT SHOP", tone: "completed" };
     if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return { key: "paid", label: "PAID", tone: "completed" };
-    if (["down_payment_confirmed", "partially_paid"].includes(value)) return { key: "partial", label: "DOWN PAYMENT CONFIRMED", tone: "ready" };
+    if (["down_payment_confirmed", "partially_paid"].includes(value)) return { key: "partial", label: "PARTIALLY PAID", tone: "ready" };
     if (["pay_at_shop", "payment_pending_at_shop"].includes(value)) return { key: "shop", label: "PAY AT SHOP", tone: "payment" };
-    if (["correction_required"].includes(value)) return { key: "correction", label: "CORRECTION REQUIRED", tone: "overdue" };
-    if (["proof_submitted", "under_review"].includes(value)) return { key: "verification", label: "FOR VERIFICATION", tone: "payment" };
-    if (["50_dp", "50%_dp", "half_down", "half_deposit"].includes(value) || key(item.paymentLabel) === "50%_dp" || key(item.paymentLabel) === "50_dp") return { key: "deposit", label: paidAmount && dueAmount && paidAmount * 2 === dueAmount ? "50% DP" : "PARTIAL", tone: "payment" };
-    if (["partial", "deposit", "down_payment"].includes(value)) return { key: "partial", label: "PARTIAL", tone: "payment" };
+    if (value === "proof_submitted") return { key: "receipt", label: "RECEIPT SUBMITTED", tone: "payment" };
+    if (value === "under_review") return { key: "review", label: "PAYMENT REVIEW", tone: "payment" };
+    if (["correction_required"].includes(value)) return { key: "review", label: "PAYMENT REVIEW", tone: "overdue" };
+    if (["50_dp", "50%_dp", "half_down", "half_deposit"].includes(value) || key(item.paymentLabel) === "50%_dp" || key(item.paymentLabel) === "50_dp") return { key: "partial", label: "PARTIALLY PAID", tone: "payment" };
+    if (["partial", "deposit", "down_payment"].includes(value)) return { key: "partial", label: "PARTIALLY PAID", tone: "payment" };
     if (["required", "awaiting_payment", "unpaid"].includes(value)) return { key: "awaiting", label: "UNPAID", tone: "overdue" };
-    if (paidAmount > 0 && dueAmount > paidAmount) return { key: "partial", label: "PARTIAL", tone: "payment" };
-    return { key: "not_set", label: "NOT SET", tone: "queued" };
+    if (paidAmount > 0 && dueAmount > paidAmount) return { key: "partial", label: "PARTIALLY PAID", tone: "payment" };
+    return { key: "awaiting", label: "UNPAID", tone: "queued" };
   }
 
   function orderPaymentSummary(item) {

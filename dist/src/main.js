@@ -216,7 +216,10 @@ const OPS_LIME = "#DDFF4F";
 const OPS_INK = "#111111";
 const OPS_RED = "#E23F32";
 const CUSTOMER_PAYMENT_WORKFLOW_ENABLED = false;
-const PAYMENT_CUSTOMER_ACTIONS = new Set(["require_payment", "mark_payment_under_review", "request_new_payment_proof", "confirm_payment", "confirm_cash_payment"]);
+const ONLINE_PAYMENT_CUSTOMER_ACTIONS = new Set(["require_payment", "mark_payment_under_review", "request_new_payment_proof", "confirm_payment"]);
+const SHOP_PAYMENT_ACTIONS = new Set(["confirm_shop_payment", "confirm_cash_payment"]);
+const SHOP_PAYMENT_METHODS = new Set(["cash", "gcash", "bank_transfer", "card", "other"]);
+const PAYMENT_INTERNAL_NOTE_MAX_LENGTH = 500;
 
 const opsStatus = {
   new: { label: "New / Inquiry Received", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
@@ -301,6 +304,9 @@ let opsSoDraft = null;
 let opsSoSavingId = null;
 let opsArtworkRequests = {};
 let opsCustomerActionRequests = {};
+let opsPaymentHistoryByInquiry = {};
+let opsShopPaymentDrafts = {};
+let opsShopPaymentConfirmation = null;
 let expandedOpsInquiryId = null;
 let selectedOrderDashboardId = null;
 let orderDashboardSaveError = "";
@@ -2534,6 +2540,29 @@ function canOpsRequestPayment(item) {
   return state.quote === "approved" && state.artwork === "approved" && !isOpsPaymentConfirmed(state.payment);
 }
 
+function isAdminPayAtShopUiEnabled() {
+  const value = String(window.TRRY_ADMIN_ENV?.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? "false").trim().toLowerCase();
+  return value === "true";
+}
+
+function isOpsShopPaymentPending(item) {
+  return ["pay_at_shop", "payment_pending_at_shop"].includes(String(item?.paymentStatus || "").trim().toLowerCase());
+}
+
+function isOpsShopPaymentConfirmed(item) {
+  return String(item?.paymentType || "").trim().toLowerCase() === "shop"
+    && isOpsPaymentConfirmed(item?.paymentStatus);
+}
+
+function canOpsConfirmShopPayment(item) {
+  const state = getOpsNormalizedCustomerState(item);
+  return isAdminPayAtShopUiEnabled()
+    && ["owner", "admin"].includes(adminUser?.role)
+    && state.quote === "approved"
+    && state.artwork === "approved"
+    && isOpsShopPaymentPending(item);
+}
+
 
 function isOpsPaymentConfirmed(value) {
   return ["confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(String(value || "").trim().toLowerCase());
@@ -2568,7 +2597,14 @@ function getOpsInquiryCurrentTask(item) {
   if (canOpsPrepareProof(item) && hasOpsFinalProof(item)) return { stage: "artwork", text: "Send approved design" };
   if (state.artwork === "approval_required") return { stage: "artwork", text: "Waiting for customer artwork approval" };
   if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment receipt" };
-  if (canOpsRequestPayment(item) && ["pay_at_shop", "payment_pending_at_shop"].includes(state.payment)) return { stage: "payment", text: "Confirm shop payment" };
+  if (isAdminPayAtShopUiEnabled() && isOpsShopPaymentPending(item)) {
+    return {
+      stage: "payment",
+      text: ["owner", "admin"].includes(adminUser?.role)
+        ? "Confirm shop payment"
+        : "Owner/Admin confirmation required",
+    };
+  }
   if (canOpsRequestPayment(item)) return { stage: "payment", text: "Request payment" };
   if (state.quote === "approved" && state.status !== "won") return { stage: "production", text: "Create TRRY order" };
   if (canEditOpsCustomerTracking(item)) return { stage: "fulfillment", text: "Update customer tracking" };
@@ -2919,6 +2955,58 @@ function renderOpsQuoteStage(item) {
   return renderOpsStageShell({ key: "quote", title: "Quotation", status: getOpsCustomerActionLabel("quote", status), current, body });
 }
 
+function getOpsShopPaymentDraft(item) {
+  const existing = opsShopPaymentDrafts[item.id];
+  const selectedMethod = SHOP_PAYMENT_METHODS.has(String(existing?.paymentMethod || item.paymentMethod || "").toLowerCase())
+    ? String(existing?.paymentMethod || item.paymentMethod).toLowerCase()
+    : "cash";
+  return {
+    receivedAmount: existing?.receivedAmount ?? item.quotedAmount ?? item.amountDue ?? "",
+    paymentMethod: selectedMethod,
+    internalNote: existing?.internalNote ?? "",
+  };
+}
+
+function getOpsShopPaymentConfirmationEvent(item) {
+  const history = opsPaymentHistoryByInquiry[item.id]?.events || [];
+  return [...history].reverse().find((event) => event.eventType === "SHOP_PAYMENT_CONFIRMED") || null;
+}
+
+function renderOpsPaymentHistory(item) {
+  const history = opsPaymentHistoryByInquiry[item.id];
+  if (!history && expandedOpsInquiryId !== item.id) return "";
+
+  let content = `<p class="ops-stage-muted">Loading payment history...</p>`;
+  if (history?.status === "error") {
+    content = `<p class="ops-customer-action-message error">${escapeHtml(history.message || "PAYMENT HISTORY UNAVAILABLE")}</p>`;
+  } else if (history?.status === "success") {
+    const events = Array.isArray(history.events) ? history.events : [];
+    content = events.length
+      ? `<ol>${events.map((event) => {
+        const isConfirmation = event.eventType === "SHOP_PAYMENT_CONFIRMED";
+        const title = isConfirmation ? "SHOP PAYMENT CONFIRMED" : "PAY AT SHOP SELECTED";
+        const actor = event.source === "CUSTOMER"
+          ? "Customer"
+          : event.actorDisplayName || (event.actorRole ? formatAdminRole(event.actorRole) : "TRRY Admin");
+        const detail = isConfirmation
+          ? [formatOpsValue(event.amount), getOpsPaymentMethodLabel(event.paymentMethod)].filter(Boolean).join(" / ")
+          : "";
+        return `<li><span></span><div><strong>${escapeHtml(title)}</strong>${detail ? `<b>${escapeHtml(detail)}</b>` : ""}<small>${escapeHtml(actor)}</small><time>${escapeHtml(formatOpsTrackingDate(event.createdAt))}</time>${event.internalNote ? `<p>${escapeHtml(event.internalNote)}</p>` : ""}</div></li>`;
+      }).join("")}</ol>`
+      : `<p class="ops-stage-muted">No Pay at Shop history recorded.</p>`;
+  }
+
+  return `<section class="ops-payment-history"><header><strong>PAYMENT HISTORY</strong></header>${content}</section>`;
+}
+
+function renderOpsShopPaymentDialog(item) {
+  const confirmation = opsShopPaymentConfirmation;
+  if (!confirmation || confirmation.inquiryId !== item.id) return "";
+
+  const saving = confirmation.status === "loading";
+  return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog" role="alertdialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">Confirm ${escapeHtml(formatOpsValue(confirmation.receivedAmount))} received at shop?</h3><dl><div><dt>Payment method</dt><dd>${escapeHtml(getOpsPaymentMethodLabel(confirmation.paymentMethod))}</dd></div>${confirmation.internalNote ? `<div><dt>Internal note</dt><dd>${escapeHtml(confirmation.internalNote)}</dd></div>` : ""}</dl><p>This records the payment as final. Editing and reversal are outside this workflow.</p>${confirmation.error ? `<p class="ops-customer-action-message error">${escapeHtml(confirmation.error)}</p>` : ""}<div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button" ${saving ? "disabled" : ""}>CANCEL</button><button class="ops-gold-button mini" data-ops-confirm-shop-payment="${escapeHtml(item.id)}" type="button" ${saving ? "disabled" : ""}>${saving ? "CONFIRMING..." : "CONFIRM PAYMENT"}</button></div></section>`;
+}
+
 function renderOpsPaymentStage(item) {
   const request = opsCustomerActionRequests[item.id] || {};
   const isLoading = request.status === "loading";
@@ -2933,14 +3021,25 @@ function renderOpsPaymentStage(item) {
   const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
   body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
 
-  if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) {
+  if (isOpsShopPaymentPending(item) && isAdminPayAtShopUiEnabled()) {
+    const draft = getOpsShopPaymentDraft(item);
+    body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">PAY AT SHOP</strong><h4>SHOP PAYMENT PENDING</h4><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Amount to collect</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Customer-selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Selected</span><strong>${escapeHtml(item.paymentSelectedAt ? formatOpsTrackingDate(item.paymentSelectedAt) : "Selection time unavailable")}</strong></div></div><p class="ops-shop-payment-warning">Confirm only after payment is physically received or verified at the shop.</p></div>`;
+    if (canOpsConfirmShopPayment(item)) {
+      body += `<div class="ops-customer-action-form compact ops-shop-payment-form"><label><span>Received amount</span><input data-ops-shop-field="receivedAmount" inputmode="decimal" min="0" step="0.01" type="number" value="${escapeHtml(draft.receivedAmount)}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment method received</span><select data-ops-shop-field="paymentMethod" ${isLoading ? "disabled" : ""}><option value="cash" ${draft.paymentMethod === "cash" ? "selected" : ""}>Cash</option><option value="gcash" ${draft.paymentMethod === "gcash" ? "selected" : ""}>GCash</option><option value="bank_transfer" ${draft.paymentMethod === "bank_transfer" ? "selected" : ""}>Bank Transfer</option><option value="card" ${draft.paymentMethod === "card" ? "selected" : ""}>Card</option><option value="other" ${draft.paymentMethod === "other" ? "selected" : ""}>Other</option></select></label><label class="wide"><span>Internal note <small>Optional</small></span><textarea data-ops-shop-field="internalNote" maxlength="${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}" placeholder="Receipt 1042 / received by front desk" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(draft.internalNote)}</textarea><small>${String(draft.internalNote).length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}</small></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM SHOP PAYMENT", action: "confirm_shop_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
+    } else {
+      body += `<p class="ops-stage-muted"><strong>Owner/Admin confirmation required.</strong></p>`;
+    }
+    body += renderOpsPaymentHistory(item);
+  } else if (isOpsShopPaymentConfirmed(item)) {
+    const confirmationEvent = getOpsShopPaymentConfirmationEvent(item);
+    const confirmedBy = confirmationEvent?.actorDisplayName || (confirmationEvent?.actorRole ? formatAdminRole(confirmationEvent.actorRole) : "TRRY Admin");
+    body += `<div class="ops-shop-payment-state confirmed"><strong class="ops-payment-state-badge confirmed">PAID AT SHOP</strong><div class="ops-stage-mini-grid"><div><span>Amount paid</span><strong>${formatOpsValue(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount)}</strong></div><div><span>Payment method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Confirmed by</span><strong>${escapeHtml(confirmedBy)}</strong></div><div><span>Confirmed</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</strong></div>${item.paymentInternalNote ? `<div class="wide"><span>Internal note</span><strong>${escapeHtml(item.paymentInternalNote)}</strong></div>` : ""}</div></div>${renderOpsPaymentHistory(item)}`;
+  } else if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) {
     body += `<p class="ops-stage-muted"><strong>PAYMENT WORKFLOW PARKED</strong>Payment history remains visible, but payment actions do not block order conversion or production in this release.</p>`;
   } else if (isOpsPaymentConfirmed(status)) {
     body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
   } else if (!canOpsRequestPayment(item)) {
     body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
-  } else if (["pay_at_shop", "payment_pending_at_shop"].includes(status)) {
-    body += `<div class="ops-stage-mini-grid"><div><span>Selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Customer status</span><strong>PAY AT SHOP</strong></div><div><span>Amount to collect</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div></div><p class="ops-stage-muted"><strong>SHOP PAYMENT PENDING</strong>Confirm only after staff receives payment at the shop.</p><div class="ops-customer-action-form compact"><label><span>Cash amount received</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? item.amountDue ?? "")}" /></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM CASH PAYMENT", action: "confirm_cash_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
   } else if (["required", "correction_required"].includes(status)) {
     body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>PAYMENT REQUESTED</strong></div></div><p class="ops-stage-muted"><strong>${item.paymentRejectedAt ? "NEW RECEIPT NEEDED" : "PAYMENT REQUESTED"}</strong>Awaiting receipt.</p>`;
   } else if (["proof_submitted", "under_review"].includes(status)) {
@@ -2954,7 +3053,15 @@ function renderOpsPaymentStage(item) {
 
   if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW RECEIPT NEEDED</strong>${escapeHtml(item.paymentReviewNote || "Replacement receipt requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
 
-  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && !isOpsPaymentConfirmed(status), body });
+  const stageStatus = isOpsShopPaymentPending(item)
+    ? "PAY AT SHOP"
+    : isOpsShopPaymentConfirmed(item)
+      ? "PAID AT SHOP"
+      : getOpsCustomerActionLabel("payment", status);
+  const locked = !isOpsShopPaymentPending(item)
+    && !canOpsRequestPayment(item)
+    && !isOpsPaymentConfirmed(status);
+  return `${renderOpsStageShell({ key: "payment", title: "Payment", status: stageStatus, current, locked, body })}${renderOpsShopPaymentDialog(item)}`;
 }
 function renderOpsProductionStage(item) {
   const current = getOpsInquiryCurrentTask(item).stage === "production";
@@ -3100,7 +3207,7 @@ function setOpsCustomerActionInlineMessage(sourceElement, message, status = "err
 function getOpsActionLoadingLabel(action) {
   if (action === "publish_quote") return "SENDING...";
   if (action === "require_payment") return "REQUESTING...";
-  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING...";
+  if (action === "confirm_payment" || SHOP_PAYMENT_ACTIONS.has(action)) return "CONFIRMING...";
   if (action === "request_new_payment_proof") return "REQUESTING...";
   return "SAVING...";
 }
@@ -3108,7 +3215,7 @@ function getOpsActionLoadingLabel(action) {
 function getOpsActionSavingMessage(action) {
   if (action === "publish_quote") return "SENDING QUOTE...";
   if (action === "require_payment") return "REQUESTING PAYMENT...";
-  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING PAYMENT...";
+  if (action === "confirm_payment" || SHOP_PAYMENT_ACTIONS.has(action)) return "CONFIRMING PAYMENT...";
   if (action === "request_new_payment_proof") return "REQUESTING NEW RECEIPT...";
   return "SAVING CUSTOMER ACTION...";
 }
@@ -3117,7 +3224,7 @@ function getOpsActionSuccessMessage(action) {
   if (action === "save_quote_draft") return "QUOTE DRAFT SAVED.";
   if (action === "publish_quote") return "QUOTE PUBLISHED FOR CUSTOMER.";
   if (action === "require_payment") return "PAYMENT REQUESTED.";
-  if (action === "confirm_payment" || action === "confirm_cash_payment") return "PAYMENT CONFIRMED.";
+  if (action === "confirm_payment" || SHOP_PAYMENT_ACTIONS.has(action)) return "PAYMENT CONFIRMED.";
   if (action === "request_new_payment_proof") return "NEW RECEIPT NEEDED.";
   return "CUSTOMER ACTION SAVED.";
 }
@@ -3134,6 +3241,145 @@ function setOpsActionButtonLoading(button, isLoading) {
     delete button.dataset.opsOriginalText;
   }
 }
+
+function getOpsShopPaymentFormPayload(inquiryId, sourceElement) {
+  const stageSection = sourceElement?.closest?.(".ops-stage-section");
+  const fieldValue = (name) => stageSection?.querySelector(`[data-ops-shop-field="${name}"]`)?.value ?? "";
+  return {
+    inquiryId,
+    receivedAmount: fieldValue("receivedAmount"),
+    paymentMethod: fieldValue("paymentMethod"),
+    internalNote: fieldValue("internalNote"),
+  };
+}
+
+function getOpsShopPaymentValidationMessage(item, draft) {
+  const amount = parseOpsQuoteMoney(draft.receivedAmount);
+  const quoteTotal = Number(item?.quotedAmount);
+  if (!Number.isFinite(amount) || amount <= 0) return "ENTER A VALID RECEIVED AMOUNT.";
+  if (!Number.isFinite(quoteTotal) || quoteTotal <= 0) return "A POSITIVE APPROVED QUOTE IS REQUIRED.";
+  if (Math.round(amount * 100) !== Math.round(quoteTotal * 100)) return "RECEIVED AMOUNT MUST MATCH THE FULL QUOTE TOTAL.";
+  if (!SHOP_PAYMENT_METHODS.has(String(draft.paymentMethod || "").trim().toLowerCase())) return "SELECT A VALID PAYMENT METHOD.";
+  if (String(draft.internalNote || "").trim().length > PAYMENT_INTERNAL_NOTE_MAX_LENGTH) return `INTERNAL NOTE MUST BE ${PAYMENT_INTERNAL_NOTE_MAX_LENGTH} CHARACTERS OR FEWER.`;
+  return "";
+}
+
+function openOpsShopPaymentConfirmation(inquiryId, sourceElement) {
+  const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
+  if (!item || !canOpsConfirmShopPayment(item)) {
+    setOpsCustomerActionInlineMessage(sourceElement, "OWNER OR ADMIN CONFIRMATION REQUIRED.", "error");
+    return;
+  }
+
+  const draft = getOpsShopPaymentFormPayload(inquiryId, sourceElement);
+  const validationMessage = getOpsShopPaymentValidationMessage(item, draft);
+  opsShopPaymentDrafts = { ...opsShopPaymentDrafts, [inquiryId]: draft };
+  if (validationMessage) {
+    setOpsCustomerActionInlineMessage(sourceElement, validationMessage, "error");
+    return;
+  }
+
+  opsShopPaymentConfirmation = {
+    ...draft,
+    receivedAmount: Number(draft.receivedAmount),
+    paymentMethod: String(draft.paymentMethod).trim().toLowerCase(),
+    internalNote: String(draft.internalNote || "").trim(),
+    idempotencyKey: `shop:${inquiryId}:${crypto.randomUUID()}`,
+    status: "ready",
+    error: "",
+  };
+  render();
+  requestAnimationFrame(() => document.querySelector("[data-ops-confirm-shop-payment]")?.focus());
+}
+
+async function confirmOpsShopPayment(inquiryId) {
+  const confirmation = opsShopPaymentConfirmation;
+  if (!confirmation || confirmation.inquiryId !== inquiryId || confirmation.status === "loading") return;
+
+  opsShopPaymentConfirmation = { ...confirmation, status: "loading", error: "" };
+  opsCustomerActionRequests = {
+    ...opsCustomerActionRequests,
+    [inquiryId]: { status: "loading", message: "CONFIRMING SHOP PAYMENT..." },
+  };
+  render();
+
+  try {
+    const payload = await requestOpsCustomerAction(inquiryId, {
+      action: "confirm_shop_payment",
+      receivedAmount: confirmation.receivedAmount,
+      paymentMethod: confirmation.paymentMethod,
+      internalNote: confirmation.internalNote,
+      idempotencyKey: confirmation.idempotencyKey,
+    });
+
+    if (payload?.inquiry) {
+      opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...payload.inquiry } : item);
+    }
+    if (Array.isArray(payload?.paymentEvents)) {
+      opsPaymentHistoryByInquiry = {
+        ...opsPaymentHistoryByInquiry,
+        [inquiryId]: { status: "success", events: payload.paymentEvents },
+      };
+    }
+    opsCustomerActionRequests = {
+      ...opsCustomerActionRequests,
+      [inquiryId]: { status: "success", message: "SHOP PAYMENT CONFIRMED." },
+    };
+    const nextDrafts = { ...opsShopPaymentDrafts };
+    delete nextDrafts[inquiryId];
+    opsShopPaymentDrafts = nextDrafts;
+    opsShopPaymentConfirmation = null;
+    hasLoadedOpsInquiries = false;
+    await loadOpsBoardInquiries();
+  } catch (error) {
+    const message = error.message || "SHOP PAYMENT CONFIRMATION FAILED.";
+    opsShopPaymentConfirmation = {
+      ...confirmation,
+      status: "error",
+      error: message,
+    };
+    opsCustomerActionRequests = {
+      ...opsCustomerActionRequests,
+      [inquiryId]: { status: "error", message },
+    };
+    render();
+  }
+}
+
+async function loadOpsPaymentHistory(inquiryId, force = false) {
+  if (!inquiryId || !isAdminPayAtShopUiEnabled() || !adminAuthSession?.access_token) return;
+  const current = opsPaymentHistoryByInquiry[inquiryId];
+  if (!force && ["loading", "success"].includes(current?.status)) return;
+
+  opsPaymentHistoryByInquiry = {
+    ...opsPaymentHistoryByInquiry,
+    [inquiryId]: { status: "loading", events: current?.events || [] },
+  };
+  render();
+
+  try {
+    const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions?view=payment-history`, {
+      headers: { Authorization: `Bearer ${adminAuthSession.access_token}` },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.ok) {
+      throw new Error(getOpsCustomerActionError(response.status, payload?.error));
+    }
+
+    opsPaymentHistoryByInquiry = {
+      ...opsPaymentHistoryByInquiry,
+      [inquiryId]: { status: "success", events: Array.isArray(payload.paymentEvents) ? payload.paymentEvents : [] },
+    };
+  } catch (error) {
+    opsPaymentHistoryByInquiry = {
+      ...opsPaymentHistoryByInquiry,
+      [inquiryId]: { status: "error", events: current?.events || [], message: error.message || "PAYMENT HISTORY UNAVAILABLE." },
+    };
+  }
+
+  render();
+}
+
 async function requestOpsCustomerAction(inquiryId, body) {
   const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions`, {
     method: "PATCH",
@@ -3154,8 +3400,12 @@ async function requestOpsCustomerAction(inquiryId, body) {
 
 async function saveOpsCustomerAction(inquiryId, action, sourceElement) {
   if (!inquiryId || !action || sourceElement?.disabled) return;
-  if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED && PAYMENT_CUSTOMER_ACTIONS.has(action)) {
+  if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED && ONLINE_PAYMENT_CUSTOMER_ACTIONS.has(action)) {
     setOpsCustomerActionInlineMessage(sourceElement, "PAYMENT WORKFLOW IS PARKED FOR THIS RELEASE.", "error");
+    return;
+  }
+  if (!isAdminPayAtShopUiEnabled() && SHOP_PAYMENT_ACTIONS.has(action)) {
+    setOpsCustomerActionInlineMessage(sourceElement, "PAY AT SHOP CONFIRMATION IS NOT AVAILABLE.", "error");
     return;
   }
 
@@ -3306,8 +3556,10 @@ async function openOpsCustomerAsset(inquiryId, asset) {
 function getOpsCustomerActionError(status, error) {
   const normalized = String(error || "").trim().toLowerCase();
   if (status === 401) return "ADMIN SESSION REQUIRED.";
-  if (status === 403) return "ADMIN WRITE ACCESS REQUIRED.";
+  if (status === 403) return error ? String(error).toUpperCase() : "OWNER OR ADMIN CONFIRMATION REQUIRED.";
+  if (status === 404 && normalized.includes("not available")) return String(error).toUpperCase();
   if (status === 404) return "INQUIRY OR FILE NOT FOUND.";
+  if (status === 409) return error ? String(error).toUpperCase() : "SHOP PAYMENT IS ALREADY CONFIRMED.";
   if (status === 503) return "CUSTOMER ACTION DATABASE FIELDS ARE NOT READY.";
   if (status === 400 && normalized === "enter a valid quoted amount") return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than 0 before sending the quote.";
   if (status === 400 && normalized === "enter a valid amount due") return "ENTER A VALID AMOUNT DUE\nAmount due must be zero or greater.";
@@ -7107,9 +7359,46 @@ function bindOpsBoardEvents() {
     field.addEventListener("input", updateOpsCustomerActionInlineValidation);
   });
 
+  document.querySelectorAll("[data-ops-shop-field]").forEach((field) => {
+    const updateDraft = () => {
+      const stage = field.closest(".ops-stage-section");
+      const button = stage?.querySelector('[data-ops-customer-action="confirm_shop_payment"]');
+      const inquiryId = button?.dataset.opsCustomerId;
+      if (!inquiryId) return;
+      opsShopPaymentDrafts = {
+        ...opsShopPaymentDrafts,
+        [inquiryId]: getOpsShopPaymentFormPayload(inquiryId, button),
+      };
+      if (field.dataset.opsShopField === "internalNote") {
+        const counter = field.parentElement?.querySelector(":scope > small:last-child");
+        if (counter) counter.textContent = `${field.value.length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}`;
+      }
+    };
+    field.addEventListener("input", updateDraft);
+    field.addEventListener("change", updateDraft);
+  });
+
   document.querySelectorAll("[data-ops-customer-action]").forEach((button) => {
     button.addEventListener("click", async () => {
+      if (button.dataset.opsCustomerAction === "confirm_shop_payment") {
+        openOpsShopPaymentConfirmation(button.dataset.opsCustomerId, button);
+        return;
+      }
       await saveOpsCustomerAction(button.dataset.opsCustomerId, button.dataset.opsCustomerAction, button);
+    });
+  });
+
+  document.querySelectorAll("[data-ops-cancel-shop-payment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (opsShopPaymentConfirmation?.status === "loading") return;
+      opsShopPaymentConfirmation = null;
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-ops-confirm-shop-payment]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await confirmOpsShopPayment(button.dataset.opsConfirmShopPayment);
     });
   });
 
@@ -7148,6 +7437,7 @@ function bindOpsBoardEvents() {
       if (!id) return;
       expandedOpsInquiryId = id;
       render();
+      void loadOpsPaymentHistory(id);
       requestAnimationFrame(() => {
         document.querySelector(`[data-ops-card-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
       });
@@ -7158,6 +7448,7 @@ function bindOpsBoardEvents() {
       const id = button.dataset.opsToggleDetails;
       expandedOpsInquiryId = expandedOpsInquiryId === id ? null : id;
       render();
+      if (expandedOpsInquiryId) void loadOpsPaymentHistory(expandedOpsInquiryId);
     });
   });
 
@@ -7167,6 +7458,7 @@ function bindOpsBoardEvents() {
       opsSoDraft = null;
       opsArtworkRequests = {};
       opsCustomerActionRequests = {};
+      opsShopPaymentConfirmation = null;
       render();
     });
   });

@@ -357,6 +357,8 @@ export function mapOpsRowToInquiry(row) {
     paymentProofSubmittedAt: getFirstValue(row, ["payment_proof_submitted_at", "paymentProofSubmittedAt"]),
     paymentConfirmedAt: getFirstValue(row, ["payment_confirmed_at", "paymentConfirmedAt"]),
     paymentConfirmedAmount: getNullableNumber(row, ["payment_confirmed_amount", "paymentConfirmedAmount"]),
+    paymentSelectedAt: getFirstValue(row, ["payment_selected_at", "paymentSelectedAt"]),
+    paymentInternalNote: getFirstValue(row, ["payment_internal_note", "paymentInternalNote"]),
     paymentReviewNote: getFirstValue(row, ["payment_review_note", "paymentReviewNote"]),
     paymentRejectedAt: getFirstValue(row, ["payment_rejected_at", "paymentRejectedAt"]),
     productionFieldsReady:
