@@ -440,3 +440,87 @@ Release decision:
 
 - RELEASE NOT COMPLETE.
 - Do not mark Phase 7 complete until Task API 500s, Work Chat Realtime exact-once delivery, and Work Chat attachment hydration/authenticated access pass in production.
+
+## Phase 7F Task Domain Enablement And Final Acceptance
+
+Status: RELEASE COMPLETE.
+
+Date: 2026-07-29
+
+Release references:
+
+- Production main: `c31da4a153c9cdeb76e2dff8f053b04ac2d16b63`
+- Production deployment: `dpl_349VPfKCxW3NHyg5xvJHzWgrfWHC` (`READY`)
+- Production alias: `admin.trryapparel.com`
+- Staging preparation commit: `52099c1b1891219b842b154512eae766762ad3a3`
+
+Task-domain source and staging validation:
+
+- PASS: `202607250001_create_task_domain_schema.sql` is additive and creates only the five task tables, task sequence, task indexes, constraints, triggers, RLS policies, grants, and feature helper. Its only external relationships are restricted foreign keys to `public.admin_users`.
+- PASS: `202607250002_create_task_domain_functions.sql` creates all required task helper and command RPCs. Command execution is granted only to `authenticated`; helpers remain private; all security-definer functions pin `search_path=pg_catalog`.
+- PASS: Repository migrations do not alter inquiry, order, payment, Work Chat, catalog, production, or customer records.
+- PASS: Staging has all five task tables, the task sequence, 54 constraints, 22 indexes, four triggers, four authenticated read policies, restricted grants, all 24 required helper/command RPCs, and `TASK_DOMAIN=true`.
+- PASS: Production schema fingerprints after migrations match staging for relations, columns, constraints, indexes, triggers, policies, grants, and functions. Function hashes matched after normalizing Windows CRLF versus staging LF line endings.
+- PASS: `npm run build`, task-domain static validation, 18 task API suites, task service, dispatch, gateway, Workboard UI/HTTP/browser, My Tasks UI/HTTP/browser, and Work Chat static regression.
+- PASS: `git diff --check` and tracked secret/artifact scan. Only `.env.example` is tracked as an environment template.
+- NOTE: The disposable Docker Postgres concurrency harness could not run because Docker Desktop was unavailable. Existing API concurrency contracts and prior staging SQL evidence remained green.
+
+Controlled production migrations:
+
+- PASS: `202607250001_create_task_domain_schema.sql` applied individually as migration `20260729042009 create_task_domain_schema`.
+- PASS: After migration 001, production had exactly five empty task tables, the sequence, 54 constraints, 22 indexes, four triggers, four policies, RLS on every task table, restricted grants, and `TASK_DOMAIN=false`.
+- PASS: `202607250002_create_task_domain_functions.sql` applied individually as migration `20260729042203 create_task_domain_functions`.
+- NOTE: The first migration 002 connector payload was transport-truncated and PostgreSQL rejected it transactionally. Verification confirmed that no partial functions landed. The exact file was then transmitted losslessly and applied once.
+- PASS: After migration 002, all required RPCs, security modes, search paths, and authenticated execute grants matched staging. Direct authenticated task-table mutation remained blocked.
+- PASS: `202607290007_enable_task_domain_production.sql` applied individually as migration `20260729042301 enable_task_domain_production`.
+- PASS: Migration 007 updated only the existing `TASK_DOMAIN` feature row. It inserted no users or task records.
+- PASS: `task_domain_enabled()` returned true after enablement.
+- PASS: Payment migration `202607260001_complete_payment_workflow.sql` was not reapplied. Migrations 002-006 were not reapplied. No generic migration command was used.
+
+Production Task API acceptance:
+
+- PASS: QA Admin `GET /api/tasks?pageSize=5` returned 200.
+- PASS: QA Admin `GET /api/my-tasks?pageSize=5` returned 200.
+- PASS: QA Staff `GET /api/my-tasks?pageSize=5` returned 200.
+- PASS: QA Staff `GET /api/tasks?pageSize=5` returned clean 403, not 500.
+- PASS: Admin non-manual task creation remained blocked with 403.
+- PASS: One retained production QA task, `TSK-000001`, completed the controlled lifecycle: create draft, assign to QA Staff, approve draft, start, submit, approve work, complete, and archive.
+- PASS: The retained task has one time entry, one submission, and eight audit events: `TASK_CREATED`, `ASSIGNED`, `DRAFT_APPROVED`, `STARTED`, `SUBMITTED`, `WORK_APPROVED`, `COMPLETED`, and `ARCHIVED`.
+- PASS: Admin owner-only reopen remained blocked with 403.
+- PASS: No Task API request returned `INTERNAL_ERROR` 500.
+- PASS: The task domain contains no non-QA tasks.
+
+Corrected Work Chat attachment acceptance:
+
+- PASS: The prepared attachment ID was used only for prepare, upload, and send.
+- PASS: The retained message was reloaded from the channel messages API and its final attachment ID was used for the URL request.
+- PASS: Hydration returned final attachment ID `f53c888d-47f2-4d7d-897d-23cb0017f71e`, filename `phase7f-production-qa.txt`, MIME type `text/plain`, and size 51 bytes.
+- PASS: Authenticated final-ID URL request returned 200 with the expected temporary expiry; the signed URL was not printed or stored.
+- PASS: Anonymous final-ID URL request returned 401.
+- PASS: The final attachment row joins to its matching private Storage object.
+- PASS: The earlier prepared-ID 404 is classified as a QA harness issue, not a production attachment defect.
+
+Corrected Work Chat Realtime acceptance:
+
+- PASS: Fresh QA Admin and QA Staff clients both reached `SUBSCRIBED` before either message was sent.
+- PASS: Staff received exactly one INSERT for Admin message `ffbff5f7-7259-4ced-a146-09a9fdf3ccc8`.
+- PASS: Admin received exactly one INSERT for Staff message `a37e9fbd-1f0f-4cd4-9a96-91b93552e2d3`.
+- PASS: Event counts used Realtime callbacks only; polling results were not mixed into counts.
+- PASS: Both channels were removed after the test. Recorded transitions were `SUBSCRIBED` then `CLOSED`.
+
+Final runtime and security:
+
+- PASS: Vercel reported no runtime error groups from `2026-07-29T04:30:42Z` through the completed acceptance window.
+- PASS: Successful-window runtime status counts were 200: 8, 201: 4, 403: 2, and 401: 1. No 5xx or Work Chat attachment 404 occurred.
+- PASS: Payment remains parked and returned HTTP 404 with `payment workflow is not available`.
+- PASS: Odoo remains removed as an active dependency. Historical Odoo/SO display fields remain preserved only for compatibility and audit context.
+- PASS: Previously completed authenticated desktop, tablet 820px, and mobile 390px Admin/Staff QA remains valid; no production code or deployment changed during Phase 7F.
+- PASS: QA Admin and QA Staff sessions were globally revoked after acceptance.
+- PASS: Both QA `admin_users` rows remain preserved for audit history with `is_active=false`; both Auth users remain preserved and banned.
+- PASS: The external production QA account file and both temporary Phase 7F runners were removed.
+- PASS: Passwords, tokens, cookies, browser storage, environment values, and signed URLs were never printed, committed, or documented.
+
+Release decision:
+
+- RELEASE COMPLETE.
+- Phase 7 production acceptance is closed with the task domain enabled, final Work Chat harness corrections passing, payment parked, Odoo removed as an active dependency, and production runtime healthy.
