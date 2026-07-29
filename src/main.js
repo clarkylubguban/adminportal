@@ -1191,6 +1191,7 @@ async function loadOpsBoardInquiries() {
   opsLoadError = result.error?.message ?? "";
 
   render();
+  void preloadOpsPaymentHistories(opsInquiries);
 }
 function isLocalTaskQaMode() {
   const value = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_MODE ?? "false").trim().toLowerCase();
@@ -3376,6 +3377,42 @@ async function loadOpsPaymentHistory(inquiryId, force = false) {
       [inquiryId]: { status: "error", events: current?.events || [], message: error.message || "PAYMENT HISTORY UNAVAILABLE." },
     };
   }
+
+  render();
+}
+
+async function preloadOpsPaymentHistories(items) {
+  if (!isAdminPayAtShopUiEnabled() || !adminAuthSession?.access_token) return;
+  const inquiryIds = (items || [])
+    .filter((item) => isOpsShopPaymentPending(item) || isOpsShopPaymentConfirmed(item))
+    .map((item) => item.id)
+    .filter((id) => id && !["loading", "success"].includes(opsPaymentHistoryByInquiry[id]?.status));
+  if (!inquiryIds.length) return;
+
+  opsPaymentHistoryByInquiry = inquiryIds.reduce(
+    (history, id) => ({ ...history, [id]: { status: "loading", events: [] } }),
+    opsPaymentHistoryByInquiry
+  );
+  render();
+
+  await Promise.all(inquiryIds.map(async (inquiryId) => {
+    try {
+      const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions?view=payment-history`, {
+        headers: { Authorization: `Bearer ${adminAuthSession.access_token}` },
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok || !payload?.ok) throw new Error(getOpsCustomerActionError(response.status, payload?.error));
+      opsPaymentHistoryByInquiry = {
+        ...opsPaymentHistoryByInquiry,
+        [inquiryId]: { status: "success", events: Array.isArray(payload.paymentEvents) ? payload.paymentEvents : [] },
+      };
+    } catch (error) {
+      opsPaymentHistoryByInquiry = {
+        ...opsPaymentHistoryByInquiry,
+        [inquiryId]: { status: "error", events: [], message: error.message || "PAYMENT HISTORY UNAVAILABLE." },
+      };
+    }
+  }));
 
   render();
 }
