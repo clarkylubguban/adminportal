@@ -370,3 +370,73 @@ Release decision:
 
 - RELEASE NOT COMPLETE.
 - The next Phase 7E resume needs production QA Admin and Staff credentials that successfully authenticate against production Supabase Auth before the remaining acceptance tests can run.
+
+## Phase 7E Production Acceptance After Account Repair
+
+Status: BLOCKED; RELEASE NOT COMPLETE.
+
+Date: 2026-07-29
+
+Resume state checks:
+
+- PASS: Starting staging head was `8378be49a2307b136e96966aba5039ccc9708fc4`.
+- PASS: `origin/main` remains `c31da4a153c9cdeb76e2dff8f053b04ac2d16b63`.
+- PASS: Production deployment `dpl_349VPfKCxW3NHyg5xvJHzWgrfWHC` remains `READY`.
+- PASS: Production deployment aliases include `admin.trryapparel.com`.
+- PASS: Production app public Supabase configuration points at the expected production project ref. No environment values were printed.
+- PASS: QA Admin and QA Staff credentials authenticated successfully against production Supabase Auth.
+- PASS: Payment endpoint remains parked and returned HTTP 404 with `payment workflow is not available`.
+- PASS: Odoo dependency was not restored; active Odoo prompt text was not observed in route smoke.
+
+Passed credentialed acceptance scope:
+
+- PASS: QA Admin role bootstrap, login, Work Chat launcher, and standard channel load.
+- PASS: QA Staff role bootstrap, login, Work Chat launcher, and standard channel load.
+- PASS: Admin Staff Access scope is limited to Staff management; Admin owner-only create action is blocked.
+- PASS: Staff Access remains inaccessible to Staff.
+- PASS: Staff manager Workboard scope remains restricted, but see blocker note for returned status.
+- PASS: Work Chat unread/read marker behavior passed using concrete message ids.
+- PASS: Work Chat mention unread behavior passed.
+- PASS: Plain `@` text without `mentionedUserIds` did not create a false mention.
+- PASS: Anonymous Work Chat bootstrap is rejected.
+- PASS: Anonymous Work Chat attachment URL API is rejected.
+- PASS: Anonymous storage bucket listing exposed no object names.
+- PASS: Authenticated desktop, tablet 820px, and mobile 390px Work Chat launcher/drawer/composer checks passed for both QA Admin and QA Staff.
+- PASS: Follow-up read endpoint passed without mutating customer workflow records.
+- PASS: Inquiries, Orders, Production, Workboard, My Tasks, Settings route smoke completed for Admin and Staff after isolated-context retries.
+
+Retained production QA evidence:
+
+- Work Chat messages retained with `[PRODUCTION ACCEPTANCE TEST] Admin to Staff`.
+- Work Chat messages retained with `[PRODUCTION ACCEPTANCE TEST] Staff to Admin`.
+- Work Chat mention retained with `[PRODUCTION ACCEPTANCE TEST] Admin mentions Staff`.
+- Work Chat attachment evidence retained as `phase7e-production-qa.txt`, but attachment hydration/access did not fully pass.
+
+Remaining blockers:
+
+- BLOCKED: Admin Workboard manager API returned HTTP 500 for `/api/tasks?pageSize=5`; Workboard manager access cannot be marked passing.
+- BLOCKED: Admin My Tasks API returned HTTP 500 for `/api/my-tasks?pageSize=5`.
+- BLOCKED: Staff My Tasks API returned HTTP 500 for `/api/my-tasks?pageSize=5`.
+- BLOCKED: Staff restricted Workboard API returned HTTP 500 instead of a clean 403-style restriction response.
+- BLOCKED: Cross-session Work Chat exact-once Realtime did not pass. Staff did not receive exactly one Realtime INSERT for the Admin message, and Admin did not receive exactly one Realtime INSERT for the Staff message within the acceptance window.
+- BLOCKED: Uploaded Work Chat attachment was not hydrated on its retained message.
+- BLOCKED: Authenticated Work Chat attachment URL endpoint returned HTTP 404 for the retained attachment.
+
+Runtime health:
+
+- BLOCKED: Runtime health is not clean. Vercel reported repeated Task API `INTERNAL_ERROR` 500 groups on `/api/my-tasks` and `/api/tasks`.
+- BLOCKED: Vercel reported Work Chat attachment URL 404 error groups with `Attachment was not found`.
+- WARN: Existing Node `DEP0169` deprecation warning remains non-blocking by itself.
+- WARN: One nullable Work Chat read-marker probe returned invalid UUID syntax before the harness switched to concrete message ids; concrete-message read markers passed.
+
+Security note:
+
+- The production QA account file was read only inside temporary QA processes.
+- Passwords, tokens, cookies, browser storage, signed URLs, and environment values were not printed, stored, committed, or documented.
+- Temporary isolated browser profile directories were removed at process exit, and the temporary acceptance runner was removed after testing.
+- No production migrations, production settings, payment enablement, Odoo restoration, or active customer workflow record mutations were performed.
+
+Release decision:
+
+- RELEASE NOT COMPLETE.
+- Do not mark Phase 7 complete until Task API 500s, Work Chat Realtime exact-once delivery, and Work Chat attachment hydration/authenticated access pass in production.
