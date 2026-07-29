@@ -40,6 +40,7 @@ assert.match(main, /CONFIRMING\.\.\./);
 assert.match(main, /Owner\/Admin confirmation required/);
 assert.match(main, /Selection time unavailable/);
 assert.match(main, /PAYMENT HISTORY/);
+assert.match(main, /renderPayment: renderOpsPaymentStage/);
 assert.match(build, /VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW[\s\S]+?"false"/);
 
 globalThis.window = {

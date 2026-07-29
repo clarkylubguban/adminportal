@@ -2366,6 +2366,7 @@ function renderMvpInquiriesPage() {
     renderQuote: renderOpsQuoteStage,
     renderOrder: renderOpsOrderAction,
     renderArtwork: renderMvpArtworkAction,
+    renderPayment: renderOpsPaymentStage,
   });
 }
 

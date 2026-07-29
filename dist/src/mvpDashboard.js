@@ -505,7 +505,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<button type="button" class="mvp-module-link" data-mvp-route="${html(route)}"><span><strong>${html(label)}</strong><small>${html(detail)}</small></span><b>${count}</b></button>`;
   }
   return { state, renderOverview, renderInquiries, renderOrders, renderProduction, bind, helpers: { confirmed, productionStage, stageLabel } };
-  function renderInquiries({ items, notices = "", renderQuote, renderOrder, renderArtwork }) {
+  function renderInquiries({ items, notices = "", renderQuote, renderOrder, renderArtwork, renderPayment }) {
     const inquiries = items.filter((item) => !confirmed(item));
     const stageFilter = query("stage") || state.inquiry.stage;
     const search = state.inquiry.search.toLowerCase();
@@ -525,7 +525,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ${notices}
       <div class="mvp-stage-cards">${INQUIRY_QUEUES.map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="${stageFilter === value ? "active" : ""}"><span>${label}</span><strong>${inquiryStageCount(value, inquiries)}</strong></button>`).join("")}</div>
       ${filterBar("inquiry", items, ["owner", "service", "due"])}
-      ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOrder, renderArtwork)}
+      ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOrder, renderArtwork, renderPayment)}
     </main>`;
   }
 
@@ -545,7 +545,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `${table("inquiry", headers, desktopRows, "No inquiries found.")}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("No inquiries found.")}</section>`;
   }
 
-  function inquiryDrawer(item, renderQuote, renderOrder, renderArtwork) {
+  function inquiryDrawer(item, renderQuote, renderOrder, renderArtwork, renderPayment) {
     if (!item) return "";
     const stage = quoteStage(item);
     const action = inquiryPrimaryAction(item, stage, renderOrder);
@@ -553,10 +553,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const workflowPanel = state.inquiryActionId === item.id ? inquiryWorkflowPanel(item, action, renderQuote, renderOrder) : "";
     return drawer("inquiry locked", item, QUOTE_STAGES[stage], `
       <section class="mvp-inquiry-locked-shell">
-        ${inquiryLockedHeader(item, stage)}
-        ${inquiryTabs(activeTab)}
-        ${inquiryTabPanels(item, activeTab, stage, renderArtwork)}
-        ${workflowPanel}
+         ${inquiryLockedHeader(item, stage)}
+         ${inquiryTabs(activeTab)}
+         ${inquiryTabPanels(item, activeTab, stage, renderArtwork)}
+         ${typeof renderPayment === "function" ? renderPayment(item) : ""}
+         ${workflowPanel}
       </section>
     `, inquiryActionBar(item, action));
   }
