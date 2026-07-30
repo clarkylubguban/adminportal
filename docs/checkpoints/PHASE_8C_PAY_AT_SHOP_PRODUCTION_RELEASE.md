@@ -2,91 +2,159 @@
 
 ## Status
 
-**BLOCKED - RELEASE NOT STARTED**
+**PHASE 8C - RELEASE COMPLETE**
 
-Date: 2026-07-29
+Date: 2026-07-30
 
-Phase 8C resumed from Step 1 after the credential file was recreated, then
-stopped again at the credentialed-acceptance gate before any production write.
+The approved Pay at Shop release is live in production. Migration 008, the
+approved code, credentialed Admin/Staff acceptance, runtime review, and QA
+cleanup all passed.
 
-## Preflight
+## Release Scope
 
-- Approved staging head:
+- Approved production code:
   `8d71713111c1f4434af6af3a8c53b00d2e77017e`
-- Approved release code is an ancestor of the current documentation head.
-- Local documentation head:
-  `a3f474ff80340127a669641195fa0b15674bcb94`
-- `origin/staging`:
-  `a3f474ff80340127a669641195fa0b15674bcb94`
-- Expected and observed `origin/main`:
+- Previous production rollback reference:
   `c31da4a153c9cdeb76e2dff8f053b04ac2d16b63`
-- Approved release code is 13 commits ahead and 0 behind production `main`.
-- The documentation-only staging commit is excluded from the production
-  release.
-- Worktree before this checkpoint: clean
-- Production deployment `dpl_349VPfKCxW3NHyg5xvJHzWgrfWHC` is `READY`,
-  targets production from `main`, and serves `admin.trryapparel.com`.
-- Migration 008 remains absent.
-- Migration 007 remains applied and was not rerun.
-- `inquiry_payment_events`,
-  `confirm_inquiry_shop_payment(text,numeric,text,text,text)`, and the migration
-  008 selection trigger remain absent.
-- The existing pending Pay-at-Shop count remains `1`.
-- Invalid canonical payment status, method, and type counts remain `0`.
-- The customer Pay Online endpoint returns `404`.
-- The public Pay-at-Shop client flag remains absent.
+- Production `main` was fast-forwarded directly to the approved code SHA.
+- Documentation-only staging commits were excluded from production.
+- Migration 008 was applied individually:
+  `202607290008_pay_at_shop_admin_workflow.sql`
+- Production migration-history version:
+  `20260730012857`
+- Migration 007 remained applied and was not rerun.
+- No other production migration was applied.
 
-## Exact Blocker
+## Production Deployment
 
-The required external credential file now exists:
+- Initial approved-code deployment:
+  `dpl_2GtEWvEZEe14RFyv4G6HJv8Zhwnc`
+- Task-domain corrective redeployment:
+  `dpl_DXG7ijUXHKdjB4VBpgAJtx7eAg3L`
+- Final Pay at Shop deployment:
+  `dpl_44QPvaSq8XJhkqTNtJjztEob2xgU`
+- Final state: `READY`
+- Target: production from `main`
+- Production alias: `admin.trryapparel.com`
+- Deployed Git SHA:
+  `8d71713111c1f4434af6af3a8c53b00d2e77017e`
 
-`C:\tmp\trry-admin-production-qa-secrets\qa-accounts.env`
+## Environment Separation
 
-Its values were never printed, logged, stored, or committed. A key-only check
-confirmed that it contains exactly:
+Only the approved production keys were changed:
 
-- `QA_ADMIN_EMAIL`
-- `QA_ADMIN_PASSWORD`
-- `QA_STAFF_EMAIL`
-- `QA_STAFF_PASSWORD`
+- `VITE_ENABLE_TASK_DOMAIN=true`
+- `ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW=true`
+- `VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW=true`
 
-Both expected synthetic Auth users exist and are confirmed, and their
-`public.admin_users` roles are Admin and Staff respectively. However, both
-public profiles remain inactive and both Auth users retain the prior infinite
-ban. A memory-only password-authentication probe therefore fails inside
-production Auth before credential evaluation with an internal `banned_until`
-type error.
+The following remained parked:
 
-This fails the explicit requirement that both temporary QA accounts be active
-and temporarily unbanned. The task requires stopping before production changes
-when credentialed acceptance cannot be completed, so migration and release
-execution did not begin.
+- `ENABLE_CUSTOMER_PAYMENT_WORKFLOW` is absent or not `true`.
+- Customer Pay Online remains unavailable.
+- The removed Odoo workflow was not restored.
 
-## No-Write Confirmation
+No unrelated production environment key was changed.
 
-- Migration 008 was not applied.
-- Migration 007 was not rerun.
-- `main` was not merged or pushed.
-- No production deployment was triggered.
-- No Vercel environment variable was inspected by value or changed.
-- `ENABLE_CUSTOMER_PAYMENT_WORKFLOW` was not enabled.
-- No production Supabase row was created, updated, or deleted.
-- No production QA inquiry was created.
-- The existing live pending Pay-at-Shop inquiry was not opened, accessed by
-  identifier, or mutated; only its aggregate count was checked.
-- Odoo was not restored.
-- Order Drawer development was not started.
+## Migration Verification
 
-## Resume Gate
+Migration 008 created and verified:
 
-Before resuming Phase 8C:
+- Pay at Shop payment fields and canonical constraints;
+- append-only `inquiry_payment_events`;
+- selection and confirmation event constraints and indexes;
+- authenticated read policy with anonymous access denied;
+- `confirm_inquiry_shop_payment(text,numeric,text,text,text)`;
+- Owner/Admin authorization and Staff denial;
+- quote, artwork, amount, row-lock, and idempotency guards;
+- selection-event trigger;
+- required grants and revocations.
 
-- temporarily unban both synthetic production Auth users using an Auth-safe
-  finite/null ban state;
-- set both matching `public.admin_users.is_active` values to `true`;
-- manually verify fresh password login for QA Admin and QA Staff;
-- keep the credential file external and unchanged.
+The migration was absent before execution and present afterward. Migration 007
+was not rerun.
 
-The resumed run must restart at Phase 8C Step 1 and reverify every branch,
-schema, deployment, environment, pending-count, account, and runtime gate
-before applying migration 008.
+## Production Acceptance
+
+One synthetic inquiry was created with the label
+`QA PAY AT SHOP PRODUCTION ACCEPTANCE`. No real customer data was used.
+
+Admin acceptance passed:
+
+- pending Pay at Shop state and full amount rendered;
+- payment method and internal note controls rendered;
+- custom confirmation dialog rendered at 1366px, 820px, and 390px;
+- Cancel caused no mutation;
+- confirmation succeeded once for the full quoted amount;
+- confirmer, timestamps, method, amount, and QA note were stored and rendered;
+- confirmation controls disappeared after success.
+
+Staff acceptance passed:
+
+- pending and confirmed states rendered read-only;
+- no confirmation controls were available;
+- direct confirmation returned `403`;
+- payment history remained readable to the authenticated Staff role.
+
+Payment and idempotency acceptance passed:
+
+- `payment_status=full_payment_confirmed`;
+- `payment_type=shop`;
+- same-key retry returned an idempotent success with no field changes;
+- different-key retry returned `409`;
+- exactly one `SHOP_PAYMENT_CONFIRMED` event exists;
+- history contains exactly `PAY_AT_SHOP_SELECTED` followed by
+  `SHOP_PAYMENT_CONFIRMED`;
+- no payment event was deleted.
+
+Workflow regression passed:
+
+- direct TRRY order conversion succeeded without an Odoo Sales Order;
+- Orders displays `PAID AT SHOP`;
+- payment confirmation did not advance production;
+- the retained QA order remains `queued`;
+- an incomplete production handoff returns a clean non-payment readiness
+  blocker and does not mutate the order;
+- Inquiry, Orders, Production, Overview, Work Chat, Workboard, and My Tasks
+  remained healthy;
+- Admin Workboard and My Tasks APIs returned `200`;
+- Staff My Tasks returned `200` and Staff Workboard access returned `403`;
+- Admin and Staff desktop, tablet, and 390px layouts had no page-level
+  horizontal overflow or uncaught page errors;
+- anonymous payment-history access returned `401`;
+- the Pay Online confirmation path returned `404`.
+
+## Runtime Health
+
+The final production deployment had no `5xx` requests during the acceptance
+window. Observed `400`, `401`, `403`, `404`, and `409` responses matched the
+intentional negative permission, readiness, anonymous, parked-feature, and
+conflict probes.
+
+The only runtime error group was the pre-existing Node `url.parse()`
+deprecation warning. No Pay at Shop internal error, permission leakage,
+duplicate confirmation, online payment activation, unrelated-module error, or
+unexpected inquiry mutation was observed.
+
+## QA Cleanup
+
+- The synthetic QA inquiry was clearly retained as production acceptance audit
+  evidence in Orders.
+- Its two append-only payment events were preserved.
+- Both temporary `public.admin_users` profiles were set inactive.
+- Both matching Auth users received a finite future ban.
+- All matching Auth sessions and refresh tokens were revoked.
+- Fresh login checks for both accounts failed after deactivation.
+- The external QA credential file was deleted.
+- The empty external credential directory was removed.
+- All temporary Phase 8C runner files were deleted.
+- No credential, token, cookie, browser storage, signed URL, screenshot, or
+  local runner was committed.
+
+The pre-existing live pending Pay at Shop inquiry was never opened or mutated.
+Its aggregate pending count was `1` before the release and remained `1` after
+acceptance and cleanup.
+
+## Final Decision
+
+All Phase 8C release gates passed. Pay at Shop is enabled for the approved
+Admin workflow, Pay Online remains parked, Odoo remains removed, and the
+release is complete.
