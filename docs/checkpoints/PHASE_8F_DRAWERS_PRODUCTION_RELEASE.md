@@ -2,118 +2,189 @@
 
 ## Status
 
-**BLOCKED IN FINAL PREFLIGHT - PRODUCTION RELEASE NOT STARTED**
+**PHASE 8F RELEASE COMPLETE**
 
-The required production QA credential file now exists and all four required
-keys are populated. The designated QA accounts were temporarily activated and
-unbanned, but the QA Admin login returned the safe Supabase Auth code
-`invalid_credentials`. Credentialed acceptance could not be guaranteed, so
-Phase 8F stopped before moving production main, deploying code, or creating QA
-data.
+The approved Order Drawer and Production Drawer executable was released to
+production and passed synthetic, credentialed production acceptance.
 
-Phase 8F is not release complete.
+No migration or production environment change was required or performed. No
+live customer order or existing Pay-at-Shop inquiry was accessed or mutated.
 
 ## Release References
 
-- Staging documentation head:
-  `f26762e7c4e4964d1a9a250df95be0b60c2eb4b6`
-- Approved executable release SHA:
+- Production main:
   `a7da022fbc1a9d9e92c571f49462dcefd16dff95`
-- Expected and observed production main:
+- Production deployment:
+  `dpl_ErTbEwTWnhnP6TdPK22RGSDC969a` - READY
+- Previous production rollback SHA:
   `8d71713111c1f4434af6af3a8c53b00d2e77017e`
-- Current production deployment:
+- Previous production rollback deployment:
   `dpl_44QPvaSq8XJhkqTNtJjztEob2xgU`
-- Approved staging deployment:
-  `dpl_3pUdFezKP2jFamY6EYLSQhee8YC9`
+- Staging documentation base:
+  `6fbc09a9a97800d1d5775ca41b27ccb8cdb4f65f`
+- Production URL: `https://admin.trryapparel.com`
 
-## Passed Preflight Gates
+Production `main` was fast-forwarded directly from the previous release to the
+approved executable SHA. Documentation-only staging commits were not released.
 
-- Local `HEAD` matched the required staging documentation head.
-- `origin/staging` matched the required staging documentation head.
-- `origin/main` matched the required production main.
-- Approved executable commit exists.
-- Approved executable is an ancestor of the documentation head.
-- Production main can fast-forward to the executable SHA.
-- Worktree was clean.
-- No migration exists in the production release diff.
-- Current production deployment was READY, targeted production `main`, and
-  included `admin.trryapparel.com`.
-- Corrected Order Details select: 61 fields.
-- Production-present selected fields: 61.
-- Missing selected fields: 0.
-- Incompatible production stage values: 0.
-- `VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW`: true.
-- `VITE_ENABLE_TASK_DOMAIN`: true.
-- Customer Pay Online endpoint: `404`.
-- Pay Online remained parked.
-- Odoo remained absent from the active release implementation.
-- Production QA Admin and Staff records each existed exactly once with the
-  expected role and confirmed Auth identity.
+## Credential Repair
 
-All production database checks were read-only metadata or aggregate checks. No
-customer row was opened by identity.
+The two exact designated production QA Auth users and their profiles were
+verified by exact email before repair:
 
-## Credential Blocker
+- one confirmed Auth identity each;
+- one `admin_users` profile each;
+- `is_test = true`;
+- expected Admin and Staff roles.
 
-Required file:
+Production generated two distinct cryptographically secure temporary passwords
+and applied their bcrypt hashes only to those exact Auth users. Each generated
+password was returned encrypted to a one-time local public key, decrypted only
+inside the temporary repair runner, and written to the external QA credential
+file without being printed.
 
-`C:\tmp\trry-admin-production-qa-secrets\qa-accounts.env`
+Normal public Supabase sign-in then passed for both accounts. Each returned Auth
+identity matched the intended user and its active `is_test` portal profile and
+expected role. Both proof sessions were globally revoked before release.
 
-Observed state:
+No password, hash, API key, token, cookie, browser storage, signed URL, or
+credential-bearing URL was printed, committed, or documented.
 
-- Credential file exists: **YES**
-- `QA_ADMIN_EMAIL`: populated
-- `QA_ADMIN_PASSWORD`: populated
-- `QA_STAFF_EMAIL`: populated
-- `QA_STAFF_PASSWORD`: populated
-- QA Admin login: **FAIL - `invalid_credentials`**
-- QA Staff login: **NOT ATTEMPTED after the hard Admin failure**
+## Synthetic Evidence
 
-The expected QA Admin and QA Staff records were confirmed, then temporarily
-activated and unbanned as authorized. Login proof stopped at the QA Admin
-failure.
+One clearly labeled canonical production QA order was retained:
 
-Cleanup immediately restored both profiles to inactive, banned both Auth
-accounts, and revoked their sessions. Final session counts were zero for both
-accounts. The credential file was retained for correction because production
-acceptance did not run.
+- Reference: `QA-PHASE-8F-DRAWERS-20260730-01`
+- Customer label: `QA ORDER DRAWER PRODUCTION ACCEPTANCE`
+- Company label: `QA PRODUCTION DRAWER PRODUCTION ACCEPTANCE`
+- Data class: synthetic Phase 8F QA only
+- Route: DTF
+- Final production stage: completed
 
-No credential, token, cookie, browser storage, signed URL, or environment value
-was printed, stored, committed, or documented.
+The retained record has exactly one Pay-at-Shop selection event and exactly one
+shop-payment confirmation event.
 
-## Production Changes
+## Order Drawer
 
-- Production main change: none
-- Production deployment: none
-- Production Supabase migration: none
-- Production business-data write: none
-- Production QA account administration: temporary activate/unban, fully reversed
-- QA session revocation: complete; zero sessions retained
-- Production environment change: none
-- Synthetic production QA order: not created
-- TRRY POS change: none
-- Client portal change: none
+**PASS**
 
-## Resume Gate
+- Anonymous request isolation: `401`
+- Owner, Admin, and Staff authenticated reads: PASS
+- Canonical reference, customer, product, quantity, due date, assignment,
+  payment, readiness, blocker, and production state: PASS
+- Staff Pay-at-Shop confirmation denial: `403`
+- Admin full-amount Pay-at-Shop confirmation: PASS
+- Same-key payment replay: PASS with one confirmation event
+- Second confirmation with a different key: `409`
+- Pay Online action: `404`
+- No Odoo dependency or Odoo content in the drawer: PASS
 
-Before Phase 8F can resume:
+## Production Drawer
 
-1. Repair the QA Admin credential in
-   `C:\tmp\trry-admin-production-qa-secrets\qa-accounts.env`.
-2. Confirm both QA Admin and QA Staff credentials match their designated
-   production Auth accounts without exposing their values.
-3. Resume Phase 8F from Step 1 with:
-   - executable SHA
-     `a7da022fbc1a9d9e92c571f49462dcefd16dff95`;
-   - production main
-     `8d71713111c1f4434af6af3a8c53b00d2e77017e`;
-   - production deployment
-     `dpl_44QPvaSq8XJhkqTNtJjztEob2xgU`.
-4. Temporarily activate and unban only the two designated QA accounts.
-5. Prove both logins before moving production main.
+**PASS**
 
-## Recommendation
+- Anonymous request isolation: `401`
+- Owner, Admin, and Staff authenticated reads: PASS
+- Admin and Owner assignment, blocker, and note controls: PASS
+- Unassigned Staff write denial: `403`
+- Assigned Staff note and stage actions: PASS
+- Active-blocker progression denial: PASS
+- Staff blocker mutation denial: `403`
+- Valid DTF route:
+  `queued -> printing -> qc -> ready -> completed`
+- Completed detail/action lock: PASS
+- Payment excluded from production readiness and unchanged by all production
+  actions: PASS
 
-**BLOCKED.** Do not fast-forward or deploy production until both credentialed
-QA logins pass preflight. The approved executable and production references
-remain unchanged and ready for a controlled resume.
+## Role Matrix
+
+| Capability | Owner | Admin | Assigned Staff | Unassigned Staff | Anonymous |
+| --- | --- | --- | --- | --- | --- |
+| Read Order Drawer | PASS | PASS | PASS | PASS | `401` |
+| Read Production Drawer | PASS | PASS | PASS | PASS | `401` |
+| Confirm Pay at Shop | Covered by Owner/Admin contract; Admin live PASS | PASS | `403` | `403` | DENIED |
+| Assign Staff | PASS | PASS | DENIED | DENIED | DENIED |
+| Set/clear blocker | PASS | PASS | `403` | `403` | DENIED |
+| Edit production note | PASS | PASS | PASS | `403` | DENIED |
+| Advance valid stage | PASS | PASS | PASS | `403` | DENIED |
+
+The designated QA Admin profile was temporarily changed from Admin to Owner
+only for the Owner production boundary pass, then restored to Admin before the
+final stage sequence.
+
+## Concurrency And Consistency
+
+**PASS**
+
+- A repeated update using the stale stage/version pair returned `409`.
+- A duplicate queued-to-printing command produced one successful transition and
+  one stale `409`.
+- The final production note was the canonical winning value.
+- Order and Production projections matched on reference, customer, quantity,
+  due date, assigned Staff, production stage, and payment state.
+- Payment state and confirmed amount did not change during production updates.
+
+## Responsive And Module QA
+
+**PASS**
+
+- Authenticated Order and Production drawers at 1366px: PASS
+- Authenticated Order and Production drawers at 820px: PASS
+- Authenticated full-screen drawers and Pay-at-Shop dialog at 390px: PASS
+- No page or drawer horizontal overflow at the tested widths: PASS
+- Admin modules: Overview, Orders, Production, Workboard, My Tasks, and
+  Settings loaded
+- Staff modules: Overview, Orders, Production, My Tasks, and Settings loaded
+- Workboard visible to Admin and hidden from Staff: PASS
+- My Tasks visible to Admin and Staff: PASS
+- Admin Task API and Staff My Tasks API: `200`
+
+No screenshots or browser-storage artifacts were retained.
+
+## Runtime And Feature Posture
+
+- Deployment state: READY
+- Production release requests in the review window: 246 successful `200`
+  responses
+- Expected acceptance denials/conflicts: observed `400`, `401`, `403`, `404`,
+  and `409`
+- Sustained or individual `5xx` responses on the release deployment: 0
+- Schema-column errors: 0
+- Runtime error groups: no application failure; one existing Node
+  `url.parse()` deprecation warning group on Task routes
+- `VITE_ENABLE_TASK_DOMAIN`: true
+- `VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW`: true
+- Server Pay at Shop: enabled and proven by the live synthetic confirmation
+- Pay Online: parked; endpoint returned `404`
+- Odoo: no release dependency; drawers did not expose or require Odoo
+- Payment: excluded from production readiness
+
+## Migration And Environment Status
+
+- Supabase migrations applied: none
+- Production environment variables changed: none
+- Production settings changed: none
+- Production schema compatibility: PASS
+- TRRY POS changes: none
+- Client Portal changes: none
+
+## QA Cleanup
+
+After acceptance:
+
+- both designated QA profiles set inactive;
+- both designated QA Auth users banned;
+- Admin/Staff profile roles restored;
+- all QA sessions revoked; final session count zero;
+- profile rows and required synthetic audit evidence retained;
+- external QA credential file deleted;
+- temporary repair/acceptance runners deleted;
+- one-time encryption keys and temporary package files deleted;
+- no screenshot or browser artifact retained.
+
+## Final Decision
+
+**PHASE 8F RELEASE COMPLETE**
+
+The controlled production release and all critical Phase 8F acceptance gates
+passed. The prior production SHA and deployment remain the rollback references.
