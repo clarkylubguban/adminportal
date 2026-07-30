@@ -519,7 +519,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       if (state.inquiry.due !== "all" && inquiryDue(item) !== state.inquiry.due) return false;
       return !search || [item.id, item.customer, item.contact, item.service, product(item)].join(" ").toLowerCase().includes(search);
     });
-    const selected = inquiries.find((item) => item.id === (state.inquiryId || query("inquiry")));
+    const selected = items.find((item) => item.id === (state.inquiryId || query("inquiry")));
     return `<main class="mvp-page ops-board-page mvp-inquiries-page">
       ${pageTitle("Inquiries", "INQUIRIES", `${rows.length} shown / ${inquiries.length} total`)}
       ${notices}
@@ -767,7 +767,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (value === "customer_replied_action_needed") return "Customer replied / action needed";
     return "Follow-up update";
   }
-  function renderOrders({ items, notices = "", schemaNotice = "", renderPayment, renderTracking }) {
+  function renderOrders({
+    items,
+    notices = "",
+    schemaNotice = "",
+    orderDetailState = {},
+    renderPayment,
+    renderArtwork,
+  }) {
     const orders = items.filter(confirmed);
     const stageQuery = query("stage");
     const paymentQuery = query("payment");
@@ -789,7 +796,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     });
     const selected = orders.find((item) => item.id === (state.orderId || orderQuery));
     return `<main class="mvp-page ops-board-page mvp-orders-page">${pageTitle("Orders", "ORDERS", `${rows.length} shown / ${orders.length} total`)}${notices}${schemaNotice}
-      ${orderMetrics(orders)}${filterBar("order", items, ["payment", "artwork", "due", "production", "owner"])}${ordersTable(rows)}${orderCards(rows)}${orderDrawer(selected, renderPayment, renderTracking)}
+      ${orderMetrics(orders)}${filterBar("order", items, ["payment", "artwork", "due", "production", "owner"])}${ordersTable(rows)}${orderCards(rows)}${orderDrawer(selected, orderDetailState, renderPayment, renderArtwork)}
     </main>`;
   }
 
@@ -810,7 +817,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         status(payment.label, payment.tone),
         status(production.label, production.tone),
         `<span class="mvp-due ${dueState.key}" title="${html(dueState.label)}">${html(dueShortLabel(dueState, item))}</span>`,
-        cell(orderOwner(item)),
+        `<span class="mvp-order-owner-cell"><span>${html(orderOwner(item))}</span><button class="mvp-view" data-mvp-open="order" data-mvp-id="${html(item.id)}" data-mvp-trigger="action" type="button">OPEN</button></span>`,
       ]);
     }), "No orders found.");
   }
@@ -823,7 +830,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const payment = paymentState(item);
     const production = productionDisplay(item);
     const dueState = due(item);
-    return `<article class="mvp-order-mobile-card" data-mvp-open="order" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-order-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(orderReference(item))}</small></div><b class="mvp-mobile-open">OPEN</b></div><div class="mvp-order-mobile-summary"><strong>${html(itemDisplay(item))}</strong><span>${html([serviceDisplay(item), quantityDisplay(item)].filter(Boolean).join(" / "))}</span></div><div class="mvp-order-mobile-statuses">${status(payment.label, payment.tone)}${status(production.label, production.tone)}</div><div class="mvp-order-mobile-meta"><span>Due: ${html(dueShortLabel(dueState, item))}</span><span>Owner: ${html(orderOwner(item))}</span></div></article>`;
+    return `<article class="mvp-order-mobile-card" data-mvp-open="order" data-mvp-id="${html(item.id)}" data-mvp-trigger="mobile" role="button" tabindex="0"><div class="mvp-order-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(orderReference(item))}</small></div><b class="mvp-mobile-open">OPEN</b></div><div class="mvp-order-mobile-summary"><strong>${html(itemDisplay(item))}</strong><span>${html([serviceDisplay(item), quantityDisplay(item)].filter(Boolean).join(" / "))}</span></div><div class="mvp-order-mobile-statuses">${status(payment.label, payment.tone)}${status(production.label, production.tone)}</div><div class="mvp-order-mobile-meta"><span>Due: ${html(dueShortLabel(dueState, item))}</span><span>Owner: ${html(orderOwner(item))}</span></div></article>`;
   }
 
   function orderReferenceCell(item) {
@@ -840,26 +847,227 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<span class="mvp-order-item-cell"><strong>${html(itemDisplay(item))}</strong>${service && service !== "-" ? `<small>${html(service)}</small>` : ""}</span>`;
   }
 
-  function orderDrawer(item, renderPayment, renderTracking) {
+  function orderDrawer(item, detailState, renderPayment, renderArtwork) {
     if (!item) return "";
-    const stage = productionStage(item);
-    const readiness = readinessState(item);
-    const payment = paymentState(item);
-    const production = productionDisplay(item);
-    const block = blockedReason(item);
-    const gate = productionGate(item);
-    const canOpenProduction = true;
-    const action = orderFooterAction(item, gate);
-    return drawer("order", item, production.label, `
-      ${detailSection("Overview", [["Order Reference", orderReference(item)], ["Source Inquiry", sourceInquiryReference(item)], ["Historical SO", item.odooSO || "Not set"], ["Customer", item.customer], ["Item", itemDisplay(item)], ["Quantity", item.sizeBreakdown || item.qty], ["Confirmed", dateTime(item.quoteApprovedAt || item.updatedAt)], ["Due Date", dueShortLabel(due(item), item)]])}
-      ${detailSection("Readiness", [["Artwork Status", readiness.artwork], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Revision Requirement", key(item.artworkStatus) === "revision_requested" ? "Revision needed" : "None"], ["Payment Readiness", payment.label], ["Blocked Reason", block || "None"]])}
-      ${orderPaymentSummary(item)}
-      ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", tracking(item)], ["Contact", item.contact || "Not set"]])}
-      ${detailSection("Production Handoff", [["Release State", stage === "queued" ? (readyForProduction(item) ? "Ready for production" : gate.length ? `Blocked: ${gate.join(", ")}` : "Not released") : "Released to production"], ["Current Production", production.label], ["Assigned Production Staff", assigned(item)], ["Production Link", canOpenProduction ? "Available" : "Not available"], ["Blocked Reason", block || "None"]])}
-      ${detailSection("Internal", [["Order Owner", orderOwner(item)], ["Internal Note", item.productionNote || item.internalNote || "Not set"], ["Last Update", dateTime(item.updatedAt)]])}
-      ${typeof renderTracking === "function" ? renderTracking(item) : ""}
-    `, action);
-  }  function orderReference(item) {
+    const currentState = detailState?.id === item.id ? detailState : { status: "loading" };
+    if (currentState.status === "error") {
+      return orderDetailsDialog(item, null, `
+        <div class="mvp-order-detail-state error" role="alert">
+          <strong>${html(currentState.error || "Unable to load order details.")}</strong>
+          <button class="mvp-secondary-action" data-mvp-retry-order="${html(item.id)}" type="button">TRY AGAIN</button>
+        </div>
+      `);
+    }
+    if (currentState.status !== "ready" || !currentState.order) {
+      return orderDetailsDialog(item, null, `
+        <div class="mvp-order-detail-state loading" role="status" aria-live="polite">
+          <span class="mvp-order-loading-bar"></span>
+          <strong>Loading order details...</strong>
+        </div>
+      `);
+    }
+
+    const order = currentState.order;
+    const paymentItem = orderDetailPaymentItem(order);
+    const payment = paymentState(paymentItem);
+    const production = productionDisplay(paymentItem);
+    const quoteNote = [order.quoteBreakdown, order.quoteNotes].filter(Boolean).join("\n");
+    const address = [order.deliveryAddress, order.deliveryCity].filter(Boolean).join(" / ");
+    const customerRows = [
+      ["Customer", order.customerName],
+      ["Contact", contactWithCopy(order.contact)],
+      ["Fulfillment", formatEnum(order.fulfillmentMethod)],
+      ...(address ? [["Delivery address", address]] : []),
+      ...(order.deliveryLandmark ? [["Landmark", order.deliveryLandmark]] : []),
+      ["Inquiry source", formatEnum(order.source)],
+    ];
+
+    return orderDetailsDialog(item, order, `
+      <section class="mvp-order-detail-section mvp-order-summary-section">
+        <h3>ORDER SUMMARY</h3>
+        ${orderDetailGrid([
+          ["Item / service", order.productDescription],
+          ["Quantity", order.quantity],
+          ["Quoted total", money(order.quotedAmount)],
+          ["Due date", detailDate(order.dueDate)],
+          ["Owner", order.owner],
+          ["Production staff", order.assignedStaff],
+          ["Fulfillment", formatEnum(order.fulfillmentMethod)],
+          ["Next action", order.nextAction],
+        ])}
+      </section>
+      <section class="mvp-order-detail-section">
+        <h3>CUSTOMER</h3>
+        ${orderDetailGrid(customerRows)}
+      </section>
+      <section class="mvp-order-detail-section">
+        <h3>QUOTE &amp; ARTWORK</h3>
+        ${orderDetailGrid([
+          ["Quote status", formatEnum(order.quoteStatus)],
+          ["Quoted amount", money(order.quotedAmount)],
+          ["Artwork status", formatEnum(order.artworkStatus)],
+          ["Artwork approval", dateTime(order.artworkApprovedAt)],
+        ])}
+        ${quoteNote ? noteBlock(quoteNote) : ""}
+        <div class="mvp-order-detail-actions">
+          ${typeof renderArtwork === "function" ? renderArtwork(paymentItem) : ""}
+          <button class="mvp-secondary-action" data-mvp-open-original-inquiry="${html(order.id)}" type="button">OPEN ORIGINAL INQUIRY</button>
+        </div>
+      </section>
+      <section class="mvp-order-payment-section" aria-label="Order payment">
+        ${typeof renderPayment === "function" ? renderPayment(paymentItem) : orderDetailGrid([["Payment", payment.label]])}
+      </section>
+      ${orderReadinessSection(order, production)}
+      ${orderActivitySection(order.activity)}
+    `);
+  }
+
+  function orderDetailsDialog(listItem, order, body) {
+    const detailItem = order ? orderDetailPaymentItem(order) : listItem;
+    const payment = paymentState(detailItem);
+    const production = productionDisplay(detailItem);
+    const reference = order?.reference || orderReference(listItem);
+    const customer = order?.customerName || listItem.customer || "Unnamed customer";
+    return `<button class="mvp-drawer-backdrop mvp-order-detail-backdrop" data-mvp-close type="button" aria-label="Close order details"></button>
+      <aside class="mvp-drawer order mvp-order-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="mvp-order-detail-title" tabindex="-1">
+        <header class="mvp-order-detail-header">
+          <div>
+            <span class="mvp-order-detail-eyebrow">ORDER DETAILS</span>
+            <code>${html(reference)}</code>
+            <h2 id="mvp-order-detail-title">${html(customer)}</h2>
+            <div class="mvp-order-detail-badges" aria-label="Order statuses">
+              ${status("CONFIRMED", "completed")}
+              ${status(payment.label, payment.tone)}
+              ${status(production.label, production.tone)}
+            </div>
+          </div>
+          <button class="mvp-order-detail-close" type="button" data-mvp-close aria-label="Close order details">&times;</button>
+        </header>
+        <div class="mvp-drawer-body mvp-order-detail-body">${body}</div>
+      </aside>`;
+  }
+
+  function orderDetailPaymentItem(order) {
+    return {
+      id: order.id,
+      customer: order.customerName,
+      company: order.company,
+      contact: order.contact,
+      source: order.source,
+      service: order.service,
+      productDesc: order.productDescription,
+      qty: order.quantity,
+      sizeBreakdown: order.sizeBreakdown,
+      status: "won",
+      next: order.nextAction,
+      dueDate: order.dueDate,
+      fulfillmentMethod: order.fulfillmentMethod,
+      deliveryCity: order.deliveryCity,
+      deliveryAddress: order.deliveryAddress,
+      deliveryLandmark: order.deliveryLandmark,
+      trackingSubstatus: order.trackingSubstatus,
+      trackingNote: order.trackingNote,
+      trackingUpdatedAt: order.trackingUpdatedAt,
+      quotedAmount: order.quotedAmount,
+      amountDue: order.amountDue,
+      quoteStatus: order.quoteStatus,
+      quoteApprovedAt: order.quoteApprovedAt,
+      quotePublishedAt: order.quotePublishedAt,
+      quoteSentAt: order.quoteSentAt,
+      quoteBreakdown: order.quoteBreakdown,
+      quoteNotes: order.quoteNotes,
+      artworkStatus: order.artworkStatus,
+      artworkUrl: order.artworkAvailable ? "available" : "",
+      artworkApprovedAt: order.artworkApprovedAt,
+      artworkRevisionRequest: order.artworkRevisionRequest,
+      paymentStatus: order.paymentStatus,
+      paymentLabel: order.paymentLabel,
+      paymentMethod: order.paymentMethod,
+      paymentType: order.paymentType,
+      paymentConfirmedAmount: order.paymentConfirmedAmount,
+      paymentConfirmedAt: order.paymentConfirmedAt,
+      paymentVerifiedAmount: order.paymentVerifiedAmount,
+      paymentVerifiedAt: order.paymentVerifiedAt,
+      paymentVerifiedBy: order.paymentVerifiedBy,
+      paymentSelectedAt: order.paymentSelectedAt,
+      paymentInternalNote: order.paymentInternalNote,
+      paymentProofSubmittedAt: order.paymentProofSubmittedAt,
+      paymentReviewNote: order.paymentReviewNote,
+      paymentRejectedAt: order.paymentRejectedAt,
+      productionStage: order.productionStage,
+      productionNote: order.productionNote,
+      blockedReason: order.blockerReason,
+      assignedStaff: order.assignedStaff,
+      assigned: order.assignedStaff,
+      owner: order.owner,
+    };
+  }
+
+  function orderDetailGrid(rows) {
+    return `<dl class="mvp-order-detail-grid">${rows.map(([label, rawValue]) => {
+      const value = normalizeDetailValue(rawValue);
+      const content = typeof value === "object" && value?.html
+        ? value.html
+        : html(value);
+      return `<div><dt>${html(label)}</dt><dd>${content}</dd></div>`;
+    }).join("")}</dl>`;
+  }
+
+  function contactWithCopy(contact) {
+    const value = normalizeDetailValue(contact);
+    if (value === "Not set") return value;
+    return {
+      html: `<span class="mvp-order-contact-value">${html(value)}<button class="mvp-copy-button" data-mvp-copy="${html(value)}" type="button" aria-label="Copy contact"><small>COPY</small></button></span>`,
+    };
+  }
+
+  function normalizeDetailValue(value) {
+    if (value && typeof value === "object" && value.html) return value;
+    const text = String(value ?? "").trim();
+    return !text || text === "-" || text.toLowerCase() === "undefined" || text.toLowerCase() === "null"
+      ? "Not set"
+      : text;
+  }
+
+  function formatEnum(value) {
+    const text = String(value || "").trim();
+    if (!text) return "Not set";
+    return text.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+
+  function detailDate(value) {
+    if (!value) return "Not set";
+    const date = new Date(`${String(value).slice(0, 10)}T00:00:00`);
+    return Number.isNaN(date.getTime())
+      ? "Not set"
+      : date.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function orderReadinessSection(order, production) {
+    const readiness = order.readiness || { ready: false, checks: [], missing: [] };
+    const result = readiness.ready ? "READY FOR PRODUCTION" : "NOT READY FOR PRODUCTION";
+    return `<section class="mvp-order-detail-section mvp-order-readiness">
+      <header><h3>PRODUCTION READINESS</h3><strong class="${readiness.ready ? "ready" : "not-ready"}">${result}</strong></header>
+      <ul class="mvp-order-readiness-list">${(readiness.checks || []).map((check) => `<li class="${check.complete ? "complete" : "missing"}"><span aria-hidden="true">${check.complete ? "&#10003;" : "!"}</span>${html(check.label)}</li>`).join("")}</ul>
+      ${!readiness.ready && readiness.missing?.length ? `<p class="mvp-order-missing"><strong>Missing requirements</strong>${html(readiness.missing.join(" / "))}</p>` : ""}
+      ${orderDetailGrid([
+        ["Production stage", production.label],
+        ["Assigned staff", order.assignedStaff],
+        ["Current blocker", order.blockerReason || "None"],
+        ["Production note", order.productionNote],
+      ])}
+      <button class="mvp-secondary-action" data-mvp-view-production="${html(order.id)}" type="button">VIEW IN PRODUCTION</button>
+    </section>`;
+  }
+
+  function orderActivitySection(activity = []) {
+    return `<section class="mvp-order-detail-section mvp-order-activity">
+      <h3>ACTIVITY</h3>
+      ${activity.length ? `<ol>${activity.map((event) => `<li><span aria-hidden="true"></span><div><strong>${html(event.label)}</strong>${event.actor ? `<small>${html(event.actor)}</small>` : ""}<time datetime="${html(event.createdAt)}">${html(dateTime(event.createdAt))}</time>${event.note ? `<p>${html(event.note)}</p>` : ""}</div></li>`).join("")}</ol>` : `<p class="mvp-order-empty">No recorded activity yet.</p>`}
+    </section>`;
+  }
+
+  function orderReference(item) {
     return String(item.orderCode || item.orderReference || item.reference || item.code || item.odooSO || humanReadableId(item.id) || "Local order").trim();
   }
 
@@ -1173,7 +1381,18 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, saveProduction, saveInquiryFollowUp, saveInquiryFollowUpEvent }) {
+  function bind({
+    root = document,
+    rerender,
+    navigate,
+    copy,
+    openOrder,
+    closeOrder,
+    retryOrder,
+    saveProduction,
+    saveInquiryFollowUp,
+    saveInquiryFollowUpEvent,
+  }) {
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-production-stage]").forEach((button) => button.addEventListener("click", () => { state.production.stage = button.dataset.mvpProductionStage; clearQuery(); rerender(); }));
@@ -1182,11 +1401,79 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       field.addEventListener(field.type === "search" ? "input" : "change", () => { state[scope][name] = field.value; clearQuery(); rerender(); if (field.type === "search") focusAtEnd(field.dataset.mvpFilter); });
     });
     root.querySelectorAll("[data-mvp-open]").forEach((element) => {
-      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = "details"; state.inquiryActionId = null; state.inquiryMoreOpen = false; state.inquiryFollowUpRecordId = null; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
-      element.addEventListener("click", (event) => { if (event.target.closest("[data-mvp-copy]")) return; event.stopPropagation(); open(); });
+      const open = () => {
+        const type = element.dataset.mvpOpen;
+        const id = element.dataset.mvpId;
+        state.returnFocus = {
+          type,
+          id,
+          trigger: element.dataset.mvpTrigger || "row",
+        };
+        if (type === "order") {
+          state.orderPageScrollY = window.scrollY;
+          state.orderTableScrollLeft = element.closest(".mvp-table-wrap")?.scrollLeft || 0;
+        }
+        state[`${type}Id`] = id;
+        if (type === "inquiry") {
+          state.inquiryTab = "details";
+          state.inquiryActionId = null;
+          state.inquiryMoreOpen = false;
+          state.inquiryFollowUpRecordId = null;
+        }
+        if (type === "order" && typeof openOrder === "function") openOrder(id);
+        else rerender();
+        requestAnimationFrame(() => {
+          restoreOrderViewport();
+          root.querySelector(".mvp-drawer [data-mvp-close]")?.focus();
+        });
+      };
+      element.addEventListener("click", (event) => {
+        const nestedControl = event.target.closest("button,a,input,select,textarea");
+        if (event.target.closest("[data-mvp-copy]") || (nestedControl && nestedControl !== element)) return;
+        event.stopPropagation();
+        open();
+      });
       element.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); open(); } });
     });
-    root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => { const restore = state.returnFocus; state.inquiryId = null; state.orderId = null; state.productionId = null; state.returnFocus = null; clearQuery(); rerender(); requestAnimationFrame(() => { if (restore) root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]`)?.focus(); }); }));
+    root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => {
+      const restore = state.returnFocus;
+      if ((state.orderId || button.closest(".mvp-order-detail-drawer")) && typeof closeOrder === "function") closeOrder();
+      state.inquiryId = null;
+      state.orderId = null;
+      state.productionId = null;
+      state.returnFocus = null;
+      clearQuery();
+      rerender();
+      requestAnimationFrame(() => {
+        restoreOrderViewport();
+        if (!restore) return;
+        const trigger = restore.trigger
+          ? `[data-mvp-trigger="${CSS.escape(restore.trigger)}"]`
+          : "";
+        root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]${trigger}`)?.focus();
+      });
+    }));
+    root.querySelectorAll("[data-mvp-retry-order]").forEach((button) => button.addEventListener("click", () => {
+      retryOrder?.(button.dataset.mvpRetryOrder);
+    }));
+    root.querySelectorAll("[data-mvp-open-original-inquiry]").forEach((button) => button.addEventListener("click", () => {
+      closeOrder?.();
+      state.orderId = null;
+      state.returnFocus = null;
+      navigate(`/inquiries?inquiry=${encodeURIComponent(button.dataset.mvpOpenOriginalInquiry)}`);
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-view-production]").forEach((button) => button.addEventListener("click", () => {
+      const id = button.dataset.mvpViewProduction;
+      closeOrder?.();
+      state.orderId = null;
+      state.returnFocus = null;
+      state.productionId = null;
+      state.production.search = id;
+      navigate("/production");
+      rerender();
+      requestAnimationFrame(() => focusAtEnd("production:search"));
+    }));
     root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); button.dataset.copied = "true"; const label = button.querySelector("small"); if (label) label.textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const nextLabel = button.querySelector("small"); if (nextLabel) nextLabel.textContent = "Copy"; }, 1300); }));
     root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -1313,8 +1600,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<section class="mvp-table-wrap"><div class="mvp-table ${type}" role="table"><div class="mvp-table-head" role="row">${headers.map((header) => `<span role="columnheader">${header}</span>`).join("")}</div><div role="rowgroup">${rows.length ? rows.join("") : empty(emptyLabel)}</div></div></section>`;
   }
 
+  function restoreOrderViewport() {
+    if (!Number.isFinite(state.orderPageScrollY)) return;
+    window.scrollTo(0, state.orderPageScrollY);
+    const table = document.querySelector(".mvp-orders-page .mvp-table-wrap");
+    if (table) table.scrollLeft = Number(state.orderTableScrollLeft) || 0;
+  }
+
   function row(type, id, cells) {
-    return `<div class="mvp-table-row" data-mvp-open="${type}" data-mvp-id="${html(id)}" role="row" tabindex="0">${cells.join("")}</div>`;
+    return `<div class="mvp-table-row" data-mvp-open="${type}" data-mvp-id="${html(id)}" data-mvp-trigger="row" role="row" tabindex="0">${cells.join("")}</div>`;
   }
 
   function drawer(type, item, statusLabel, body, footer = "") {

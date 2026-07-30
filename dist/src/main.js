@@ -36,6 +36,7 @@ import {
   updateOpsInquiryFields,
   updateOpsInquiryStatus,
 } from "./services/opsBoard.js";
+import { getOrderDetails } from "./services/orderDetails.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
   getAdminAssignmentUsers,
@@ -307,6 +308,10 @@ let opsCustomerActionRequests = {};
 let opsPaymentHistoryByInquiry = {};
 let opsShopPaymentDrafts = {};
 let opsShopPaymentConfirmation = null;
+let mvpOrderDetailState = { id: null, status: "idle", order: null, error: "" };
+let mvpOrderDetailRequestVersion = 0;
+let mvpOrderDetailController = null;
+let mvpOrderDetailScheduledId = null;
 let expandedOpsInquiryId = null;
 let selectedOrderDashboardId = null;
 let orderDashboardSaveError = "";
@@ -2372,13 +2377,82 @@ function renderMvpInquiriesPage() {
 }
 
 function renderMvpOrdersPage() {
+  const requestedOrderId = mvpDashboard.state.orderId
+    || new URLSearchParams(window.location.search).get("order")
+    || "";
+  if (
+    requestedOrderId
+    && mvpOrderDetailState.id !== requestedOrderId
+    && mvpOrderDetailScheduledId !== requestedOrderId
+  ) {
+    mvpOrderDetailScheduledId = requestedOrderId;
+    queueMicrotask(() => {
+      mvpOrderDetailScheduledId = null;
+      void loadMvpOrderDetails(requestedOrderId);
+    });
+  }
+
   return mvpDashboard.renderOrders({
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
     schemaNotice: renderOrderDashboardSchemaNotice(),
+    orderDetailState: mvpOrderDetailState,
     renderPayment: renderOpsPaymentStage,
-    renderTracking: renderOpsCustomerTracking,
+    renderArtwork: renderMvpArtworkAction,
   });
+}
+
+async function loadMvpOrderDetails(orderId, { force = false } = {}) {
+  const id = String(orderId || "").trim();
+  if (!id || !adminAuthSession?.access_token) return;
+  if (!force && mvpOrderDetailState.id === id && mvpOrderDetailState.status === "ready") return;
+
+  const requestVersion = ++mvpOrderDetailRequestVersion;
+  mvpOrderDetailController?.abort();
+  const controller = new AbortController();
+  mvpOrderDetailController = controller;
+  mvpOrderDetailState = {
+    id,
+    status: "loading",
+    order: mvpOrderDetailState.id === id ? mvpOrderDetailState.order : null,
+    error: "",
+  };
+  render();
+
+  try {
+    const order = await getOrderDetails(id, adminAuthSession, { signal: controller.signal });
+    if (requestVersion !== mvpOrderDetailRequestVersion || controller.signal.aborted) return;
+    mvpOrderDetailState = { id, status: "ready", order, error: "" };
+    opsPaymentHistoryByInquiry = {
+      ...opsPaymentHistoryByInquiry,
+      [id]: {
+        status: "success",
+        events: Array.isArray(order.paymentEvents) ? order.paymentEvents : [],
+      },
+    };
+  } catch (error) {
+    if (controller.signal.aborted || requestVersion !== mvpOrderDetailRequestVersion) return;
+    mvpOrderDetailState = {
+      id,
+      status: "error",
+      order: null,
+      error: error.message || "Unable to load order details.",
+    };
+  } finally {
+    if (requestVersion === mvpOrderDetailRequestVersion) {
+      mvpOrderDetailController = null;
+      render();
+      requestAnimationFrame(() => document.querySelector(".mvp-order-detail-close")?.focus());
+    }
+  }
+}
+
+function closeMvpOrderDetails() {
+  mvpOrderDetailRequestVersion += 1;
+  mvpOrderDetailController?.abort();
+  mvpOrderDetailController = null;
+  mvpOrderDetailScheduledId = null;
+  mvpOrderDetailState = { id: null, status: "idle", order: null, error: "" };
 }
 
 function renderMvpProductionPage() {
@@ -2786,7 +2860,7 @@ function renderMvpArtworkAction(item) {
     : "";
 
   if (!hasArtwork) {
-    return `<span class="mvp-artwork-empty">No customer artwork file or supported URL is saved.</span>`;
+    return `<span class="mvp-artwork-empty">Artwork unavailable.</span>`;
   }
 
   return `<button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>${renderIcon("external-link", "ops-button-icon")}${isLoading ? "OPENING..." : "VIEW ARTWORK"}</button>${message}`;
@@ -2835,7 +2909,7 @@ async function openOpsArtwork(inquiryId) {
 }
 
 function getOpsArtworkErrorMessage(status, error) {
-  if (status === 404 && error === "no artwork uploaded") return "NO ARTWORK FILE AVAILABLE";
+  if (status === 404 && error === "no artwork uploaded") return "Artwork unavailable.";
   if (status === 400) return "INVALID INQUIRY REFERENCE";
   if (status === 401) return "ADMIN SESSION REQUIRED";
   if (status === 404) return "INQUIRY NOT FOUND";
@@ -2996,7 +3070,7 @@ function renderOpsPaymentHistory(item) {
           : "";
         return `<li><span></span><div><strong>${escapeHtml(title)}</strong>${detail ? `<b>${escapeHtml(detail)}</b>` : ""}<small>${escapeHtml(actor)}</small><time>${escapeHtml(formatOpsTrackingDate(event.createdAt))}</time>${event.internalNote ? `<p>${escapeHtml(event.internalNote)}</p>` : ""}</div></li>`;
       }).join("")}</ol>`
-      : `<p class="ops-stage-muted">No Pay at Shop history recorded.</p>`;
+      : `<p class="ops-stage-muted">No payment history yet.</p>`;
   }
 
   return `<section class="ops-payment-history"><header><strong>PAYMENT HISTORY</strong></header>${content}</section>`;
@@ -3338,8 +3412,20 @@ async function confirmOpsShopPayment(inquiryId) {
     delete nextDrafts[inquiryId];
     opsShopPaymentDrafts = nextDrafts;
     opsShopPaymentConfirmation = null;
+    const refreshOpenOrder = mvpDashboard.state.orderId === inquiryId;
+    if (refreshOpenOrder) {
+      mvpOrderDetailState = {
+        id: inquiryId,
+        status: "loading",
+        order: null,
+        error: "",
+      };
+    }
     hasLoadedOpsInquiries = false;
     await loadOpsBoardInquiries();
+    if (refreshOpenOrder) {
+      await loadMvpOrderDetails(inquiryId, { force: true });
+    }
   } catch (error) {
     const message = error.message || "SHOP PAYMENT CONFIRMATION FAILED.";
     opsShopPaymentConfirmation = {
@@ -6786,6 +6872,48 @@ function handleWorkChatEscape(event) {
   workChatState.isOpen = false;
   render();
 }
+
+function bindMvpOrderDrawerKeyboard() {
+  document.removeEventListener("keydown", handleMvpOrderDrawerKeydown);
+  if (document.querySelector(".mvp-order-detail-drawer")) {
+    document.addEventListener("keydown", handleMvpOrderDrawerKeydown);
+  }
+}
+
+function handleMvpOrderDrawerKeydown(event) {
+  const drawer = document.querySelector(".mvp-order-detail-drawer");
+  if (!drawer) return;
+
+  if (event.key === "Escape") {
+    event.preventDefault();
+    drawer.querySelector("[data-mvp-close]")?.click();
+    return;
+  }
+  if (event.key !== "Tab") return;
+
+  const focusable = [...drawer.querySelectorAll(
+    'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+  )].filter((element) => {
+    const rect = element.getBoundingClientRect();
+    return rect.width > 0 && rect.height > 0;
+  });
+  if (!focusable.length) {
+    event.preventDefault();
+    drawer.focus();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+}
+
 function bindEvents() {
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -6899,10 +7027,14 @@ function bindEvents() {
     rerender: render,
     navigate: navigateTo,
     copy: copyToClipboard,
+    openOrder: loadMvpOrderDetails,
+    closeOrder: closeMvpOrderDetails,
+    retryOrder: (id) => loadMvpOrderDetails(id, { force: true }),
     saveProduction: saveMvpProductionFields,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,
-    handleInquiryFollowUpOutcome: handleMvpInquiryFollowUpOutcome,
+    saveInquiryFollowUpEvent: handleMvpInquiryFollowUpOutcome,
   });
+  bindMvpOrderDrawerKeyboard();
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
   document.body.classList.toggle("work-chat-open", workChatState.isOpen);
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));

@@ -1,4 +1,5 @@
 import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
+import { createOrderDetailsHandler } from "../../_lib/orderDetails.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
@@ -9,8 +10,13 @@ const WORKFLOW_SELECT = [
   "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "blocked_reason",
 ].join(",");
 const WORKFLOW_LEGACY_SELECT = WORKFLOW_SELECT.replace("payment_verified_amount,", "");
+const handleOrderDetailsRequest = createOrderDetailsHandler();
 
 export default async function handler(request, response) {
+  if (request.method === "GET" && getWorkflowAction(request) === "order-details") {
+    return handleOrderDetailsRequest(request, response);
+  }
+
   const inquiryReference = getInquiryReference(request);
   if (!/^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(inquiryReference)) return sendJson(response, 400, { ok: false, error: "invalid inquiry reference" });
   if (request.method !== "PATCH") return sendJson(response, 405, { ok: false, error: "method not allowed" });
@@ -162,6 +168,15 @@ function getInquiryReference(request) {
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
   const match = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/workflow\/?$/);
   return match ? decodeURIComponent(match[1]).trim().toUpperCase() : "";
+}
+
+function getWorkflowAction(request) {
+  const queryAction = Array.isArray(request.query?._opsAction)
+    ? request.query._opsAction[0]
+    : request.query?._opsAction;
+  if (queryAction) return String(queryAction);
+  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  return url.searchParams.get("_opsAction") || "";
 }
 
 function getBearerToken(request) {

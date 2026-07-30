@@ -72,6 +72,12 @@ async function handleRequest(request, response) {
       return;
     }
 
+    if (/^\/api\/orders\/[^/]+\/?$/.test(routePath)) {
+      const { default: handleOrderDetailsRequest } = await import("../api/_lib/orderDetails.js");
+      await handleOrderDetailsRequest(request, response);
+      return;
+    }
+
 
     if (await handleTaskApiRoute(routePath, request, response)) return;
     if (await handleWorkChatApiRoute(routePath, request, response)) return;

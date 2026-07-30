@@ -92,6 +92,10 @@
       "destination": "/api/tasks/:id?_taskAction=time-entry-correct&entryId=:entryId"
     },
     {
+      "source": "/api/orders/:id",
+      "destination": "/api/inquiries/:id/workflow?_opsAction=order-details"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
