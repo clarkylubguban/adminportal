@@ -279,7 +279,7 @@ export function normalizePaymentReview(inquiry, events = [], profiles = [], role
     ),
     verifiedBy: displayForUser(inquiry.payment_verified_by, profileMap),
     internalNote: canWrite ? cleanText(inquiry.payment_internal_note, 500) : "",
-    version: isoOrNull(inquiry.updated_at),
+    version: versionOrNull(inquiry.updated_at),
     history: events
       .map((event) => normalizePaymentEvent(event, profileMap, canWrite))
       .filter(Boolean),
@@ -600,6 +600,12 @@ function isoOrNull(value) {
   if (!value) return null;
   const date = new Date(value);
   return Number.isFinite(date.getTime()) ? date.toISOString() : null;
+}
+
+function versionOrNull(value) {
+  if (typeof value !== "string") return isoOrNull(value);
+  const version = value.trim();
+  return Number.isFinite(new Date(version).getTime()) ? version : null;
 }
 
 function money(value) {

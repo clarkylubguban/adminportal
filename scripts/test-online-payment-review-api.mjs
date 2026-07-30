@@ -21,7 +21,7 @@ const inquiry = {
   payment_proof_submitted_at: "2026-07-30T01:00:00.000Z",
   payment_review_note: "",
   payment_internal_note: "Manager-only note",
-  updated_at: "2026-07-30T01:00:00.000Z",
+  updated_at: "2026-07-30T01:00:00.123456+00:00",
 };
 const events = [{
   event_type: "ONLINE_PAYMENT_REVIEW_STARTED",
@@ -47,6 +47,7 @@ assert.equal(manager.permissions.canConfirm, true);
 assert.equal(manager.internalNote, "Manager-only note");
 assert.equal(manager.history[0].label, "ONLINE PAYMENT REVIEW STARTED");
 assert.equal(manager.history[0].actorDisplayName, "QA Admin");
+assert.equal(manager.version, inquiry.updated_at, "database timestamp precision is preserved");
 
 const staff = normalizePaymentReview(inquiry, events, [], "staff");
 assert.equal(staff.permissions.canConfirm, false);
@@ -195,7 +196,7 @@ const baseDependencies = {
   const staleHandler = createPaymentReviewHandler({
     ...baseDependencies,
     invokeReview: async () => {
-      throw { code: "40001", message: "PAYMENT_STALE_VERSION: hidden details" };
+      throw { code: "P0001", message: "PAYMENT_STALE_VERSION: hidden details" };
     },
   });
   const response = await runHandler(staleHandler, {
