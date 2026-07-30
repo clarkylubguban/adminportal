@@ -27063,6 +27063,184 @@ textarea,
   }
 }
 
+.payment-review-section {
+  position: relative;
+}
+
+.payment-review-heading,
+.payment-review-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+}
+
+.payment-review-grid {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 14px 0;
+  overflow: hidden;
+  border: 1px solid #d7d7d2;
+  border-radius: 4px;
+}
+
+.payment-review-grid > div,
+.payment-review-dialog dl > div {
+  background: #fff;
+  min-width: 0;
+  padding: 10px 12px;
+}
+
+.payment-review-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.payment-review-grid dt,
+.payment-review-dialog dt {
+  color: #666;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.payment-review-grid dd,
+.payment-review-dialog dd {
+  margin: 4px 0 0;
+  overflow-wrap: anywhere;
+}
+
+.payment-review-message,
+.payment-review-readonly,
+.payment-review-state,
+.payment-review-empty {
+  margin: 10px 0;
+}
+
+.payment-review-message.error {
+  color: #b42318;
+}
+
+.payment-review-message.success {
+  color: #176b3a;
+}
+
+.payment-review-message.warning,
+.payment-review-warning {
+  border-left: 3px solid #d39b20;
+  color: #5c450f;
+  padding: 8px 10px;
+}
+
+.payment-review-readonly {
+  border: 1px solid #d7d7d2;
+  padding: 10px 12px;
+}
+
+.payment-review-history .payment-review-internal {
+  border-left: 2px solid #888;
+  color: #555;
+  padding-left: 8px;
+}
+
+.payment-review-dialog-backdrop {
+  background: rgb(17 17 17 / 48%);
+  inset: 0;
+  position: fixed;
+  z-index: 1200;
+}
+
+.payment-review-dialog {
+  background: #fff;
+  border: 1px solid #111;
+  border-radius: 6px;
+  box-shadow: 0 18px 50px rgb(0 0 0 / 24%);
+  display: grid;
+  gap: 14px;
+  left: 50%;
+  max-height: calc(100vh - 32px);
+  max-width: min(520px, calc(100vw - 32px));
+  overflow: auto;
+  padding: 22px;
+  position: fixed;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 100%;
+  z-index: 1201;
+}
+
+.payment-review-dialog > span {
+  color: #666;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.payment-review-dialog h3,
+.payment-review-dialog p {
+  margin: 0;
+}
+
+.payment-review-dialog dl {
+  display: grid;
+  gap: 1px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid #d7d7d2;
+  border-radius: 4px;
+}
+
+.payment-review-dialog label {
+  display: grid;
+  gap: 6px;
+}
+
+.payment-review-dialog input,
+.payment-review-dialog textarea {
+  border: 1px solid #aaa;
+  border-radius: 4px;
+  font: inherit;
+  padding: 10px;
+  resize: vertical;
+  width: 100%;
+}
+
+.payment-review-dialog input:focus-visible,
+.payment-review-dialog textarea:focus-visible,
+.payment-review-section button:focus-visible {
+  outline: 3px solid #111;
+  outline-offset: 2px;
+}
+
+.payment-review-dialog > div:last-child {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+@media (max-width: 520px) {
+  .payment-review-grid,
+  .payment-review-dialog dl {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-review-grid .wide {
+    grid-column: auto;
+  }
+
+  .payment-review-dialog {
+    max-height: calc(100vh - 16px);
+    max-width: calc(100vw - 16px);
+    padding: 16px;
+  }
+
+  .payment-review-dialog > div:last-child button {
+    flex: 1 1 140px;
+  }
+}
+
 /* Phase 8D.1 Order Details drawer */
 .mvp-order-owner-cell {
   align-items: center;
