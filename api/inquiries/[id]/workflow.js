@@ -1,6 +1,7 @@
 import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
 import { createOrderDetailsHandler } from "../../_lib/orderDetails.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
+import { createProductionJobHandler } from "../../_lib/productionJob.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
 const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
@@ -11,10 +12,14 @@ const WORKFLOW_SELECT = [
 ].join(",");
 const WORKFLOW_LEGACY_SELECT = WORKFLOW_SELECT.replace("payment_verified_amount,", "");
 const handleOrderDetailsRequest = createOrderDetailsHandler();
+const handleProductionJobRequest = createProductionJobHandler();
 
 export default async function handler(request, response) {
   if (request.method === "GET" && getWorkflowAction(request) === "order-details") {
     return handleOrderDetailsRequest(request, response);
+  }
+  if (["GET", "PATCH"].includes(request.method) && getWorkflowAction(request) === "production-job") {
+    return handleProductionJobRequest(request, response);
   }
 
   const inquiryReference = getInquiryReference(request);

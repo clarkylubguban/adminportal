@@ -37,6 +37,10 @@ import {
   updateOpsInquiryStatus,
 } from "./services/opsBoard.js";
 import { getOrderDetails } from "./services/orderDetails.js";
+import {
+  getProductionJob,
+  updateProductionJob,
+} from "./services/productionJob.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
   getAdminAssignmentUsers,
@@ -312,6 +316,12 @@ let mvpOrderDetailState = { id: null, status: "idle", order: null, error: "" };
 let mvpOrderDetailRequestVersion = 0;
 let mvpOrderDetailController = null;
 let mvpOrderDetailScheduledId = null;
+let mvpProductionDetailState = { id: null, status: "idle", job: null, error: "" };
+let mvpProductionActionState = { id: null, status: "idle", error: "", success: "" };
+let mvpProductionDrafts = {};
+let mvpProductionRequestVersion = 0;
+let mvpProductionController = null;
+let mvpProductionScheduledId = null;
 let expandedOpsInquiryId = null;
 let selectedOrderDashboardId = null;
 let orderDashboardSaveError = "";
@@ -2456,11 +2466,173 @@ function closeMvpOrderDetails() {
 }
 
 function renderMvpProductionPage() {
+  const requestedJobId = mvpDashboard.state.productionId
+    || new URLSearchParams(window.location.search).get("order")
+    || "";
+  if (
+    requestedJobId
+    && mvpProductionDetailState.id !== requestedJobId
+    && mvpProductionScheduledId !== requestedJobId
+  ) {
+    mvpProductionScheduledId = requestedJobId;
+    queueMicrotask(() => {
+      mvpProductionScheduledId = null;
+      void loadMvpProductionJob(requestedJobId);
+    });
+  }
+
   return mvpDashboard.renderProduction({
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
     schemaNotice: renderOrderDashboardSchemaNotice(),
+    productionDetailState: mvpProductionDetailState,
+    productionActionState: mvpProductionActionState,
+    productionDrafts: mvpProductionDrafts,
+    renderArtwork: renderMvpArtworkAction,
   });
+}
+
+async function loadMvpProductionJob(jobId, { force = false } = {}) {
+  const id = String(jobId || "").trim();
+  if (!id || !adminAuthSession?.access_token) return;
+  if (!force && mvpProductionDetailState.id === id && mvpProductionDetailState.status === "ready") return;
+
+  const requestVersion = ++mvpProductionRequestVersion;
+  mvpProductionController?.abort();
+  const controller = new AbortController();
+  mvpProductionController = controller;
+  mvpProductionDetailState = {
+    id,
+    status: "loading",
+    job: mvpProductionDetailState.id === id ? mvpProductionDetailState.job : null,
+    error: "",
+  };
+  mvpProductionActionState = { id, status: "idle", error: "", success: "" };
+  render();
+
+  try {
+    const job = await getProductionJob(id, adminAuthSession, { signal: controller.signal });
+    if (requestVersion !== mvpProductionRequestVersion || controller.signal.aborted) return;
+    mvpProductionDetailState = { id, status: "ready", job, error: "" };
+  } catch (error) {
+    if (controller.signal.aborted || requestVersion !== mvpProductionRequestVersion) return;
+    mvpProductionDetailState = {
+      id,
+      status: "error",
+      job: null,
+      error: error.message || "Unable to load production details.",
+    };
+  } finally {
+    if (requestVersion === mvpProductionRequestVersion) {
+      mvpProductionController = null;
+      render();
+      requestAnimationFrame(() => document.querySelector(".mvp-production-detail-close")?.focus());
+    }
+  }
+}
+
+function closeMvpProductionJob() {
+  const id = mvpProductionDetailState.id;
+  mvpProductionRequestVersion += 1;
+  mvpProductionController?.abort();
+  mvpProductionController = null;
+  mvpProductionScheduledId = null;
+  mvpProductionDetailState = { id: null, status: "idle", job: null, error: "" };
+  mvpProductionActionState = { id: null, status: "idle", error: "", success: "" };
+  if (id) {
+    const nextDrafts = { ...mvpProductionDrafts };
+    delete nextDrafts[id];
+    mvpProductionDrafts = nextDrafts;
+  }
+}
+
+async function runMvpProductionAction(id, action, draft = {}) {
+  const job = mvpProductionDetailState.id === id
+    ? mvpProductionDetailState.job
+    : null;
+  if (!job || mvpProductionActionState.status === "saving") return;
+
+  mvpProductionDrafts = {
+    ...mvpProductionDrafts,
+    [id]: {
+      ...(mvpProductionDrafts[id] || {}),
+      ...draft,
+    },
+  };
+  mvpProductionActionState = { id, status: "saving", error: "", success: "" };
+  render();
+
+  try {
+    const updated = await updateProductionJob(id, {
+      ...action,
+      expectedCurrentStage: job.stage,
+      expectedUpdatedAt: job.productionUpdatedAt,
+      ...(action.action === "advance_production_stage"
+        ? { nextStage: job.validNextStage }
+        : {}),
+    }, adminAuthSession);
+    mvpProductionDetailState = { id, status: "ready", job: updated, error: "" };
+    mvpProductionActionState = {
+      id,
+      status: "success",
+      error: "",
+      success: productionActionSuccessMessage(action.action),
+    };
+    const assignedUserId = action.action === "assign_production_staff"
+      ? action.assignedUserId || null
+      : undefined;
+    opsInquiries = opsInquiries.map((item) => item.id === id ? {
+      ...item,
+      ...(assignedUserId !== undefined ? { assignedUserId } : {}),
+      assignedStaff: updated.assignedStaff === "Not set" ? null : updated.assignedStaff,
+      productionStage: updated.storedStage,
+      productionNote: updated.productionNote || null,
+      productionUpdatedAt: updated.productionUpdatedAt,
+      blockedReason: updated.blockerReason || null,
+    } : item);
+    if (mvpOrderDetailState.id === id && mvpOrderDetailState.order) {
+      mvpOrderDetailState = {
+        ...mvpOrderDetailState,
+        order: {
+          ...mvpOrderDetailState.order,
+          assignedStaff: updated.assignedStaff,
+          productionStage: updated.storedStage,
+          productionNote: updated.productionNote,
+          productionUpdatedAt: updated.productionUpdatedAt,
+          blockerReason: updated.blockerReason,
+          readiness: updated.readiness,
+        },
+      };
+    }
+    mvpProductionDrafts = {
+      ...mvpProductionDrafts,
+      [id]: {
+        assignedUserId: assignedUserId !== undefined
+          ? assignedUserId
+          : mvpProductionDrafts[id]?.assignedUserId,
+        productionNote: updated.productionNote || "",
+        blockerReason: "",
+      },
+    };
+  } catch (error) {
+    mvpProductionActionState = {
+      id,
+      status: "error",
+      error: error.message || "Unable to update production details.",
+      success: "",
+    };
+  } finally {
+    render();
+  }
+}
+
+function productionActionSuccessMessage(action) {
+  if (action === "assign_production_staff") return "Assignment updated.";
+  if (action === "set_production_blocker") return "Production blocker set.";
+  if (action === "clear_production_blocker") return "Production blocker cleared.";
+  if (action === "update_production_note") return "Production note saved.";
+  if (action === "advance_production_stage") return "Production stage updated.";
+  return "Production job updated.";
 }
 
 function renderOpsPersistenceNotice() {
@@ -6873,25 +7045,31 @@ function handleWorkChatEscape(event) {
   render();
 }
 
-function bindMvpOrderDrawerKeyboard() {
-  document.removeEventListener("keydown", handleMvpOrderDrawerKeydown);
-  if (document.querySelector(".mvp-order-detail-drawer")) {
-    document.addEventListener("keydown", handleMvpOrderDrawerKeydown);
+function bindMvpDetailDrawerKeyboard() {
+  document.removeEventListener("keydown", handleMvpDetailDrawerKeydown);
+  if (document.querySelector(".mvp-order-detail-drawer, .mvp-production-detail-drawer")) {
+    document.addEventListener("keydown", handleMvpDetailDrawerKeydown);
   }
 }
 
-function handleMvpOrderDrawerKeydown(event) {
-  const drawer = document.querySelector(".mvp-order-detail-drawer");
+function handleMvpDetailDrawerKeydown(event) {
+  const drawer = document.querySelector(".mvp-order-detail-drawer, .mvp-production-detail-drawer");
   if (!drawer) return;
+  const confirmation = drawer.querySelector(".mvp-production-confirm-dialog");
 
   if (event.key === "Escape") {
     event.preventDefault();
+    if (confirmation) {
+      confirmation.querySelector("[data-mvp-cancel-production-confirm]")?.click();
+      return;
+    }
     drawer.querySelector("[data-mvp-close]")?.click();
     return;
   }
   if (event.key !== "Tab") return;
 
-  const focusable = [...drawer.querySelectorAll(
+  const focusRoot = confirmation || drawer;
+  const focusable = [...focusRoot.querySelectorAll(
     'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
   )].filter((element) => {
     const rect = element.getBoundingClientRect();
@@ -6899,7 +7077,7 @@ function handleMvpOrderDrawerKeydown(event) {
   });
   if (!focusable.length) {
     event.preventDefault();
-    drawer.focus();
+    focusRoot.focus();
     return;
   }
 
@@ -7030,11 +7208,14 @@ function bindEvents() {
     openOrder: loadMvpOrderDetails,
     closeOrder: closeMvpOrderDetails,
     retryOrder: (id) => loadMvpOrderDetails(id, { force: true }),
-    saveProduction: saveMvpProductionFields,
+    openProduction: loadMvpProductionJob,
+    closeProduction: closeMvpProductionJob,
+    retryProduction: (id) => loadMvpProductionJob(id, { force: true }),
+    runProductionAction: runMvpProductionAction,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,
     saveInquiryFollowUpEvent: handleMvpInquiryFollowUpOutcome,
   });
-  bindMvpOrderDrawerKeyboard();
+  bindMvpDetailDrawerKeyboard();
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
   document.body.classList.toggle("work-chat-open", workChatState.isOpen);
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));

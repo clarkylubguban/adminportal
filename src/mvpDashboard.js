@@ -24,15 +24,16 @@ const INQUIRY_QUEUES = [
 
 const PRODUCTION_STAGES = [
   ["queued", "Queued"],
-  ["printing", "Printing"],
+  ["printing", "DTF Printing"],
   ["embroidery", "Embroidery"],
   ["screen_printing", "Screen Printing"],
-  ["qc", "QC"],
+  ["in_production", "In Production"],
+  ["qc", "Quality Check"],
   ["ready", "Ready"],
   ["completed", "Completed"],
 ];
 
-const ACTIVE_STAGES = ["printing", "embroidery", "screen_printing", "qc"];
+const ACTIVE_STAGES = ["printing", "embroidery", "screen_printing", "in_production"];
 
 export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], loadState: "idle", error: "" }) } = {}) {
   const state = {
@@ -46,6 +47,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     inquiryTab: "details",
     inquiryActionId: null,
     inquiryMoreOpen: false,
+    productionConfirmation: null,
   };
 
   const quoteStage = (item) => {
@@ -89,7 +91,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (PRODUCTION_STAGES.some(([stage]) => stage === value)) return value;
     if (value === "qc_finishing") return "qc";
     if (value === "ready_for_fulfillment") return "ready";
-    if (value === "in_production") return stationFor(item);
+    if (value === "in_production") return "in_production";
     return "queued";
   };
 
@@ -100,8 +102,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   };
 
   const blockedReason = (item) => {
-    if (productionStage(item) !== "queued") return "";
     if (item.blockedReason) return item.blockedReason;
+    if (productionStage(item) !== "queued") return "";
     const artwork = artworkLabel(item);
     if (artwork === "No Artwork") return "No artwork";
     if (artwork !== "Artwork Approved") return "Awaiting customer artwork approval";
@@ -1215,9 +1217,17 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const date = new Date(`${item.dueDate}T00:00:00`);
     return Number.isNaN(date.getTime()) ? "NO DATE" : date.toLocaleDateString("en-US", { month: "short", day: "numeric" }).toUpperCase();
   }
-  function renderProduction({ items, notices = "", schemaNotice = "" }) {
-    const orders = items.filter(confirmed);
-    const productionJobs = orders.filter(isReleasedToProduction);
+  function renderProduction({
+    items,
+    notices = "",
+    schemaNotice = "",
+    productionDetailState = {},
+    productionActionState = {},
+    productionDrafts = {},
+    renderArtwork,
+  }) {
+    const orders = items.filter((item) => key(item.status) === "won");
+    const productionJobs = orders;
     const stageQuery = query("stage");
     const dueQuery = query("due");
     const staffQuery = query("staff");
@@ -1259,7 +1269,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     };
     return `<main class="mvp-page ops-board-page mvp-production-page">${pageTitle("Production", "PRODUCTION", `${rows.length} shown / ${productionJobs.length} total`)}${notices}${schemaNotice}
       <div class="mvp-metrics production">${metric("ACTIVE JOBS", counts.active, "/production", "Released")}${metric("UNASSIGNED", counts.unassigned, "/production?staff=Not%20Yet%20Assigned", "Needs staff", "warning")}${metric("DUE TODAY", counts.today, "/production?due=today", "Today", "lime")}${metric("OVERDUE", counts.overdue, "/production?due=overdue", "Past due", "danger")}${metric("BLOCKED", counts.blocked, "/production?blocker=blocked", "Has blocker", "warning")}${metric("READY", counts.ready, "/production?stage=ready", "Fulfillment")}${metric("COMPLETED", counts.completed, "/production?stage=completed", "Closed")}</div>
-      ${productionStageTabs(productionJobs, stageQuery)}${filterBar("production", productionJobs, ["staff", "method", "due", "blocker"])}${productionTable(rows, productionJobs.length)}${productionCards(rows, productionJobs.length)}${productionDrawer(selected)}
+      ${productionStageTabs(productionJobs, stageQuery)}${filterBar("production", productionJobs, ["staff", "method", "due", "blocker"])}${productionTable(rows, productionJobs.length)}${productionCards(rows, productionJobs.length)}${productionDrawer(selected, productionDetailState, productionActionState, productionDrafts, renderArtwork)}
     </main>`;
   }
 
@@ -1307,13 +1317,13 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const stage = productionStage(item);
     const dueState = due(item);
     const blocker = productionBlocker(item);
-    return `<article class="mvp-production-mobile-card" data-mvp-open="production" data-mvp-id="${html(item.id)}" role="button" tabindex="0"><div class="mvp-production-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(jobReference(item))}</small></div><b class="mvp-mobile-open">OPEN</b></div><div class="mvp-production-mobile-job"><strong>${html(itemDisplay(item))}</strong><span>${html([productionMethod(item), quantityDisplay(item)].filter(Boolean).join(" / "))}</span></div><div class="mvp-production-mobile-statuses">${status(stageLabel(stage), stage)}<span class="mvp-due ${dueState.key}">${html(dueShortLabel(dueState, item))}</span></div><div class="mvp-production-mobile-ops"><span>Assigned: ${html(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item))}</span>${blocker ? `<span class="mvp-mobile-blocker">Blocked: ${html(blocker)}</span>` : ""}</div></article>`;
+    return `<article class="mvp-production-mobile-card" data-mvp-open="production" data-mvp-id="${html(item.id)}" data-mvp-trigger="mobile" role="button" tabindex="0"><div class="mvp-production-mobile-header"><div><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(jobReference(item))}</small></div><b class="mvp-mobile-open">OPEN</b></div><div class="mvp-production-mobile-job"><strong>${html(itemDisplay(item))}</strong><span>${html([productionMethod(item), quantityDisplay(item)].filter(Boolean).join(" / "))}</span></div><div class="mvp-production-mobile-statuses">${status(stageLabel(stage), stage)}<span class="mvp-due ${dueState.key}">${html(dueShortLabel(dueState, item))}</span></div><div class="mvp-production-mobile-ops"><span>Assigned: ${html(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item))}</span>${blocker ? `<span class="mvp-mobile-blocker">Blocked: ${html(blocker)}</span>` : ""}</div></article>`;
   }
 
   function productionReferenceCell(item) {
     const orderRef = orderReference(item);
     const jobRef = jobReference(item);
-    return `<span class="mvp-production-ref-cell"><strong>${html(jobRef)}</strong>${orderRef !== jobRef ? `<small>${html(orderRef)}</small>` : ""}</span>`;
+    return `<span class="mvp-production-ref-cell"><strong>${html(jobRef)}</strong>${orderRef !== jobRef ? `<small>${html(orderRef)}</small>` : ""}<button class="mvp-view" data-mvp-open="production" data-mvp-id="${html(item.id)}" data-mvp-trigger="action" type="button">OPEN</button></span>`;
   }
 
   function productionCustomerCell(item) {
@@ -1330,30 +1340,238 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<span class="mvp-blocker-cell" title="${html(blocker || "Not blocked")}">${blocker ? `<b>BLOCKED</b><small>${html(blocker)}</small>` : "Clear"}</span>`;
   }
 
-  function productionDrawer(item) {
-    if (!item) return "";
-    const released = isReleasedToProduction(item);
-    const stage = productionStage(item);
-    const next = released ? nextStage(item) : "";
-    const gate = released ? productionAdvanceGate(item) : [];
-    const fieldsReady = !item.requiresProductionMigration;
-    const editorLocked = !released || ["ready", "completed"].includes(stage);
-    const editorEnabled = fieldsReady && !editorLocked;
-    const assignmentHelp = assignmentNotice();
-    const assignmentDisabled = assignmentControlsDisabled();
-    const blocker = productionBlocker(item);
-    const footer = released ? productionFooterAction(item, next, fieldsReady, gate) : `<section class="mvp-production-action"><span>Not released to Production</span><strong>Return to Orders</strong><button class="mvp-secondary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(item.id)}">Open Order</button></section>`;
-    return drawer("production", item, released ? stageLabel(stage) : "Not released", `
-      ${detailSection("Job", [["Job Reference", jobReference(item)], ["Item", itemDisplay(item)], ["Method", productionMethod(item)], ["Quantity", quantityDisplay(item)], ["Due Date", dueShortLabel(due(item), item)], ["Order Reference", orderReference(item) === jobReference(item) ? "Same as job" : orderReference(item)], ["Current Production Status", released ? stageLabel(stage) : "Not released"]])}
-      <section class="mvp-drawer-section"><h3>Production</h3>${released ? "" : `<p class="mvp-inline-note">This confirmed order has not passed the current release requirements and is read-only here.</p>`}${fieldsReady ? "" : `<p class="mvp-inline-error">DATABASE FIELDS NOT READY. Apply the pending migration before saving.</p>`}${editorLocked && released ? `<p class="mvp-inline-note">${stage === "ready" ? "READY IS OPEN FOR FULFILLMENT. PRODUCTION DETAILS ARE LOCKED." : stage === "completed" ? "COMPLETED PRODUCTION DETAILS ARE LOCKED." : "PRODUCTION DETAILS ARE READ ONLY."}</p>` : ""}<div class="mvp-production-editor">
-        <label><span>Assigned Staff</span><select data-mvp-production-staff="${html(item.id)}" ${editorEnabled && !assignmentDisabled ? "" : "disabled"}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select>${assignmentHelp}</label>
-        <label><span>Current Stage</span><strong>${stageLabel(stage)}</strong></label>
-        <label><span>Next Stage</span><strong>${next ? stageLabel(next) : stage === "completed" ? "Completed" : released ? "None" : "Not available"}</strong></label>
-        <label><span>Production Blocker</span><select data-mvp-production-blocked="${html(item.id)}" ${editorEnabled ? "" : "disabled"}><option value="">Not blocked</option>${["No artwork", "Awaiting customer artwork approval", "Materials unavailable"].map((reason) => `<option ${item.blockedReason === reason ? "selected" : ""}>${reason}</option>`).join("")}</select></label><label class="wide"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>${html(item.productionNote || "")}</textarea></label>
-      </div><button class="mvp-secondary-action" type="button" data-mvp-save-production="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>Save Assignment &amp; Note</button>${blocker ? `<p class="mvp-blocked">BLOCKER: ${html(blocker)}</p>` : ""}</section>
-      ${detailSection("Release Context", [["Artwork Status", artworkLabel(item)], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Payment Status", paymentState(item).label], ["Historical SO", item.odooSO || "Not set"], ["Source Order", orderReference(item)], ["Released", released ? dateTime(item.productionUpdatedAt || item.updatedAt) : "Not released"]])}
-      ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", stage === "ready" || tracking(item) !== "Not set" ? tracking(item) : "Not set"], ["Readiness", stage === "ready" ? productionDisplay(item).label : "Not ready"]])}
-    `, footer);
+  function productionDrawer(
+    listItem,
+    productionDetailState = {},
+    productionActionState = {},
+    productionDrafts = {},
+    renderArtwork,
+  ) {
+    if (!listItem) return "";
+    const currentState = productionDetailState.id === listItem.id
+      ? productionDetailState
+      : { status: "loading" };
+    if (currentState.status === "error") {
+      return productionDetailsDialog(listItem, null, `
+        <div class="mvp-production-detail-state error" role="alert">
+          <strong>${html(currentState.error || "Unable to load production details.")}</strong>
+          <button class="mvp-secondary-action" data-mvp-retry-production="${html(listItem.id)}" type="button">RETRY</button>
+        </div>
+      `);
+    }
+    if (currentState.status !== "ready" || !currentState.job) {
+      return productionDetailsDialog(listItem, null, `
+        <div class="mvp-production-detail-state loading" role="status" aria-live="polite">
+          <span class="mvp-order-loading-bar"></span>
+          <strong>Loading production job...</strong>
+        </div>
+      `);
+    }
+
+    const job = currentState.job;
+    const actionState = productionActionState.id === job.id
+      ? productionActionState
+      : { status: "idle", error: "", success: "" };
+    const saving = actionState.status === "saving";
+    const draft = productionDrafts[job.id] || {};
+    const assignmentValue = Object.prototype.hasOwnProperty.call(draft, "assignedUserId")
+      ? draft.assignedUserId
+      : listItem.assignedUserId || "";
+    const noteValue = Object.prototype.hasOwnProperty.call(draft, "productionNote")
+      ? draft.productionNote
+      : job.productionNote || "";
+    const blockerValue = Object.prototype.hasOwnProperty.call(draft, "blockerReason")
+      ? draft.blockerReason
+      : "";
+    const permissions = job.permissions || {};
+    const completed = permissions.completedReadOnly;
+    const artworkItem = {
+      id: job.id,
+      artworkStatus: job.artworkStatus,
+      artworkUrl: job.artworkAvailable ? "available" : "",
+    };
+
+    const body = `
+      ${productionJobSummary(job)}
+      ${productionReadiness(job)}
+      <section class="mvp-production-detail-section">
+        <h3>ARTWORK &amp; ORDER</h3>
+        ${orderDetailGrid([["Artwork status", formatEnum(job.artworkStatus)]])}
+        <div class="mvp-production-detail-actions">
+          ${typeof renderArtwork === "function" ? renderArtwork(artworkItem) : ""}
+          <button class="mvp-secondary-action" data-mvp-production-view-order="${html(job.id)}" type="button">VIEW ORDER DETAILS</button>
+        </div>
+      </section>
+      ${productionAssignmentSection(job, listItem, assignmentValue, saving)}
+      ${productionBlockerSection(job, blockerValue, saving)}
+      ${productionNoteSection(job, noteValue, saving)}
+      ${productionStageSection(job)}
+      ${productionActivitySection(job.activity)}
+      ${completed ? `<p class="mvp-production-completed-note">COMPLETED JOBS ARE READ-ONLY.</p>` : ""}
+      ${actionState.error ? `<p class="mvp-production-action-message error" role="alert">${html(actionState.error)}</p>` : ""}
+      ${actionState.success ? `<p class="mvp-production-action-message success" role="status">${html(actionState.success)}</p>` : ""}
+    `;
+    const footer = productionStageFooter(job, saving);
+    const confirmation = productionConfirmationDialog(job, saving);
+    return productionDetailsDialog(listItem, job, body, footer, confirmation);
+  }
+
+  function productionDetailsDialog(listItem, job, body, footer = "", confirmation = "") {
+    const reference = job?.reference || jobReference(listItem);
+    const customer = job?.customerName || listItem.customer || "Unnamed customer";
+    const service = job?.service || productionMethod(listItem);
+    const stage = job?.stageLabel || stageLabel(productionStage(listItem)).toUpperCase();
+    const blocker = job?.blockerReason || productionBlocker(listItem);
+    return `<button class="mvp-drawer-backdrop mvp-production-detail-backdrop" data-mvp-close type="button" aria-label="Close production job"></button>
+      <aside class="mvp-drawer production mvp-production-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="mvp-production-detail-title" tabindex="-1">
+        <header class="mvp-production-detail-header">
+          <div>
+            <span class="mvp-production-detail-eyebrow">PRODUCTION JOB</span>
+            <code>${html(reference)}</code>
+            <h2 id="mvp-production-detail-title">${html(customer)}</h2>
+            <div class="mvp-production-detail-badges" aria-label="Production job statuses">
+              <span class="mvp-production-service-badge">${html(formatEnum(service))}</span>
+              ${status(stage, canonicalProductionStageForDisplay(job?.stage || productionStage(listItem)))}
+              ${blocker ? status("BLOCKED", "overdue") : ""}
+            </div>
+          </div>
+          <button class="mvp-production-detail-close" type="button" data-mvp-close aria-label="Close production job">&times;</button>
+        </header>
+        <div class="mvp-drawer-body mvp-production-detail-body">${body}</div>
+        ${footer ? `<footer class="mvp-production-detail-footer">${footer}</footer>` : ""}
+        ${confirmation}
+      </aside>`;
+  }
+
+  function productionJobSummary(job) {
+    return `<section class="mvp-production-detail-section">
+      <h3>JOB SUMMARY</h3>
+      ${orderDetailGrid([
+        ["Product / service", job.productDescription],
+        ["Quantity", job.quantity],
+        ["Due date", detailDate(job.dueDate)],
+        ["Owner", job.owner],
+        ["Assigned staff", job.assignedStaff],
+        ["Fulfillment", formatEnum(job.fulfillmentMethod)],
+        ["Payment", job.paymentStatus],
+        ["Quoted amount", money(job.quotedAmount)],
+        ["Next action", job.nextAction],
+      ])}
+    </section>`;
+  }
+
+  function productionReadiness(job) {
+    const readiness = job.readiness || { ready: false, checks: [], missing: [] };
+    return `<section class="mvp-production-detail-section mvp-production-readiness">
+      <header>
+        <h3>PRODUCTION READINESS</h3>
+        <strong class="${readiness.ready ? "ready" : "not-ready"}">${readiness.ready ? "READY FOR PRODUCTION" : "NOT READY FOR PRODUCTION"}</strong>
+      </header>
+      <ul>${readiness.checks.map((check) => `<li class="${check.complete ? "complete" : "missing"}"><span aria-hidden="true">${check.complete ? "OK" : "!"}</span>${html(check.label)}</li>`).join("")}</ul>
+      ${readiness.missing.length ? `<p class="mvp-production-missing"><strong>Missing requirements</strong>${html(readiness.missing.join(" / "))}</p>` : ""}
+    </section>`;
+  }
+
+  function productionAssignmentSection(job, listItem, value, saving) {
+    if (!job.permissions?.canAssign) {
+      return `<section class="mvp-production-detail-section">
+        <h3>ASSIGNMENT</h3>
+        ${orderDetailGrid([["Assigned production staff", job.assignedStaff || "No production staff assigned."]])}
+      </section>`;
+    }
+    return `<section class="mvp-production-detail-section">
+      <h3>ASSIGNMENT</h3>
+      <label class="mvp-production-field"><span>Production staff</span>
+        <select data-mvp-production-assignment="${html(job.id)}" ${saving || assignmentControlsDisabled() ? "disabled" : ""}>
+          ${assignmentSelectOptions(value, listItem.assignedStaff || listItem.assigned, "Unassigned")}
+        </select>
+      </label>
+      ${assignmentNotice()}
+      <button class="mvp-secondary-action" data-mvp-save-production-assignment="${html(job.id)}" type="button" ${saving || assignmentControlsDisabled() ? "disabled" : ""}>${saving ? "SAVING..." : "SAVE ASSIGNMENT"}</button>
+    </section>`;
+  }
+
+  function productionBlockerSection(job, value, saving) {
+    if (job.blockerReason) {
+      return `<section class="mvp-production-detail-section">
+        <h3>BLOCKER</h3>
+        <p class="mvp-production-blocker-current"><strong>BLOCKED</strong>${html(job.blockerReason)}</p>
+        ${job.permissions?.canClearBlocker ? `<button class="mvp-secondary-action" data-mvp-request-clear-blocker="${html(job.id)}" type="button" ${saving ? "disabled" : ""}>CLEAR BLOCKER</button>` : ""}
+      </section>`;
+    }
+    return `<section class="mvp-production-detail-section">
+      <h3>BLOCKER</h3>
+      <p class="mvp-production-empty">No active blocker.</p>
+      ${job.permissions?.canSetBlocker ? `<label class="mvp-production-field"><span>Blocker reason</span><textarea data-mvp-production-blocker="${html(job.id)}" maxlength="500" ${saving ? "disabled" : ""}>${html(value)}</textarea></label><button class="mvp-secondary-action" data-mvp-set-production-blocker="${html(job.id)}" type="button" ${saving ? "disabled" : ""}>${saving ? "SAVING..." : "SET BLOCKER"}</button>` : ""}
+    </section>`;
+  }
+
+  function productionNoteSection(job, value, saving) {
+    if (!job.permissions?.canUpdateNote) {
+      return `<section class="mvp-production-detail-section">
+        <h3>PRODUCTION NOTE</h3>
+        <p class="mvp-production-note-readonly">${html(job.productionNote || "Not set")}</p>
+      </section>`;
+    }
+    return `<section class="mvp-production-detail-section">
+      <h3>PRODUCTION NOTE</h3>
+      <label class="mvp-production-field"><span>Internal production note</span><textarea data-mvp-production-note-editor="${html(job.id)}" maxlength="2000" ${saving ? "disabled" : ""}>${html(value)}</textarea></label>
+      <button class="mvp-secondary-action" data-mvp-save-production-note="${html(job.id)}" type="button" ${saving ? "disabled" : ""}>${saving ? "SAVING..." : "SAVE NOTE"}</button>
+    </section>`;
+  }
+
+  function productionStageSection(job) {
+    const noSafeStart = job.stage === "queued" && !job.validNextStage && job.readiness?.ready;
+    return `<section class="mvp-production-detail-section mvp-production-stage-section">
+      <h3>STAGE ACTION</h3>
+      ${orderDetailGrid([
+        ["Current stage", job.stageLabel],
+        ["Next valid stage", job.validNextStageLabel || (job.stage === "completed" ? "Completed" : "Not available")],
+      ])}
+      ${job.stageActionExplanation ? `<p>${html(job.stageActionExplanation)}</p>` : ""}
+      ${noSafeStart ? `<p class="mvp-production-missing">This service has no safe start stage under the current production rules.</p>` : ""}
+    </section>`;
+  }
+
+  function productionStageFooter(job, saving) {
+    if (job.stage === "completed") return `<strong class="mvp-production-finished">COMPLETED</strong>`;
+    if (!job.validNextStage) return "";
+    return `<button class="mvp-production-primary-action" data-mvp-request-stage-advance="${html(job.id)}" type="button" aria-label="${html(job.stageActionLabel)}" ${saving || !job.permissions?.canAdvance ? "disabled" : ""}>${saving ? "UPDATING..." : html(job.stageActionLabel)}</button>`;
+  }
+
+  function productionActivitySection(activity = []) {
+    return `<section class="mvp-production-detail-section mvp-production-activity">
+      <h3>ACTIVITY</h3>
+      ${activity.length ? `<ol>${activity.map((event) => `<li><span aria-hidden="true"></span><div><strong>${html(event.label)}</strong>${event.actor ? `<small>${html(event.actor)}</small>` : ""}<time datetime="${html(event.createdAt)}">${html(dateTime(event.createdAt))}</time>${event.note ? `<p>${html(event.note)}</p>` : ""}</div></li>`).join("")}</ol>` : ""}
+      <p class="mvp-production-empty">No detailed production history recorded yet.</p>
+    </section>`;
+  }
+
+  function productionConfirmationDialog(job, saving) {
+    const confirmation = state.productionConfirmation;
+    if (!confirmation || confirmation.id !== job.id) return "";
+    const clearBlocker = confirmation.type === "clear-blocker";
+    const title = clearBlocker ? "CLEAR PRODUCTION BLOCKER?" : "CONFIRM STAGE CHANGE";
+    const body = clearBlocker
+      ? `Clear the blocker for ${job.reference}?`
+      : `Move ${job.reference} from ${job.stageLabel} to ${job.validNextStageLabel}?`;
+    return `<div class="mvp-production-confirm-backdrop">
+      <section class="mvp-production-confirm-dialog" role="alertdialog" aria-modal="true" aria-labelledby="mvp-production-confirm-title" aria-describedby="mvp-production-confirm-copy">
+        <h3 id="mvp-production-confirm-title">${html(title)}</h3>
+        <p id="mvp-production-confirm-copy">${html(body)}</p>
+        <div>
+          <button class="mvp-secondary-action" data-mvp-cancel-production-confirm type="button" ${saving ? "disabled" : ""}>CANCEL</button>
+          <button class="mvp-production-primary-action" data-mvp-confirm-production-action="${html(job.id)}" data-mvp-confirm-type="${html(confirmation.type)}" type="button" ${saving ? "disabled" : ""}>${saving ? "UPDATING..." : clearBlocker ? "CLEAR BLOCKER" : "CONFIRM STAGE"}</button>
+        </div>
+      </section>
+    </div>`;
+  }
+
+  function canonicalProductionStageForDisplay(value) {
+    const stage = key(value);
+    if (stage === "qc_finishing") return "qc";
+    if (stage === "ready_for_fulfillment") return "ready";
+    return stage || "queued";
   }
   function nextStage(item) {
     const stage = productionStage(item);
@@ -1389,7 +1607,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     openOrder,
     closeOrder,
     retryOrder,
-    saveProduction,
+    openProduction,
+    closeProduction,
+    retryProduction,
+    runProductionAction,
     saveInquiryFollowUp,
     saveInquiryFollowUpEvent,
   }) {
@@ -1413,6 +1634,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
           state.orderPageScrollY = window.scrollY;
           state.orderTableScrollLeft = element.closest(".mvp-table-wrap")?.scrollLeft || 0;
         }
+        if (type === "production") {
+          state.productionPageScrollY = window.scrollY;
+          state.productionTableScrollLeft = element.closest(".mvp-table-wrap")?.scrollLeft || 0;
+        }
         state[`${type}Id`] = id;
         if (type === "inquiry") {
           state.inquiryTab = "details";
@@ -1421,9 +1646,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
           state.inquiryFollowUpRecordId = null;
         }
         if (type === "order" && typeof openOrder === "function") openOrder(id);
+        else if (type === "production" && typeof openProduction === "function") openProduction(id);
         else rerender();
         requestAnimationFrame(() => {
-          restoreOrderViewport();
+          restoreMvpViewport(type);
           root.querySelector(".mvp-drawer [data-mvp-close]")?.focus();
         });
       };
@@ -1438,14 +1664,16 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => {
       const restore = state.returnFocus;
       if ((state.orderId || button.closest(".mvp-order-detail-drawer")) && typeof closeOrder === "function") closeOrder();
+      if ((state.productionId || button.closest(".mvp-production-detail-drawer")) && typeof closeProduction === "function") closeProduction();
       state.inquiryId = null;
       state.orderId = null;
       state.productionId = null;
+      state.productionConfirmation = null;
       state.returnFocus = null;
       clearQuery();
       rerender();
       requestAnimationFrame(() => {
-        restoreOrderViewport();
+        restoreMvpViewport(restore?.type);
         if (!restore) return;
         const trigger = restore.trigger
           ? `[data-mvp-trigger="${CSS.escape(restore.trigger)}"]`
@@ -1455,6 +1683,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     }));
     root.querySelectorAll("[data-mvp-retry-order]").forEach((button) => button.addEventListener("click", () => {
       retryOrder?.(button.dataset.mvpRetryOrder);
+    }));
+    root.querySelectorAll("[data-mvp-retry-production]").forEach((button) => button.addEventListener("click", () => {
+      retryProduction?.(button.dataset.mvpRetryProduction);
     }));
     root.querySelectorAll("[data-mvp-open-original-inquiry]").forEach((button) => button.addEventListener("click", () => {
       closeOrder?.();
@@ -1473,6 +1704,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       navigate("/production");
       rerender();
       requestAnimationFrame(() => focusAtEnd("production:search"));
+    }));
+    root.querySelectorAll("[data-mvp-production-view-order]").forEach((button) => button.addEventListener("click", () => {
+      const id = button.dataset.mvpProductionViewOrder;
+      closeProduction?.();
+      state.productionId = null;
+      state.productionConfirmation = null;
+      state.returnFocus = null;
+      navigate(`/orders?order=${encodeURIComponent(id)}`);
+      rerender();
     }));
     root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); button.dataset.copied = "true"; const label = button.querySelector("small"); if (label) label.textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const nextLabel = button.querySelector("small"); if (nextLabel) nextLabel.textContent = "Copy"; }, 1300); }));
     root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => button.addEventListener("click", (event) => {
@@ -1549,24 +1789,56 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         button.textContent = 'SAVE FOLLOW-UP UPDATE';
       }
     }));
-    root.querySelectorAll("[data-mvp-save-production]").forEach((button) => button.addEventListener("click", async () => {
+    root.querySelectorAll("[data-mvp-save-production-assignment]").forEach((button) => button.addEventListener("click", async () => {
       if (button.disabled) return;
-      const id = button.dataset.mvpSaveProduction;
-      const staff = root.querySelector(`[data-mvp-production-staff="${CSS.escape(id)}"]`)?.value || null;
-      const note = root.querySelector(`[data-mvp-production-note="${CSS.escape(id)}"]`)?.value.trim() || null;
-      const blocked = root.querySelector(`[data-mvp-production-blocked="${CSS.escape(id)}"]`)?.value || null;
-      button.disabled = true; button.textContent = "Saving...";
-      await saveProduction(id, { assignedUserId: staff === "__legacy__" ? null : staff, productionNote: note, blockedReason: blocked });
-      rerender();
+      const id = button.dataset.mvpSaveProductionAssignment;
+      const assignedUserId = root.querySelector(`[data-mvp-production-assignment="${CSS.escape(id)}"]`)?.value || null;
+      await runProductionAction?.(id, {
+        action: "assign_production_staff",
+        assignedUserId: assignedUserId === "__legacy__" ? null : assignedUserId,
+      }, { assignedUserId });
     }));
-    root.querySelectorAll("[data-mvp-advance]").forEach((button) => button.addEventListener("click", async () => {
+    root.querySelectorAll("[data-mvp-set-production-blocker]").forEach((button) => button.addEventListener("click", async () => {
       if (button.disabled) return;
-      const id = button.dataset.mvpAdvance;
-      const staff = root.querySelector(`[data-mvp-production-staff="${CSS.escape(id)}"]`)?.value || null;
-      const note = root.querySelector(`[data-mvp-production-note="${CSS.escape(id)}"]`)?.value.trim() || null;
-      const blocked = root.querySelector(`[data-mvp-production-blocked="${CSS.escape(id)}"]`)?.value || null;
-      button.disabled = true; button.textContent = "Saving...";
-      await saveProduction(id, { productionStage: button.dataset.mvpNext, assignedUserId: staff === "__legacy__" ? null : staff, productionNote: note, blockedReason: blocked });
+      const id = button.dataset.mvpSetProductionBlocker;
+      const blockerReason = root.querySelector(`[data-mvp-production-blocker="${CSS.escape(id)}"]`)?.value.trim() || "";
+      await runProductionAction?.(id, {
+        action: "set_production_blocker",
+        blockerReason,
+      }, { blockerReason });
+    }));
+    root.querySelectorAll("[data-mvp-save-production-note]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpSaveProductionNote;
+      const productionNote = root.querySelector(`[data-mvp-production-note-editor="${CSS.escape(id)}"]`)?.value || "";
+      await runProductionAction?.(id, {
+        action: "update_production_note",
+        productionNote,
+      }, { productionNote });
+    }));
+    root.querySelectorAll("[data-mvp-request-clear-blocker]").forEach((button) => button.addEventListener("click", () => {
+      state.productionConfirmation = { id: button.dataset.mvpRequestClearBlocker, type: "clear-blocker" };
+      rerender();
+      requestAnimationFrame(() => root.querySelector("[data-mvp-cancel-production-confirm]")?.focus());
+    }));
+    root.querySelectorAll("[data-mvp-request-stage-advance]").forEach((button) => button.addEventListener("click", () => {
+      state.productionConfirmation = { id: button.dataset.mvpRequestStageAdvance, type: "advance-stage" };
+      rerender();
+      requestAnimationFrame(() => root.querySelector("[data-mvp-cancel-production-confirm]")?.focus());
+    }));
+    root.querySelectorAll("[data-mvp-cancel-production-confirm]").forEach((button) => button.addEventListener("click", () => {
+      state.productionConfirmation = null;
+      rerender();
+      requestAnimationFrame(() => root.querySelector("[data-mvp-request-stage-advance], [data-mvp-request-clear-blocker]")?.focus());
+    }));
+    root.querySelectorAll("[data-mvp-confirm-production-action]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpConfirmProductionAction;
+      const type = button.dataset.mvpConfirmType;
+      await runProductionAction?.(id, type === "clear-blocker"
+        ? { action: "clear_production_blocker" }
+        : { action: "advance_production_stage" });
+      state.productionConfirmation = null;
       rerender();
     }));
   }
@@ -1600,11 +1872,18 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<section class="mvp-table-wrap"><div class="mvp-table ${type}" role="table"><div class="mvp-table-head" role="row">${headers.map((header) => `<span role="columnheader">${header}</span>`).join("")}</div><div role="rowgroup">${rows.length ? rows.join("") : empty(emptyLabel)}</div></div></section>`;
   }
 
-  function restoreOrderViewport() {
-    if (!Number.isFinite(state.orderPageScrollY)) return;
-    window.scrollTo(0, state.orderPageScrollY);
-    const table = document.querySelector(".mvp-orders-page .mvp-table-wrap");
-    if (table) table.scrollLeft = Number(state.orderTableScrollLeft) || 0;
+  function restoreMvpViewport(type) {
+    if (type === "production" && Number.isFinite(state.productionPageScrollY)) {
+      window.scrollTo(0, state.productionPageScrollY);
+      const table = document.querySelector(".mvp-production-page .mvp-table-wrap");
+      if (table) table.scrollLeft = Number(state.productionTableScrollLeft) || 0;
+      return;
+    }
+    if (type === "order" && Number.isFinite(state.orderPageScrollY)) {
+      window.scrollTo(0, state.orderPageScrollY);
+      const table = document.querySelector(".mvp-orders-page .mvp-table-wrap");
+      if (table) table.scrollLeft = Number(state.orderTableScrollLeft) || 0;
+    }
   }
 
   function row(type, id, cells) {

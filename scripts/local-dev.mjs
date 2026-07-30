@@ -78,6 +78,12 @@ async function handleRequest(request, response) {
       return;
     }
 
+    if (/^\/api\/production\/[^/]+\/?$/.test(routePath)) {
+      const { default: handleProductionJobRequest } = await import("../api/_lib/productionJob.js");
+      await handleProductionJobRequest(request, response);
+      return;
+    }
+
 
     if (await handleTaskApiRoute(routePath, request, response)) return;
     if (await handleWorkChatApiRoute(routePath, request, response)) return;

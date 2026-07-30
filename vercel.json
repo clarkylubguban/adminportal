@@ -96,6 +96,10 @@
       "destination": "/api/inquiries/:id/workflow?_opsAction=order-details"
     },
     {
+      "source": "/api/production/:id",
+      "destination": "/api/inquiries/:id/workflow?_opsAction=production-job"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
