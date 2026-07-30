@@ -3,6 +3,10 @@ import { readFile } from "node:fs/promises";
 
 const migrationPath = "supabase/migrations/202607300009_online_payment_review.sql";
 const migration = await readFile(migrationPath, "utf8");
+const staleFix = await readFile(
+  "supabase/migrations/202607300010_online_payment_review_stale_version_fix.sql",
+  "utf8",
+);
 const parked = await readFile("supabase/migrations/202607260001_complete_payment_workflow.sql", "utf8");
 const payAtShop = await readFile("supabase/migrations/202607290008_pay_at_shop_admin_workflow.sql", "utf8");
 const customerApi = await readFile("api/inquiries/[id]/payments.js", "utf8");
@@ -48,6 +52,14 @@ assert.match(migration, /grant select on table public\.inquiry_payment_events to
 assert.match(migration, /revoke execute on function public\.review_online_payment[\s\S]+from public, anon/i);
 assert.doesNotMatch(migration, /update public\.(ops_orders|production_jobs)/i);
 assert.doesNotMatch(migration, /odoo/i);
+
+assert.match(staleFix, /pg_get_functiondef/i);
+assert.match(staleFix, /errcode = ''40001'', message = ''PAYMENT_STALE_VERSION''/i);
+assert.match(staleFix, /errcode = ''P0001'', message = ''PAYMENT_STALE_VERSION''/i);
+assert.match(staleFix, /from public, anon/i);
+assert.match(staleFix, /to authenticated/i);
+assert.doesNotMatch(staleFix, /update public\.(ops_orders|production_jobs)/i);
+assert.doesNotMatch(staleFix, /odoo/i);
 
 assert.match(customerApi, /ONLINE_PAYMENT_METHODS = new Set\(\["gcash", "bank_transfer"\]\)/);
 assert.match(customerApi, /payment_method: paymentMethod/);
