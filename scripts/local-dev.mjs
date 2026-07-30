@@ -65,6 +65,13 @@ async function handleRequest(request, response) {
       await handleWorkflowRequest(request, response);
       return;
     }
+    if (/^\/api\/inquiries\/[^/]+\/payment-(review|proof)\/?$/.test(routePath)) {
+      const { default: handleWorkflowRequest } = await import("../api/inquiries/[id]/workflow.js");
+      const paymentAction = routePath.endsWith("/payment-proof") ? "payment-proof" : "payment-review";
+      request.query = { ...(request.query || {}), _opsAction: paymentAction };
+      await handleWorkflowRequest(request, response);
+      return;
+    }
 
     if (/^\/api\/inquiries\/[^/]+\/artwork\/?$/.test(routePath)) {
       const { default: handleArtworkRequest } = await import("../api/inquiries/[id]/artwork.js");
@@ -191,6 +198,7 @@ async function createEnvScript() {
     VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA ?? env.VITE_USE_SUPABASE_DATA ?? "true",
     VITE_ENABLE_TASK_DOMAIN: process.env.VITE_ENABLE_TASK_DOMAIN ?? env.VITE_ENABLE_TASK_DOMAIN ?? "false",
     VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW: process.env.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? env.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? "false",
+    VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW: process.env.VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW ?? env.VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW ?? "false",
     VITE_LOCAL_TASK_QA_MODE: process.env.VITE_LOCAL_TASK_QA_MODE ?? env.VITE_LOCAL_TASK_QA_MODE ?? "false",
     VITE_ADMIN_ACCESS_CODE: process.env.VITE_ADMIN_ACCESS_CODE ?? env.VITE_ADMIN_ACCESS_CODE ?? "",
   };

@@ -3,6 +3,8 @@ import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 const RECEIPT_BUCKET = "inquiry-artworks";
 const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
 const RECEIPT_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
+const RECEIPT_CONTENT_TYPES = new Set(["image/png", "image/jpeg", "application/pdf"]);
+const ONLINE_PAYMENT_METHODS = new Set(["gcash", "bank_transfer"]);
 const PAYMENT_SELECT = [
   "id",
   "quoted_amount",
@@ -58,6 +60,7 @@ export default async function handler(request, response) {
       if (validation) return sendJson(response, 400, { ok: false, error: validation });
       if (!filename || !RECEIPT_EXTENSIONS.has(getExtension(filename))) return sendJson(response, 400, { ok: false, error: "upload PNG, JPG, or PDF receipt" });
       if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > MAX_RECEIPT_SIZE) return sendJson(response, 400, { ok: false, error: "receipt must be between 1 byte and 10 MB" });
+      if (!isApprovedReceiptType(filename, contentType)) return sendJson(response, 400, { ok: false, error: "receipt content type does not match the file" });
 
       const receiptPath = `${inquiryReference}/payments/${crypto.randomUUID()}-${filename}`;
       const { data: signed, error: signedError } = await supabase.storage
@@ -112,22 +115,30 @@ function buildPaymentUpdate(action, body, inquiry, now) {
 
   const selectedAmount = getMoney(body.selectedAmount);
   const paymentType = cleanPaymentType(body.paymentType);
+  const paymentMethod = cleanPaymentMethod(body.paymentMethod);
   const expected = expectedPaymentAmount(inquiry, paymentType);
   const proofPath = cleanText(body.proofPath, 500);
+  const receiptFilename = sanitizeFilename(cleanText(body.receiptFilename, 180));
+  const receiptContentType = cleanText(body.receiptContentType, 120).toLowerCase();
+  const receiptSize = Number(body.receiptSize);
   if (!Number.isFinite(selectedAmount) || selectedAmount <= 0) return { error: "invalid payment amount" };
   if (!expected.ok || Math.abs(selectedAmount - expected.amount) > 0.009) return { error: expected.error || "payment amount does not match quote" };
+  if (!ONLINE_PAYMENT_METHODS.has(paymentMethod)) return { error: "select GCash or bank transfer" };
   if (!isValidReceiptPath(proofPath, inquiry.id)) return { error: "invalid receipt upload" };
+  if (!receiptFilename || !isApprovedReceiptType(receiptFilename, receiptContentType)) return { error: "receipt metadata is invalid" };
+  if (!receiptExtensionsMatch(proofPath, receiptFilename)) return { error: "receipt metadata does not match the upload" };
+  if (!Number.isFinite(receiptSize) || receiptSize <= 0 || receiptSize > MAX_RECEIPT_SIZE) return { error: "receipt must be between 1 byte and 10 MB" };
 
   return {
     values: {
-      payment_method: "online",
+      payment_method: paymentMethod,
       payment_type: paymentType,
       payment_selected_amount: selectedAmount,
       payment_reference: cleanText(body.referenceNumber, 120) || null,
       payment_customer_note: cleanText(body.customerNote, 1000) || null,
-      payment_receipt_filename: sanitizeFilename(cleanText(body.receiptFilename, 180)) || null,
-      payment_receipt_content_type: cleanText(body.receiptContentType, 120) || null,
-      payment_receipt_size: Number.isFinite(Number(body.receiptSize)) ? Number(body.receiptSize) : null,
+      payment_receipt_filename: receiptFilename,
+      payment_receipt_content_type: receiptContentType,
+      payment_receipt_size: receiptSize,
       payment_proof_path: proofPath,
       payment_proof_submitted_at: now,
       payment_status: "proof_submitted",
@@ -199,6 +210,22 @@ function cleanPaymentMethod(value) {
 
 function isValidReceiptPath(path, inquiryReference) {
   return path.startsWith(`${inquiryReference}/payments/`) && RECEIPT_EXTENSIONS.has(getExtension(path));
+}
+
+function isApprovedReceiptType(filename, contentType) {
+  const extension = getExtension(filename);
+  const normalizedType = cleanText(contentType, 120).toLowerCase();
+  if (!RECEIPT_CONTENT_TYPES.has(normalizedType)) return false;
+  if (extension === "pdf") return normalizedType === "application/pdf";
+  if (extension === "png") return normalizedType === "image/png";
+  return ["jpg", "jpeg"].includes(extension) && normalizedType === "image/jpeg";
+}
+
+function receiptExtensionsMatch(path, filename) {
+  const pathExtension = getExtension(path);
+  const filenameExtension = getExtension(filename);
+  if (["jpg", "jpeg"].includes(pathExtension) && ["jpg", "jpeg"].includes(filenameExtension)) return true;
+  return pathExtension === filenameExtension;
 }
 
 function getMoney(value) {

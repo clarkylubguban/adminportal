@@ -38,9 +38,16 @@ import {
 } from "./services/opsBoard.js";
 import { getOrderDetails } from "./services/orderDetails.js";
 import {
+  createPaymentReviewIdempotencyKey,
+  getPaymentReview,
+  openPaymentProof,
+  updatePaymentReview,
+} from "./services/paymentReview.js";
+import {
   getProductionJob,
   updateProductionJob,
 } from "./services/productionJob.js";
+import { renderOnlinePaymentReview } from "./paymentReviewView.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
   getAdminAssignmentUsers,
@@ -312,6 +319,8 @@ let opsCustomerActionRequests = {};
 let opsPaymentHistoryByInquiry = {};
 let opsShopPaymentDrafts = {};
 let opsShopPaymentConfirmation = null;
+let onlinePaymentReviewByInquiry = {};
+const scheduledOnlinePaymentReviews = new Set();
 let mvpOrderDetailState = { id: null, status: "idle", order: null, error: "" };
 let mvpOrderDetailRequestVersion = 0;
 let mvpOrderDetailController = null;
@@ -2794,6 +2803,18 @@ function isAdminPayAtShopUiEnabled() {
   return value === "true";
 }
 
+function isAdminOnlinePaymentReviewUiEnabled() {
+  const value = String(window.TRRY_ADMIN_ENV?.VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW ?? "false").trim().toLowerCase();
+  return value === "true";
+}
+
+function isOnlinePaymentReviewItem(item) {
+  const status = String(item?.paymentStatus || "").trim().toLowerCase();
+  const type = String(item?.paymentType || "").trim().toLowerCase();
+  return type !== "shop"
+    && ["proof_submitted", "under_review", "correction_required", "full_payment_confirmed"].includes(status);
+}
+
 function isOpsShopPaymentPending(item) {
   return ["pay_at_shop", "payment_pending_at_shop"].includes(String(item?.paymentStatus || "").trim().toLowerCase());
 }
@@ -3262,7 +3283,303 @@ function renderActiveOpsShopPaymentDialog() {
   return item ? renderOpsShopPaymentDialog(item) : "";
 }
 
+function scheduleOnlinePaymentReview(inquiryId) {
+  if (
+    !inquiryId
+    || !isAdminOnlinePaymentReviewUiEnabled()
+    || scheduledOnlinePaymentReviews.has(inquiryId)
+    || ["loading", "ready"].includes(onlinePaymentReviewByInquiry[inquiryId]?.status)
+  ) {
+    return;
+  }
+  scheduledOnlinePaymentReviews.add(inquiryId);
+  queueMicrotask(async () => {
+    scheduledOnlinePaymentReviews.delete(inquiryId);
+    await loadOnlinePaymentReview(inquiryId);
+  });
+}
+
+async function loadOnlinePaymentReview(inquiryId, { force = false, preserveDialog = false } = {}) {
+  if (!inquiryId || !isAdminOnlinePaymentReviewUiEnabled() || !adminAuthSession?.access_token) return;
+  const current = onlinePaymentReviewByInquiry[inquiryId] || {};
+  if (!force && ["loading", "ready"].includes(current.status)) return;
+
+  onlinePaymentReviewByInquiry = {
+    ...onlinePaymentReviewByInquiry,
+    [inquiryId]: {
+      ...current,
+      status: "loading",
+      error: "",
+      message: "",
+    },
+  };
+  render();
+
+  try {
+    const payment = await getPaymentReview(inquiryId, adminAuthSession);
+    onlinePaymentReviewByInquiry = {
+      ...onlinePaymentReviewByInquiry,
+      [inquiryId]: {
+        ...(preserveDialog ? current : {}),
+        status: "ready",
+        payment,
+        error: "",
+        saving: false,
+        proofStatus: current.proofStatus === "loading" ? "idle" : current.proofStatus,
+      },
+    };
+  } catch (error) {
+    onlinePaymentReviewByInquiry = {
+      ...onlinePaymentReviewByInquiry,
+      [inquiryId]: {
+        ...current,
+        status: "error",
+        error: error.message || "Unable to load payment review details.",
+        saving: false,
+      },
+    };
+  }
+  render();
+}
+
+async function openOnlinePaymentProof(inquiryId) {
+  const current = onlinePaymentReviewByInquiry[inquiryId];
+  if (!current || current.proofStatus === "loading") return;
+  onlinePaymentReviewByInquiry = {
+    ...onlinePaymentReviewByInquiry,
+    [inquiryId]: { ...current, proofStatus: "loading", message: "", messageTone: "" },
+  };
+  render();
+
+  try {
+    const proof = await openPaymentProof(inquiryId, adminAuthSession);
+    window.open(proof.signedUrl, "_blank", "noopener,noreferrer");
+    onlinePaymentReviewByInquiry = {
+      ...onlinePaymentReviewByInquiry,
+      [inquiryId]: {
+        ...onlinePaymentReviewByInquiry[inquiryId],
+        proofStatus: "opened",
+        message: `Opened ${proof.filename || "payment receipt"}.`,
+        messageTone: "success",
+      },
+    };
+  } catch (error) {
+    onlinePaymentReviewByInquiry = {
+      ...onlinePaymentReviewByInquiry,
+      [inquiryId]: {
+        ...onlinePaymentReviewByInquiry[inquiryId],
+        proofStatus: "error",
+        message: error.message || "Unable to open the payment receipt.",
+        messageTone: "error",
+      },
+    };
+  }
+  render();
+}
+
+function openOnlinePaymentDialog(inquiryId, dialog) {
+  const current = onlinePaymentReviewByInquiry[inquiryId];
+  if (!current?.payment || current.saving) return;
+  onlinePaymentReviewByInquiry = {
+    ...onlinePaymentReviewByInquiry,
+    [inquiryId]: {
+      ...current,
+      dialog,
+      dialogError: "",
+      draft: dialog === "confirm"
+        ? {
+          verifiedAmount: current.payment.amountDue ?? "",
+          internalNote: current.payment.internalNote || "",
+        }
+        : {
+          reviewNote: current.payment.reviewNote || "",
+          internalNote: current.payment.internalNote || "",
+        },
+      pendingAction: "",
+      pendingKey: "",
+    },
+  };
+  render();
+  requestAnimationFrame(() => document.querySelector("[data-payment-review-field]")?.focus());
+}
+
+function closeOnlinePaymentDialog() {
+  const entry = Object.entries(onlinePaymentReviewByInquiry)
+    .find(([, state]) => state?.dialog);
+  if (!entry || entry[1].saving) return;
+  const [inquiryId, current] = entry;
+  onlinePaymentReviewByInquiry = {
+    ...onlinePaymentReviewByInquiry,
+    [inquiryId]: {
+      ...current,
+      dialog: "",
+      dialogError: "",
+      draft: {},
+      pendingAction: "",
+      pendingKey: "",
+    },
+  };
+  render();
+}
+
+function updateOnlinePaymentDraft(field, value) {
+  const entry = Object.entries(onlinePaymentReviewByInquiry)
+    .find(([, state]) => state?.dialog);
+  if (!entry) return;
+  const [inquiryId, current] = entry;
+  onlinePaymentReviewByInquiry = {
+    ...onlinePaymentReviewByInquiry,
+    [inquiryId]: {
+      ...current,
+      draft: { ...(current.draft || {}), [field]: value },
+    },
+  };
+}
+
+async function saveOnlinePaymentReview(inquiryId, action) {
+  const current = onlinePaymentReviewByInquiry[inquiryId];
+  if (!current?.payment || current.saving) return;
+  const draft = current.draft || {};
+  if (
+    action === "request_online_payment_correction"
+    && String(draft.reviewNote || "").trim().length < 5
+  ) {
+    onlinePaymentReviewByInquiry = {
+      ...onlinePaymentReviewByInquiry,
+      [inquiryId]: { ...current, dialogError: "Enter a clear correction reason." },
+    };
+    render();
+    return;
+  }
+
+  const idempotencyKey = current.pendingAction === action && current.pendingKey
+    ? current.pendingKey
+    : createPaymentReviewIdempotencyKey(inquiryId, action);
+  onlinePaymentReviewByInquiry = {
+    ...onlinePaymentReviewByInquiry,
+    [inquiryId]: {
+      ...current,
+      saving: true,
+      dialogError: "",
+      message: "",
+      pendingAction: action,
+      pendingKey: idempotencyKey,
+    },
+  };
+  render();
+
+  try {
+    const payment = await updatePaymentReview(inquiryId, {
+      action,
+      expectedVersion: current.payment.version,
+      idempotencyKey,
+      verifiedAmount: action === "confirm_online_payment" ? draft.verifiedAmount : null,
+      reviewNote: action === "request_online_payment_correction" ? draft.reviewNote : "",
+      internalNote: draft.internalNote || "",
+    }, adminAuthSession);
+    onlinePaymentReviewByInquiry = {
+      ...onlinePaymentReviewByInquiry,
+      [inquiryId]: {
+        status: "ready",
+        payment,
+        saving: false,
+        dialog: "",
+        draft: {},
+        dialogError: "",
+        message: paymentReviewSuccessMessage(action),
+        messageTone: "success",
+        proofStatus: current.proofStatus || "idle",
+        pendingAction: "",
+        pendingKey: "",
+      },
+    };
+
+    hasLoadedOpsInquiries = false;
+    await loadOpsBoardInquiries();
+    if (mvpDashboard.state.orderId === inquiryId) {
+      await loadMvpOrderDetails(inquiryId, { force: true });
+    }
+  } catch (error) {
+    const stale = error.code === "PAYMENT_STALE";
+    let payment = current.payment;
+    if (stale) {
+      try {
+        payment = await getPaymentReview(inquiryId, adminAuthSession);
+      } catch {
+        // Keep the last safe snapshot when the conflict refresh also fails.
+      }
+    }
+    onlinePaymentReviewByInquiry = {
+      ...onlinePaymentReviewByInquiry,
+      [inquiryId]: {
+        ...current,
+        payment,
+        status: "ready",
+        saving: false,
+        dialogError: current.dialog ? error.message : "",
+        message: current.dialog ? "" : error.message,
+        messageTone: "error",
+        pendingAction: action,
+        pendingKey: idempotencyKey,
+      },
+    };
+  }
+  render();
+}
+
+function paymentReviewSuccessMessage(action) {
+  if (action === "start_online_payment_review") return "Payment review started.";
+  if (action === "confirm_online_payment") return "Online payment confirmed.";
+  return "Receipt correction requested.";
+}
+
+function bindOnlinePaymentReviewEvents() {
+  document.querySelectorAll("[data-payment-review-retry]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void loadOnlinePaymentReview(button.dataset.paymentReviewRetry, { force: true });
+    });
+  });
+  document.querySelectorAll("[data-payment-review-proof]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void openOnlinePaymentProof(button.dataset.paymentReviewProof);
+    });
+  });
+  document.querySelectorAll("[data-payment-review-action]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const inquiryId = button.dataset.paymentReviewId;
+      const action = button.dataset.paymentReviewAction;
+      if (action === "open_confirm") {
+        openOnlinePaymentDialog(inquiryId, "confirm");
+      } else if (action === "open_correction") {
+        openOnlinePaymentDialog(inquiryId, "correction");
+      } else {
+        void saveOnlinePaymentReview(inquiryId, action);
+      }
+    });
+  });
+  document.querySelectorAll("[data-payment-review-field]").forEach((field) => {
+    field.addEventListener("input", () => {
+      updateOnlinePaymentDraft(field.dataset.paymentReviewField, field.value);
+    });
+  });
+  document.querySelectorAll("[data-payment-review-cancel]").forEach((button) => {
+    button.addEventListener("click", closeOnlinePaymentDialog);
+  });
+  document.querySelectorAll("[data-payment-review-submit]").forEach((button) => {
+    button.addEventListener("click", () => {
+      void saveOnlinePaymentReview(
+        button.dataset.paymentReviewId,
+        button.dataset.paymentReviewSubmit,
+      );
+    });
+  });
+}
+
 function renderOpsPaymentStage(item) {
+  if (isAdminOnlinePaymentReviewUiEnabled() && isOnlinePaymentReviewItem(item)) {
+    scheduleOnlinePaymentReview(item.id);
+    return renderOnlinePaymentReview(item, onlinePaymentReviewByInquiry[item.id]);
+  }
   const request = opsCustomerActionRequests[item.id] || {};
   const isLoading = request.status === "loading";
   const isReceiptLoading = isLoading && request.asset === "payment-proof";
@@ -7047,23 +7364,23 @@ function handleWorkChatEscape(event) {
 
 function bindMvpDetailDrawerKeyboard() {
   document.removeEventListener("keydown", handleMvpDetailDrawerKeydown);
-  if (document.querySelector(".mvp-order-detail-drawer, .mvp-production-detail-drawer")) {
+  if (document.querySelector(".mvp-order-detail-drawer, .mvp-production-detail-drawer, .ops-detail-drawer")) {
     document.addEventListener("keydown", handleMvpDetailDrawerKeydown);
   }
 }
 
 function handleMvpDetailDrawerKeydown(event) {
-  const drawer = document.querySelector(".mvp-order-detail-drawer, .mvp-production-detail-drawer");
+  const drawer = document.querySelector(".mvp-order-detail-drawer, .mvp-production-detail-drawer, .ops-detail-drawer");
   if (!drawer) return;
-  const confirmation = drawer.querySelector(".mvp-production-confirm-dialog");
+  const confirmation = drawer.querySelector(".mvp-production-confirm-dialog, .payment-review-dialog");
 
   if (event.key === "Escape") {
     event.preventDefault();
     if (confirmation) {
-      confirmation.querySelector("[data-mvp-cancel-production-confirm]")?.click();
+      confirmation.querySelector("[data-mvp-cancel-production-confirm], [data-payment-review-cancel]")?.click();
       return;
     }
-    drawer.querySelector("[data-mvp-close]")?.click();
+    drawer.querySelector("[data-mvp-close], [data-ops-close-details]")?.click();
     return;
   }
   if (event.key !== "Tab") return;
@@ -7765,6 +8082,7 @@ function bindOpsBoardEvents() {
       await openOpsCustomerAsset(button.dataset.opsCustomerId, button.dataset.opsCustomerAsset);
     });
   });
+  bindOnlinePaymentReviewEvents();
 
   document.querySelectorAll("[data-ops-final-proof-file]").forEach((input) => {
     input.addEventListener("change", async (event) => {

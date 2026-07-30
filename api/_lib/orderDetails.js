@@ -70,6 +70,7 @@ const PAYMENT_EVENT_SELECT = [
   "event_type",
   "payment_method",
   "amount",
+  "review_note",
   "internal_note",
   "actor_user_id",
   "actor_role",
@@ -399,13 +400,10 @@ function normalizePaymentEvent(event, profileMap) {
   const source = key(event.source);
   return {
     eventType,
-    label: eventType === "SHOP_PAYMENT_CONFIRMED"
-      ? "SHOP PAYMENT CONFIRMED"
-      : eventType === "PAY_AT_SHOP_SELECTED"
-        ? "PAY AT SHOP SELECTED"
-        : eventType.replaceAll("_", " "),
+    label: paymentEventLabel(eventType),
     paymentMethod: cleanText(event.payment_method, 80),
     amount: numberOrNull(event.amount),
+    reviewNote: cleanText(event.review_note, 1000),
     internalNote: cleanText(event.internal_note, 500),
     actorDisplayName: source === "customer"
       ? "Customer"
@@ -447,7 +445,7 @@ function buildActivity(row, paymentEvents, followUpEvents) {
       event.label,
       event.createdAt,
       event.actorDisplayName,
-      event.internalNote,
+      event.reviewNote || event.internalNote,
     );
   }
   for (const event of followUpEvents) {
@@ -461,6 +459,15 @@ function buildActivity(row, paymentEvents, followUpEvents) {
   }
 
   return activity.sort((left, right) => new Date(left.createdAt) - new Date(right.createdAt));
+}
+
+function paymentEventLabel(eventType) {
+  if (eventType === "ONLINE_PAYMENT_REVIEW_STARTED") return "ONLINE PAYMENT REVIEW STARTED";
+  if (eventType === "ONLINE_PAYMENT_CONFIRMED") return "ONLINE PAYMENT CONFIRMED";
+  if (eventType === "ONLINE_PAYMENT_CORRECTION_REQUESTED") return "PAYMENT CORRECTION REQUESTED";
+  if (eventType === "SHOP_PAYMENT_CONFIRMED") return "SHOP PAYMENT CONFIRMED";
+  if (eventType === "PAY_AT_SHOP_SELECTED") return "PAY AT SHOP SELECTED";
+  return eventType.replaceAll("_", " ");
 }
 
 function addActivity(activity, label, timestamp, actor, note) {

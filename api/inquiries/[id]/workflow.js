@@ -1,6 +1,7 @@
 import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
 import { createOrderDetailsHandler } from "../../_lib/orderDetails.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
+import { createPaymentReviewHandler } from "../../_lib/paymentReview.js";
 import { createProductionJobHandler } from "../../_lib/productionJob.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
@@ -12,9 +13,16 @@ const WORKFLOW_SELECT = [
 ].join(",");
 const WORKFLOW_LEGACY_SELECT = WORKFLOW_SELECT.replace("payment_verified_amount,", "");
 const handleOrderDetailsRequest = createOrderDetailsHandler();
+const handlePaymentReviewRequest = createPaymentReviewHandler();
 const handleProductionJobRequest = createProductionJobHandler();
 
 export default async function handler(request, response) {
+  if (["GET", "PATCH"].includes(request.method) && getWorkflowAction(request) === "payment-review") {
+    return handlePaymentReviewRequest(request, response, "review");
+  }
+  if (request.method === "GET" && getWorkflowAction(request) === "payment-proof") {
+    return handlePaymentReviewRequest(request, response, "proof");
+  }
   if (request.method === "GET" && getWorkflowAction(request) === "order-details") {
     return handleOrderDetailsRequest(request, response);
   }
