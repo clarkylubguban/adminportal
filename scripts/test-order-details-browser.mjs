@@ -53,6 +53,7 @@ const rows = [
     assigned_user_id: null,
     assigned_staff: null,
     blocked_reason: "Materials unavailable",
+    production_note: null,
   }),
 ];
 const requests = [];
@@ -125,12 +126,32 @@ try {
   await click(cdp, owner, orderSelector(ids.paid));
   await waitFor(cdp, owner, drawerHas("Synthetic paid-at-shop acceptance note"), "paid details");
   await waitFor(cdp, owner, drawerHas("SHOP PAYMENT CONFIRMED"), "payment history");
+  assert.equal(
+    await evalValue(cdp, owner, `document.querySelector('.mvp-order-detail-drawer').innerText.includes('CUSTOMER NOTES')`),
+    false,
+    "unsupported Customer Notes row is absent",
+  );
+  assert.equal(
+    await evalValue(cdp, owner, `document.querySelector('.mvp-order-payment-section').innerText.includes('Synthetic paid-at-shop acceptance note')`),
+    true,
+    "payment internal note remains under Payment",
+  );
   await press(cdp, owner, "Escape");
   await waitFor(cdp, owner, `document.querySelector('.mvp-order-detail-drawer') === null`, "Escape closes");
   assert.equal(await evalValue(cdp, owner, `document.activeElement?.dataset?.mvpTrigger`), "row");
 
   await click(cdp, owner, orderSelector(ids.ready));
   await waitFor(cdp, owner, drawerHas("READY FOR PRODUCTION"), "ready checklist");
+  assert.equal(
+    await evalValue(cdp, owner, `Array.from(document.querySelectorAll('.mvp-order-detail-section')).find((section) => section.querySelector('h3')?.textContent.includes('QUOTE'))?.innerText.includes('Synthetic quote notes') === true`),
+    true,
+    "quote notes remain under Quote and Artwork",
+  );
+  assert.equal(
+    await evalValue(cdp, owner, `document.querySelector('.mvp-order-readiness').innerText.includes('Synthetic read-only production note')`),
+    true,
+    "production note remains under Production Readiness",
+  );
   assert.equal(await evalValue(cdp, owner, `document.querySelectorAll('.mvp-order-readiness-list li.complete').length`), 8);
   await click(cdp, owner, ".mvp-order-detail-backdrop");
   await waitFor(cdp, owner, `document.querySelector('.mvp-order-detail-drawer') === null`, "backdrop closes");
@@ -173,6 +194,11 @@ try {
   await click(cdp, owner, "[data-mvp-retry-order]");
   await waitFor(cdp, owner, drawerHas("NOT READY FOR PRODUCTION"), "retry success");
   await waitFor(cdp, owner, drawerHas("Production staff assigned / No active blocker"), "missing requirements");
+  assert.equal(
+    await evalValue(cdp, owner, `Array.from(document.querySelectorAll('.mvp-order-readiness dt')).find((node) => node.textContent === 'Production note')?.nextElementSibling?.textContent === 'Not set'`),
+    true,
+    "missing production note uses calm empty state",
+  );
   await click(cdp, owner, ".mvp-order-detail-close");
 
   await click(cdp, owner, "[data-work-chat-open]");
@@ -468,8 +494,6 @@ function orderDetail(row) {
     productionNote: row.production_note,
     productionUpdatedAt: row.production_updated_at,
     blockerReason: row.blocked_reason || "",
-    notes: "",
-    customerNotes: "",
     readiness: {
       ready: checks.every((check) => check.complete),
       checks,
@@ -516,8 +540,6 @@ function orderRow(id, customerName, overrides) {
     customer_name: customerName,
     company: "Synthetic QA",
     contact: "Synthetic contact",
-    notes: "",
-    customer_notes: "",
     source: "QA",
     channel: "synthetic",
     message: "Synthetic Order Drawer QA record.",

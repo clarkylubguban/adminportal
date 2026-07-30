@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import {
   createOrderDetailsHandler,
   normalizeOrderDetails,
+  ORDER_SELECT_FIELDS,
 } from "../api/_lib/orderDetails.js";
 
 const ownerId = "81000000-0000-4000-8000-000000000001";
@@ -160,7 +161,13 @@ for (const [role, token] of [
     result.body.order.activity.some((event) => event.label === "FOLLOW-UP: ACTION NEEDED"),
   );
   assert.equal(result.body.order.readiness.ready, true);
+  assert.equal(Object.hasOwn(result.body.order, "notes"), false);
+  assert.equal(Object.hasOwn(result.body.order, "customerNotes"), false);
+  assert.equal(result.body.order.quoteNotes, "Synthetic quote");
+  assert.equal(result.body.order.productionNote, "Synthetic production note");
+  assert.equal(result.body.order.paymentInternalNote, "Synthetic QA confirmation");
   assertSafeProjection(result.body.order);
+  assertNoUndefined(result.body.order);
 }
 
 const normalized = normalizeOrderDetails(
@@ -180,10 +187,71 @@ assert.equal(
   false,
   "no fabricated order-confirmed event",
 );
+assert.equal(Object.hasOwn(normalized, "notes"), false);
+assert.equal(Object.hasOwn(normalized, "customerNotes"), false);
+
+let selectedProductionFields = [];
+const productionShapeHandler = createOrderDetailsHandler({
+  createClient: () => ({
+    from(table) {
+      assert.equal(table, "ops_inquiries");
+      return {
+        select(fields) {
+          selectedProductionFields = fields.split(",");
+          return {
+            eq() {
+              return {
+                async maybeSingle() {
+                  return { data: { ...order }, error: null };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+  }),
+  getAuthUser: async () => ({ id: ownerId }),
+  getPortalProfile: async () => ({ role: "owner", is_active: true }),
+  getPaymentEvents: async () => paymentEvents,
+  getFollowUpEvents: async () => [],
+  getDisplayProfiles: async () => profiles,
+});
+const productionShapeRead = await call(productionShapeHandler, {
+  id: orderId,
+  token: ownerId,
+});
+assert.equal(productionShapeRead.status, 200, "production-compatible row reads without legacy note columns");
+assert.deepEqual(selectedProductionFields, ORDER_SELECT_FIELDS);
+assert.equal(selectedProductionFields.includes("notes"), false);
+assert.equal(selectedProductionFields.includes("customer_notes"), false);
+
+const rawSchemaMessage = "column ops_inquiries.customer_notes does not exist";
+const schemaFailureHandler = createOrderDetailsHandler({
+  createClient: () => ({}),
+  getAuthUser: async () => ({ id: ownerId }),
+  getPortalProfile: async () => ({ role: "owner", is_active: true }),
+  getOrder: async () => {
+    throw Object.assign(new Error(rawSchemaMessage), { code: "42703" });
+  },
+});
+const originalConsoleError = console.error;
+console.error = () => {};
+let schemaFailure;
+try {
+  schemaFailure = await call(schemaFailureHandler, { id: orderId, token: ownerId });
+} finally {
+  console.error = originalConsoleError;
+}
+assert.equal(schemaFailure.status, 500);
+assert.equal(schemaFailure.body.error.code, "ORDER_DETAILS_FAILED");
+assert.equal(JSON.stringify(schemaFailure.body).includes(rawSchemaMessage), false, "raw schema errors stay private");
 
 const apiSource = await readFile("api/_lib/orderDetails.js", "utf8");
-const selectBlock = apiSource.match(/const ORDER_SELECT = \[([\s\S]*?)\]\.join/)?.[1] || "";
+const selectBlock = apiSource.match(/ORDER_SELECT_FIELDS = \[([\s\S]*?)\]/)?.[1] || "";
 assert.doesNotMatch(selectBlock, /odoo_so/i, "order read has no Odoo dependency");
+assert.doesNotMatch(selectBlock, /["']notes["']/i, "legacy notes column is not selected");
+assert.doesNotMatch(selectBlock, /customer_notes/i, "legacy customer_notes column is not selected");
 assert.doesNotMatch(selectBlock, /auth\\.|encrypted_password|token/i);
 const vercelConfig = JSON.parse(await readFile("vercel.json", "utf8"));
 assert.ok(
@@ -236,5 +304,17 @@ function assertSafeProjection(value) {
   }
   for (const key of Object.keys(value)) {
     assert.doesNotMatch(key, /userId|auth|token|email/i, `safe top-level key: ${key}`);
+  }
+}
+
+function assertNoUndefined(value) {
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoUndefined(item);
+    return;
+  }
+  if (!value || typeof value !== "object") return;
+  for (const [key, item] of Object.entries(value)) {
+    assert.notEqual(item, undefined, `projection value ${key} is defined`);
+    assertNoUndefined(item);
   }
 }

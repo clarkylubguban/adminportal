@@ -1,13 +1,11 @@
 import { createServerSupabaseClient } from "./supabaseServer.js";
 
 const PORTAL_ROLES = new Set(["owner", "admin", "staff"]);
-const ORDER_SELECT = [
+export const ORDER_SELECT_FIELDS = [
   "id",
   "customer_name",
   "company",
   "contact",
-  "notes",
-  "customer_notes",
   "source",
   "channel",
   "message",
@@ -65,7 +63,8 @@ const ORDER_SELECT = [
   "blocked_reason",
   "created_at",
   "updated_at",
-].join(",");
+];
+const ORDER_SELECT = ORDER_SELECT_FIELDS.join(",");
 
 const PAYMENT_EVENT_SELECT = [
   "event_type",
@@ -292,8 +291,6 @@ export function normalizeOrderDetails(
     productionNote: cleanText(row.production_note, 2000),
     productionUpdatedAt: isoOrNull(row.production_updated_at),
     blockerReason: blocker,
-    notes: cleanText(row.notes, 2000),
-    customerNotes: cleanText(row.customer_notes, 2000),
     readiness,
     paymentEvents: safePaymentEvents,
     activity: buildActivity(row, safePaymentEvents, safeFollowUps, profileMap),
