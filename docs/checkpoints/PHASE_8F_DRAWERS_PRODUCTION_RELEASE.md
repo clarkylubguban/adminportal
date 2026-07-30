@@ -4,17 +4,19 @@
 
 **BLOCKED IN FINAL PREFLIGHT - PRODUCTION RELEASE NOT STARTED**
 
-The required production QA credential file was absent. Credentialed acceptance
-could not be guaranteed, so Phase 8F stopped before activating QA accounts,
-moving production main, deploying code, creating QA data, or making any
-production write.
+The required production QA credential file now exists and all four required
+keys are populated. The designated QA accounts were temporarily activated and
+unbanned, but the QA Admin login returned the safe Supabase Auth code
+`invalid_credentials`. Credentialed acceptance could not be guaranteed, so
+Phase 8F stopped before moving production main, deploying code, or creating QA
+data.
 
 Phase 8F is not release complete.
 
 ## Release References
 
 - Staging documentation head:
-  `462e7e119e1c52d07c5606237db361d77d322ed4`
+  `f26762e7c4e4964d1a9a250df95be0b60c2eb4b6`
 - Approved executable release SHA:
   `a7da022fbc1a9d9e92c571f49462dcefd16dff95`
 - Expected and observed production main:
@@ -45,6 +47,8 @@ Phase 8F is not release complete.
 - Customer Pay Online endpoint: `404`.
 - Pay Online remained parked.
 - Odoo remained absent from the active release implementation.
+- Production QA Admin and Staff records each existed exactly once with the
+  expected role and confirmed Auth identity.
 
 All production database checks were read-only metadata or aggregate checks. No
 customer row was opened by identity.
@@ -57,19 +61,22 @@ Required file:
 
 Observed state:
 
-- Credential file exists: **NO**
-- Four required keys populated: **NOT TESTABLE**
-- QA Admin login: **NOT TESTABLE**
-- QA Staff login: **NOT TESTABLE**
+- Credential file exists: **YES**
+- `QA_ADMIN_EMAIL`: populated
+- `QA_ADMIN_PASSWORD`: populated
+- `QA_STAFF_EMAIL`: populated
+- `QA_STAFF_PASSWORD`: populated
+- QA Admin login: **FAIL - `invalid_credentials`**
+- QA Staff login: **NOT ATTEMPTED after the hard Admin failure**
 
-Read-only production account metadata found exactly one expected QA Admin role
-record and one expected QA Staff role record. Both public profiles remained
-inactive and both Auth accounts remained unavailable for login, consistent with
-the previous production QA cleanup.
+The expected QA Admin and QA Staff records were confirmed, then temporarily
+activated and unbanned as authorized. Login proof stopped at the QA Admin
+failure.
 
-The accounts were deliberately not activated or unbanned because the missing
-credential file prevented the mandatory pre-release login proof and guaranteed
-post-release acceptance.
+Cleanup immediately restored both profiles to inactive, banned both Auth
+accounts, and revoked their sessions. Final session counts were zero for both
+accounts. The credential file was retained for correction because production
+acceptance did not run.
 
 No credential, token, cookie, browser storage, signed URL, or environment value
 was printed, stored, committed, or documented.
@@ -79,9 +86,10 @@ was printed, stored, committed, or documented.
 - Production main change: none
 - Production deployment: none
 - Production Supabase migration: none
-- Production Supabase record write: none
+- Production business-data write: none
+- Production QA account administration: temporary activate/unban, fully reversed
+- QA session revocation: complete; zero sessions retained
 - Production environment change: none
-- QA account activation/unban: none
 - Synthetic production QA order: not created
 - TRRY POS change: none
 - Client portal change: none
@@ -90,9 +98,10 @@ was printed, stored, committed, or documented.
 
 Before Phase 8F can resume:
 
-1. Restore
+1. Repair the QA Admin credential in
    `C:\tmp\trry-admin-production-qa-secrets\qa-accounts.env`.
-2. Populate all four required QA Admin/Staff email and password keys.
+2. Confirm both QA Admin and QA Staff credentials match their designated
+   production Auth accounts without exposing their values.
 3. Resume Phase 8F from Step 1 with:
    - executable SHA
      `a7da022fbc1a9d9e92c571f49462dcefd16dff95`;
@@ -100,8 +109,7 @@ Before Phase 8F can resume:
      `8d71713111c1f4434af6af3a8c53b00d2e77017e`;
    - production deployment
      `dpl_44QPvaSq8XJhkqTNtJjztEob2xgU`.
-4. Temporarily activate and unban the two QA accounts only after the credential
-   file passes key-presence validation.
+4. Temporarily activate and unban only the two designated QA accounts.
 5. Prove both logins before moving production main.
 
 ## Recommendation
