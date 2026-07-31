@@ -3703,7 +3703,10 @@ function renderOpsPaymentStage(item) {
   const paymentTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
   const paymentPaid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) > 0 ? Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) : 0;
   const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
-  body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
+  const isBelowFullPaymentOnly = paymentTotal > 0 && paymentTotal < 1000 && !isOpsPaymentConfirmed(status);
+  if (!isBelowFullPaymentOnly) {
+    body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
+  }
 
   if (isOpsShopPaymentPending(item) && isAdminPayAtShopUiEnabled()) {
     const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
@@ -3722,7 +3725,7 @@ function renderOpsPaymentStage(item) {
     const remaining = Math.max(paymentTotal - paid, 0);
     const title = remaining > 0 ? "DOWN PAYMENT CONFIRMED" : "FULLY PAID";
     body += `<div class="ops-shop-payment-state confirmed"><strong class="ops-payment-state-badge confirmed">${title}</strong><div class="ops-stage-mini-grid"><div><span>Paid</span><strong>${formatOpsValue(paid)}</strong></div><div><span>Remaining</span><strong>${formatOpsValue(remaining)}</strong></div><div><span>Method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Received by</span><strong>${escapeHtml(confirmedBy)}</strong></div><div><span>Received</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</strong></div>${item.paymentInternalNote ? `<div class="wide"><span>Internal note</span><strong>${escapeHtml(item.paymentInternalNote)}</strong></div>` : ""}</div><div class="ops-stage-actions"><button class="ops-dark-button mini" data-ops-view-shop-payment="${escapeHtml(item.id)}" type="button">VIEW PAYMENT</button></div></div>${renderOpsPaymentHistory(item)}`;
-  } else if (paymentTotal > 0 && paymentTotal < 1000 && !isOpsPaymentConfirmed(status)) {
+  } else if (isBelowFullPaymentOnly) {
     body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">FULL PAYMENT REQUIRED</strong><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Full payment is required for quotations below ${formatOpsValue(1000)}. Production remains blocked until payment is confirmed.</p></div>`;
   } else if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) {
     body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">AWAITING PAYMENT</strong><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until payment is confirmed.</p></div>`;
@@ -3747,7 +3750,7 @@ function renderOpsPaymentStage(item) {
     ? "PAY AT SHOP"
     : isOpsShopPaymentConfirmed(item)
       ? (paymentBalance > 0 ? "DOWN PAYMENT CONFIRMED" : "FULLY PAID")
-      : paymentTotal > 0 && paymentTotal < 1000 && !isOpsPaymentConfirmed(status)
+      : isBelowFullPaymentOnly
         ? "FULL PAYMENT REQUIRED"
       : getOpsCustomerActionLabel("payment", status);
   const locked = !isOpsShopPaymentPending(item)
