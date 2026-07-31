@@ -20,13 +20,13 @@ export function renderOnlinePaymentReview(item, state = {}) {
   if (state.status === "loading" || !state.status) {
     return paymentShell(
       "LOADING",
-      `<p class="payment-review-state" role="status">Loading payment review...</p>`,
+      `<div class="payment-review-loading" role="status"><strong>Loading payment review...</strong></div>`,
     );
   }
   if (state.status === "error" || !state.payment) {
     return paymentShell(
       "UNAVAILABLE",
-      `<p class="payment-review-message error" role="alert">${html(state.error || "Payment review is unavailable.")}</p>
+      `<p class="payment-review-message error" role="alert">${html(state.error || "Unable to load payment details.")}</p>
        <button class="ops-light-button mini" data-payment-review-retry="${html(inquiryId)}" type="button">TRY AGAIN</button>`,
     );
   }
@@ -82,7 +82,7 @@ export function renderOnlinePaymentReview(item, state = {}) {
       ${!canReview ? detail("Remaining balance", money(remaining)) : ""}
       ${!canReview ? detail("Payment method", METHOD_LABELS[payment.paymentMethod] || enumLabel(payment.paymentMethod)) : ""}
       ${!canReview ? detail("Verified by", payment.verifiedBy || "Not available") : ""}
-      ${!canReview ? detail("Verification date/time", dateTime(payment.verifiedAt)) : ""}
+      ${!canReview ? detail("Verified", dateTime(payment.verifiedAt)) : ""}
     </dl>
     ${managerActions}
     ${renderDialog(inquiryId, payment, state)}
@@ -122,7 +122,7 @@ function renderDialog(inquiryId, payment, state) {
   if (!state.dialog) return "";
   const saving = Boolean(state.saving);
   const draft = state.draft || {};
-  const commonClose = `<button class="ops-light-button mini" data-payment-review-cancel type="button" ${saving ? "disabled" : ""}>CANCEL</button>`;
+  const commonClose = `<button class="ops-light-button mini payment-dialog-close-action" data-payment-review-cancel type="button" ${saving ? "disabled" : ""}>CLOSE</button>`;
   if (state.dialog === "review") {
     const proof = state.proof || {};
     const receipt = payment.receipt || {};
@@ -134,20 +134,19 @@ function renderDialog(inquiryId, payment, state) {
     const remainingAfterConfirmation = Math.max((Number.isFinite(total) ? total : 0) - (Number.isFinite(expected) ? expected : 0), 0);
     const canConfirm = payment.permissions?.canConfirm;
     const canRequestCorrection = payment.permissions?.canRequestCorrection;
+    const confirmed = !["proof_submitted", "under_review", "correction_required"].includes(payment.paymentStatus);
     return `<div class="payment-review-dialog-backdrop" data-payment-review-cancel></div>
       <section class="payment-review-dialog receipt" role="dialog" aria-modal="true" aria-labelledby="payment-review-receipt-title">
-        <span>ONLINE PAYMENT</span>
-        <h3 id="payment-review-receipt-title">${canConfirm ? "Review receipt" : "Payment receipt"}</h3>
-        ${renderReceiptPreview(proof, receipt, state)}
+        <header><div><span>ONLINE PAYMENT</span><h3 id="payment-review-receipt-title">${confirmed ? compactPaymentStatus(payment) : "Review receipt"}</h3></div><button type="button" data-payment-review-cancel aria-label="Close payment dialog">X</button></header>
+        ${renderReceiptPreview(inquiryId, proof, receipt, state)}
+        ${confirmed ? `<div class="payment-confirmed-hero"><div><span>PAID</span><strong>${money(payment.verifiedAmount)}</strong></div><div><span>REMAINING</span><strong>${money(remaining)}</strong></div><div><span>METHOD</span><strong>${html(METHOD_LABELS[payment.paymentMethod] || enumLabel(payment.paymentMethod))}</strong></div><div><span>VERIFIED BY</span><strong>${html(payment.verifiedBy || "Not available")}</strong></div><div><span>VERIFIED</span><strong>${html(dateTime(payment.verifiedAt))}</strong></div></div><h4>RECEIPT DETAILS</h4>` : ""}
         <dl>
           ${detail("Quote total", money(payment.quotedAmount))}
-          ${payment.verifiedAmount != null ? detail("Confirmed DP", money(payment.verifiedAmount)) : ""}
-          ${payment.verifiedAmount != null ? detail("Remaining", money(remaining)) : ""}
           ${detail("Selected type", getPaymentTypeLabel(payment.paymentType))}
           ${detail("Expected amount", money(expected))}
           ${detail("Submitted amount", money(payment.submittedAmount))}
-          ${detail("Remaining after confirmation", money(remainingAfterConfirmation))}
-          ${detail("Reference number", payment.customerReference || "Not provided")}
+          ${!confirmed ? detail("Remaining after confirmation", money(remainingAfterConfirmation)) : ""}
+          ${detail("Reference", payment.customerReference || "Not provided")}
           ${detail("Submission date/time", dateTime(payment.submittedAt))}
           ${detail("Customer note", payment.customerNote || "Not provided", "wide")}
         </dl>
@@ -187,16 +186,17 @@ function renderDialog(inquiryId, payment, state) {
     </section>`;
 }
 
-function renderReceiptPreview(proof, receipt, state) {
+function renderReceiptPreview(inquiryId, proof, receipt, state) {
   if (state.proofStatus === "loading") return `<div class="payment-receipt-preview loading">Loading receipt preview...</div>`;
-  if (state.proofStatus === "error") return `<p class="payment-review-message error">Unable to open the receipt preview.</p>`;
+  if (state.proofStatus === "error") return `<div class="payment-receipt-preview fallback"><strong>Receipt preview unavailable.</strong><div><button class="ops-dark-button mini" data-payment-review-open-receipt="${html(inquiryId)}" type="button">OPEN RECEIPT</button><button class="ops-light-button mini" data-payment-review-retry-proof="${html(inquiryId)}" type="button">RETRY</button></div></div>`;
   const url = proof?.signedUrl || "";
-  if (!url) return `<div class="payment-receipt-preview empty">Receipt preview unavailable.</div>`;
+  if (!url && receipt.available === false) return `<div class="payment-receipt-preview empty">No receipt file is attached.</div>`;
+  if (!url) return `<div class="payment-receipt-preview fallback"><strong>Receipt preview unavailable.</strong><div><button class="ops-light-button mini" data-payment-review-retry-proof="${html(inquiryId)}" type="button">RETRY</button></div></div>`;
   const contentType = String(proof.contentType || receipt.contentType || "").toLowerCase();
   if (contentType.includes("pdf")) {
-    return `<iframe class="payment-receipt-preview" title="Payment receipt preview" src="${html(url)}"></iframe>`;
+    return `<div class="payment-receipt-pdf"><iframe class="payment-receipt-preview" title="Payment receipt preview" src="${html(url)}"></iframe><a class="ops-dark-button mini" href="${html(url)}" target="_blank" rel="noopener noreferrer">OPEN PDF</a></div>`;
   }
-  return `<img class="payment-receipt-preview" alt="Payment receipt preview" src="${html(url)}">`;
+  return `<a class="payment-receipt-image-link" href="${html(url)}" target="_blank" rel="noopener noreferrer"><img class="payment-receipt-preview" alt="Payment receipt preview" src="${html(url)}"></a>`;
 }
 
 function paymentShell(status, body) {
@@ -233,11 +233,10 @@ function detail(label, value, className = "") {
 function money(value) {
   const number = Number(value);
   if (!Number.isFinite(number)) return "Not available";
-  return new Intl.NumberFormat("en-PH", {
-    style: "currency",
-    currency: "PHP",
-    minimumFractionDigits: 2,
-  }).format(number);
+  const formatted = Number.isInteger(number)
+    ? number.toLocaleString("en-US")
+    : number.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return `${String.fromCharCode(8369)}${formatted}`;
 }
 
 function dateTime(value) {

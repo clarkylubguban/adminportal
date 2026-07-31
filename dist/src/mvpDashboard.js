@@ -506,7 +506,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function moduleEntry(label, count, detail, route) {
     return `<button type="button" class="mvp-module-link" data-mvp-route="${html(route)}"><span><strong>${html(label)}</strong><small>${html(detail)}</small></span><b>${count}</b></button>`;
   }
-  return { state, renderOverview, renderInquiries, renderOrders, renderProduction, bind, helpers: { confirmed, productionStage, stageLabel } };
+  return { state, renderOverview, renderInquiries, renderOrders, renderProduction, renderInquiryHistoryPanel: inquiryHistoryTab, bind, helpers: { confirmed, productionStage, stageLabel } };
   function renderInquiries({ items, notices = "", renderQuote, renderOrder, renderArtwork, renderPayment }) {
     const inquiries = items.filter((item) => !confirmed(item));
     const stageFilter = query("stage") || state.inquiry.stage;
