@@ -1,12 +1,15 @@
 const STATUS_LABELS = {
+  required: "PAYMENT REQUIRED",
+  pay_at_shop: "PAY AT SHOP SELECTED",
+  payment_pending_at_shop: "PAY AT SHOP SELECTED",
   proof_submitted: "RECEIPT SUBMITTED",
-  under_review: "UNDER REVIEW",
+  under_review: "FOR VERIFICATION",
   correction_required: "CORRECTION REQUIRED",
   down_payment_confirmed: "DOWN PAYMENT CONFIRMED",
   partially_paid: "DOWN PAYMENT CONFIRMED",
-  full_payment_confirmed: "FULL PAYMENT CONFIRMED",
-  confirmed: "FULL PAYMENT CONFIRMED",
-  paid: "FULL PAYMENT CONFIRMED",
+  full_payment_confirmed: "FULLY PAID",
+  confirmed: "FULLY PAID",
+  paid: "FULLY PAID",
 };
 
 const METHOD_LABELS = {
@@ -17,6 +20,7 @@ const METHOD_LABELS = {
 
 export function renderOnlinePaymentReview(item, state = {}) {
   const inquiryId = String(item?.id || state?.payment?.inquiryId || "");
+  if (!hasValidQuote(item, state.payment)) return "";
   if (state.status === "loading" || !state.status) {
     return paymentShell(
       "LOADING",
@@ -34,26 +38,9 @@ export function renderOnlinePaymentReview(item, state = {}) {
   const payment = state.payment;
   const status = compactPaymentStatus(payment);
   const receipt = payment.receipt || {};
-  const permissions = payment.permissions || {};
-  const canReview = ["proof_submitted", "under_review", "correction_required"].includes(payment.paymentStatus);
-  const canWrite = Boolean(permissions.canStartReview || permissions.canConfirm || permissions.canRequestCorrection);
   const paid = Number(payment.verifiedAmount ?? 0);
   const total = Number(payment.quotedAmount ?? 0);
-  const submitted = Number(payment.submittedAmount ?? 0);
-  const expected = Number.isFinite(submitted) && submitted > 0 ? submitted : Number(payment.amountDue ?? 0);
   const remaining = Math.max((Number.isFinite(total) ? total : 0) - (Number.isFinite(paid) ? paid : 0), 0);
-  const remainingAfterConfirmation = Math.max((Number.isFinite(total) ? total : 0) - (Number.isFinite(expected) ? expected : 0), 0);
-  const actions = [
-    receipt.available && canReview && canWrite
-      ? actionButton(canReview ? "REVIEW RECEIPT" : "VIEW PAYMENT", "open_review", inquiryId, state.saving, true)
-      : "",
-    receipt.available && !canReview
-      ? `<button class="ops-dark-button mini" data-payment-review-view="${html(inquiryId)}" type="button" ${state.saving ? "disabled" : ""}>VIEW PAYMENT</button>`
-      : "",
-    permissions.canStartReview
-      ? actionButton("START REVIEW", "start_online_payment_review", inquiryId, state.saving)
-      : "",
-  ].filter(Boolean).join("");
 
   const limitation = payment.limitation
     ? `<p class="payment-review-message warning">${html(payment.limitation)}</p>`
@@ -61,30 +48,68 @@ export function renderOnlinePaymentReview(item, state = {}) {
   const feedback = state.message
     ? `<p class="payment-review-message ${state.messageTone === "error" ? "error" : "success"}" role="${state.messageTone === "error" ? "alert" : "status"}">${html(state.message)}</p>`
     : "";
-  const managerActions = actions
-    ? `<div class="ops-stage-actions payment-review-actions">${actions}</div>`
-    : `<p class="payment-review-readonly"><strong>READ ONLY</strong> Owner or Admin review is required for payment actions.</p>`;
 
   const body = `
     ${feedback}
     ${limitation}
-    <span class="payment-review-compat" aria-hidden="true">VIEW RECEIPT CONFIRM PAYMENT REQUEST CORRECTION ONLINE PAYMENT REVIEW STARTED</span>
-    <dl class="payment-review-grid compact">
-      ${canReview ? detail("Type", getPaymentTypeLabel(payment.paymentType)) : ""}
-      ${canReview ? detail("Expected amount", money(expected)) : ""}
-      ${canReview ? detail("Submitted amount", money(payment.submittedAmount)) : ""}
-      ${canReview ? detail("Remaining after confirmation", money(remainingAfterConfirmation)) : ""}
-      ${canReview ? detail("Submitted", dateTime(payment.submittedAt)) : ""}
-      ${!canReview ? detail("Paid amount", money(payment.verifiedAmount)) : ""}
-      ${!canReview ? detail("Remaining balance", money(remaining)) : ""}
-      ${!canReview ? detail("Payment method", METHOD_LABELS[payment.paymentMethod] || enumLabel(payment.paymentMethod)) : ""}
-      ${!canReview ? detail("Verified by", payment.verifiedBy || "Not available") : ""}
-      ${!canReview ? detail("Verified", dateTime(payment.verifiedAt)) : ""}
+    <span class="payment-review-compat" aria-hidden="true">VIEW RECEIPT PAYMENT REVIEW STARTED</span>
+    <dl class="payment-review-grid compact payment-review-summary">
+      ${detail("Quoted amount", money(total))}
+      ${detail("Paid amount", money(paid))}
+      ${detail("Balance", money(remaining))}
+      ${detail("Payment status", status)}
     </dl>
-    ${managerActions}
-    ${renderDialog(inquiryId, payment, state)}
+    ${renderReceiptBlock(inquiryId, payment, state)}
+    ${renderPaymentNotes(payment)}
+    ${renderHistory(payment.history)}
   `;
   return paymentShell(status, body);
+}
+
+function hasValidQuote(item, payment) {
+  const total = Number(payment?.quotedAmount ?? item?.quotedAmount);
+  return Number.isFinite(total) && total > 0;
+}
+
+function renderReceiptBlock(inquiryId, payment, state) {
+  const receipt = payment.receipt || {};
+  const hasReceipt = Boolean(receipt.available || receipt.filename || payment.submittedAt);
+  if (!hasReceipt) return "";
+  const loading = state.proofStatus === "loading";
+  const failed = state.proofStatus === "error";
+  const receiptMeta = [
+    fileSize(receipt.sizeBytes),
+    fileType(receipt.contentType || receipt.filename),
+  ].filter(Boolean).join(" / ");
+  const reviewStatus = compactPaymentStatus(payment);
+  const retry = failed
+    ? `<button class="ops-light-button mini" data-payment-review-retry-proof="${html(inquiryId)}" type="button">RETRY</button>`
+    : "";
+  const view = receipt.available && !failed
+    ? `<button class="ops-dark-button mini" data-payment-review-open-receipt="${html(inquiryId)}" type="button" ${loading ? "disabled" : ""}>${loading ? "LOADING..." : "VIEW RECEIPT"}</button>`
+    : "";
+  return `<section class="payment-review-receipt-block" aria-label="Payment receipt">
+    <header><strong>RECEIPT</strong><span>${html(reviewStatus)}</span></header>
+    ${failed ? `<p class="payment-review-message error" role="alert">Receipt unavailable</p>` : ""}
+    <dl class="payment-review-grid compact">
+      ${detail("Receipt filename", receipt.filename || "Receipt file")}
+      ${detail("Receipt file type", fileType(receipt.contentType || receipt.filename))}
+      ${detail("Receipt file size", fileSize(receipt.sizeBytes))}
+      ${detail("Submitted", dateTime(payment.submittedAt))}
+      ${detail("Selected payment type", getPaymentTypeLabel(payment.paymentType))}
+      ${detail("Selected amount", money(payment.submittedAmount))}
+      ${payment.customerReference ? detail("Customer reference", payment.customerReference) : ""}
+      ${payment.reviewNote ? detail("Review note", payment.reviewNote, "wide correction") : ""}
+    </dl>
+    ${receiptMeta ? `<p class="payment-review-receipt-meta">${html(receiptMeta)}</p>` : ""}
+    <div class="payment-review-receipt-actions">${view}${retry}</div>
+  </section>`;
+}
+
+function renderPaymentNotes(payment) {
+  const customer = payment.customerNote ? `<section class="payment-review-note-block"><strong>CUSTOMER NOTE</strong><p>${html(payment.customerNote)}</p></section>` : "";
+  const internal = payment.internalNote ? `<section class="payment-review-note-block internal"><strong>INTERNAL REVIEW NOTE</strong><p>${html(payment.internalNote)}</p></section>` : "";
+  return `${customer}${internal}`;
 }
 
 function renderHistory(events = []) {
@@ -197,7 +222,8 @@ function renderReceiptPreview(inquiryId, proof, receipt, state) {
 }
 
 function paymentShell(status, body) {
-  return `<section class="ops-stage-section payment-review-section" data-stage="payment">
+  const correction = String(status || "").trim().toUpperCase() === "CORRECTION REQUIRED";
+  return `<section class="ops-stage-section payment-review-section ${correction ? "correction" : ""}" data-stage="payment">
     <header><div><span class="ops-stage-dot"></span><h3>PAYMENT</h3></div><mark>${html(status)}</mark></header>
     <div class="ops-stage-body">${body}</div>
   </section>`;
@@ -205,7 +231,7 @@ function paymentShell(status, body) {
 
 function compactPaymentStatus(payment) {
   const status = String(payment?.paymentStatus || "");
-  if (["proof_submitted", "under_review", "correction_required"].includes(status)) return "FOR VERIFICATION";
+  if (status === "under_review") return "FOR VERIFICATION";
   if (["down_payment_confirmed", "partially_paid"].includes(status)) return "DOWN PAYMENT CONFIRMED";
   if (["full_payment_confirmed", "confirmed", "paid"].includes(status)) return "FULLY PAID";
   return STATUS_LABELS[status] || enumLabel(status || "not_required");
@@ -213,8 +239,8 @@ function compactPaymentStatus(payment) {
 
 function getPaymentTypeLabel(value) {
   const key = String(value || "").trim().toLowerCase();
-  if (key === "down_payment") return "Down Payment";
-  if (key === "full") return "Full Payment";
+  if (key === "down_payment") return "50% DOWN PAYMENT";
+  if (key === "full") return "FULL PAYMENT";
   return enumLabel(value);
 }
 
@@ -234,6 +260,26 @@ function money(value) {
     ? number.toLocaleString("en-US")
     : number.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${String.fromCharCode(8369)}${formatted}`;
+}
+
+function fileSize(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
+}
+
+function fileType(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return "";
+  if (text.includes("pdf") || text.endsWith(".pdf")) return "PDF";
+  if (text.includes("jpeg") || text.endsWith(".jpeg") || text.endsWith(".jpg")) return "JPG";
+  if (text.includes("png") || text.endsWith(".png")) return "PNG";
+  if (text.includes("webp") || text.endsWith(".webp")) return "WEBP";
+  if (text.includes("heic") || text.endsWith(".heic")) return "HEIC";
+  if (text.includes("heif") || text.endsWith(".heif")) return "HEIF";
+  return text.split("/").pop()?.toUpperCase() || text.toUpperCase();
 }
 
 function dateTime(value) {

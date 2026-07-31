@@ -68,9 +68,12 @@ const managerHtml = renderOnlinePaymentReview(
   { status: "ready", payment },
 );
 assert.match(managerHtml, /VIEW RECEIPT/);
-assert.match(managerHtml, /CONFIRM PAYMENT/);
-assert.match(managerHtml, /REQUEST CORRECTION/);
+assert.match(managerHtml, /Quoted amount/);
+assert.match(managerHtml, /Paid amount/);
+assert.match(managerHtml, /Balance/);
+assert.match(managerHtml, /CUSTOMER NOTE/);
 assert.match(managerHtml, /ONLINE PAYMENT REVIEW STARTED/);
+assert.doesNotMatch(managerHtml, /CONFIRM PAYMENT|REQUEST CORRECTION|REQUEST NEW RECEIPT|START REVIEW/);
 assert.doesNotMatch(managerHtml, /payment_proof_path|payments\/|11111111-/);
 
 const staffHtml = renderOnlinePaymentReview(
@@ -88,7 +91,7 @@ const staffHtml = renderOnlinePaymentReview(
     },
   },
 );
-assert.match(staffHtml, /READ ONLY/);
+assert.match(staffHtml, /VIEW RECEIPT/);
 assert.doesNotMatch(staffHtml, /data-payment-review-action/);
 
 const correctionHtml = renderOnlinePaymentReview(
@@ -101,8 +104,8 @@ const correctionHtml = renderOnlinePaymentReview(
     draft: { reviewNote: "Please upload a clearer receipt", internalNote: "QA only" },
   },
 );
-assert.match(correctionHtml, /Please upload a clearer receipt/);
-assert.match(correctionHtml, /Synthetic validation error/);
+assert.doesNotMatch(correctionHtml, /Please upload a clearer receipt/);
+assert.doesNotMatch(correctionHtml, /Synthetic validation error/);
 assert.doesNotMatch(correctionHtml, /alert\(|confirm\(|prompt\(/);
 
 const port = 58391;

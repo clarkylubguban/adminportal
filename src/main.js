@@ -2856,10 +2856,28 @@ function isOpsPaymentConfirmed(value) {
   return ["confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(String(value || "").trim().toLowerCase());
 }
 
+function getOpsValidQuotedAmount(item) {
+  const total = Number(item?.quotedAmount);
+  return Number.isFinite(total) && total > 0 ? total : 0;
+}
+
+function hasOpsPaymentQuotation(item) {
+  return getOpsValidQuotedAmount(item) > 0;
+}
+
+function getOpsConfirmedPaymentAmount(item) {
+  const paid = Number(item?.paymentVerifiedAmount ?? item?.paymentConfirmedAmount);
+  return Number.isFinite(paid) && paid > 0 ? paid : 0;
+}
+
+function getOpsPaymentBalance(item) {
+  return Math.max(getOpsValidQuotedAmount(item) - getOpsConfirmedPaymentAmount(item), 0);
+}
+
 function getOpsPaymentTypeLabel(value) {
   const key = String(value || "").trim().toLowerCase();
-  if (key === "down_payment") return "50% Down Payment";
-  if (key === "full") return "Full Payment";
+  if (key === "down_payment") return "50% DOWN PAYMENT";
+  if (key === "full") return "FULL PAYMENT";
   if (key === "shop") return "Pay at Shop";
   return "Not selected";
 }
@@ -2873,6 +2891,89 @@ function getOpsPaymentMethodLabel(value) {
   if (key === "card") return "Card";
   if (key === "other") return "Other";
   return "Not selected";
+}
+
+function getOpsPaymentStatusDisplay(item) {
+  const status = String(item?.paymentStatus || "").trim().toLowerCase();
+  if (["pay_at_shop", "payment_pending_at_shop"].includes(status)) return "PAY AT SHOP SELECTED";
+  if (status === "proof_submitted") return "RECEIPT SUBMITTED";
+  if (status === "under_review") return "FOR VERIFICATION";
+  if (status === "correction_required") return "CORRECTION REQUIRED";
+  if (["down_payment_confirmed", "partially_paid"].includes(status)) return "DOWN PAYMENT CONFIRMED";
+  if (["confirmed", "paid", "full_payment_confirmed"].includes(status)) return "FULLY PAID";
+  return "PAYMENT REQUIRED";
+}
+
+function renderOpsPaymentSummary(item) {
+  return `<dl class="ops-payment-clean-summary">
+    <div><dt>Quoted amount</dt><dd>${formatOpsValue(getOpsValidQuotedAmount(item))}</dd></div>
+    <div><dt>Paid amount</dt><dd>${formatOpsValue(getOpsConfirmedPaymentAmount(item))}</dd></div>
+    <div><dt>Balance</dt><dd>${formatOpsValue(getOpsPaymentBalance(item))}</dd></div>
+    <div><dt>Payment status</dt><dd>${escapeHtml(getOpsPaymentStatusDisplay(item))}</dd></div>
+  </dl>`;
+}
+
+function renderOpsPaymentReceiptBlock(item) {
+  const status = String(item.paymentStatus || "").trim().toLowerCase();
+  const hasReceipt = Boolean(item.paymentProofPath || item.paymentReceiptFilename || item.paymentProofSubmittedAt);
+  if (!hasReceipt) return "";
+  const request = opsCustomerActionRequests[item.id] || {};
+  const isReceiptLoading = request.status === "loading" && request.asset === "payment-proof";
+  const receiptUnavailable = request.status === "error" && request.asset === "payment-proof";
+  const fileType = getOpsReceiptFileType(item.paymentReceiptContentType || item.paymentReceiptFilename);
+  const fileSize = formatOpsFileSize(item.paymentReceiptSize);
+  const receiptAction = item.paymentProofPath
+    ? renderOpsAssetButton({ label: isReceiptLoading ? "LOADING..." : "VIEW RECEIPT", asset: "payment-proof", id: item.id, disabled: isReceiptLoading })
+    : "";
+  return `<section class="ops-payment-clean-block ${status === "correction_required" ? "correction" : ""}" aria-label="Receipt">
+    <header><strong>RECEIPT</strong><span>${escapeHtml(getOpsPaymentStatusDisplay(item))}</span></header>
+    ${receiptUnavailable ? `<p class="ops-customer-action-message error">Receipt unavailable</p>` : ""}
+    <dl class="ops-payment-clean-summary">
+      <div><dt>Receipt filename</dt><dd>${escapeHtml(item.paymentReceiptFilename || "Receipt file")}</dd></div>
+      <div><dt>Receipt file type</dt><dd>${escapeHtml(fileType || "Not set")}</dd></div>
+      <div><dt>Receipt file size</dt><dd>${escapeHtml(fileSize || "Not set")}</dd></div>
+      <div><dt>Submitted</dt><dd>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</dd></div>
+      <div><dt>Selected payment type</dt><dd>${escapeHtml(getOpsPaymentTypeLabel(item.paymentType))}</dd></div>
+      <div><dt>Selected amount</dt><dd>${formatOpsValue(item.paymentSelectedAmount)}</dd></div>
+      ${item.paymentReference ? `<div><dt>Customer reference</dt><dd>${escapeHtml(item.paymentReference)}</dd></div>` : ""}
+      ${item.paymentReviewNote ? `<div class="wide"><dt>Review note</dt><dd>${escapeHtml(item.paymentReviewNote)}</dd></div>` : ""}
+    </dl>
+    <div class="ops-stage-actions">${receiptAction}${receiptUnavailable ? renderOpsAssetButton({ label: "RETRY", asset: "payment-proof", id: item.id, disabled: isReceiptLoading }) : ""}</div>
+  </section>`;
+}
+
+function renderOpsPaymentNotes(item) {
+  const customer = item.paymentCustomerNote ? `<section class="ops-payment-note-block"><strong>CUSTOMER NOTE</strong><p>${escapeHtml(item.paymentCustomerNote)}</p></section>` : "";
+  const internal = item.paymentInternalNote ? `<section class="ops-payment-note-block internal"><strong>INTERNAL REVIEW NOTE</strong><p>${escapeHtml(item.paymentInternalNote)}</p></section>` : "";
+  return `${customer}${internal}`;
+}
+
+function renderOpsPayAtShopReadOnly(item) {
+  if (!isOpsShopPaymentPending(item)) return "";
+  return `<section class="ops-payment-clean-block">
+    <header><strong>PAY AT SHOP SELECTED</strong></header>
+    <p class="ops-stage-muted"><strong>Customer selected payment at the TRRY shop.</strong>Payment remains unpaid until staff confirms receipt.</p>
+  </section>`;
+}
+
+function getOpsReceiptFileType(value) {
+  const text = String(value || "").trim().toLowerCase();
+  if (!text) return "";
+  if (text.includes("pdf") || text.endsWith(".pdf")) return "PDF";
+  if (text.includes("jpeg") || text.endsWith(".jpeg") || text.endsWith(".jpg")) return "JPG";
+  if (text.includes("png") || text.endsWith(".png")) return "PNG";
+  if (text.includes("webp") || text.endsWith(".webp")) return "WEBP";
+  if (text.includes("heic") || text.endsWith(".heic")) return "HEIC";
+  if (text.includes("heif") || text.endsWith(".heif")) return "HEIF";
+  return text.split("/").pop()?.toUpperCase() || text.toUpperCase();
+}
+
+function formatOpsFileSize(value) {
+  const bytes = Number(value);
+  if (!Number.isFinite(bytes) || bytes <= 0) return "";
+  if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(bytes >= 10 * 1024 * 1024 ? 0 : 1)} MB`;
+  if (bytes >= 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${bytes} B`;
 }
 function getOpsInquiryCurrentTask(item) {
   const state = getOpsNormalizedCustomerState(item);
@@ -2949,7 +3050,8 @@ function renderOpsAssetButton({ label, asset, id, disabled = false }) {
 }
 
 function renderOpsStageShell({ key, title, status, current, locked = false, body }) {
-  return `<section class="ops-stage-section ${current ? "current" : ""} ${locked ? "locked" : ""}" data-ops-stage="${escapeHtml(key)}"><div class="ops-stage-section-heading"><div><span>${escapeHtml(title)}</span>${status ? `<strong>${escapeHtml(status)}</strong>` : ""}</div>${current ? `<mark>CURRENT</mark>` : ""}</div>${body}</section>`;
+  const correction = String(status || "").trim().toUpperCase() === "CORRECTION REQUIRED";
+  return `<section class="ops-stage-section ${current ? "current" : ""} ${locked ? "locked" : ""} ${correction ? "correction" : ""}" data-ops-stage="${escapeHtml(key)}"><div class="ops-stage-section-heading"><div><span>${escapeHtml(title)}</span>${status ? `<strong>${escapeHtml(status)}</strong>` : ""}</div>${current ? `<mark>CURRENT</mark>` : ""}</div>${body}</section>`;
 }
 const opsTrackingSubstatus = {
   ready_for_pickup: { label: "Ready for Pickup", methods: ["pickup"] },
@@ -3690,75 +3792,15 @@ function bindOnlinePaymentReviewEvents(root = document) {
 }
 
 function renderOpsPaymentStage(item) {
+  if (!hasOpsPaymentQuotation(item)) return "";
   if (isAdminOnlinePaymentReviewUiEnabled() && isOnlinePaymentReviewItem(item)) {
     scheduleOnlinePaymentReview(item.id);
     return renderOnlinePaymentReview(item, onlinePaymentReviewByInquiry[item.id]);
   }
-  const request = opsCustomerActionRequests[item.id] || {};
-  const isLoading = request.status === "loading";
-  const isReceiptLoading = isLoading && request.asset === "payment-proof";
-  const receiptOpened = request.status === "success" && request.asset === "payment-proof" && request.signedUrl;
-  const receiptUnavailable = request.status === "error" && request.asset === "payment-proof";
   const current = getOpsInquiryCurrentTask(item).stage === "payment";
-  const status = item.paymentStatus || "not_required";
-  let body = renderOpsQuoteHiddenFields(item);
-  const paymentTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
-  const paymentPaid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) > 0 ? Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) : 0;
-  const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
-  const isShopPaymentPending = isOpsShopPaymentPending(item);
-  const isShopPaymentConfirmed = isOpsShopPaymentConfirmed(item);
-  const isBelowFullPaymentOnly = paymentTotal > 0 && paymentTotal < 1000 && !isOpsPaymentConfirmed(status);
-  if (!isBelowFullPaymentOnly && !isShopPaymentPending && !isShopPaymentConfirmed) {
-    body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
-  }
-
-  if (isShopPaymentPending && isAdminPayAtShopUiEnabled()) {
-    const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
-    const requiredDp = quoteTotal >= 1000 ? getOpsShopPaymentChoiceAmount(item, "down_payment") : null;
-    body += `<div class="ops-shop-payment-state"><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div>${requiredDp ? `<div><span>Required DP</span><strong>${formatOpsValue(requiredDp)}</strong></div>` : ""}<div><span>Full-payment amount</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Customer-selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Selected</span><strong>${escapeHtml(item.paymentSelectedAt ? formatOpsTrackingDate(item.paymentSelectedAt) : "Selection time unavailable")}</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until an exact allowed shop payment is received and confirmed.</p></div>`;
-    if (canOpsConfirmShopPayment(item)) {
-      body += `<div class="ops-stage-actions"><button class="ops-gold-button mini" data-ops-open-shop-payment="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>RECEIVE PAYMENT</button></div>`;
-    } else {
-      body += `<p class="ops-stage-muted"><strong>Owner/Admin confirmation required.</strong></p>`;
-    }
-    body += renderOpsPaymentHistory(item);
-  } else if (isShopPaymentConfirmed) {
-    const confirmationEvent = getOpsShopPaymentConfirmationEvent(item);
-    const confirmedBy = confirmationEvent?.actorDisplayName || (confirmationEvent?.actorRole ? formatAdminRole(confirmationEvent.actorRole) : "TRRY Admin");
-    const paid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) || 0;
-    const remaining = Math.max(paymentTotal - paid, 0);
-    body += `<div class="ops-shop-payment-state confirmed"><div class="ops-stage-mini-grid"><div><span>Paid</span><strong>${formatOpsValue(paid)}</strong></div><div><span>Remaining</span><strong>${formatOpsValue(remaining)}</strong></div><div><span>Method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Received by</span><strong>${escapeHtml(confirmedBy)}</strong></div><div><span>Received</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</strong></div>${item.paymentInternalNote ? `<div class="wide"><span>Internal note</span><strong>${escapeHtml(item.paymentInternalNote)}</strong></div>` : ""}</div><div class="ops-stage-actions"><button class="ops-dark-button mini" data-ops-view-shop-payment="${escapeHtml(item.id)}" type="button">VIEW PAYMENT</button></div></div>${renderOpsPaymentHistory(item)}`;
-  } else if (isBelowFullPaymentOnly) {
-    body += `<div class="ops-shop-payment-state"><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Full payment is required for quotations below ${formatOpsValue(1000)}. Production remains blocked until payment is confirmed.</p></div>`;
-  } else if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) {
-    body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">AWAITING PAYMENT</strong><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until payment is confirmed.</p></div>`;
-  } else if (isOpsPaymentConfirmed(status)) {
-    body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
-  } else if (!canOpsRequestPayment(item)) {
-    body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
-  } else if (["required", "correction_required"].includes(status)) {
-    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>PAYMENT REQUESTED</strong></div></div><p class="ops-stage-muted"><strong>${item.paymentRejectedAt ? "NEW RECEIPT NEEDED" : "PAYMENT REQUESTED"}</strong>Awaiting receipt.</p>`;
-  } else if (["proof_submitted", "under_review"].includes(status)) {
-    const receipt = item.paymentProofPath ? renderOpsAssetButton({ label: isReceiptLoading ? "LOADING..." : receiptUnavailable ? "TRY AGAIN" : "REVIEW RECEIPT", asset: "payment-proof", id: item.id, disabled: isReceiptLoading }) : `<span class="ops-customer-empty">No receipt uploaded.</span>`;
-    const receiptPreview = receiptOpened ? `<figure class="ops-payment-receipt-preview"><img alt="Uploaded payment receipt for ${escapeHtml(item.id)}" src="${escapeHtml(request.signedUrl)}" /><figcaption>Receipt opened for ${escapeHtml(item.id)}</figcaption></figure>` : "";
-    const receiptError = receiptUnavailable ? `<p class="ops-customer-action-message error">RECEIPT UNAVAILABLE</p>` : "";
-    body += `<div class="ops-stage-mini-grid"><div><span>Inquiry reference</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Selected amount</span><strong>${formatOpsValue(item.paymentSelectedAmount ?? item.amountDue)}</strong></div><div><span>Payment type</span><strong>${escapeHtml(getOpsPaymentTypeLabel(item.paymentType))}</strong></div><div><span>Reference</span><strong>${escapeHtml(item.paymentReference || "-")}</strong></div><div><span>Customer note</span><strong>${escapeHtml(item.paymentCustomerNote || "-")}</strong></div><div><span>Uploaded</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div><div><span>Receipt file</span><strong>${escapeHtml(item.paymentReceiptFilename || item.paymentProofPath || "-")}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentSelectedAmount ?? item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Reason for new receipt</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div>${receiptPreview}${receiptError}<div class="ops-stage-actions">${receipt}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}${renderOpsActionButton({ label: "REQUEST NEW RECEIPT", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading })}</div>`;
-  } else {
-    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentSelectedAmount ?? item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "correction_required", "proof_submitted", "under_review", "pay_at_shop", "payment_pending_at_shop", "confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(status) })}</div>`;
-  }
-
-  if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW RECEIPT NEEDED</strong>${escapeHtml(item.paymentReviewNote || "Replacement receipt requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
-
-  const stageStatus = isShopPaymentPending
-    ? "AWAITING SHOP PAYMENT"
-    : isShopPaymentConfirmed
-      ? (paymentBalance > 0 ? "DOWN PAYMENT CONFIRMED" : "FULLY PAID")
-      : isBelowFullPaymentOnly
-        ? "FULL PAYMENT REQUIRED"
-      : getOpsCustomerActionLabel("payment", status);
-  const locked = !isOpsShopPaymentPending(item)
-    && !canOpsRequestPayment(item)
-    && !isOpsPaymentConfirmed(status);
+  const stageStatus = getOpsPaymentStatusDisplay(item);
+  const locked = false;
+  const body = `${renderOpsPaymentSummary(item)}${renderOpsPayAtShopReadOnly(item)}${renderOpsPaymentReceiptBlock(item)}${renderOpsPaymentNotes(item)}${renderOpsPaymentHistory(item)}`;
   return renderOpsStageShell({ key: "payment", title: "Payment", status: stageStatus, current, locked, body });
 }
 function renderOpsProductionStage(item) {
