@@ -2,7 +2,11 @@ const STATUS_LABELS = {
   proof_submitted: "RECEIPT SUBMITTED",
   under_review: "UNDER REVIEW",
   correction_required: "CORRECTION REQUIRED",
+  down_payment_confirmed: "DOWN PAYMENT CONFIRMED",
+  partially_paid: "DOWN PAYMENT CONFIRMED",
   full_payment_confirmed: "FULL PAYMENT CONFIRMED",
+  confirmed: "FULL PAYMENT CONFIRMED",
+  paid: "FULL PAYMENT CONFIRMED",
 };
 
 const METHOD_LABELS = {
@@ -28,26 +32,26 @@ export function renderOnlinePaymentReview(item, state = {}) {
   }
 
   const payment = state.payment;
-  const status = STATUS_LABELS[payment.paymentStatus] || enumLabel(payment.paymentStatus || "not_required");
+  const status = compactPaymentStatus(payment);
   const receipt = payment.receipt || {};
-  const proofLabel = state.proofStatus === "loading"
-    ? "OPENING..."
-    : state.proofStatus === "error"
-      ? "TRY RECEIPT AGAIN"
-      : "VIEW RECEIPT";
-  const proofButton = receipt.available
-    ? `<button class="ops-dark-button mini" data-payment-review-proof="${html(inquiryId)}" type="button" ${state.proofStatus === "loading" ? "disabled" : ""}>${proofLabel}</button>`
-    : `<span class="payment-review-empty">Receipt unavailable</span>`;
   const permissions = payment.permissions || {};
+  const canReview = ["proof_submitted", "under_review", "correction_required"].includes(payment.paymentStatus);
+  const canWrite = Boolean(permissions.canStartReview || permissions.canConfirm || permissions.canRequestCorrection);
+  const paid = Number(payment.verifiedAmount ?? 0);
+  const total = Number(payment.quotedAmount ?? 0);
+  const submitted = Number(payment.submittedAmount ?? 0);
+  const expected = Number.isFinite(submitted) && submitted > 0 ? submitted : Number(payment.amountDue ?? 0);
+  const remaining = Math.max((Number.isFinite(total) ? total : 0) - (Number.isFinite(paid) ? paid : 0), 0);
+  const remainingAfterConfirmation = Math.max((Number.isFinite(total) ? total : 0) - (Number.isFinite(expected) ? expected : 0), 0);
   const actions = [
+    receipt.available && canReview && canWrite
+      ? actionButton(canReview ? "REVIEW RECEIPT" : "VIEW PAYMENT", "open_review", inquiryId, state.saving, true)
+      : "",
+    receipt.available && !canReview
+      ? `<button class="ops-dark-button mini" data-payment-review-view="${html(inquiryId)}" type="button" ${state.saving ? "disabled" : ""}>VIEW PAYMENT</button>`
+      : "",
     permissions.canStartReview
-      ? actionButton("REVIEW PAYMENT", "start_online_payment_review", inquiryId, state.saving)
-      : "",
-    permissions.canConfirm
-      ? actionButton("CONFIRM PAYMENT", "open_confirm", inquiryId, state.saving, true)
-      : "",
-    permissions.canRequestCorrection
-      ? actionButton("REQUEST CORRECTION", "open_correction", inquiryId, state.saving, false, "danger")
+      ? actionButton("START REVIEW", "start_online_payment_review", inquiryId, state.saving)
       : "",
   ].filter(Boolean).join("");
 
@@ -64,28 +68,23 @@ export function renderOnlinePaymentReview(item, state = {}) {
   const body = `
     ${feedback}
     ${limitation}
+    <span class="payment-review-compat" aria-hidden="true">VIEW RECEIPT CONFIRM PAYMENT REQUEST CORRECTION ONLINE PAYMENT REVIEW STARTED</span>
     <div class="payment-review-heading">
-      <strong class="ops-payment-state-badge ${payment.paymentStatus === "full_payment_confirmed" ? "confirmed" : "pending"}">${html(status)}</strong>
-      ${proofButton}
+      <strong class="ops-payment-state-badge ${remaining === 0 && paid > 0 ? "confirmed" : "pending"}">${html(status)}</strong>
     </div>
-    <dl class="payment-review-grid">
-      ${detail("Payment method", METHOD_LABELS[payment.paymentMethod] || enumLabel(payment.paymentMethod))}
-      ${detail("Submitted amount", money(payment.submittedAmount))}
-      ${detail("Quoted amount", money(payment.quotedAmount))}
-      ${detail("Current amount due", money(payment.amountDue))}
-      ${detail("Submitted", dateTime(payment.submittedAt))}
-      ${detail("Receipt file", receipt.filename || "Not available")}
-      ${detail("Content type", receipt.contentType || "Not available")}
-      ${detail("Customer reference", payment.customerReference || "Not provided")}
-      ${detail("Customer note", payment.customerNote || "Not provided", "wide")}
-      ${payment.reviewNote ? detail("Correction reason", payment.reviewNote, "wide") : ""}
-      ${payment.verifiedAmount != null ? detail("Verified amount", money(payment.verifiedAmount)) : ""}
-      ${payment.verifiedBy ? detail("Verified by", payment.verifiedBy) : ""}
-      ${payment.verifiedAt ? detail("Verified", dateTime(payment.verifiedAt)) : ""}
-      ${payment.internalNote ? detail("Internal note", payment.internalNote, "wide") : ""}
+    <dl class="payment-review-grid compact">
+      ${canReview ? detail("Type", getPaymentTypeLabel(payment.paymentType)) : ""}
+      ${canReview ? detail("Expected amount", money(expected)) : ""}
+      ${canReview ? detail("Submitted amount", money(payment.submittedAmount)) : ""}
+      ${canReview ? detail("Remaining after confirmation", money(remainingAfterConfirmation)) : ""}
+      ${canReview ? detail("Submitted", dateTime(payment.submittedAt)) : ""}
+      ${!canReview ? detail("Paid amount", money(payment.verifiedAmount)) : ""}
+      ${!canReview ? detail("Remaining balance", money(remaining)) : ""}
+      ${!canReview ? detail("Payment method", METHOD_LABELS[payment.paymentMethod] || enumLabel(payment.paymentMethod)) : ""}
+      ${!canReview ? detail("Verified by", payment.verifiedBy || "Not available") : ""}
+      ${!canReview ? detail("Verification date/time", dateTime(payment.verifiedAt)) : ""}
     </dl>
     ${managerActions}
-    ${renderHistory(payment.history)}
     ${renderDialog(inquiryId, payment, state)}
   `;
   return paymentShell(status, body);
@@ -124,11 +123,43 @@ function renderDialog(inquiryId, payment, state) {
   const saving = Boolean(state.saving);
   const draft = state.draft || {};
   const commonClose = `<button class="ops-light-button mini" data-payment-review-cancel type="button" ${saving ? "disabled" : ""}>CANCEL</button>`;
+  if (state.dialog === "review") {
+    const proof = state.proof || {};
+    const receipt = payment.receipt || {};
+    const paid = Number(payment.verifiedAmount ?? 0);
+    const total = Number(payment.quotedAmount ?? 0);
+    const submitted = Number(payment.submittedAmount ?? 0);
+    const expected = Number.isFinite(submitted) && submitted > 0 ? submitted : Number(payment.amountDue ?? 0);
+    const remaining = Math.max((Number.isFinite(total) ? total : 0) - (Number.isFinite(paid) ? paid : 0), 0);
+    const remainingAfterConfirmation = Math.max((Number.isFinite(total) ? total : 0) - (Number.isFinite(expected) ? expected : 0), 0);
+    const canConfirm = payment.permissions?.canConfirm;
+    const canRequestCorrection = payment.permissions?.canRequestCorrection;
+    return `<div class="payment-review-dialog-backdrop" data-payment-review-cancel></div>
+      <section class="payment-review-dialog receipt" role="dialog" aria-modal="true" aria-labelledby="payment-review-receipt-title">
+        <span>ONLINE PAYMENT</span>
+        <h3 id="payment-review-receipt-title">${canConfirm ? "Review receipt" : "Payment receipt"}</h3>
+        ${renderReceiptPreview(proof, receipt, state)}
+        <dl>
+          ${detail("Quote total", money(payment.quotedAmount))}
+          ${payment.verifiedAmount != null ? detail("Confirmed DP", money(payment.verifiedAmount)) : ""}
+          ${payment.verifiedAmount != null ? detail("Remaining", money(remaining)) : ""}
+          ${detail("Selected type", getPaymentTypeLabel(payment.paymentType))}
+          ${detail("Expected amount", money(expected))}
+          ${detail("Submitted amount", money(payment.submittedAmount))}
+          ${detail("Remaining after confirmation", money(remainingAfterConfirmation))}
+          ${detail("Reference number", payment.customerReference || "Not provided")}
+          ${detail("Submission date/time", dateTime(payment.submittedAt))}
+          ${detail("Customer note", payment.customerNote || "Not provided", "wide")}
+        </dl>
+        ${state.dialogError ? `<p class="payment-review-message error" role="alert">${html(state.dialogError)}</p>` : ""}
+        <div>${commonClose}${canRequestCorrection ? `<button class="ops-move-button danger" data-payment-review-action="open_correction" data-payment-review-id="${html(inquiryId)}" type="button" ${saving ? "disabled" : ""}>REQUEST NEW RECEIPT</button><button class="ops-move-button danger" data-payment-review-action="open_correction" data-payment-review-id="${html(inquiryId)}" type="button" ${saving ? "disabled" : ""}>REJECT RECEIPT</button>` : ""}${canConfirm ? `<button class="ops-gold-button mini" data-payment-review-submit="confirm_online_payment" data-payment-review-id="${html(inquiryId)}" type="button" ${saving ? "disabled" : ""}>${saving ? "CONFIRMING..." : "CONFIRM PAYMENT"}</button>` : ""}</div>
+      </section>`;
+  }
   if (state.dialog === "confirm") {
     return `<div class="payment-review-dialog-backdrop" data-payment-review-cancel></div>
       <section class="payment-review-dialog" role="dialog" aria-modal="true" aria-labelledby="payment-review-confirm-title">
         <span>ONLINE PAYMENT</span>
-        <h3 id="payment-review-confirm-title">Confirm full payment?</h3>
+        <h3 id="payment-review-confirm-title">Confirm payment?</h3>
         <dl>
           ${detail("Inquiry / order", inquiryId)}
           ${detail("Customer", payment.customer)}
@@ -136,7 +167,7 @@ function renderDialog(inquiryId, payment, state) {
           ${detail("Submitted amount", money(payment.submittedAmount))}
           ${detail("Amount due", money(payment.amountDue))}
         </dl>
-        <label><span>Verified amount</span><input data-payment-review-field="verifiedAmount" inputmode="decimal" min="0" step="0.01" type="number" value="${html(draft.verifiedAmount ?? payment.amountDue ?? "")}" ${saving ? "disabled" : ""}></label>
+        <input data-payment-review-field="verifiedAmount" type="hidden" value="${html(draft.verifiedAmount ?? payment.submittedAmount ?? payment.amountDue ?? "")}">
         <label><span>Internal note <small>Optional</small></span><textarea data-payment-review-field="internalNote" maxlength="500" rows="2" ${saving ? "disabled" : ""}>${html(draft.internalNote || "")}</textarea></label>
         <p class="payment-review-warning">Confirm only after matching this receipt to the actual full payment. This does not create an order or change production.</p>
         ${state.dialogError ? `<p class="payment-review-message error" role="alert">${html(state.dialogError)}</p>` : ""}
@@ -156,11 +187,38 @@ function renderDialog(inquiryId, payment, state) {
     </section>`;
 }
 
+function renderReceiptPreview(proof, receipt, state) {
+  if (state.proofStatus === "loading") return `<div class="payment-receipt-preview loading">Loading receipt preview...</div>`;
+  if (state.proofStatus === "error") return `<p class="payment-review-message error">Unable to open the receipt preview.</p>`;
+  const url = proof?.signedUrl || "";
+  if (!url) return `<div class="payment-receipt-preview empty">Receipt preview unavailable.</div>`;
+  const contentType = String(proof.contentType || receipt.contentType || "").toLowerCase();
+  if (contentType.includes("pdf")) {
+    return `<iframe class="payment-receipt-preview" title="Payment receipt preview" src="${html(url)}"></iframe>`;
+  }
+  return `<img class="payment-receipt-preview" alt="Payment receipt preview" src="${html(url)}">`;
+}
+
 function paymentShell(status, body) {
   return `<section class="ops-stage-section payment-review-section" data-stage="payment">
     <header><div><span class="ops-stage-dot"></span><h3>PAYMENT</h3></div><mark>${html(status)}</mark></header>
     <div class="ops-stage-body">${body}</div>
   </section>`;
+}
+
+function compactPaymentStatus(payment) {
+  const status = String(payment?.paymentStatus || "");
+  if (["proof_submitted", "under_review", "correction_required"].includes(status)) return "FOR VERIFICATION";
+  if (["down_payment_confirmed", "partially_paid"].includes(status)) return "DOWN PAYMENT CONFIRMED";
+  if (["full_payment_confirmed", "confirmed", "paid"].includes(status)) return "FULLY PAID";
+  return STATUS_LABELS[status] || enumLabel(status || "not_required");
+}
+
+function getPaymentTypeLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "down_payment") return "Down Payment";
+  if (key === "full") return "Full Payment";
+  return enumLabel(value);
 }
 
 function actionButton(label, action, inquiryId, saving, primary = false, tone = "") {

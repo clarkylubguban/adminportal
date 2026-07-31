@@ -26857,6 +26857,12 @@ textarea,
   font: inherit;
 }
 
+.ops-board-page .ops-shop-payment-form input[readonly] {
+  background: #f7f7f0;
+  color: #111111;
+  font-weight: 800;
+}
+
 .ops-board-page .ops-shop-payment-form label > small {
   color: #6c6c6c;
   font-size: 10px;
@@ -27067,6 +27073,10 @@ textarea,
   position: relative;
 }
 
+.payment-review-compat {
+  display: none;
+}
+
 .payment-review-heading,
 .payment-review-actions {
   align-items: center;
@@ -27084,6 +27094,10 @@ textarea,
   overflow: hidden;
   border: 1px solid #d7d7d2;
   border-radius: 4px;
+}
+
+.payment-review-grid.compact {
+  margin-bottom: 10px;
 }
 
 .payment-review-grid > div,
@@ -27168,6 +27182,35 @@ textarea,
   transform: translate(-50%, -50%);
   width: 100%;
   z-index: 1201;
+}
+
+.payment-review-dialog.receipt {
+  max-width: min(720px, calc(100vw - 32px));
+}
+
+.payment-receipt-preview {
+  background: #f7f7f0;
+  border: 1px solid #d7d7d2;
+  display: block;
+  max-height: 42vh;
+  min-height: 220px;
+  object-fit: contain;
+  overflow: auto;
+  width: 100%;
+}
+
+iframe.payment-receipt-preview {
+  height: 42vh;
+}
+
+div.payment-receipt-preview {
+  align-items: center;
+  color: #555;
+  display: flex;
+  font-size: 12px;
+  font-weight: 800;
+  justify-content: center;
+  padding: 18px;
 }
 
 .payment-review-dialog > span {

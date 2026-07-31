@@ -2373,6 +2373,9 @@ function validateTaskSubmit(action) {
 function getMvpDashboardItems() {
   return opsInquiries.map((item) => ({
     ...item,
+    paymentEvents: opsPaymentHistoryByInquiry[item.id]?.status === "success"
+      ? opsPaymentHistoryByInquiry[item.id].events
+      : [],
     requiresProductionMigration: shouldLoadSupabaseOps && !item.productionFieldsReady,
   }));
 }
@@ -2812,7 +2815,7 @@ function isOnlinePaymentReviewItem(item) {
   const status = String(item?.paymentStatus || "").trim().toLowerCase();
   const type = String(item?.paymentType || "").trim().toLowerCase();
   return type !== "shop"
-    && ["proof_submitted", "under_review", "correction_required", "full_payment_confirmed"].includes(status);
+    && ["proof_submitted", "under_review", "correction_required", "down_payment_confirmed", "partially_paid", "full_payment_confirmed", "confirmed", "paid"].includes(status);
 }
 
 function isOpsShopPaymentPending(item) {
@@ -3226,15 +3229,26 @@ function renderOpsQuoteStage(item) {
 }
 
 function getOpsShopPaymentDraft(item) {
-  const existing = opsShopPaymentDrafts[item.id];
+  const existing = opsShopPaymentDrafts[item.id] || {};
+  const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : Number(item.amountDue) || 0;
+  const defaultChoice = quoteTotal >= 1000 ? "down_payment" : "full";
+  const paymentChoice = existing.paymentChoice || defaultChoice;
   const selectedMethod = SHOP_PAYMENT_METHODS.has(String(existing?.paymentMethod || item.paymentMethod || "").toLowerCase())
     ? String(existing?.paymentMethod || item.paymentMethod).toLowerCase()
     : "cash";
   return {
-    receivedAmount: existing?.receivedAmount ?? item.quotedAmount ?? item.amountDue ?? "",
+    paymentChoice,
+    receivedAmount: existing?.receivedAmount ?? getOpsShopPaymentChoiceAmount(item, paymentChoice) ?? "",
     paymentMethod: selectedMethod,
+    referenceNumber: existing?.referenceNumber ?? "",
     internalNote: existing?.internalNote ?? "",
   };
+}
+
+function getOpsShopPaymentChoiceAmount(item, choice) {
+  const total = Number(item?.quotedAmount);
+  if (!Number.isFinite(total) || total <= 0) return "";
+  return choice === "down_payment" && total >= 1000 ? Math.round(total * 50) / 100 : total;
 }
 
 function getOpsShopPaymentConfirmationEvent(item) {
@@ -3274,7 +3288,11 @@ function renderOpsShopPaymentDialog(item) {
   if (!confirmation || confirmation.inquiryId !== item.id) return "";
 
   const saving = confirmation.status === "loading";
-  return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog" role="alertdialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">Confirm ${escapeHtml(formatOpsValue(confirmation.receivedAmount))} received at shop?</h3><dl><div><dt>Payment method</dt><dd>${escapeHtml(getOpsPaymentMethodLabel(confirmation.paymentMethod))}</dd></div>${confirmation.internalNote ? `<div><dt>Internal note</dt><dd>${escapeHtml(confirmation.internalNote)}</dd></div>` : ""}</dl><p>This records the payment as final. Editing and reversal are outside this workflow.</p>${confirmation.error ? `<p class="ops-customer-action-message error">${escapeHtml(confirmation.error)}</p>` : ""}<div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button" ${saving ? "disabled" : ""}>CANCEL</button><button class="ops-gold-button mini" data-ops-confirm-shop-payment="${escapeHtml(item.id)}" type="button" ${saving ? "disabled" : ""}>${saving ? "CONFIRMING..." : "CONFIRM PAYMENT"}</button></div></section>`;
+  const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
+  const allowsDp = quoteTotal >= 1000;
+  const amount = getOpsShopPaymentChoiceAmount(item, confirmation.paymentChoice);
+  const digital = ["gcash", "bank_transfer", "other"].includes(String(confirmation.paymentMethod || "").toLowerCase());
+  return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog shop-receiver" role="alertdialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">Receive payment</h3><dl><div><dt>Quote total</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div>${allowsDp ? `<div><dt>Required DP</dt><dd>${escapeHtml(formatOpsValue(getOpsShopPaymentChoiceAmount(item, "down_payment")))}</dd></div>` : ""}<div><dt>Full-payment amount</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div></dl><p>Opening this receiver does not record a transaction. Only final confirmation writes payment.</p><div class="ops-customer-action-form compact ops-shop-payment-form"><label><span>Payment amount choice</span><select data-ops-shop-field="paymentChoice" ${saving ? "disabled" : ""}>${allowsDp ? `<option value="down_payment" ${confirmation.paymentChoice === "down_payment" ? "selected" : ""}>Required DP</option>` : ""}<option value="full" ${confirmation.paymentChoice === "full" ? "selected" : ""}>Pay in full</option></select></label><label><span>Calculated amount</span><input data-ops-shop-field="receivedAmount" inputmode="decimal" readonly type="number" value="${escapeHtml(amount)}" /></label><label><span>Payment method</span><select data-ops-shop-field="paymentMethod" ${saving ? "disabled" : ""}><option value="cash" ${confirmation.paymentMethod === "cash" ? "selected" : ""}>Cash</option><option value="gcash" ${confirmation.paymentMethod === "gcash" ? "selected" : ""}>GCash</option><option value="bank_transfer" ${confirmation.paymentMethod === "bank_transfer" ? "selected" : ""}>Bank transfer</option><option value="other" ${confirmation.paymentMethod === "other" ? "selected" : ""}>Other</option></select></label><label><span>Reference number ${digital ? "" : "<small>Optional</small>"}</span><input data-ops-shop-field="referenceNumber" value="${escapeHtml(confirmation.referenceNumber || "")}" ${saving ? "disabled" : ""}></label><label class="wide"><span>Received by</span><input readonly value="${escapeHtml(adminUser?.displayName || adminUser?.email || "Authenticated admin")}" /></label><label class="wide"><span>Date/time</span><input readonly value="${escapeHtml(formatOpsTrackingDate(new Date().toISOString()))}" /></label><label class="wide"><span>Internal note <small>Optional</small></span><textarea data-ops-shop-field="internalNote" maxlength="${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}" rows="2" ${saving ? "disabled" : ""}>${escapeHtml(confirmation.internalNote || "")}</textarea><small>${String(confirmation.internalNote || "").length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}</small></label></div>${confirmation.error ? `<p class="ops-customer-action-message error">${escapeHtml(confirmation.error)}</p>` : ""}<div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button" ${saving ? "disabled" : ""}>CANCEL</button><button class="ops-gold-button mini" data-ops-confirm-shop-payment="${escapeHtml(item.id)}" data-ops-action-label="CONFIRM SHOP PAYMENT" type="button" ${saving ? "disabled" : ""}>${saving ? "CONFIRMING..." : "CONFIRM PAYMENT RECEIVED"}</button></div></section>`;
 }
 
 function renderActiveOpsShopPaymentDialog() {
@@ -3353,14 +3371,14 @@ async function openOnlinePaymentProof(inquiryId) {
 
   try {
     const proof = await openPaymentProof(inquiryId, adminAuthSession);
-    window.open(proof.signedUrl, "_blank", "noopener,noreferrer");
     onlinePaymentReviewByInquiry = {
       ...onlinePaymentReviewByInquiry,
       [inquiryId]: {
         ...onlinePaymentReviewByInquiry[inquiryId],
+        proof,
         proofStatus: "opened",
-        message: `Opened ${proof.filename || "payment receipt"}.`,
-        messageTone: "success",
+        message: "",
+        messageTone: "",
       },
     };
   } catch (error) {
@@ -3380,20 +3398,26 @@ async function openOnlinePaymentProof(inquiryId) {
 function openOnlinePaymentDialog(inquiryId, dialog) {
   const current = onlinePaymentReviewByInquiry[inquiryId];
   if (!current?.payment || current.saving) return;
+  const payment = current.payment;
   onlinePaymentReviewByInquiry = {
     ...onlinePaymentReviewByInquiry,
     [inquiryId]: {
       ...current,
       dialog,
       dialogError: "",
-      draft: dialog === "confirm"
+      draft: dialog === "review"
         ? {
-          verifiedAmount: current.payment.amountDue ?? "",
-          internalNote: current.payment.internalNote || "",
+          verifiedAmount: payment.submittedAmount ?? payment.amountDue ?? "",
+          internalNote: payment.internalNote || "",
+        }
+        : dialog === "confirm"
+        ? {
+          verifiedAmount: payment.submittedAmount ?? payment.amountDue ?? "",
+          internalNote: payment.internalNote || "",
         }
         : {
-          reviewNote: current.payment.reviewNote || "",
-          internalNote: current.payment.internalNote || "",
+          reviewNote: payment.reviewNote || "",
+          internalNote: payment.internalNote || "",
         },
       pendingAction: "",
       pendingKey: "",
@@ -3544,11 +3568,20 @@ function bindOnlinePaymentReviewEvents() {
       void openOnlinePaymentProof(button.dataset.paymentReviewProof);
     });
   });
+  document.querySelectorAll("[data-payment-review-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openOnlinePaymentDialog(button.dataset.paymentReviewView, "review");
+      void openOnlinePaymentProof(button.dataset.paymentReviewView);
+    });
+  });
   document.querySelectorAll("[data-payment-review-action]").forEach((button) => {
     button.addEventListener("click", () => {
       const inquiryId = button.dataset.paymentReviewId;
       const action = button.dataset.paymentReviewAction;
-      if (action === "open_confirm") {
+      if (action === "open_review") {
+        openOnlinePaymentDialog(inquiryId, "review");
+        void openOnlinePaymentProof(inquiryId);
+      } else if (action === "open_confirm") {
         openOnlinePaymentDialog(inquiryId, "confirm");
       } else if (action === "open_correction") {
         openOnlinePaymentDialog(inquiryId, "correction");
@@ -3594,10 +3627,11 @@ function renderOpsPaymentStage(item) {
   body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
 
   if (isOpsShopPaymentPending(item) && isAdminPayAtShopUiEnabled()) {
-    const draft = getOpsShopPaymentDraft(item);
-    body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">PAY AT SHOP</strong><h4>SHOP PAYMENT PENDING</h4><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Amount to collect</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Customer-selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Selected</span><strong>${escapeHtml(item.paymentSelectedAt ? formatOpsTrackingDate(item.paymentSelectedAt) : "Selection time unavailable")}</strong></div></div><p class="ops-shop-payment-warning">Confirm only after payment is physically received or verified at the shop.</p></div>`;
+    const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
+    const requiredDp = quoteTotal >= 1000 ? getOpsShopPaymentChoiceAmount(item, "down_payment") : null;
+    body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">AWAITING SHOP PAYMENT</strong><h4>SHOP PAYMENT PENDING</h4><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div>${requiredDp ? `<div><span>Required DP</span><strong>${formatOpsValue(requiredDp)}</strong></div>` : ""}<div><span>Full-payment amount</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Customer-selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Selected</span><strong>${escapeHtml(item.paymentSelectedAt ? formatOpsTrackingDate(item.paymentSelectedAt) : "Selection time unavailable")}</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until an exact allowed shop payment is received and confirmed.</p></div>`;
     if (canOpsConfirmShopPayment(item)) {
-      body += `<div class="ops-customer-action-form compact ops-shop-payment-form"><label><span>Received amount</span><input data-ops-shop-field="receivedAmount" inputmode="decimal" min="0" step="0.01" type="number" value="${escapeHtml(draft.receivedAmount)}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment method received</span><select data-ops-shop-field="paymentMethod" ${isLoading ? "disabled" : ""}><option value="cash" ${draft.paymentMethod === "cash" ? "selected" : ""}>Cash</option><option value="gcash" ${draft.paymentMethod === "gcash" ? "selected" : ""}>GCash</option><option value="bank_transfer" ${draft.paymentMethod === "bank_transfer" ? "selected" : ""}>Bank Transfer</option><option value="card" ${draft.paymentMethod === "card" ? "selected" : ""}>Card</option><option value="other" ${draft.paymentMethod === "other" ? "selected" : ""}>Other</option></select></label><label class="wide"><span>Internal note <small>Optional</small></span><textarea data-ops-shop-field="internalNote" maxlength="${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}" placeholder="Receipt 1042 / received by front desk" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(draft.internalNote)}</textarea><small>${String(draft.internalNote).length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}</small></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM SHOP PAYMENT", action: "confirm_shop_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
+      body += `<div class="ops-stage-actions"><button class="ops-gold-button mini" data-ops-open-shop-payment="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>RECEIVE PAYMENT</button></div>`;
     } else {
       body += `<p class="ops-stage-muted"><strong>Owner/Admin confirmation required.</strong></p>`;
     }
@@ -3816,22 +3850,36 @@ function setOpsActionButtonLoading(button, isLoading) {
 
 function getOpsShopPaymentFormPayload(inquiryId, sourceElement) {
   const stageSection = sourceElement?.closest?.(".ops-stage-section");
-  const fieldValue = (name) => stageSection?.querySelector(`[data-ops-shop-field="${name}"]`)?.value ?? "";
+  const dialog = sourceElement?.closest?.(".ops-payment-dialog");
+  const existing = opsShopPaymentConfirmation?.inquiryId === inquiryId
+    ? opsShopPaymentConfirmation
+    : opsShopPaymentDrafts[inquiryId] || {};
+  const fieldValue = (name) => dialog?.querySelector(`[data-ops-shop-field="${name}"]`)?.value
+    ?? stageSection?.querySelector(`[data-ops-shop-field="${name}"]`)?.value
+    ?? existing[name]
+    ?? "";
   return {
     inquiryId,
+    paymentChoice: fieldValue("paymentChoice"),
     receivedAmount: fieldValue("receivedAmount"),
     paymentMethod: fieldValue("paymentMethod"),
+    referenceNumber: fieldValue("referenceNumber"),
     internalNote: fieldValue("internalNote"),
   };
 }
 
 function getOpsShopPaymentValidationMessage(item, draft) {
-  const amount = parseOpsQuoteMoney(draft.receivedAmount);
+  const expectedAmount = getOpsShopPaymentChoiceAmount(item, draft.paymentChoice);
+  const amount = parseOpsQuoteMoney(draft.receivedAmount || expectedAmount);
   const quoteTotal = Number(item?.quotedAmount);
+  const method = String(draft.paymentMethod || "").trim().toLowerCase();
   if (!Number.isFinite(amount) || amount <= 0) return "ENTER A VALID RECEIVED AMOUNT.";
   if (!Number.isFinite(quoteTotal) || quoteTotal <= 0) return "A POSITIVE APPROVED QUOTE IS REQUIRED.";
-  if (Math.round(amount * 100) !== Math.round(quoteTotal * 100)) return "RECEIVED AMOUNT MUST MATCH THE FULL QUOTE TOTAL.";
-  if (!SHOP_PAYMENT_METHODS.has(String(draft.paymentMethod || "").trim().toLowerCase())) return "SELECT A VALID PAYMENT METHOD.";
+  if (!["full", "down_payment"].includes(String(draft.paymentChoice || ""))) return "SELECT A VALID PAYMENT AMOUNT.";
+  if (draft.paymentChoice === "down_payment" && quoteTotal < 1000) return "FULL PAYMENT ONLY BELOW PHP 1,000.";
+  if (Math.round(amount * 100) !== Math.round(Number(expectedAmount) * 100)) return "RECEIVED AMOUNT MUST MATCH THE SELECTED PAYMENT AMOUNT.";
+  if (!SHOP_PAYMENT_METHODS.has(method) || method === "card") return "SELECT A VALID PAYMENT METHOD.";
+  if (["gcash", "bank_transfer", "other"].includes(method) && !String(draft.referenceNumber || "").trim()) return "REFERENCE NUMBER IS REQUIRED FOR DIGITAL METHODS.";
   if (String(draft.internalNote || "").trim().length > PAYMENT_INTERNAL_NOTE_MAX_LENGTH) return `INTERNAL NOTE MUST BE ${PAYMENT_INTERNAL_NOTE_MAX_LENGTH} CHARACTERS OR FEWER.`;
   return "";
 }
@@ -3843,18 +3891,14 @@ function openOpsShopPaymentConfirmation(inquiryId, sourceElement) {
     return;
   }
 
-  const draft = getOpsShopPaymentFormPayload(inquiryId, sourceElement);
-  const validationMessage = getOpsShopPaymentValidationMessage(item, draft);
+  const draft = getOpsShopPaymentDraft(item);
   opsShopPaymentDrafts = { ...opsShopPaymentDrafts, [inquiryId]: draft };
-  if (validationMessage) {
-    setOpsCustomerActionInlineMessage(sourceElement, validationMessage, "error");
-    return;
-  }
 
   opsShopPaymentConfirmation = {
     ...draft,
-    receivedAmount: Number(draft.receivedAmount),
+    receivedAmount: getOpsShopPaymentChoiceAmount(item, draft.paymentChoice),
     paymentMethod: String(draft.paymentMethod).trim().toLowerCase(),
+    referenceNumber: String(draft.referenceNumber || "").trim(),
     internalNote: String(draft.internalNote || "").trim(),
     idempotencyKey: `shop:${inquiryId}:${crypto.randomUUID()}`,
     status: "ready",
@@ -3867,8 +3911,19 @@ function openOpsShopPaymentConfirmation(inquiryId, sourceElement) {
 async function confirmOpsShopPayment(inquiryId) {
   const confirmation = opsShopPaymentConfirmation;
   if (!confirmation || confirmation.inquiryId !== inquiryId || confirmation.status === "loading") return;
+  const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
+  const draft = getOpsShopPaymentFormPayload(inquiryId, document.querySelector(`[data-ops-confirm-shop-payment="${CSS.escape(inquiryId)}"]`));
+  const validationMessage = getOpsShopPaymentValidationMessage(item, draft);
+  if (validationMessage) {
+    opsShopPaymentConfirmation = { ...confirmation, ...draft, status: "ready", error: validationMessage };
+    render();
+    return;
+  }
+  const receivedAmount = getOpsShopPaymentChoiceAmount(item, draft.paymentChoice);
+  const referenceNumber = String(draft.referenceNumber || "").trim();
+  const internalNote = [String(draft.internalNote || "").trim(), referenceNumber ? `Reference: ${referenceNumber}` : ""].filter(Boolean).join("\n");
 
-  opsShopPaymentConfirmation = { ...confirmation, status: "loading", error: "" };
+  opsShopPaymentConfirmation = { ...confirmation, ...draft, receivedAmount, status: "loading", error: "" };
   opsCustomerActionRequests = {
     ...opsCustomerActionRequests,
     [inquiryId]: { status: "loading", message: "CONFIRMING SHOP PAYMENT..." },
@@ -3878,9 +3933,9 @@ async function confirmOpsShopPayment(inquiryId) {
   try {
     const payload = await requestOpsCustomerAction(inquiryId, {
       action: "confirm_shop_payment",
-      receivedAmount: confirmation.receivedAmount,
-      paymentMethod: confirmation.paymentMethod,
-      internalNote: confirmation.internalNote,
+      receivedAmount,
+      paymentMethod: String(draft.paymentMethod).trim().toLowerCase(),
+      internalNote,
       idempotencyKey: confirmation.idempotencyKey,
     });
 
@@ -8036,14 +8091,24 @@ function bindOpsBoardEvents() {
 
   document.querySelectorAll("[data-ops-shop-field]").forEach((field) => {
     const updateDraft = () => {
+      const dialog = field.closest(".ops-payment-dialog");
       const stage = field.closest(".ops-stage-section");
-      const button = stage?.querySelector('[data-ops-customer-action="confirm_shop_payment"]');
-      const inquiryId = button?.dataset.opsCustomerId;
+      const button = dialog?.querySelector("[data-ops-confirm-shop-payment]") || stage?.querySelector('[data-ops-customer-action="confirm_shop_payment"]');
+      const inquiryId = button?.dataset.opsConfirmShopPayment || button?.dataset.opsCustomerId;
       if (!inquiryId) return;
-      opsShopPaymentDrafts = {
-        ...opsShopPaymentDrafts,
-        [inquiryId]: getOpsShopPaymentFormPayload(inquiryId, button),
-      };
+      const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
+      const draft = getOpsShopPaymentFormPayload(inquiryId, button);
+      opsShopPaymentDrafts = { ...opsShopPaymentDrafts, [inquiryId]: draft };
+      if (opsShopPaymentConfirmation?.inquiryId === inquiryId && item) {
+        opsShopPaymentConfirmation = {
+          ...opsShopPaymentConfirmation,
+          ...draft,
+          receivedAmount: getOpsShopPaymentChoiceAmount(item, draft.paymentChoice),
+          error: "",
+        };
+        render();
+        return;
+      }
       if (field.dataset.opsShopField === "internalNote") {
         const counter = field.parentElement?.querySelector(":scope > small:last-child");
         if (counter) counter.textContent = `${field.value.length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}`;
@@ -8060,6 +8125,12 @@ function bindOpsBoardEvents() {
         return;
       }
       await saveOpsCustomerAction(button.dataset.opsCustomerId, button.dataset.opsCustomerAction, button);
+    });
+  });
+
+  document.querySelectorAll("[data-ops-open-shop-payment]").forEach((button) => {
+    button.addEventListener("click", () => {
+      openOpsShopPaymentConfirmation(button.dataset.opsOpenShopPayment, button);
     });
   });
 

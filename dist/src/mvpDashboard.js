@@ -557,8 +557,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       <section class="mvp-inquiry-locked-shell">
          ${inquiryLockedHeader(item, stage)}
          ${inquiryTabs(activeTab)}
-         ${inquiryTabPanels(item, activeTab, stage, renderArtwork)}
-         ${typeof renderPayment === "function" ? renderPayment(item) : ""}
+         ${inquiryTabPanels(item, activeTab, stage, renderArtwork, renderPayment)}
          ${workflowPanel}
       </section>
     `, inquiryActionBar(item, action));
@@ -585,9 +584,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<nav class="mvp-inquiry-tabs" aria-label="Inquiry drawer tabs">${tabs.map(([id, label]) => `<button type="button" data-mvp-inquiry-tab="${id}" class="${activeTab === id ? "active" : ""}">${html(label)}</button>`).join("")}</nav>`;
   }
 
-  function inquiryTabPanels(item, activeTab, stage, renderArtwork) {
+  function inquiryTabPanels(item, activeTab, stage, renderArtwork, renderPayment) {
     const panels = [
-      ["details", inquiryDetailsTab(item)],
+      ["details", inquiryDetailsTab(item, stage, renderPayment)],
       ["request", inquiryRequestTab(item, renderArtwork)],
       ["notes", inquiryNotesTab(item)],
       ["history", inquiryHistoryTab(item)],
@@ -595,8 +594,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return panels.map(([id, content]) => `<div class="mvp-inquiry-tab-panel" data-mvp-inquiry-panel="${id}" ${activeTab === id ? "" : "hidden"}>${content}</div>`).join("");
   }
 
-  function inquiryDetailsTab(item) {
-    return `<div class="mvp-inquiry-detail-list">${inquiryDetailSection("CUSTOMER INFORMATION", `${detailLine("Contact", contactDisplay(item))}${item.company ? detailLine("Company", item.company) : ""}`)}${inquiryDetailSection("INQUIRY CONTEXT", `${detailLine("Inquiry Reference", item.id)}${detailLine("Needed Date", item.dueDate ? shortDate(item.dueDate) : "Not set")}${detailLine("Internal Status", internalStatus(item))}`)}${inquiryDetailSection("NEXT ACTION", detailLine("Current Next Action", item.next || "Review inquiry", true))}${inquiryFollowUpSection(item)}</div>`;
+  function inquiryDetailsTab(item, stage, renderPayment) {
+    const payment = typeof renderPayment === "function" ? renderPayment(item) : paymentSummary(item);
+    return `<div class="mvp-inquiry-detail-list">${inquirySummaryCards(item, stage)}${payment}</div>`;
   }
 
   function inquiryRequestTab(item, renderArtwork) {
@@ -747,6 +747,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryHistory(item) {
     const rows = [];
     if (item.updatedAt) rows.push({ title: "Last Updated", meta: dateTime(item.updatedAt) });
+    paymentHistoryRows(item).forEach((event) => rows.push(event));
     (Array.isArray(item.followUpEvents) ? item.followUpEvents : []).forEach((event) => {
       rows.push({
         title: `Follow-up: ${followUpOutcomeLabel(event.outcome)}`,
@@ -760,6 +761,53 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (confirmed(item)) rows.push({ title: "Order Created", meta: orderReference(item) });
     rows.push({ title: "Inquiry Created", meta: inquiryTimestamp(item).date });
     return rows;
+  }
+
+  function paymentHistoryRows(item) {
+    const rows = [];
+    (Array.isArray(item.paymentEvents) ? item.paymentEvents : []).forEach((event) => {
+      const title = paymentEventTitle(event.eventType);
+      const actor = event.source === "CUSTOMER"
+        ? "Customer"
+        : event.actorDisplayName || (event.actorRole ? roleLabel(event.actorRole) : "TRRY Admin");
+      const parts = [
+        actor,
+        event.amount != null ? money(event.amount) : "",
+        paymentMethodLabel(event.paymentMethod),
+      ].filter((value) => value && value !== "Not selected");
+      rows.push({
+        title,
+        meta: `${parts.join(" / ")}${event.createdAt ? ` / ${dateTime(event.createdAt)}` : ""}`,
+        note: event.internalNote || event.reviewNote || "",
+      });
+    });
+    if (!rows.some((row) => /payment confirmed|payment received/i.test(row.title))) {
+      const paid = amount(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount);
+      const paidAt = item.paymentVerifiedAt || item.paymentConfirmedAt;
+      if (paid || paidAt) {
+        rows.push({
+          title: key(item.paymentType) === "shop" ? "Shop Payment Received" : "Payment Verified",
+          meta: [item.paymentVerifiedBy || "TRRY Admin", paid ? money(paid) : "", paymentMethodLabel(item.paymentMethod), paidAt ? dateTime(paidAt) : ""].filter(Boolean).join(" / "),
+        });
+      }
+    }
+    if (item.paymentSelectedAt && key(item.paymentType) === "shop") {
+      rows.push({ title: "Payment Method Selected", meta: `Pay at Shop / ${dateTime(item.paymentSelectedAt)}` });
+    }
+    if (item.paymentProofSubmittedAt) {
+      rows.push({ title: "Receipt Submitted", meta: [paymentTypeLabel(item.paymentType), money(item.paymentSelectedAmount), dateTime(item.paymentProofSubmittedAt)].filter(Boolean).join(" / ") });
+    }
+    return rows;
+  }
+
+  function paymentEventTitle(value) {
+    const event = key(value);
+    if (event === "pay_at_shop_selected") return "PAY_AT_SHOP_SELECTED";
+    if (event === "shop_payment_confirmed") return "Shop Payment Received";
+    if (event === "online_payment_confirmed") return "Payment Verified";
+    if (event === "online_payment_review_started") return "Payment Review Started";
+    if (event === "online_payment_correction_requested") return "Receipt Correction Requested";
+    return labelFromKey(value);
   }
 
   function followUpOutcomeLabel(outcome) {
@@ -2070,6 +2118,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function paymentSummary(item) { const total = amount(item.quotedAmount); const selected = amount(item.paymentSelectedAmount); const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Method", paymentMethodLabel(item.paymentMethod)], ["Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Total Amount", money(total)], ["Amount Verified", money(paid)], ["Balance", money(balance)]]); }
   function paymentTypeLabel(value) { const text = key(value); if (text === "down_payment") return "50% Down Payment"; if (text === "full") return "Full Payment"; if (text === "shop") return "Pay at Shop"; return "Not selected"; }
   function paymentMethodLabel(value) { const text = key(value); if (text === "online") return "Pay Online"; if (text === "cash") return "Cash at Shop"; if (text === "gcash") return "GCash"; if (text === "bank_transfer") return "Bank Transfer"; if (text === "card") return "Card"; if (text === "other") return "Other"; return "Not selected"; }
+  function labelFromKey(value) { const text = String(value || "").trim(); return text ? text.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Payment Event"; }
   function amount(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
   function messageValue(message, labels) { for (const label of labels) { const match = String(message || "").match(new RegExp(`^${label}:\\s*(.+)$`, "im")); if (match?.[1]?.trim()) return match[1].trim(); } return ""; }
   function customerNotes(item) {
