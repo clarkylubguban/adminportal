@@ -22794,33 +22794,62 @@ pre,
 }
 
 .mvp-inquiries-page .mvp-table.inquiry {
-  min-width: 980px;
+  min-width: 1040px;
 }
 
 .mvp-inquiries-page .mvp-table.inquiry .mvp-table-head,
 .mvp-inquiries-page .mvp-table.inquiry .mvp-table-row {
-  grid-template-columns: 112px minmax(170px, 1.05fr) minmax(220px, 1.5fr) 118px 82px 118px 118px 132px;
+  display: grid;
+  grid-template-columns: 112px minmax(170px, 1.05fr) minmax(220px, 1.5fr) 118px 82px 128px 126px 150px;
 }
 
 .mvp-inquiries-page .mvp-table.inquiry .mvp-table-head {
+  background: #f7f8fa;
+  border-bottom: 1px solid #dfe3ea;
   color: #6b7280;
   font-size: 11px;
   font-weight: 850;
   letter-spacing: 0.02em;
   min-height: 34px;
+  text-transform: uppercase;
 }
 
-.mvp-inquiries-page .mvp-table.inquiry .mvp-table-row {
-  border-bottom: 1px solid #edf0f4;
-  min-height: 58px;
+.mvp-inquiries-page .mvp-table.inquiry .mvp-table-head > * {
+  align-items: center;
+  display: flex !important;
   padding: 0 12px;
 }
 
+.mvp-inquiries-page .mvp-table.inquiry .mvp-table-row {
+  background: #ffffff;
+  border-bottom: 1px solid #edf0f4;
+  min-height: 58px;
+  padding: 0;
+}
+
 .mvp-inquiries-page .mvp-table.inquiry .mvp-table-row > * {
+  align-items: center;
+  display: flex !important;
   min-width: 0;
   overflow: hidden;
+  padding: 0 12px;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.mvp-inquiries-page .mvp-table.inquiry .mvp-table-head > :nth-child(6),
+.mvp-inquiries-page .mvp-table.inquiry .mvp-table-head > :nth-child(7),
+.mvp-inquiries-page .mvp-table.inquiry .mvp-table-head > :nth-child(8),
+.mvp-inquiries-page .mvp-table.inquiry .mvp-table-row > :nth-child(6),
+.mvp-inquiries-page .mvp-table.inquiry .mvp-table-row > :nth-child(7),
+.mvp-inquiries-page .mvp-table.inquiry .mvp-table-row > :nth-child(8) {
+  overflow: visible;
+}
+
+.mvp-inquiries-page .mvp-table.inquiry .quote-status-badge,
+.mvp-inquiries-page .mvp-table.inquiry .mvp-due {
+  box-sizing: border-box;
+  height: 26px;
 }
 
 .mvp-inquiries-page .mvp-customer-cell,
@@ -22853,16 +22882,19 @@ pre,
 }
 
 .mvp-inquiries-page .mvp-status {
+  align-items: center;
   border: 1px solid #d6dce5;
-  border-radius: 999px;
-  display: inline-flex;
+  border-radius: var(--trry-radius-sm, 4px);
+  display: inline-flex !important;
   font-size: 11px;
   font-weight: 900;
   justify-content: center;
   line-height: 1;
   max-width: 100%;
+  min-height: 26px;
   padding: 6px 8px;
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .mvp-inquiries-page .mvp-status.new {
@@ -22890,9 +22922,16 @@ pre,
 }
 
 .mvp-inquiries-page .mvp-due {
+  align-items: center;
+  border-radius: var(--trry-radius-sm, 4px);
+  display: inline-flex !important;
   font-size: 11px;
+  justify-content: center;
+  line-height: 1;
+  min-height: 26px;
   min-width: 0;
   padding: 6px 8px;
+  white-space: nowrap;
 }
 
 @media (max-width: 1100px) {
@@ -22901,12 +22940,12 @@ pre,
   }
 
   .mvp-inquiries-page .mvp-table.inquiry {
-    min-width: 900px;
+    min-width: 980px;
   }
 
   .mvp-inquiries-page .mvp-table.inquiry .mvp-table-head,
   .mvp-inquiries-page .mvp-table.inquiry .mvp-table-row {
-    grid-template-columns: 104px minmax(155px, 1fr) minmax(190px, 1.35fr) 108px 74px 112px 108px 118px;
+    grid-template-columns: 104px minmax(155px, 1fr) minmax(190px, 1.35fr) 108px 74px 118px 118px 132px;
   }
 }
 
@@ -25880,9 +25919,9 @@ textarea,
   justify-content: center;
   letter-spacing: 0.02em;
   line-height: 1;
-  min-height: 24px;
+  min-height: 26px;
   min-width: 92px;
-  padding: 0 9px;
+  padding: 6px 9px;
   text-align: center;
   text-transform: uppercase;
   white-space: nowrap;
@@ -25926,6 +25965,7 @@ textarea,
 .mvp-table .quote-status-badge,
 .mvp-inquiry-mobile-card .quote-status-badge {
   justify-self: start;
+  max-width: 100%;
 }
 
 .mvp-inquiry-mobile-header .quote-status-badge {
@@ -25940,8 +25980,9 @@ textarea,
 @media (max-width: 430px) {
   .quote-status-badge {
     font-size: 9px;
+    min-height: 24px;
     min-width: 84px;
-    padding: 0 7px;
+    padding: 5px 7px;
   }
 
   .mvp-inquiry-mobile-header .quote-status-badge {
@@ -27240,6 +27281,10 @@ textarea,
   max-width: min(720px, calc(100vw - 32px));
 }
 
+.payment-review-dialog.receipt dl > div {
+  padding: 8px 10px;
+}
+
 .payment-receipt-preview {
   background: #f7f7f0;
   border: 1px solid #d7d7d2;
@@ -27406,6 +27451,15 @@ div.payment-receipt-preview {
   flex-wrap: wrap;
   gap: 8px;
   justify-content: flex-end;
+}
+
+.payment-review-dialog > div:last-child .payment-dialog-close-action,
+.ops-payment-dialog > div:last-child .ops-light-button {
+  min-height: 40px;
+}
+
+.ops-payment-dialog .ops-payment-confirmed-hero div {
+  padding: 8px 10px;
 }
 
 @media (max-width: 520px) {

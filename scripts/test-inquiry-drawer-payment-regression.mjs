@@ -148,9 +148,13 @@ assert.match(drawerHtml, /₱850/);
 assert.match(paymentView, /payment-receipt-preview fallback/, "failed image preview has a fallback instead of blank box");
 assert.match(paymentView, /payment-receipt-image-frame/, "image receipts render inside a bounded visible frame");
 assert.doesNotMatch(paymentView, /payment-review-heading[\s\S]+ops-payment-state-badge/, "online payment summary does not duplicate the section status badge");
+assert.match(styles, /grid-template-columns: 112px minmax\(170px, 1\.05fr\) minmax\(220px, 1\.5fr\) 118px 82px 128px 126px 150px/, "Inquiries status columns have Orders-style breathing room");
+assert.match(styles, /\.quote-status-badge \{[\s\S]*?border-radius: var\(--trry-radius-sm, 4px\)[\s\S]*?min-height: 26px[\s\S]*?padding: 6px 9px/, "quote badges stay rectangular and match table badge height");
+assert.match(styles, /\.mvp-inquiries-page \.mvp-due \{[\s\S]*?min-height: 26px[\s\S]*?white-space: nowrap/, "inquiry follow-up badges match table badge height without clipping");
 assert.match(styles, /object-fit: contain/, "receipt images use contain instead of crop or stretch");
 assert.match(styles, /max-height: 280px/, "mobile receipt preview is bounded");
 assert.match(styles, /min-height: 40px/, "payment modal action buttons meet 40px minimum height");
+assert.match(styles, /payment-dialog-close-action,[\s\S]*?\.ops-payment-dialog > div:last-child \.ops-light-button \{[\s\S]*?min-height: 40px/, "online and Pay at Shop modal close buttons have explicit 40px minimum height");
 assert.match(paymentView, /application\/pdf|OPEN PDF|payment-receipt-pdf/, "PDF receipt preview or OPEN PDF fallback exists");
 
 console.log("PASS Phase 9B4.1 inquiry drawer payment no-refresh, preview, currency, and state regressions");
