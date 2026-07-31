@@ -42,8 +42,8 @@ const eligible = {
 assert.equal(getPaymentAllowedError(eligible), "");
 assert.equal(getPaymentAllowedError({ ...eligible, artwork_status: "missing" }), "", "eligible legacy approved inquiry can prepare upload");
 assert.equal(getPaymentAllowedError({ ...eligible, artwork_status: null }), "", "eligible legacy blank artwork state can prepare upload");
+assert.equal(getPaymentAllowedError({ ...eligible, artwork_status: "approval_required" }), "", "payment readiness follows approved quote and open payment state");
 assert.equal(getPaymentAllowedError({ ...eligible, quote_status: "ready" }).code, "INQUIRY_NOT_PAYMENT_ELIGIBLE");
 assert.equal(getPaymentAllowedError({ ...eligible, payment_status: "proof_submitted" }).code, "PAYMENT_STATE_UNSUPPORTED");
-assert.equal(getPaymentAllowedError({ ...eligible, artwork_status: "approval_required" }).code, "INQUIRY_NOT_PAYMENT_ELIGIBLE");
 
 console.log("PASS customer payment upload receipt policy and eligibility");

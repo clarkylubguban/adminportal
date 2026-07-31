@@ -156,7 +156,6 @@ function buildPaymentUpdate(action, body, inquiry, now) {
 
 export function getPaymentAllowedError(inquiry) {
   const quoteStatus = cleanKey(inquiry.quote_status);
-  const artworkStatus = cleanKey(inquiry.artwork_status);
   const paymentStatus = cleanKey(inquiry.payment_status) || "required";
 
   if (quoteStatus !== "approved") {
@@ -170,9 +169,6 @@ export function getPaymentAllowedError(inquiry) {
   }
   if (!["required", "correction_required", "not_required"].includes(paymentStatus)) {
     return { status: 400, code: "PAYMENT_STATE_UNSUPPORTED", message: "Payment is not open for receipt changes." };
-  }
-  if (artworkStatus && !["approved", "missing"].includes(artworkStatus)) {
-    return { status: 400, code: "INQUIRY_NOT_PAYMENT_ELIGIBLE", message: "Approved artwork is required before payment." };
   }
   return "";
 }
