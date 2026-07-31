@@ -55,6 +55,17 @@ assert.equal(staff.permissions.canRequestCorrection, false);
 assert.equal(staff.internalNote, "");
 assert.equal(staff.history[0].internalNote, "");
 
+const downPaymentReview = normalizePaymentReview({
+  ...inquiry,
+  quoted_amount: 1050,
+  amount_due: 1050,
+  payment_type: "down_payment",
+  payment_selected_amount: 525,
+}, [], [], "admin");
+assert.equal(downPaymentReview.permissions.canConfirm, true);
+assert.equal(downPaymentReview.submittedAmount, 525);
+assert.equal(downPaymentReview.limitation, "");
+
 const calls = [];
 const baseDependencies = {
   featureEnabled: () => true,

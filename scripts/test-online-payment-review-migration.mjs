@@ -7,6 +7,10 @@ const staleFix = await readFile(
   "supabase/migrations/202607300010_online_payment_review_stale_version_fix.sql",
   "utf8",
 );
+const downPaymentFix = await readFile(
+  "supabase/migrations/202607310001_allow_admin_down_payment_confirmations.sql",
+  "utf8",
+);
 const parked = await readFile("supabase/migrations/202607260001_complete_payment_workflow.sql", "utf8");
 const payAtShop = await readFile("supabase/migrations/202607290008_pay_at_shop_admin_workflow.sql", "utf8");
 const customerApi = await readFile("api/inquiries/[id]/payments.js", "utf8");
@@ -73,5 +77,13 @@ assert.doesNotMatch(
 
 assert.notEqual(migration, parked, "new migration must not copy the parked migration");
 assert.notEqual(migration, payAtShop, "new migration must not edit or copy Pay at Shop");
+
+assert.match(downPaymentFix, /create or replace function public\.review_online_payment/i);
+assert.match(downPaymentFix, /coalesce\(v_inquiry\.payment_type, ''\) = 'down_payment' and v_quote_total >= 1000/i);
+assert.match(downPaymentFix, /v_expected_amount := round\(v_quote_total \* 0\.5, 2\)/i);
+assert.match(downPaymentFix, /v_next_status := 'down_payment_confirmed'/i);
+assert.match(downPaymentFix, /amount_due = case[\s\S]+v_remaining_balance/i);
+assert.match(downPaymentFix, /VERIFIED_AMOUNT_MISMATCH/);
+assert.doesNotMatch(downPaymentFix, /FULL_PAYMENT_ONLY/);
 
 console.log("PASS Phase 9A forward migration, atomic review RPC, and customer resubmission contract");

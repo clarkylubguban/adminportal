@@ -463,7 +463,7 @@ function cleanPaymentMethod(value) {
   return cleanText(value, 80).toLowerCase().replace(/[\s-]+/g, "_");
 }
 
-function buildUpdates(action, body, inquiry, now, adminUser = null) {
+export function buildUpdates(action, body, inquiry, now, adminUser = null) {
   if (isProductionActive(inquiry.production_stage)) return null;
 
   const quoteValues = getQuoteValues(body);
@@ -558,6 +558,7 @@ function buildUpdates(action, body, inquiry, now, adminUser = null) {
       payment_verified_amount: confirmedAmount,
       payment_verified_at: now,
       payment_verified_by: adminUser?.user_id || null,
+      amount_due: confirmation.remainingBalance,
       payment_review_note: null,
       payment_rejected_at: null,
     };
@@ -831,22 +832,42 @@ function getMoney(value) {
   return NaN;
 }
 
-function getConfirmedPaymentState(inquiry, amount) {
+export function getConfirmedPaymentState(inquiry, amount) {
   const total = Number(inquiry.quoted_amount);
   if (!Number.isFinite(total) || total <= 0) return { ok: false, error: "valid quote total required" };
   const roundedAmount = roundMoney(amount);
   const fullAmount = roundMoney(total);
   const downAmount = roundMoney(total * 0.5);
   const paymentType = String(inquiry.payment_type || "").trim().toLowerCase();
-  if (roundedAmount >= fullAmount) return { ok: true, status: "paid" };
-  if (total >= 1000 && (paymentType === "down_payment" || roundedAmount >= downAmount) && roundedAmount >= downAmount) {
-    return { ok: true, status: "down_payment_confirmed" };
+  const selectedAmount = Number(inquiry.payment_selected_amount);
+  const hasSelectedAmount = Number.isFinite(selectedAmount) && selectedAmount > 0;
+
+  if (amountsMatch(roundedAmount, fullAmount)) {
+    return { ok: true, status: "paid", paymentType: "full", remainingBalance: 0 };
+  }
+  if (total >= 1000 && amountsMatch(roundedAmount, downAmount)) {
+    if (paymentType && !["down_payment", "shop"].includes(paymentType)) {
+      return { ok: false, error: "confirmed amount must match the selected payment type" };
+    }
+    if (hasSelectedAmount && !amountsMatch(selectedAmount, downAmount)) {
+      return { ok: false, error: "confirmed amount must match the selected payment amount" };
+    }
+    return {
+      ok: true,
+      status: "down_payment_confirmed",
+      paymentType: "down_payment",
+      remainingBalance: roundMoney(fullAmount - downAmount),
+    };
   }
   return { ok: false, error: total >= 1000 ? "confirmed amount must match the 50% down payment or full quote total" : "confirmed amount must match the full quote total" };
 }
 
 function roundMoney(value) {
   return Math.round(Number(value) * 100) / 100;
+}
+
+function amountsMatch(left, right) {
+  return Math.abs(roundMoney(left) - roundMoney(right)) <= 0.009;
 }
 function numberOrNull(value) {
   const number = getMoney(value);

@@ -243,7 +243,9 @@ export function normalizePaymentReview(inquiry, events = [], profiles = [], role
     ),
   );
   const canWrite = REVIEW_ROLES.has(key(role));
-  const fullOnlineReceipt = paymentType === "full" && ONLINE_METHODS.has(paymentMethod) && hasReceipt;
+  const supportedOnlineReceipt = ["full", "down_payment"].includes(paymentType)
+    && ONLINE_METHODS.has(paymentMethod)
+    && hasReceipt;
 
   return {
     inquiryId: cleanText(inquiry.id, 80),
@@ -285,13 +287,11 @@ export function normalizePaymentReview(inquiry, events = [], profiles = [], role
       .filter(Boolean),
     permissions: {
       canRead: true,
-      canStartReview: canWrite && fullOnlineReceipt && paymentStatus === "proof_submitted",
-      canConfirm: canWrite && fullOnlineReceipt && REVIEWABLE_STATUSES.has(paymentStatus),
-      canRequestCorrection: canWrite && fullOnlineReceipt && REVIEWABLE_STATUSES.has(paymentStatus),
+      canStartReview: canWrite && supportedOnlineReceipt && paymentStatus === "proof_submitted",
+      canConfirm: canWrite && supportedOnlineReceipt && REVIEWABLE_STATUSES.has(paymentStatus),
+      canRequestCorrection: canWrite && supportedOnlineReceipt && REVIEWABLE_STATUSES.has(paymentStatus),
     },
-    limitation: paymentType === "down_payment"
-      ? "Down-payment confirmation is outside Phase 9A."
-      : paymentMethod === "online"
+    limitation: paymentMethod === "online"
         ? "A specific GCash or bank-transfer method is required."
         : "",
   };
@@ -492,19 +492,19 @@ function mapPaymentReviewError(error) {
   }
   if (code === "22023" || /INVALID_|_REQUIRED|_FORBIDDEN|_ONLY|_MISMATCH|_REVIEWABLE|_TOO_LONG|UNSAFE_/.test(message)) {
     const known = [
-      ["FULL_PAYMENT_ONLY", "Only full-payment receipts are supported in this review workflow."],
+      ["INVALID_PAYMENT_TYPE", "Receipt payment type must be full payment or 50% down payment."],
       ["ONLINE_PAYMENT_METHOD_REQUIRED", "A GCash or bank-transfer receipt is required."],
       ["APPROVED_QUOTE_REQUIRED", "An approved quotation is required."],
       ["APPROVED_ARTWORK_REQUIRED", "Approved artwork is required by the active customer receipt contract."],
       ["POSITIVE_QUOTE_REQUIRED", "A positive quotation total is required."],
       ["POSITIVE_AMOUNT_DUE_REQUIRED", "A positive amount due is required."],
-      ["SUBMITTED_AMOUNT_MISMATCH", "The submitted amount does not match the full amount due."],
+      ["SUBMITTED_AMOUNT_MISMATCH", "The submitted amount does not match the selected payment amount."],
       ["PAYMENT_PROOF_REQUIRED", "A submitted payment receipt is required."],
       ["UNSAFE_PAYMENT_PROOF_TYPE", "The submitted receipt type is not supported."],
       ["PAYMENT_PROOF_METADATA_MISMATCH", "The submitted receipt metadata does not match the stored file."],
       ["INVALID_PAYMENT_PROOF_SIZE", "The submitted receipt size is invalid."],
       ["PAYMENT_STATUS_NOT_REVIEWABLE", "This payment is not available for that review action."],
-      ["FULL_AMOUNT_DUE_REQUIRED", "Verified amount must match the full amount due."],
+      ["VERIFIED_AMOUNT_MISMATCH", "Verified amount must match the selected payment amount."],
       ["PAY_AT_SHOP_REVIEW_FORBIDDEN", "Pay at Shop uses its separate confirmation workflow."],
       ["PAYMENT_CORRECTION_REASON_REQUIRED", "Enter a clear correction reason."],
     ];

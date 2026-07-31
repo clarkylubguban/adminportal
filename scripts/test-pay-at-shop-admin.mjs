@@ -4,6 +4,10 @@ import { readFile } from "node:fs/promises";
 import { createMvpDashboard } from "../src/mvpDashboard.js";
 
 const migration = await readFile("supabase/migrations/202607290008_pay_at_shop_admin_workflow.sql", "utf8");
+const downPaymentFix = await readFile(
+  "supabase/migrations/202607310001_allow_admin_down_payment_confirmations.sql",
+  "utf8",
+);
 const api = await readFile("api/inquiries/[id]/customer-actions.js", "utf8");
 const customerPaymentsApi = await readFile("api/inquiries/[id]/payments.js", "utf8");
 const main = await readFile("src/main.js", "utf8");
@@ -20,6 +24,12 @@ assert.match(migration, /revoke all on table public\.inquiry_payment_events from
 assert.match(migration, /grant select on table public\.inquiry_payment_events to authenticated/i);
 assert.match(migration, /grant execute on function public\.confirm_inquiry_shop_payment[\s\S]+to authenticated/i);
 assert.doesNotMatch(migration, /odoo/i);
+assert.match(downPaymentFix, /create or replace function public\.confirm_inquiry_shop_payment/i);
+assert.match(downPaymentFix, /v_quote_total >= 1000 and v_received_amount = v_required_down_payment/i);
+assert.match(downPaymentFix, /v_next_status := 'down_payment_confirmed'/i);
+assert.match(downPaymentFix, /v_remaining_balance := round\(v_quote_total - v_required_down_payment, 2\)/i);
+assert.match(downPaymentFix, /APPROVED_PAYMENT_AMOUNT_REQUIRED/);
+assert.match(downPaymentFix, /insert into public\.inquiry_payment_events/i);
 
 assert.match(api, /ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW/);
 assert.match(api, /ENABLE_CUSTOMER_PAYMENT_WORKFLOW/);
