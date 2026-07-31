@@ -132,6 +132,7 @@ try {
 
   for (const [width, height, html] of [
     [1366, 900, managerHtml],
+    [1024, 900, managerHtml],
     [820, 1000, correctionHtml],
     [390, 844, correctionHtml],
   ]) {
@@ -164,7 +165,7 @@ try {
   await new Promise((resolve) => server.close(resolve));
 }
 
-console.log("PASS Phase 9A shared Inquiry/Order payment review component, Staff read-only state, and 1366/820/390 responsive QA");
+console.log("PASS Phase 9A shared Inquiry/Order payment review component, Staff read-only state, and 1366/1024/820/390 responsive QA");
 
 async function waitForCdp(debugPort) {
   for (let index = 0; index < 100; index += 1) {

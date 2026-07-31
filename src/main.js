@@ -3309,7 +3309,9 @@ function renderOpsShopPaymentDialog(item) {
     const remaining = Math.max(quoteTotal - paid, 0);
     const confirmationEvent = getOpsShopPaymentConfirmationEvent(item);
     const confirmedBy = confirmationEvent?.actorDisplayName || (confirmationEvent?.actorRole ? formatAdminRole(confirmationEvent.actorRole) : "TRRY Admin");
-    return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog shop-receiver" role="dialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><header><div><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">${remaining > 0 ? "Down payment confirmed" : "Fully paid"}</h3></div><button type="button" data-ops-cancel-shop-payment aria-label="Close payment dialog">X</button></header><dl><div><dt>Paid</dt><dd>${escapeHtml(formatOpsValue(paid))}</dd></div><div><dt>Remaining</dt><dd>${escapeHtml(formatOpsValue(remaining))}</dd></div><div><dt>Method</dt><dd>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</dd></div><div><dt>Received by</dt><dd>${escapeHtml(confirmedBy)}</dd></div><div><dt>Received</dt><dd>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</dd></div><div><dt>Quote total</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div></dl><div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button">CLOSE</button></div></section>`;
+    const title = remaining > 0 ? "DOWN PAYMENT CONFIRMED" : "FULLY PAID";
+    const paymentType = remaining > 0 ? "Down Payment" : "Full Payment";
+    return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog shop-receiver" role="dialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><header><div><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">${title}</h3></div><button type="button" data-ops-cancel-shop-payment aria-label="Close payment dialog">X</button></header><div class="ops-payment-confirmed-hero"><div><span>PAID</span><strong>${escapeHtml(formatOpsValue(paid))}</strong></div><div><span>REMAINING</span><strong>${escapeHtml(formatOpsValue(remaining))}</strong></div><div><span>METHOD</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>RECEIVED BY</span><strong>${escapeHtml(confirmedBy)}</strong></div><div><span>RECEIVED</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</strong></div></div><h4>PAYMENT DETAILS</h4><dl><div><dt>Quote total</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div><div><dt>Payment type</dt><dd>${escapeHtml(paymentType)}</dd></div>${item.paymentInternalNote ? `<div><dt>Internal note</dt><dd>${escapeHtml(item.paymentInternalNote)}</dd></div>` : ""}</dl><div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button">CLOSE</button></div></section>`;
   }
   const allowsDp = quoteTotal >= 1000;
   const amount = getOpsShopPaymentChoiceAmount(item, confirmation.paymentChoice);
@@ -3703,30 +3705,31 @@ function renderOpsPaymentStage(item) {
   const paymentTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
   const paymentPaid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) > 0 ? Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) : 0;
   const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
+  const isShopPaymentPending = isOpsShopPaymentPending(item);
+  const isShopPaymentConfirmed = isOpsShopPaymentConfirmed(item);
   const isBelowFullPaymentOnly = paymentTotal > 0 && paymentTotal < 1000 && !isOpsPaymentConfirmed(status);
-  if (!isBelowFullPaymentOnly) {
+  if (!isBelowFullPaymentOnly && !isShopPaymentPending && !isShopPaymentConfirmed) {
     body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
   }
 
-  if (isOpsShopPaymentPending(item) && isAdminPayAtShopUiEnabled()) {
+  if (isShopPaymentPending && isAdminPayAtShopUiEnabled()) {
     const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
     const requiredDp = quoteTotal >= 1000 ? getOpsShopPaymentChoiceAmount(item, "down_payment") : null;
-    body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">AWAITING SHOP PAYMENT</strong><h4>SHOP PAYMENT PENDING</h4><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div>${requiredDp ? `<div><span>Required DP</span><strong>${formatOpsValue(requiredDp)}</strong></div>` : ""}<div><span>Full-payment amount</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Customer-selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Selected</span><strong>${escapeHtml(item.paymentSelectedAt ? formatOpsTrackingDate(item.paymentSelectedAt) : "Selection time unavailable")}</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until an exact allowed shop payment is received and confirmed.</p></div>`;
+    body += `<div class="ops-shop-payment-state"><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div>${requiredDp ? `<div><span>Required DP</span><strong>${formatOpsValue(requiredDp)}</strong></div>` : ""}<div><span>Full-payment amount</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Customer-selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Selected</span><strong>${escapeHtml(item.paymentSelectedAt ? formatOpsTrackingDate(item.paymentSelectedAt) : "Selection time unavailable")}</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until an exact allowed shop payment is received and confirmed.</p></div>`;
     if (canOpsConfirmShopPayment(item)) {
       body += `<div class="ops-stage-actions"><button class="ops-gold-button mini" data-ops-open-shop-payment="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>RECEIVE PAYMENT</button></div>`;
     } else {
       body += `<p class="ops-stage-muted"><strong>Owner/Admin confirmation required.</strong></p>`;
     }
     body += renderOpsPaymentHistory(item);
-  } else if (isOpsShopPaymentConfirmed(item)) {
+  } else if (isShopPaymentConfirmed) {
     const confirmationEvent = getOpsShopPaymentConfirmationEvent(item);
     const confirmedBy = confirmationEvent?.actorDisplayName || (confirmationEvent?.actorRole ? formatAdminRole(confirmationEvent.actorRole) : "TRRY Admin");
     const paid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) || 0;
     const remaining = Math.max(paymentTotal - paid, 0);
-    const title = remaining > 0 ? "DOWN PAYMENT CONFIRMED" : "FULLY PAID";
-    body += `<div class="ops-shop-payment-state confirmed"><strong class="ops-payment-state-badge confirmed">${title}</strong><div class="ops-stage-mini-grid"><div><span>Paid</span><strong>${formatOpsValue(paid)}</strong></div><div><span>Remaining</span><strong>${formatOpsValue(remaining)}</strong></div><div><span>Method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Received by</span><strong>${escapeHtml(confirmedBy)}</strong></div><div><span>Received</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</strong></div>${item.paymentInternalNote ? `<div class="wide"><span>Internal note</span><strong>${escapeHtml(item.paymentInternalNote)}</strong></div>` : ""}</div><div class="ops-stage-actions"><button class="ops-dark-button mini" data-ops-view-shop-payment="${escapeHtml(item.id)}" type="button">VIEW PAYMENT</button></div></div>${renderOpsPaymentHistory(item)}`;
+    body += `<div class="ops-shop-payment-state confirmed"><div class="ops-stage-mini-grid"><div><span>Paid</span><strong>${formatOpsValue(paid)}</strong></div><div><span>Remaining</span><strong>${formatOpsValue(remaining)}</strong></div><div><span>Method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Received by</span><strong>${escapeHtml(confirmedBy)}</strong></div><div><span>Received</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</strong></div>${item.paymentInternalNote ? `<div class="wide"><span>Internal note</span><strong>${escapeHtml(item.paymentInternalNote)}</strong></div>` : ""}</div><div class="ops-stage-actions"><button class="ops-dark-button mini" data-ops-view-shop-payment="${escapeHtml(item.id)}" type="button">VIEW PAYMENT</button></div></div>${renderOpsPaymentHistory(item)}`;
   } else if (isBelowFullPaymentOnly) {
-    body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">FULL PAYMENT REQUIRED</strong><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Full payment is required for quotations below ${formatOpsValue(1000)}. Production remains blocked until payment is confirmed.</p></div>`;
+    body += `<div class="ops-shop-payment-state"><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Full payment is required for quotations below ${formatOpsValue(1000)}. Production remains blocked until payment is confirmed.</p></div>`;
   } else if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) {
     body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">AWAITING PAYMENT</strong><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until payment is confirmed.</p></div>`;
   } else if (isOpsPaymentConfirmed(status)) {
@@ -3746,9 +3749,9 @@ function renderOpsPaymentStage(item) {
 
   if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW RECEIPT NEEDED</strong>${escapeHtml(item.paymentReviewNote || "Replacement receipt requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
 
-  const stageStatus = isOpsShopPaymentPending(item)
-    ? "PAY AT SHOP"
-    : isOpsShopPaymentConfirmed(item)
+  const stageStatus = isShopPaymentPending
+    ? "AWAITING SHOP PAYMENT"
+    : isShopPaymentConfirmed
       ? (paymentBalance > 0 ? "DOWN PAYMENT CONFIRMED" : "FULLY PAID")
       : isBelowFullPaymentOnly
         ? "FULL PAYMENT REQUIRED"

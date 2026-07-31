@@ -26969,14 +26969,14 @@ textarea,
   display: grid;
   width: min(430px, calc(100vw - 32px));
   max-height: calc(100vh - 32px);
-  gap: 14px;
+  gap: 12px;
   overflow: auto;
   transform: translate(-50%, -50%);
   border: 1px solid #111111;
   border-radius: 6px;
-  padding: 22px;
+  padding: 18px;
   background: #ffffff;
-  box-shadow: 0 22px 70px rgb(0 0 0 / 30%);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 22%);
 }
 
 .ops-payment-dialog > span {
@@ -27024,8 +27024,16 @@ textarea,
 
 .ops-payment-dialog h3 {
   color: #111111;
-  font-size: 20px;
+  font-size: 18px;
   line-height: 1.25;
+}
+
+.ops-payment-dialog h4 {
+  margin: 0;
+  color: #111111;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
 }
 
 .ops-payment-dialog > p {
@@ -27042,7 +27050,7 @@ textarea,
 
 .ops-payment-dialog dl div {
   display: grid;
-  grid-template-columns: 120px minmax(0, 1fr);
+  grid-template-columns: 112px minmax(0, 1fr);
   gap: 12px;
   border-top: 1px solid #e4e4e4;
   padding-top: 8px;
@@ -27258,6 +27266,16 @@ div.payment-receipt-preview {
   padding: 18px;
 }
 
+.payment-receipt-preview.image-error {
+  align-items: center;
+  color: #555555;
+  flex-direction: column;
+  font-size: 12px;
+  font-weight: 800;
+  justify-content: center;
+  padding: 18px;
+}
+
 .payment-receipt-preview.fallback div {
   display: flex;
   flex-wrap: wrap;
@@ -27268,6 +27286,33 @@ div.payment-receipt-preview {
 
 .payment-receipt-image-link {
   display: block;
+}
+
+.payment-receipt-image-frame {
+  background: #ffffff;
+  border: 1px solid #111111;
+  display: grid;
+  min-height: 160px;
+  place-items: center;
+}
+
+.payment-receipt-image-frame .payment-receipt-preview {
+  border: 0;
+  max-height: min(340px, 40vh);
+}
+
+.payment-receipt-image-frame .image-error {
+  display: none;
+  min-height: 160px;
+  text-align: center;
+}
+
+.payment-receipt-image-frame.failed img {
+  display: none;
+}
+
+.payment-receipt-image-frame.failed .image-error {
+  display: flex;
 }
 
 .payment-review-dialog > span {
@@ -27287,7 +27332,8 @@ div.payment-receipt-preview {
   letter-spacing: 0;
 }
 
-.payment-confirmed-hero {
+.payment-confirmed-hero,
+.ops-payment-confirmed-hero {
   border: 1px solid #111111;
   display: grid;
   gap: 1px;
@@ -27295,7 +27341,8 @@ div.payment-receipt-preview {
   overflow: hidden;
 }
 
-.payment-confirmed-hero div {
+.payment-confirmed-hero div,
+.ops-payment-confirmed-hero div {
   background: #ffffff;
   display: grid;
   gap: 4px;
@@ -27303,17 +27350,20 @@ div.payment-receipt-preview {
   padding: 10px 12px;
 }
 
-.payment-confirmed-hero div:first-child {
+.payment-confirmed-hero div:first-child,
+.ops-payment-confirmed-hero div:first-child {
   background: #ddff4f;
 }
 
-.payment-confirmed-hero span {
+.payment-confirmed-hero span,
+.ops-payment-confirmed-hero span {
   color: #111111;
   font-size: 10px;
   font-weight: 900;
 }
 
-.payment-confirmed-hero strong {
+.payment-confirmed-hero strong,
+.ops-payment-confirmed-hero strong {
   color: #111111;
   font-size: 14px;
   overflow-wrap: break-word;
@@ -27382,8 +27432,13 @@ div.payment-receipt-preview {
     height: 260px;
   }
 
-  .payment-confirmed-hero {
+  .payment-confirmed-hero,
+  .ops-payment-confirmed-hero {
     grid-template-columns: minmax(0, 1fr);
+  }
+
+  .payment-receipt-image-frame .payment-receipt-preview {
+    max-height: 280px;
   }
 
   .payment-review-dialog > div:last-child button {

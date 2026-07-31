@@ -6,6 +6,7 @@ import { renderOnlinePaymentReview } from "../src/paymentReviewView.js";
 const main = await readFile("src/main.js", "utf8");
 const dashboardSource = await readFile("src/mvpDashboard.js", "utf8");
 const paymentView = await readFile("src/paymentReviewView.js", "utf8");
+const styles = await readFile("src/styles.css", "utf8");
 
 const functionBody = (name) => {
   const start = main.indexOf(`function ${name}`) >= 0
@@ -19,6 +20,11 @@ const functionBody = (name) => {
 };
 
 const loadPayment = functionBody("loadOnlinePaymentReview");
+const replacePayment = functionBody("replaceActiveInquiryPaymentSection");
+const openPaymentDialog = functionBody("openOnlinePaymentDialog");
+const closePaymentDialog = functionBody("closeOnlinePaymentDialog");
+const renderPaymentStage = functionBody("renderOpsPaymentStage");
+const renderShopDialog = functionBody("renderOpsShopPaymentDialog");
 assert.doesNotMatch(loadPayment, /\brender\(\)/, "payment fetch does not full-render the drawer");
 assert.match(loadPayment, /replaceActiveInquiryPaymentSection\(inquiryId\)/, "payment fetch updates only payment container");
 assert.match(loadPayment, /mvpDashboard\.state\.inquiryId[\s\S]+requestInquiryId/, "stale online payment responses are guarded");
@@ -26,10 +32,23 @@ assert.match(main, /onlinePaymentReviewByInquiry\[inquiryId\]/, "payment cache i
 assert.match(main, /\["loading", "loaded"\]\.includes/, "payment cache uses loading/loaded states to prevent duplicate fetches");
 assert.match(main, /refreshOpsInquiryDataForPayment\(inquiryId\)/, "payment mutation refreshes payment data without route fetch churn");
 assert.match(dashboardSource, /renderInquiryHistoryPanel: inquiryHistoryTab/, "affected history panel can be refreshed directly");
+assert.match(replacePayment, /const scrollTop = drawerBody\?\.scrollTop/, "drawer scroll is captured before payment replacement");
+assert.match(replacePayment, /drawerBody\.scrollTop = scrollTop/, "drawer scroll is restored after payment replacement");
+assert.doesNotMatch(openPaymentDialog, /\brender\(\)/, "opening online payment modal does not full-render the drawer");
+assert.doesNotMatch(closePaymentDialog, /\brender\(\)/, "closing online payment modal does not full-render the drawer");
 assert.doesNotMatch(main, /PAYMENT WORKFLOW PARKED/, "parked payment copy is removed");
 assert.match(main, /FULL PAYMENT REQUIRED/, "below-threshold full-payment state is present");
 assert.match(main, /Full payment is required for quotations below \$\{formatOpsValue\(1000\)\}/, "below-threshold notice uses peso formatter");
 assert.doesNotMatch(main, /FULL PAYMENT ONLY BELOW PHP/, "payment validation does not use PHP currency copy");
+assert.match(renderPaymentStage, /const isShopPaymentPending = isOpsShopPaymentPending\(item\)/, "Pay at Shop pending state is explicit");
+assert.match(renderPaymentStage, /const isShopPaymentConfirmed = isOpsShopPaymentConfirmed\(item\)/, "Pay at Shop confirmed state is explicit");
+assert.match(renderPaymentStage, /if \(!isBelowFullPaymentOnly && !isShopPaymentPending && !isShopPaymentConfirmed\)/, "self-contained payment states skip duplicate generic summary");
+assert.match(renderPaymentStage, /else if \(isBelowFullPaymentOnly\)/, "below-threshold state uses a single dedicated branch");
+assert.match(renderPaymentStage, /\? "AWAITING SHOP PAYMENT"/, "Pay at Shop pending status is shown in the section badge");
+assert.doesNotMatch(renderPaymentStage, /<strong class="ops-payment-state-badge pending">FULL PAYMENT REQUIRED<\/strong>/, "below-threshold drawer body does not duplicate the section badge");
+assert.doesNotMatch(renderPaymentStage, /<strong class="ops-payment-state-badge confirmed">\$\{title\}<\/strong>/, "Pay at Shop confirmed drawer body does not duplicate the section badge");
+assert.match(renderShopDialog, /ops-payment-confirmed-hero/, "Pay at Shop view modal has a compact confirmed-payment summary");
+assert.match(renderShopDialog, /PAYMENT DETAILS/, "Pay at Shop view modal separates payment details from summary values");
 
 const confirmedPayment = {
   inquiryId: "TRRY-WZTBV9U2",
@@ -73,6 +92,8 @@ assert.match(confirmedModal, /PAID[\s\S]*₱525/);
 assert.match(confirmedModal, /REMAINING[\s\S]*₱525/);
 assert.match(confirmedModal, /RECEIPT DETAILS/);
 assert.match(confirmedModal, /QA-P9B2-ONLINE-DP-REF/);
+assert.match(confirmedModal, /payment-receipt-image-frame/);
+assert.match(confirmedModal, /onerror=/);
 assert.doesNotMatch(confirmedModal, /Confirmed DP|Remaining after confirmation/);
 assert.match(confirmedModal, /data-payment-review-cancel aria-label="Close payment dialog"|>CLOSE</);
 
@@ -125,6 +146,11 @@ assert.doesNotMatch(drawerHtml, /PAYMENT WORKFLOW PARKED|Required DP|50%/);
 assert.match(drawerHtml, /₱850/);
 
 assert.match(paymentView, /payment-receipt-preview fallback/, "failed image preview has a fallback instead of blank box");
+assert.match(paymentView, /payment-receipt-image-frame/, "image receipts render inside a bounded visible frame");
+assert.doesNotMatch(paymentView, /payment-review-heading[\s\S]+ops-payment-state-badge/, "online payment summary does not duplicate the section status badge");
+assert.match(styles, /object-fit: contain/, "receipt images use contain instead of crop or stretch");
+assert.match(styles, /max-height: 280px/, "mobile receipt preview is bounded");
+assert.match(styles, /min-height: 40px/, "payment modal action buttons meet 40px minimum height");
 assert.match(paymentView, /application\/pdf|OPEN PDF|payment-receipt-pdf/, "PDF receipt preview or OPEN PDF fallback exists");
 
 console.log("PASS Phase 9B4.1 inquiry drawer payment no-refresh, preview, currency, and state regressions");

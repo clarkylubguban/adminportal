@@ -69,9 +69,6 @@ export function renderOnlinePaymentReview(item, state = {}) {
     ${feedback}
     ${limitation}
     <span class="payment-review-compat" aria-hidden="true">VIEW RECEIPT CONFIRM PAYMENT REQUEST CORRECTION ONLINE PAYMENT REVIEW STARTED</span>
-    <div class="payment-review-heading">
-      <strong class="ops-payment-state-badge ${remaining === 0 && paid > 0 ? "confirmed" : "pending"}">${html(status)}</strong>
-    </div>
     <dl class="payment-review-grid compact">
       ${canReview ? detail("Type", getPaymentTypeLabel(payment.paymentType)) : ""}
       ${canReview ? detail("Expected amount", money(expected)) : ""}
@@ -196,7 +193,7 @@ function renderReceiptPreview(inquiryId, proof, receipt, state) {
   if (contentType.includes("pdf")) {
     return `<div class="payment-receipt-pdf"><iframe class="payment-receipt-preview" title="Payment receipt preview" src="${html(url)}"></iframe><a class="ops-dark-button mini" href="${html(url)}" target="_blank" rel="noopener noreferrer">OPEN PDF</a></div>`;
   }
-  return `<a class="payment-receipt-image-link" href="${html(url)}" target="_blank" rel="noopener noreferrer"><img class="payment-receipt-preview" alt="Payment receipt preview" src="${html(url)}"></a>`;
+  return `<a class="payment-receipt-image-link" href="${html(url)}" target="_blank" rel="noopener noreferrer"><span class="payment-receipt-image-frame"><img class="payment-receipt-preview" alt="Payment receipt preview" src="${html(url)}" onerror="this.closest('.payment-receipt-image-frame')?.classList.add('failed')" onload="this.closest('.payment-receipt-image-frame')?.classList.add('loaded')"><span class="payment-receipt-preview fallback image-error"><strong>Receipt preview unavailable.</strong><small>Open the receipt or retry the preview.</small></span></span></a>`;
 }
 
 function paymentShell(status, body) {
