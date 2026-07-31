@@ -1,9 +1,12 @@
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
+import {
+  RECEIPT_BUCKET,
+  isSafeReceiptPath,
+  receiptExtensionsMatch,
+  sanitizeReceiptFilename,
+  validateReceiptUploadMetadata,
+} from "../../_lib/receiptValidation.js";
 
-const RECEIPT_BUCKET = "inquiry-artworks";
-const MAX_RECEIPT_SIZE = 10 * 1024 * 1024;
-const RECEIPT_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
-const RECEIPT_CONTENT_TYPES = new Set(["image/png", "image/jpeg", "application/pdf"]);
 const ONLINE_PAYMENT_METHODS = new Set(["gcash", "bank_transfer"]);
 const PAYMENT_SELECT = [
   "id",
@@ -53,22 +56,21 @@ export default async function handler(request, response) {
     const now = new Date().toISOString();
 
     if (action === "prepare_receipt_upload") {
-      const filename = sanitizeFilename(cleanText(body.filename, 180));
-      const fileSize = Number(body.fileSize);
-      const contentType = cleanText(body.contentType, 120) || "application/octet-stream";
       const validation = getPaymentAllowedError(inquiry);
-      if (validation) return sendJson(response, 400, { ok: false, error: validation });
-      if (!filename || !RECEIPT_EXTENSIONS.has(getExtension(filename))) return sendJson(response, 400, { ok: false, error: "upload PNG, JPG, or PDF receipt" });
-      if (!Number.isFinite(fileSize) || fileSize <= 0 || fileSize > MAX_RECEIPT_SIZE) return sendJson(response, 400, { ok: false, error: "receipt must be between 1 byte and 10 MB" });
-      if (!isApprovedReceiptType(filename, contentType)) return sendJson(response, 400, { ok: false, error: "receipt content type does not match the file" });
+      if (validation) return paymentError(response, validation.status, validation.code, validation.message);
+      const receipt = validateReceiptUploadMetadata(body);
+      if (!receipt.ok) return paymentError(response, 400, receipt.code, receipt.message);
 
-      const receiptPath = `${inquiryReference}/payments/${crypto.randomUUID()}-${filename}`;
+      const receiptPath = `${inquiryReference}/payments/${crypto.randomUUID()}-${receipt.filename}`;
       const { data: signed, error: signedError } = await supabase.storage
         .from(RECEIPT_BUCKET)
         .createSignedUploadUrl(receiptPath, { upsert: false });
-      if (signedError || !signed?.signedUrl) throw signedError || new Error("Signed upload URL missing.");
+      if (signedError || !signed?.signedUrl) {
+        console.error("Receipt signed upload preparation failed.", { code: signedError?.code || "SIGNED_URL_MISSING" });
+        return paymentError(response, 503, "STORAGE_UPLOAD_UNAVAILABLE", "Receipt upload is temporarily unavailable.");
+      }
 
-      return sendJson(response, 200, { ok: true, upload: { signedUrl: signed.signedUrl, path: receiptPath, contentType } });
+      return sendJson(response, 200, { ok: true, upload: { signedUrl: signed.signedUrl, path: receiptPath, contentType: receipt.contentType } });
     }
 
     const updates = buildPaymentUpdate(action, body, inquiry, now);
@@ -118,16 +120,20 @@ function buildPaymentUpdate(action, body, inquiry, now) {
   const paymentMethod = cleanPaymentMethod(body.paymentMethod);
   const expected = expectedPaymentAmount(inquiry, paymentType);
   const proofPath = cleanText(body.proofPath, 500);
-  const receiptFilename = sanitizeFilename(cleanText(body.receiptFilename, 180));
-  const receiptContentType = cleanText(body.receiptContentType, 120).toLowerCase();
+  const receiptFilename = sanitizeReceiptFilename(cleanText(body.receiptFilename, 180));
+  const receiptContentType = cleanText(body.receiptContentType, 120).toLowerCase() || "application/octet-stream";
   const receiptSize = Number(body.receiptSize);
+  const receipt = validateReceiptUploadMetadata({
+    filename: receiptFilename,
+    fileSize: receiptSize,
+    contentType: receiptContentType,
+  });
   if (!Number.isFinite(selectedAmount) || selectedAmount <= 0) return { error: "invalid payment amount" };
   if (!expected.ok || Math.abs(selectedAmount - expected.amount) > 0.009) return { error: expected.error || "payment amount does not match quote" };
   if (!ONLINE_PAYMENT_METHODS.has(paymentMethod)) return { error: "select GCash or bank transfer" };
-  if (!isValidReceiptPath(proofPath, inquiry.id)) return { error: "invalid receipt upload" };
-  if (!receiptFilename || !isApprovedReceiptType(receiptFilename, receiptContentType)) return { error: "receipt metadata is invalid" };
+  if (!isSafeReceiptPath(proofPath, inquiry.id)) return { error: "invalid receipt upload" };
+  if (!receipt.ok) return { error: receipt.message };
   if (!receiptExtensionsMatch(proofPath, receiptFilename)) return { error: "receipt metadata does not match the upload" };
-  if (!Number.isFinite(receiptSize) || receiptSize <= 0 || receiptSize > MAX_RECEIPT_SIZE) return { error: "receipt must be between 1 byte and 10 MB" };
 
   return {
     values: {
@@ -148,11 +154,26 @@ function buildPaymentUpdate(action, body, inquiry, now) {
   };
 }
 
-function getPaymentAllowedError(inquiry) {
-  if (String(inquiry.quote_status || "") !== "approved") return "approved quote required";
-  if (String(inquiry.artwork_status || "") !== "approved") return "approved artwork required";
-  if (!(Number(inquiry.quoted_amount) > 0)) return "valid quote total required";
-  if (["proof_submitted", "under_review", "down_payment_confirmed", "full_payment_confirmed", "partially_paid", "paid", "confirmed"].includes(String(inquiry.payment_status || ""))) return "payment is not open for changes";
+export function getPaymentAllowedError(inquiry) {
+  const quoteStatus = cleanKey(inquiry.quote_status);
+  const artworkStatus = cleanKey(inquiry.artwork_status);
+  const paymentStatus = cleanKey(inquiry.payment_status) || "required";
+
+  if (quoteStatus !== "approved") {
+    return { status: 400, code: "INQUIRY_NOT_PAYMENT_ELIGIBLE", message: "Approved quotation is required before payment." };
+  }
+  if (!(Number(inquiry.quoted_amount) > 0)) {
+    return { status: 400, code: "INQUIRY_NOT_PAYMENT_ELIGIBLE", message: "A valid quote total is required before payment." };
+  }
+  if (["proof_submitted", "under_review", "down_payment_confirmed", "full_payment_confirmed", "partially_paid", "paid", "confirmed"].includes(paymentStatus)) {
+    return { status: 400, code: "PAYMENT_STATE_UNSUPPORTED", message: "Payment is not open for receipt changes." };
+  }
+  if (!["required", "correction_required", "not_required"].includes(paymentStatus)) {
+    return { status: 400, code: "PAYMENT_STATE_UNSUPPORTED", message: "Payment is not open for receipt changes." };
+  }
+  if (artworkStatus && !["approved", "missing"].includes(artworkStatus)) {
+    return { status: 400, code: "INQUIRY_NOT_PAYMENT_ELIGIBLE", message: "Approved artwork is required before payment." };
+  }
   return "";
 }
 
@@ -208,26 +229,6 @@ function cleanPaymentMethod(value) {
   return ["cash", "gcash", "bank_transfer", "card", "other"].includes(key) ? key : "";
 }
 
-function isValidReceiptPath(path, inquiryReference) {
-  return path.startsWith(`${inquiryReference}/payments/`) && RECEIPT_EXTENSIONS.has(getExtension(path));
-}
-
-function isApprovedReceiptType(filename, contentType) {
-  const extension = getExtension(filename);
-  const normalizedType = cleanText(contentType, 120).toLowerCase();
-  if (!RECEIPT_CONTENT_TYPES.has(normalizedType)) return false;
-  if (extension === "pdf") return normalizedType === "application/pdf";
-  if (extension === "png") return normalizedType === "image/png";
-  return ["jpg", "jpeg"].includes(extension) && normalizedType === "image/jpeg";
-}
-
-function receiptExtensionsMatch(path, filename) {
-  const pathExtension = getExtension(path);
-  const filenameExtension = getExtension(filename);
-  if (["jpg", "jpeg"].includes(pathExtension) && ["jpg", "jpeg"].includes(filenameExtension)) return true;
-  return pathExtension === filenameExtension;
-}
-
 function getMoney(value) {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string") {
@@ -250,14 +251,12 @@ function cleanText(value, maxLength) {
   return typeof value === "string" ? value.trim().slice(0, maxLength) : "";
 }
 
-function sanitizeFilename(filename) {
-  const normalized = filename.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
-  return normalized.replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/-+/g, "-").replace(/^[-.]+|[-.]+$/g, "") || "";
+function cleanKey(value) {
+  return cleanText(value, 80).toLowerCase().replace(/[\s-]+/g, "_");
 }
 
-function getExtension(filename) {
-  const match = filename.toLowerCase().match(/\.([a-z0-9]+)$/);
-  return match ? match[1] : "";
+function paymentError(response, status, code, message) {
+  return sendJson(response, status, { ok: false, error: message, errorCode: code });
 }
 
 function sendJson(response, statusCode, payload) {

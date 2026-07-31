@@ -2,6 +2,14 @@ import {
   createServerSupabaseClient,
   createServerUserSupabaseClient,
 } from "./supabaseServer.js";
+import {
+  RECEIPT_BUCKET,
+  isAcceptedReceiptType,
+  isSafeReceiptPath,
+  receiptExtension,
+  receiptTypesMatch,
+  sanitizeReceiptFilename,
+} from "./receiptValidation.js";
 
 const PORTAL_ROLES = new Set(["owner", "admin", "staff"]);
 const REVIEW_ROLES = new Set(["owner", "admin"]);
@@ -12,9 +20,6 @@ const REVIEW_ACTIONS = new Set([
 ]);
 const REVIEWABLE_STATUSES = new Set(["proof_submitted", "under_review"]);
 const ONLINE_METHODS = new Set(["gcash", "bank_transfer"]);
-const RECEIPT_BUCKET = "inquiry-artworks";
-const RECEIPT_TYPES = new Set(["image/png", "image/jpeg", "application/pdf"]);
-const RECEIPT_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
 const SIGNED_URL_EXPIRES_IN_SECONDS = 300;
 const PAYMENT_SELECT = [
   "id",
@@ -176,15 +181,15 @@ export function createPaymentReviewHandler(overrides = {}) {
 async function handleProofRequest(response, dependencies, serviceClient, inquiry) {
   const path = cleanText(inquiry.payment_proof_path, 500);
   const contentType = cleanText(inquiry.payment_receipt_content_type, 120).toLowerCase();
-  const filename = sanitizeFilename(cleanText(inquiry.payment_receipt_filename, 180));
+  const filename = sanitizeReceiptFilename(cleanText(inquiry.payment_receipt_filename, 180));
 
   if (!path || !filename) {
     return sendJson(response, 404, paymentError("PAYMENT_PROOF_NOT_FOUND", "Payment receipt is not available."));
   }
   if (
     !isSafeReceiptPath(path, inquiry.id)
-    || !isSafeReceiptType(filename, contentType)
-    || !isSafeReceiptType(path, contentType)
+    || !isAcceptedReceiptType(filename, contentType)
+    || !isAcceptedReceiptType(path, contentType)
   ) {
     return sendJson(response, 415, paymentError(
       "PAYMENT_PROOF_UNSAFE",
@@ -198,7 +203,13 @@ async function handleProofRequest(response, dependencies, serviceClient, inquiry
   }
 
   const storedType = cleanText(object.contentType, 120).toLowerCase();
-  if (!storedType || !RECEIPT_TYPES.has(storedType) || !typesMatch(contentType, storedType)) {
+  if (storedType && !isAcceptedReceiptType(filename, storedType)) {
+    return sendJson(response, 415, paymentError(
+      "PAYMENT_PROOF_UNSAFE",
+      "Payment receipt type is not supported.",
+    ));
+  }
+  if (!receiptTypesMatch(contentType, storedType)) {
     return sendJson(response, 415, paymentError(
       "PAYMENT_PROOF_UNSAFE",
       "Payment receipt type is not supported.",
@@ -236,8 +247,8 @@ export function normalizePaymentReview(inquiry, events = [], profiles = [], role
   const amountDue = positiveMoney(inquiry.amount_due) ?? positiveMoney(inquiry.quoted_amount);
   const hasReceipt = Boolean(
     isSafeReceiptPath(inquiry.payment_proof_path, inquiry.id)
-    && sanitizeFilename(cleanText(inquiry.payment_receipt_filename, 180))
-    && isSafeReceiptType(
+    && sanitizeReceiptFilename(cleanText(inquiry.payment_receipt_filename, 180))
+    && isAcceptedReceiptType(
       inquiry.payment_receipt_filename,
       inquiry.payment_receipt_content_type,
     ),
@@ -264,7 +275,7 @@ export function normalizePaymentReview(inquiry, events = [], profiles = [], role
     receipt: {
       available: hasReceipt,
       filename: hasReceipt
-        ? sanitizeFilename(cleanText(inquiry.payment_receipt_filename, 180))
+        ? sanitizeReceiptFilename(cleanText(inquiry.payment_receipt_filename, 180))
         : "",
       contentType: hasReceipt
         ? cleanText(inquiry.payment_receipt_content_type, 120).toLowerCase()
@@ -547,41 +558,8 @@ function isValidInquiryReference(value) {
   return /^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(value);
 }
 
-function isSafeReceiptPath(path, inquiryReference) {
-  const prefix = `${inquiryReference}/payments/`;
-  const objectName = path.startsWith(prefix) ? path.slice(prefix.length) : "";
-  return Boolean(
-    objectName
-    && !objectName.includes("/")
-    && !objectName.includes("\\")
-    && RECEIPT_EXTENSIONS.has(extension(objectName)),
-  );
-}
-
-function isSafeReceiptType(filename, contentType) {
-  const fileExtension = extension(filename);
-  const normalizedType = cleanText(contentType, 120).toLowerCase();
-  if (!RECEIPT_TYPES.has(normalizedType)) return false;
-  if (fileExtension === "pdf") return normalizedType === "application/pdf";
-  if (fileExtension === "png") return normalizedType === "image/png";
-  return ["jpg", "jpeg"].includes(fileExtension) && normalizedType === "image/jpeg";
-}
-
-function typesMatch(left, right) {
-  return left === right;
-}
-
-function sanitizeFilename(value) {
-  const normalized = String(value || "").normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
-  return normalized
-    .replace(/[^a-zA-Z0-9._-]+/g, "-")
-    .replace(/-+/g, "-")
-    .replace(/^[-.]+|[-.]+$/g, "")
-    .slice(0, 180);
-}
-
 function extension(value) {
-  return String(value || "").toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] || "";
+  return receiptExtension(value);
 }
 
 function displayForUser(userId, profileMap, fallback = "") {

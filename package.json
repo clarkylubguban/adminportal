@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "node scripts/local-dev.mjs",
     "build": "node scripts/build.mjs",
-    "preview": "node scripts/local-dev.mjs"
+    "preview": "node scripts/local-dev.mjs",
+    "test:customer-payment-upload": "node scripts/test-customer-payment-upload-policy.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",

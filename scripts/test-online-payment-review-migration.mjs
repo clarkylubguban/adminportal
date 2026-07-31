@@ -67,7 +67,7 @@ assert.doesNotMatch(staleFix, /odoo/i);
 
 assert.match(customerApi, /ONLINE_PAYMENT_METHODS = new Set\(\["gcash", "bank_transfer"\]\)/);
 assert.match(customerApi, /payment_method: paymentMethod/);
-assert.match(customerApi, /isApprovedReceiptType/);
+assert.match(customerApi, /validateReceiptUploadMetadata/);
 assert.match(customerApi, /payment_status: "proof_submitted"/);
 assert.doesNotMatch(
   customerApi,
