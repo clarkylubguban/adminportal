@@ -83,19 +83,20 @@ for (const [label, patch, missing] of [
 }
 
 for (const paymentPatch of [
-  { payment_status: "required" },
-  { payment_status: "pay_at_shop", payment_type: "shop" },
-  { payment_status: "full_payment_confirmed", payment_type: "shop" },
+  { payment_status: "required", payment_verified_amount: null, payment_confirmed_amount: null },
+  { payment_status: "pay_at_shop", payment_type: "shop", payment_verified_amount: null, payment_confirmed_amount: null },
+  { payment_status: "partially_paid", payment_verified_amount: 1200, payment_confirmed_amount: 1200 },
 ]) {
   const row = { ...baseJob(), ...paymentPatch };
-  assert.equal(getProductionReadiness(row).ready, true, "payment is not a readiness gate");
+  assert.equal(getProductionReadiness(row).ready, false, "full payment is a readiness gate");
+  assert.ok(getProductionReadiness(row).missing.includes("Full payment confirmed"));
   const harness = createHarness(row, "owner");
   const result = await patchJob(harness.handler, row, "owner", {
     action: "advance_production_stage",
     nextStage: "printing",
   });
-  assert.equal(result.status, 200, "payment state does not block start");
-  assert.equal(result.body.job.stage, "printing");
+  assert.equal(result.status, 400, "incomplete payment blocks start");
+  assert.equal(result.body.error.code, "PRODUCTION_NOT_READY");
 }
 
 for (const role of ["owner", "admin"]) {
@@ -311,8 +312,10 @@ function baseJob() {
     artwork_status: "approved",
     artwork_url: `${jobId}/qa-artwork.png`,
     artwork_approved_at: "2026-07-29T03:00:00Z",
-    payment_status: "required",
-    payment_type: null,
+    payment_status: "paid",
+    payment_type: "full",
+    payment_verified_amount: 2400,
+    payment_confirmed_amount: 2400,
     owner_id: null,
     owner_user_id: ids.owner,
     assigned_staff: "Synthetic Staff",

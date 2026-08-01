@@ -133,9 +133,7 @@ function getNavIcon(label) {
     Orders: "factory",
     Reorders: "clipboard-list",
     "Order Dashboard": "factory",
-    Clients: "users",
-    Products: "shirt",
-    Catalog: "package",
+    Calendar: "calendar-check",
     Settings: "settings",
   };
 
@@ -559,17 +557,15 @@ const routes = {
   "/production": "Production",
   "/my-tasks": "My Tasks",
   "/workboard": "Workboard",
+  "/calendar": "Calendar",
   "/reorders": "Reorders",
   "/overview": "Overview",
-  "/clients": "Clients",
-  "/products": "Products",
-  "/catalog": "Catalog",
   "/staff": "Staff",
   "/settings": "Settings",
 };
 
 const defaultRoutePath = "/";
-const parkedAdminRoutes = new Set(["/clients", "/products"]);
+const parkedAdminRoutes = new Set(["/inbox", "/customers", "/clients", "/products", "/products-services", "/catalog"]);
 const ADMIN_ACCESS_SESSION_KEY = "trry_admin_access_unlocked";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "trry_admin_sidebar_collapsed_v3";
 
@@ -608,9 +604,13 @@ function render() {
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
+  const isAdminSaasRoute = ["Staff", "Settings"].includes(currentRoute);
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
+  if (currentRoute === "Calendar") {
+    if (canViewMyTasksRoute() && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
+    if (canViewWorkboardRoute() && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
+  }
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -632,15 +632,11 @@ function render() {
                     ? renderMyTasksPage()
                     : currentRoute === "Workboard"
                       ? renderWorkboardPage()
+                      : currentRoute === "Calendar"
+                        ? renderCalendarPage()
                   : currentRoute === "Overview"
                 ? renderOverviewPage()
-                : currentRoute === "Clients"
-                  ? renderClientsPage()
-                  : currentRoute === "Products"
-                    ? renderProductsPage(selectedProduct)
-                    : currentRoute === "Catalog"
-                      ? renderCatalogPage()
-                      : currentRoute === "Staff"
+                : currentRoute === "Staff"
                         ? renderStaffAccessPage()
                         : currentRoute === "Settings"
                         ? renderSettingsPage()
@@ -1513,7 +1509,6 @@ function renderWorkboardPage() {
     </div>
     ${renderWorkboardStateNotice()}
     ${renderWorkboardSummary()}
-    ${renderWorkboardViewControls()}
     ${renderWorkboardFilters()}
     ${workboardLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Workboard</strong><span>Checking task records.</span></div>` : ""}
     ${workboardLoadState === "ready" ? renderWorkboardTaskList(visibleTasks) : ""}
@@ -1536,8 +1531,6 @@ function renderWorkboardSummary() {
     ${renderMyTaskMetric("To Do", counts.todo, "Ready to start")}
     ${renderMyTaskMetric("In Progress", counts.inProgress, "Active/review/revision")}
     ${renderMyTaskMetric("Completed", counts.completed, "Approved work")}
-    ${renderMyTaskMetric("Drafts", counts.drafts, "Planning queue")}
-    ${renderMyTaskMetric("Cancelled", counts.cancelled, "Archive")}
   </div>`;
 }
 
@@ -1552,19 +1545,7 @@ function getWorkboardCounts(tasks) {
   };
 }
 
-function renderWorkboardViewControls() {
-  const counts = getWorkboardCounts(workboardTasks);
-  const controls = [
-    ["active", "ACTIVE BOARD", counts.active],
-    ["draft", "DRAFTS", counts.drafts],
-    ["cancelled", "CANCELLED", counts.cancelled],
-  ];
-  return `<nav class="workboard-view-controls" aria-label="Workboard views">${controls.map(([value, label, count]) => `<button class="${workboardFilterStatus === value ? "active" : ""}" data-workboard-view="${escapeHtml(value)}" type="button"><span>${escapeHtml(label)}</span><b>${escapeHtml(count)}</b></button>`).join("")}</nav>`;
-}
-
 function getWorkboardViewLabel() {
-  if (workboardFilterStatus === "draft") return "Draft planning queue";
-  if (workboardFilterStatus === "cancelled") return "Cancelled archive";
   return "Active board";
 }
 
@@ -1589,8 +1570,8 @@ function renderWorkboardUserSelect(id, value, label) {
 }
 
 function renderWorkboardTaskList(tasks) {
-  if (!tasks.length && workboardFilterStatus !== "active") {
-    const emptyText = workboardFilterStatus === "draft" ? "No drafts waiting in planning." : workboardFilterStatus === "cancelled" ? "No cancelled tasks." : workboardTasks.length ? "No tasks match your filters." : "No task records yet.";
+  if (!tasks.length) {
+    const emptyText = workboardTasks.length ? "No tasks match your filters." : "No task records yet.";
     const emptyHint = workboardTasks.length ? "Try another filter or search term." : "Create a manual task draft when planning is ready.";
     return `<div class="my-tasks-empty"><strong>${escapeHtml(emptyText)}</strong><span>${escapeHtml(emptyHint)}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
   }
@@ -1599,15 +1580,11 @@ function renderWorkboardTaskList(tasks) {
 }
 
 function getWorkboardStatusGroups(tasks) {
-  const definitions = workboardFilterStatus === "draft"
-    ? [{ key: "drafts", label: "DRAFT PLANNING QUEUE", emptyText: "No drafts waiting in planning.", statuses: ["DRAFT"] }]
-    : workboardFilterStatus === "cancelled"
-      ? [{ key: "cancelled", label: "CANCELLED ARCHIVE", emptyText: "No cancelled tasks.", statuses: ["CANCELLED"] }]
-      : [
-          { key: "todo", label: "TO DO", emptyText: "No tasks ready to start.", statuses: ["TO_DO"] },
-          { key: "in_progress", label: "IN PROGRESS", emptyText: "No active work.", statuses: ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"] },
-          { key: "completed", label: "COMPLETED", emptyText: "No completed tasks yet.", statuses: ["DONE"] },
-        ];
+  const definitions = [
+    { key: "todo", label: "TO DO", emptyText: "No tasks ready to start.", statuses: ["TO_DO"] },
+    { key: "in_progress", label: "IN PROGRESS", emptyText: "No active work.", statuses: ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"] },
+    { key: "completed", label: "COMPLETED", emptyText: "No completed tasks yet.", statuses: ["DONE"] },
+  ];
   return definitions.map((definition) => {
     const groupTasks = tasks.filter((task) => definition.statuses.includes(task.status)).sort((a, b) => compareWorkboardTasks(a, b));
     return { ...definition, tasks: groupTasks };
@@ -1624,18 +1601,16 @@ function getWorkboardDisplayGroup(task) {
 }
 
 function getWorkboardDisplayStatus(task) {
-  if (task.status === "FOR_REVIEW") return { key: "waiting-review", label: "WAITING FOR REVIEW" };
-  if (task.status === "NEEDS_REVISION") return { key: "needs-revision", label: "NEEDS REVISION" };
+  if (task.status === "FOR_REVIEW") return { key: "in-progress", label: "IN PROGRESS", outcome: "Waiting for review" };
+  if (task.status === "NEEDS_REVISION") return { key: "in-progress", label: "IN PROGRESS", outcome: "Revision requested" };
   if (task.status === "IN_PROGRESS") return { key: "in-progress", label: "IN PROGRESS" };
   if (task.status === "DONE") return { key: "completed", label: "COMPLETED" };
-  if (task.status === "DRAFT") return { key: "draft", label: "DRAFT" };
-  if (task.status === "CANCELLED") return { key: "cancelled", label: "CANCELLED" };
   return { key: "to-do", label: "TO DO" };
 }
 
 function renderWorkboardDisplayStatus(task) {
   const state = getWorkboardDisplayStatus(task);
-  return `<span class="workboard-task-state workboard-task-state--${escapeHtml(state.key)}" data-workboard-task-state="${escapeHtml(state.key)}">${escapeHtml(state.label)}</span>`;
+  return `<span class="workboard-task-state workboard-task-state--${escapeHtml(state.key)}" data-workboard-task-state="${escapeHtml(state.key)}">${escapeHtml(state.label)}</span>${state.outcome ? `<span class="workboard-outcome-tag">${escapeHtml(state.outcome)}</span>` : ""}`;
 }
 
 function renderWorkboardGroup(group) {
@@ -1666,7 +1641,7 @@ function renderWorkboardCard(task) {
     ${renderWorkboardDisplayStatus(task)}
     <strong>${escapeHtml(task.title || "Untitled task")}</strong>
     <span class="workboard-card-reference"><code>${escapeHtml(task.taskCode || "TASK")}</code>${source ? `<em>${escapeHtml(source)}</em>` : ""}</span>
-    <span class="workboard-card-meta"><b>${escapeHtml(getUserLabel(task.assignedUser))}</b>${renderTaskPriority(task.priority)}</span>
+    <span class="workboard-card-meta">${renderTaskPriority(task.priority)}</span>
     <span class="workboard-card-date">${escapeHtml(formatTaskDue(task))}${task.openTimeEntry ? ` / ${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}` : ""}</span>
     ${attention ? `<span class="workboard-card-attention">${escapeHtml(attention)}</span>` : ""}
   </button>`;
@@ -1688,7 +1663,6 @@ function getWorkboardPrimaryAction(task) {
   const actions = task.allowedActions || [];
   if (actions.includes("APPROVE_WORK")) return "REVIEW";
   if (actions.includes("REQUEST_REVISION")) return "REVIEW";
-  if (actions.includes("APPROVE_DRAFT")) return "APPROVE DRAFT";
   if (actions.includes("EDIT_DRAFT")) return "EDIT";
   return "OPEN";
 }
@@ -1990,7 +1964,7 @@ function renderMyTasksPage() {
   return `
     <section class="mvp-page my-tasks-page">
       <div class="mvp-page-title">
-        <div><span>HOME / MY TASKS</span><h1>My Tasks</h1><p>Your assigned execution queue, review submissions, and task timing.</p></div>
+      <div><span>HOME / MY TASKS</span><h1>My Tasks</h1><p>Your work queue, submissions, review feedback, and task timing.</p></div>
         <label class="my-tasks-search">${renderIcon("search", "search-icon")}<input id="my-tasks-search" value="${escapeHtml(myTasksSearch)}" placeholder="Search task title or code..." type="search" /></label>
       </div>
       ${renderMyTasksStateNotice()}
@@ -2036,7 +2010,7 @@ function renderMyTasksSnapshot() {
   return `<div class="my-tasks-snapshot">
     ${renderMyTaskMetric("Due Today", counts.due, "Deadline today")}
     ${renderMyTaskMetric("In Progress", counts.inProgress, "Being worked on")}
-    ${renderMyTaskMetric("Needs Revision", counts.revision, "Returned by reviewer")}
+    ${renderMyTaskMetric("Feedback", counts.revision, "Review notes")}
     ${renderMyTaskMetric("For Review", counts.review, "With reviewer")}
   </div>`;
 }
@@ -2054,8 +2028,6 @@ function renderMyTasksFilters() {
     ["active", "Active"],
     ["to_do", "To Do"],
     ["in_progress", "In Progress"],
-    ["needs_revision", "Needs Revision"],
-    ["for_review", "For Review"],
     ["completed", "Completed"],
   ];
   return `<div class="my-tasks-filters">${filters.map(([value, label]) => `<button class="${myTasksFilter === value ? "active" : ""}" data-my-tasks-filter="${value}" type="button">${escapeHtml(label)}</button>`).join("")}</div>`;
@@ -2064,11 +2036,17 @@ function renderMyTasksFilters() {
 function getMyTaskGroups(tasks) {
   return [
     ["IN_PROGRESS", "In Progress"],
-    ["NEEDS_REVISION", "Needs Revision"],
+    ["NEEDS_REVISION", "In Progress"],
     ["TO_DO", "To Do"],
-    ["FOR_REVIEW", "For Review"],
+    ["FOR_REVIEW", "In Progress"],
     ["DONE", "Completed"],
-  ].map(([status, label]) => [label, tasks.filter((task) => task.status === status)]).filter(([, items]) => items.length);
+  ].reduce((groups, [status, label]) => {
+    const existing = groups.find(([groupLabel]) => groupLabel === label);
+    const items = tasks.filter((task) => task.status === status);
+    if (existing) existing[1].push(...items);
+    else groups.push([label, items]);
+    return groups;
+  }, []).filter(([, items]) => items.length);
 }
 
 function renderMyTaskGroups(groups, visibleTasks) {
@@ -2082,7 +2060,7 @@ function renderMyTaskCard(task) {
     <button class="my-task-card-main" data-task-open="${escapeHtml(task.id)}" type="button">
       <span class="my-task-code">${escapeHtml(task.taskCode || "TASK")}</span>
       <strong>${escapeHtml(task.title || "Untitled task")}</strong>
-      <small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(getUserLabel(task.assignedUser))}</small>
+      <small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(formatTaskDue(task))}</small>
     </button>
     <div class="my-task-card-meta">
       ${renderTaskPriority(task.priority)}
@@ -2104,9 +2082,9 @@ function getPrimaryTaskAction(task) {
 }
 
 function renderTaskQuickAction(task, action) {
-  if (action === "START_WORK") return `<button class="primary" data-task-start="${escapeHtml(task.id)}" type="button">START WORK</button>`;
-  if (action === "START_REVISION") return `<button class="primary" data-task-start-revision="${escapeHtml(task.id)}" type="button">START REVISION</button>`;
-  if (action === "SUBMIT_FOR_REVIEW") return `<button data-task-open="${escapeHtml(task.id)}" type="button">SUBMIT</button>`;
+  if (action === "START_WORK") return `<button class="primary" data-task-start="${escapeHtml(task.id)}" type="button">START TASK</button>`;
+  if (action === "START_REVISION") return `<button class="primary" data-task-open="${escapeHtml(task.id)}" type="button">VIEW REVISION</button>`;
+  if (action === "SUBMIT_FOR_REVIEW") return `<button data-task-open="${escapeHtml(task.id)}" type="button">${task.status === "NEEDS_REVISION" ? "RESUBMIT" : "SUBMIT FOR REVIEW"}</button>`;
   return `<button data-task-open="${escapeHtml(task.id)}" type="button">OPEN</button>`;
 }
 
@@ -2137,7 +2115,6 @@ function renderTaskDetailBody(detail) {
       ${renderTaskFact("Source", formatSourceType(task.sourceType))}
       ${renderTaskFact("Scheduled", formatTaskDate(task.scheduledDate))}
       ${renderTaskFact("Deadline", formatTaskDateTime(task.submissionDeadline))}
-      ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
       ${renderTaskFact("Reviewer", getUserLabel(task.reviewerUser))}
       ${renderTaskFact("Recorded Time", task.openTimeEntry ? formatElapsed(getRunningElapsedSeconds(task)) : formatDuration(task.totalClosedDurationSeconds))}
     </section>
@@ -2163,9 +2140,9 @@ function renderTaskActionArea(task) {
     ${taskCommandError ? `<p class="my-task-form-error" role="alert">${escapeHtml(taskCommandError)}</p>` : ""}
     ${actions.includes("SUBMIT_FOR_REVIEW") || actions.includes("SUBMIT_WITHOUT_RECORDED_TIME") ? renderTaskSubmitFields(busy) : ""}
     <div class="my-task-action-buttons">
-      ${actions.includes("START_WORK") ? `<button class="primary" data-task-start="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "STARTING..." : "START WORK"}</button>` : ""}
-      ${actions.includes("START_REVISION") ? `<button class="primary" data-task-start-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "STARTING..." : "START REVISION"}</button>` : ""}
-      ${actions.includes("SUBMIT_FOR_REVIEW") ? `<button class="dark" data-task-submit="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "SUBMITTING..." : "SUBMIT FOR REVIEW"}</button>` : ""}
+      ${actions.includes("START_WORK") ? `<button class="primary" data-task-start="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "STARTING..." : "START TASK"}</button>` : ""}
+      ${actions.includes("START_REVISION") ? `<button class="primary" data-task-start-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "STARTING..." : "VIEW REVISION"}</button>` : ""}
+      ${actions.includes("SUBMIT_FOR_REVIEW") ? `<button class="dark" data-task-submit="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">${busy ? "SUBMITTING..." : task.status === "NEEDS_REVISION" ? "RESUBMIT" : "SUBMIT FOR REVIEW"}</button>` : ""}
       ${actions.includes("SUBMIT_WITHOUT_RECORDED_TIME") ? `<button data-task-open-fallback="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">SUBMIT WITHOUT RECORDED TIME</button>` : ""}
     </div>
     ${taskFallbackOpen ? renderNoTimeFallback(task, busy) : ""}
@@ -2177,7 +2154,7 @@ function renderTaskSubmitFields(disabled) {
 }
 
 function renderNoTimeFallback(task, busy) {
-  return `<div class="my-task-no-time-dialog" role="alertdialog" aria-label="No work time recorded"><strong>NO WORK TIME RECORDED</strong><p>Did you forget to start the task timer?</p><label><span>Reason required</span><textarea id="task-no-time-reason" rows="3" ${busy ? "disabled" : ""} placeholder="Forgot to start timer">${escapeHtml(taskNoTimeReason)}</textarea></label><small>Examples: Forgot to start timer / Task was already completed before opening the portal / Quick task completed immediately</small><div><button class="primary" data-task-start="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">START WORK NOW</button><button class="dark" data-task-submit-no-time="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">SUBMIT WITHOUT RECORDED TIME</button><button data-task-cancel-fallback type="button">CANCEL</button></div></div>`;
+  return `<div class="my-task-no-time-dialog" role="alertdialog" aria-label="No work time recorded"><strong>NO WORK TIME RECORDED</strong><p>Did you forget to start the task timer?</p><label><span>Reason required</span><textarea id="task-no-time-reason" rows="3" ${busy ? "disabled" : ""} placeholder="Forgot to start timer">${escapeHtml(taskNoTimeReason)}</textarea></label><small>Examples: Forgot to start timer / Task was already completed before opening the portal / Quick task completed immediately</small><div><button class="primary" data-task-start="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">START TASK NOW</button><button class="dark" data-task-submit-no-time="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">SUBMIT WITHOUT RECORDED TIME</button><button data-task-cancel-fallback type="button">CANCEL</button></div></div>`;
 }
 
 function renderTaskStatus(status) {
@@ -2394,6 +2371,95 @@ function renderOverviewPage() {
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
   });
+}
+
+function renderCalendarPage() {
+  const events = getCalendarEvents();
+  const taskNotice = [myTasksLoadState, workboardLoadState].includes("loading")
+    ? `<div class="ops-persistence-card"><strong>Loading calendar items</strong><span>Checking task deadlines.</span></div>`
+    : "";
+  const grouped = groupCalendarEvents(events);
+  return `<section class="mvp-page calendar-page">
+    <div class="mvp-page-title">
+      <div><span>CALENDAR</span><h1>Calendar</h1><p>Follow-ups, expiries, due dates, production deadlines, task deadlines, and scheduled content.</p></div>
+    </div>
+    ${taskNotice}
+    <div class="calendar-summary">
+      ${renderMyTaskMetric("Today", events.filter((event) => event.bucket === "today").length, "Due now")}
+      ${renderMyTaskMetric("Upcoming", events.filter((event) => event.bucket === "upcoming").length, "Next items")}
+      ${renderMyTaskMetric("Overdue", events.filter((event) => event.bucket === "overdue").length, "Needs attention")}
+    </div>
+    <section class="calendar-event-list">
+      ${grouped.length ? grouped.map(renderCalendarEventGroup).join("") : `<div class="my-tasks-empty"><strong>No dated operational items</strong><span>Calendar will fill as follow-ups, due dates, deadlines, and scheduled content are recorded.</span></div>`}
+    </section>
+  </section>`;
+}
+
+function getCalendarEvents() {
+  const items = getMvpDashboardItems();
+  const taskRows = [...myTasks, ...workboardTasks].filter((task, index, rows) => rows.findIndex((candidate) => candidate.id === task.id) === index);
+  const events = [];
+  items.forEach((item) => {
+    const ref = createConfirmedOrderReference(item) || item.id || "Record";
+    if (item.followUpDate) events.push(calendarEvent("Inquiry follow-up", item.followUpDate, item.customer || item.company || ref, ref, `/inquiries?inquiry=${encodeURIComponent(item.id)}`));
+    if (item.quoteValidUntil || item.validUntil) events.push(calendarEvent("Quotation expiry", item.quoteValidUntil || item.validUntil, item.customer || item.company || ref, ref, `/inquiries?inquiry=${encodeURIComponent(item.id)}`));
+    if (item.dueDate || item.neededDate) {
+      const confirmedOrder = isCalendarConfirmedOrder(item);
+      events.push(calendarEvent(confirmedOrder ? "Order due date" : "Production deadline", item.dueDate || item.neededDate, item.customer || item.company || ref, ref, confirmedOrder ? `/orders?order=${encodeURIComponent(item.id)}` : `/production?order=${encodeURIComponent(item.id)}`));
+    }
+  });
+  taskRows.forEach((task) => {
+    const date = task.submissionDeadline || task.approvalDeadline || task.scheduledDate;
+    if (!date) return;
+    const type = task.sourceType === "DAILY_CONTENT" || task.sourceType === "AI_MARKETING" ? "Scheduled content" : "Task deadline";
+    events.push(calendarEvent(type, date, task.title || "Untitled task", task.taskCode || "TASK", `/my-tasks`));
+  });
+  return events.filter(Boolean).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function isCalendarConfirmedOrder(item) {
+  const status = String(item.status || "").trim().toLowerCase();
+  const quote = String(item.quoteStatus || "").trim().toLowerCase();
+  return status === "won" && quote === "approved";
+}
+
+function calendarEvent(type, value, title, reference, route) {
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  const today = new Date(`${todayIsoDate()}T00:00:00`);
+  const eventDay = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  const days = Math.round((eventDay - today) / 86400000);
+  return {
+    type,
+    title: String(title || "Untitled item"),
+    reference: String(reference || ""),
+    route,
+    timestamp: date.getTime(),
+    dayLabel: eventDay.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }),
+    timeLabel: value && String(value).includes("T") ? date.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "",
+    bucket: days < 0 ? "overdue" : days === 0 ? "today" : "upcoming",
+  };
+}
+
+function groupCalendarEvents(events) {
+  const groups = new Map();
+  events.forEach((event) => {
+    if (!groups.has(event.dayLabel)) groups.set(event.dayLabel, []);
+    groups.get(event.dayLabel).push(event);
+  });
+  return [...groups.entries()];
+}
+
+function renderCalendarEventGroup([label, events]) {
+  return `<section class="calendar-day-group"><h2>${escapeHtml(label)} <span>${events.length}</span></h2>${events.map(renderCalendarEvent).join("")}</section>`;
+}
+
+function renderCalendarEvent(event) {
+  return `<button class="calendar-event ${escapeHtml(event.bucket)}" data-route-target="${escapeHtml(event.route)}" type="button">
+    <span>${escapeHtml(event.type)}</span>
+    <strong>${escapeHtml(event.title)}</strong>
+    <small>${escapeHtml([event.reference, event.timeLabel].filter(Boolean).join(" / "))}</small>
+  </button>`;
 }
 
 function renderMvpInquiriesPage() {
@@ -2950,9 +3016,13 @@ function renderOpsPaymentNotes(item) {
 
 function renderOpsPayAtShopReadOnly(item) {
   if (!isOpsShopPaymentPending(item)) return "";
+  const action = canOpsConfirmShopPayment(item)
+    ? `<div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM PAYMENT RECEIVED", action: "confirm_shop_payment", id: item.id, primary: true })}</div>`
+    : `<p class="ops-stage-muted">Owner/Admin confirmation required.</p>`;
   return `<section class="ops-payment-clean-block">
     <header><strong>PAY AT SHOP SELECTED</strong></header>
     <p class="ops-stage-muted"><strong>Customer selected payment at the TRRY shop.</strong>Payment remains unpaid until staff confirms receipt.</p>
+    ${action}
   </section>`;
 }
 
@@ -3354,6 +3424,7 @@ function getOpsShopPaymentDraft(item) {
     ? String(existing?.paymentMethod || item.paymentMethod).toLowerCase()
     : "cash";
   return {
+    inquiryId: item.id,
     paymentChoice,
     receivedAmount: existing?.receivedAmount ?? getOpsShopPaymentChoiceAmount(item, paymentChoice) ?? "",
     paymentMethod: selectedMethod,
@@ -3423,8 +3494,41 @@ function renderOpsShopPaymentDialog(item) {
 
 function renderActiveOpsShopPaymentDialog() {
   const inquiryId = opsShopPaymentConfirmation?.inquiryId;
-  const item = inquiryId ? opsInquiries.find((inquiry) => inquiry.id === inquiryId) : null;
+  const item = inquiryId ? getOpsShopPaymentItem(inquiryId) : null;
   return item ? renderOpsShopPaymentDialog(item) : "";
+}
+
+function getOpsShopPaymentItem(inquiryId) {
+  const order = mvpOrderDetailState.id === inquiryId ? mvpOrderDetailState.order : null;
+  if (order) return {
+    id: order.id,
+    customer: order.customerName,
+    company: order.company,
+    contact: order.contact,
+    source: order.source,
+    service: order.service,
+    productDesc: order.productDescription,
+    qty: order.quantity,
+    status: "won",
+    dueDate: order.dueDate,
+    quotedAmount: order.quotedAmount,
+    amountDue: order.amountDue,
+    quoteStatus: order.quoteStatus,
+    quoteApprovedAt: order.quoteApprovedAt,
+    quotePublishedAt: order.quotePublishedAt,
+    artworkStatus: order.artworkStatus,
+    artworkUrl: order.artworkAvailable ? "available" : "",
+    artworkApprovedAt: order.artworkApprovedAt,
+    paymentStatus: order.paymentStatus,
+    paymentMethod: order.paymentMethod,
+    paymentType: order.paymentType,
+    paymentSelectedAmount: order.paymentSelectedAmount,
+    paymentSelectedAt: order.paymentSelectedAt,
+    paymentConfirmedAmount: order.paymentConfirmedAmount,
+    paymentVerifiedAmount: order.paymentVerifiedAmount,
+    paymentInternalNote: order.paymentInternalNote,
+  };
+  return opsInquiries.find((inquiry) => inquiry.id === inquiryId) || null;
 }
 
 function getActiveInquiryPaymentSection(inquiryId) {
@@ -4019,7 +4123,7 @@ function getOpsShopPaymentValidationMessage(item, draft) {
 }
 
 function openOpsShopPaymentConfirmation(inquiryId, sourceElement) {
-  const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
+  const item = getOpsShopPaymentItem(inquiryId);
   if (!item || !canOpsConfirmShopPayment(item)) {
     setOpsCustomerActionInlineMessage(sourceElement, "OWNER OR ADMIN CONFIRMATION REQUIRED.", "error");
     return;
@@ -4045,7 +4149,7 @@ function openOpsShopPaymentConfirmation(inquiryId, sourceElement) {
 async function confirmOpsShopPayment(inquiryId) {
   const confirmation = opsShopPaymentConfirmation;
   if (!confirmation || confirmation.inquiryId !== inquiryId || confirmation.status === "loading") return;
-  const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
+  const item = getOpsShopPaymentItem(inquiryId);
   const draft = getOpsShopPaymentFormPayload(inquiryId, document.querySelector(`[data-ops-confirm-shop-payment="${CSS.escape(inquiryId)}"]`));
   const validationMessage = getOpsShopPaymentValidationMessage(item, draft);
   if (validationMessage) {
@@ -4545,7 +4649,7 @@ function detectOpsServiceType(text) {
   if (/dtf/i.test(text)) return "DTF Printing";
   return "";
 }
-function demoExtractOpsInquiry(text) {
+function parseOpsInquiryDraft(text) {
   const qtyMatch = text.match(/\d+\s*(pcs|pc|pieces|shirts|caps|uniforms)?/i);
   const quantity = qtyMatch ? qtyMatch[0].trim() : "";
   const serviceType = detectOpsServiceType(text);
@@ -5996,7 +6100,7 @@ function renderSettingsPage() {
       key: "system",
       title: "System Information",
       helper: "Read-only operational context for the current Admin Portal.",
-      rows: [["Calendar", "Phase 2 parked"], ["Catalog bucket", "catalog-images"], ["Workflow gates", "Server-side protected"]],
+      rows: [["Calendar", "Operational dates"], ["Workflow gates", "Server-side protected"]],
     },
     {
       key: "access",
@@ -6860,7 +6964,7 @@ function renderSidebar(currentRoute) {
     { label: "Production", path: "/production", icon: "factory" },
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
-    { label: "Catalog", path: "/catalog" },
+    { label: "Calendar", path: "/calendar", icon: "calendar-check" },
     ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
     { label: "Settings", path: "/settings" },
   ];
@@ -6871,7 +6975,7 @@ function renderSidebar(currentRoute) {
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
         ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>`).join("")}
-        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("calendar-check", "nav-icon")}<span class="nav-label">Calendar<small>Phase 2</small></span></span><span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
+        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -6966,8 +7070,9 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
-  ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
+    ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    { label: "Calendar", path: "/calendar", icon: "calendar-check" },
   ];
   return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
 }
@@ -8245,7 +8350,7 @@ function bindOpsBoardEvents() {
 
   document.getElementById("ops-extract-inquiry")?.addEventListener("click", () => {
     if (!opsRawMessage.trim()) return;
-    opsExtractFields = demoExtractOpsInquiry(opsRawMessage);
+    opsExtractFields = parseOpsInquiryDraft(opsRawMessage);
     opsSavedNotice = false;
     render();
   });

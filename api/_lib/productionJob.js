@@ -271,6 +271,11 @@ export function getProductionReadiness(row) {
     ["due-date", "Due date set", Boolean(dateOrNull(row.due_date))],
     ["artwork", "Artwork approved", key(row.artwork_status) === "approved"],
     [
+      "payment",
+      "Full payment confirmed",
+      paymentSatisfiesProductionGate(row),
+    ],
+    [
       "staff",
       "Staff assigned",
       Boolean(row.assigned_user_id || cleanText(row.assigned_staff, 160)),
@@ -346,7 +351,7 @@ async function buildProductionAction({
     if (!manager) throw forbidden();
     if (!MUTABLE_STAGES.has(stage)) throw locked();
     if (!cleanText(job.blocked_reason, 500)) {
-      throw businessError(400, "PRODUCTION_BLOCKER_MISSING", "No active blocker is set.");
+      throw businessError(400, "PRODUCTION_BLOCKER_MISSING", "No blocker is set.");
     }
     return { updates: { blocked_reason: null, production_updated_at: now } };
   }
@@ -561,6 +566,16 @@ function paymentDisplayStatus(row) {
   if (status === "proof_submitted") return "RECEIPT SUBMITTED";
   if (["under_review", "correction_required"].includes(status)) return "PAYMENT REVIEW";
   return "UNPAID";
+}
+
+function paymentSatisfiesProductionGate(row) {
+  const total = numberOrNull(row.quoted_amount ?? row.amount_due);
+  const verified = numberOrNull(row.payment_verified_amount ?? row.payment_confirmed_amount);
+  const status = key(row.payment_status);
+  if (!Number.isFinite(total) || total <= 0) return false;
+  return ["paid", "full_payment_confirmed", "confirmed"].includes(status)
+    && Number.isFinite(verified)
+    && verified >= total;
 }
 
 function hasArtwork(row) {

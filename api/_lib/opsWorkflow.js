@@ -66,9 +66,20 @@ function productionGate(inquiry) {
   if (!inquiry.due_date) missing.push("due date");
   if (key(inquiry.artwork_status) !== "approved") missing.push("artwork approval");
   if (!cleanText(inquiry.assigned_staff, 120)) missing.push("assigned staff");
+  if (Number(inquiry.quoted_amount || inquiry.amount_due) > 0 && !paymentSatisfiesProductionGate(inquiry)) missing.push("confirmed payment");
   if (cleanText(inquiry.blocked_reason, 500)) missing.push("blocked reason");
   return missing;
 }
+
+function paymentSatisfiesProductionGate(inquiry) {
+  const total = Number(inquiry.quoted_amount || inquiry.amount_due);
+  const verified = Number(inquiry.payment_verified_amount || inquiry.payment_confirmed_amount);
+  const status = key(inquiry.payment_status);
+  if (!Number.isFinite(total) || total <= 0) return false;
+  if (["paid", "full_payment_confirmed", "confirmed"].includes(status)) return Number.isFinite(verified) && verified >= total;
+  return false;
+}
+
 function productionFields(body, now) {
   return {
     assigned_staff: cleanText(body.assignedStaff, 120) || null,

@@ -16,7 +16,7 @@ for (const required of [
   "allowedActions",
   "NO WORK TIME RECORDED",
   "SUBMIT WITHOUT RECORDED TIME",
-  "START WORK NOW",
+  "START TASK NOW",
   "TIME NOT RECORDED",
   "TIME NOT REQUIRED",
   "task.timeTrackingMode === \"NONE\"",

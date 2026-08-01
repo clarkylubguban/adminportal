@@ -18,12 +18,8 @@ const requiredCopy = [
   "TRRY Admin",
   "Overview",
   "Orders",
-  "Clients",
-  "Products",
+  "Calendar",
   "Settings",
-  "Urban Coffee",
-  "Admin Polo Uniform",
-  "Embroidered Staff Cap",
   "admin.trryapparel.com",
   "Pending Review",
   "Save Inquiry",
@@ -42,20 +38,19 @@ const requiredCopy = [
   "No production jobs found.",
   "CREATE ORDER",
   "CREATE CONFIRMED ORDER?",
-  "Search clients by name, slug, or domain...",
-  "Add New Client",
+  "START TASK",
+  "SUBMIT FOR REVIEW",
+  "VIEW REVISION",
+  "RESUBMIT",
+  "COMPLETE",
   "Copy Portal Link",
   "Search request no., client, or requested by...",
   "Update Status",
   "Add Internal Note",
   "Open Portal",
   "View Orders",
-  "Select a product to view details.",
   "Portal visibility",
   "View in Client Portal",
-  "Copy Product Code",
-  "Product code copied",
-  "Edit Product",
   "System Information",
   "Workflow gates",
 ];
@@ -75,6 +70,12 @@ for (const text of ["TRRY Apparel Management", "/src/styles.css", "/src/env.js",
 const staleTemplateName = ["zen", "da"].join("");
 const staleTemplatePattern = new RegExp(staleTemplateName, "i");
 const disallowedCopy = [
+  ["Auto Plan Today"],
+  ["Calendar Quick Direction"],
+  ["Update Calendar Plan"],
+  ["Products & Services"],
+  ["Current blocker: None"],
+  ["No active blocker"],
   ["Urb", "an", "Sti", "tch", "Co."],
   ["Pe", "ak", "Perf", "ormance"],
   ["Veloc", "ity", "Spo", "rts"],
@@ -96,7 +97,9 @@ if (staleTemplatePattern.test(html) || staleTemplatePattern.test(appCode)) {
 }
 
 for (const parts of disallowedCopy) {
-  const text = parts.length === 2 && parts[0].length === 2
+  const text = parts.length === 1
+    ? parts[0]
+    : parts.length === 2 && parts[0].length === 2
     ? parts.join("-")
     : parts.join("").replace("Co.", " Co.");
   if (html.includes(text) || appCode.includes(text)) {

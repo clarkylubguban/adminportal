@@ -319,6 +319,8 @@ export function mapOpsRowToInquiry(row) {
       "Unassigned",
     assignedStaff:
       getFirstValue(row, ["assigned_staff", "assignedStaff"]),
+    assignedUserId:
+      getFirstValue(row, ["assigned_user_id", "assignedUserId"]),
     productionStage:
       getFirstValue(row, ["production_stage", "productionStage"]),
     productionNote:

@@ -91,7 +91,7 @@ try {
 
   await click(cdp, owner, `${orderSelector(ids.pending)} [data-mvp-trigger="action"]`, 50);
   await waitForSelector(cdp, owner, ".mvp-order-detail-state.loading");
-  await waitFor(cdp, owner, drawerHas("SHOP PAYMENT PENDING"), "pending Pay at Shop details");
+  await waitFor(cdp, owner, drawerHas("PAY AT SHOP SELECTED"), "pending Pay at Shop details");
   assert.equal(await evalValue(cdp, owner, `document.body.classList.contains("mvp-drawer-open")`), true);
   assert.equal(await evalValue(cdp, owner, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`), 1);
   assert.equal(await evalValue(cdp, owner, `document.querySelectorAll('[data-ops-customer-action="confirm_payment"]').length`), 0);
@@ -193,7 +193,7 @@ try {
   await waitFor(cdp, owner, drawerHas("Unable to load order details."), "calm error state");
   await click(cdp, owner, "[data-mvp-retry-order]");
   await waitFor(cdp, owner, drawerHas("NOT READY FOR PRODUCTION"), "retry success");
-  await waitFor(cdp, owner, drawerHas("Production staff assigned / No active blocker"), "missing requirements");
+  await waitFor(cdp, owner, drawerHas("Production staff assigned / Blocker cleared"), "missing requirements");
   assert.equal(
     await evalValue(cdp, owner, `Array.from(document.querySelectorAll('.mvp-order-readiness dt')).find((node) => node.textContent === 'Production note')?.nextElementSibling?.textContent === 'Not set'`),
     true,
@@ -210,7 +210,7 @@ try {
   await navigate(cdp, admin, url("/orders"));
   await waitForSelector(cdp, admin, orderSelector(ids.pending));
   await click(cdp, admin, orderSelector(ids.pending));
-  await waitFor(cdp, admin, drawerHas("SHOP PAYMENT PENDING"), "Admin pending drawer");
+  await waitFor(cdp, admin, drawerHas("PAY AT SHOP SELECTED"), "Admin pending drawer");
   assert.equal(await evalValue(cdp, admin, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`), 1);
 
   const staff = await createPage(cdp, viewport(1366, 900));
@@ -218,7 +218,7 @@ try {
   await navigate(cdp, staff, url("/orders"));
   await waitForSelector(cdp, staff, orderSelector(ids.pending));
   await click(cdp, staff, orderSelector(ids.pending));
-  await waitFor(cdp, staff, drawerHas("SHOP PAYMENT PENDING"), "Staff pending drawer");
+  await waitFor(cdp, staff, drawerHas("PAY AT SHOP SELECTED"), "Staff pending drawer");
   assert.equal(await evalValue(cdp, staff, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`), 0);
   assert.equal(await evalValue(cdp, staff, drawerHas("Owner/Admin confirmation required.")), true);
 
@@ -242,7 +242,7 @@ try {
   await navigate(cdp, tablet, url("/orders"));
   await waitForSelector(cdp, tablet, orderSelector(ids.pending));
   await click(cdp, tablet, orderSelector(ids.pending));
-  await waitFor(cdp, tablet, drawerHas("SHOP PAYMENT PENDING"), "tablet drawer");
+  await waitFor(cdp, tablet, drawerHas("PAY AT SHOP SELECTED"), "tablet drawer");
   await assertDrawerGeometry(cdp, tablet, 520, 820);
   await captureQaScreenshot(cdp, tablet, "tablet-820");
 
@@ -251,7 +251,7 @@ try {
   await navigate(cdp, mobile, url("/orders"));
   await waitForSelector(cdp, mobile, `.mvp-order-mobile-card[data-mvp-id="${ids.pending}"]`);
   await click(cdp, mobile, `.mvp-order-mobile-card[data-mvp-id="${ids.pending}"]`);
-  await waitFor(cdp, mobile, drawerHas("SHOP PAYMENT PENDING"), "mobile drawer");
+  await waitFor(cdp, mobile, drawerHas("PAY AT SHOP SELECTED"), "mobile drawer");
   await assertDrawerGeometry(cdp, mobile, 390, 390);
   await captureQaScreenshot(cdp, mobile, "mobile-390");
   assert.equal(await evalValue(cdp, mobile, `document.scrollingElement.scrollWidth <= innerWidth + 1`), true, "mobile page has no overflow");
@@ -272,7 +272,7 @@ try {
   assert.equal(
     requests.some((request) => request.path.includes("/payments") && request.method !== "GET"),
     false,
-    "Pay Online remains parked",
+    "Pay Online remains unconfirmed until admin review",
   );
 
   process.stdout.write("PASS Order Details Drawer desktop/tablet/mobile, roles, behavior, and regressions\n");
@@ -421,7 +421,7 @@ function orderDetail(row) {
     ["due-date", "Due date set", true],
     ["artwork", "Artwork approved", true],
     ["production-staff", "Production staff assigned", Boolean(row.assigned_user_id)],
-    ["blocker", "No active blocker", !row.blocked_reason],
+    ["blocker", "Blocker cleared", !row.blocked_reason],
   ].map(([key, label, complete]) => ({ key, label, complete }));
   const activityItems = [
     activity("INQUIRY CREATED", row.created_at),

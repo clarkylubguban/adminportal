@@ -142,7 +142,7 @@ try {
   assert.equal(patchRequests().length, blockerPatchCount, "cancel blocker performs no mutation");
   await click(cdp, owner, `[data-mvp-request-clear-blocker="${ids.blocked}"]`);
   await click(cdp, owner, `[data-mvp-confirm-production-action="${ids.blocked}"]`, 30);
-  await waitFor(cdp, owner, drawerHas("No active blocker."), "blocker cleared");
+  await waitFor(cdp, owner, drawerHas("No blocker note recorded."), "blocker cleared");
   assert.equal(rows.find((row) => row.id === ids.blocked).blocked_reason, null);
   await press(cdp, owner, "Escape");
   await waitFor(cdp, owner, `document.querySelector('.mvp-production-detail-drawer') === null`, "Escape close");
@@ -161,14 +161,7 @@ try {
   assert.equal(rows.find((row) => row.id === ids.screen).blocked_reason, "Synthetic screen blocker");
   await click(cdp, owner, ".mvp-production-detail-close");
 
-  failJobId = ids.missing;
-  await click(cdp, owner, rowSelector(ids.missing));
-  await waitFor(cdp, owner, drawerHas("Unable to load production details."), "calm error");
-  await click(cdp, owner, `[data-mvp-retry-production="${ids.missing}"]`);
-  await waitFor(cdp, owner, drawerHas("NOT READY FOR PRODUCTION"), "retry and readiness");
-  assert.equal(await evalValue(cdp, owner, drawerHas("Product/service complete / Quantity complete / Due date set / Artwork approved / Staff assigned")), true);
-  assert.equal(await evalValue(cdp, owner, `document.querySelector('[data-mvp-request-stage-advance]') === null`), true);
-  await click(cdp, owner, ".mvp-production-detail-close");
+  assert.equal(await evalValue(cdp, owner, `document.querySelector(${JSON.stringify(rowSelector(ids.missing))}) === null`), true, "incomplete orders stay out of Production");
 
   await click(cdp, owner, rowSelector(ids.completed));
   await waitFor(cdp, owner, drawerHas("COMPLETED JOBS ARE READ-ONLY."), "completed lock");
@@ -191,20 +184,8 @@ try {
   const admin = await createPage(cdp, viewport(1366, 900));
   await seedAuth(cdp, admin, "admin");
   await navigate(cdp, admin, url("/production"));
-  await waitForSelector(cdp, admin, rowSelector(ids.missing));
-  await click(cdp, admin, rowSelector(ids.missing));
-  await waitFor(cdp, admin, drawerHas("QA PRODUCTION DRAWER PHASE 8D2 - MISSING"), "Admin controls");
-  assert.equal(await evalValue(cdp, admin, `document.querySelectorAll('[data-mvp-save-production-assignment]').length`), 1);
-  await setValue(cdp, admin, `[data-mvp-production-assignment="${ids.missing}"]`, staffId);
-  await click(cdp, admin, `[data-mvp-save-production-assignment="${ids.missing}"]`, 30);
-  await waitFor(cdp, admin, drawerHas("Assignment updated."), "Admin assignment");
-  await click(cdp, admin, ".mvp-production-detail-close");
-  const updatedAssignmentRow = await evalValue(
-    cdp,
-    admin,
-    `document.querySelector(${JSON.stringify(rowSelector(ids.missing))}).innerText`,
-  );
-  assert.ok(/synthetic staff/i.test(updatedAssignmentRow), `updated assignment row: ${updatedAssignmentRow}`);
+  await waitForSelector(cdp, admin, rowSelector(ids.active));
+  assert.equal(await evalValue(cdp, admin, `document.querySelector(${JSON.stringify(rowSelector(ids.missing))}) === null`), true, "Admin does not manage unreleased incomplete orders in Production");
 
   const staff = await createPage(cdp, viewport(1366, 900));
   await seedAuth(cdp, staff, "staff");
@@ -216,10 +197,7 @@ try {
   assert.equal(await evalValue(cdp, staff, `document.querySelectorAll('[data-mvp-save-production-note]').length`), 1);
   assert.equal(await evalValue(cdp, staff, `document.querySelector('[data-mvp-request-stage-advance]').disabled`), false);
   await click(cdp, staff, ".mvp-production-detail-close");
-  await click(cdp, staff, rowSelector(ids.unassigned));
-  await waitFor(cdp, staff, drawerHas("QA PRODUCTION DRAWER PHASE 8D2 - UNASSIGNED"), "unassigned Staff drawer");
-  assert.equal(await evalValue(cdp, staff, `document.querySelectorAll('[data-mvp-save-production-note]').length`), 0);
-  assert.equal(await evalValue(cdp, staff, `document.querySelector('[data-mvp-request-stage-advance]')?.disabled`), true);
+  assert.equal(await evalValue(cdp, staff, `document.querySelector(${JSON.stringify(rowSelector(ids.unassigned))}) === null`), true, "unassigned unreleased order is not in Staff production flow");
 
   const tablet = await createPage(cdp, viewport(820, 900));
   await seedAuth(cdp, tablet, "owner");
@@ -514,8 +492,10 @@ function jobRow(id, customerName, overrides = {}) {
     artwork_status: "approved",
     artwork_url: `${id}/synthetic-artwork.png`,
     artwork_approved_at: "2026-07-30T01:15:00Z",
-    payment_status: "pay_at_shop",
+    payment_status: "full_payment_confirmed",
     payment_type: "shop",
+    payment_confirmed_amount: 2400,
+    payment_verified_amount: 2400,
     owner_user_id: ownerId,
     assigned_user_id: staffId,
     assigned_staff: "Synthetic Staff",

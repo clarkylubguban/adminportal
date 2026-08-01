@@ -375,11 +375,16 @@ function buildReadiness(row, values) {
     ["due-date", "Due date set", Boolean(dateOrNull(row.due_date))],
     ["artwork", "Artwork approved", key(row.artwork_status) === "approved"],
     [
+      "payment",
+      "Full payment confirmed",
+      paymentSatisfiesProductionGate(row),
+    ],
+    [
       "production-staff",
       "Production staff assigned",
       Boolean(values.assignedStaff && values.assignedStaff !== "Not set"),
     ],
-    ["blocker", "No active blocker", !values.blocker],
+    ["blocker", "Blocker cleared", !values.blocker],
   ].map(([keyValue, label, complete]) => ({
     key: keyValue,
     label,
@@ -485,6 +490,16 @@ function hasArtwork(row) {
   if (cleanText(row.artwork_url, 1000)) return true;
   return ["submitted", "under_review", "approval_required", "revision_requested", "approved"]
     .includes(key(row.artwork_status));
+}
+
+function paymentSatisfiesProductionGate(row) {
+  const total = numberOrNull(row.quoted_amount ?? row.amount_due);
+  const verified = numberOrNull(row.payment_verified_amount ?? row.payment_confirmed_amount);
+  const status = key(row.payment_status);
+  if (!Number.isFinite(total) || total <= 0) return false;
+  return ["paid", "full_payment_confirmed", "confirmed"].includes(status)
+    && Number.isFinite(verified)
+    && verified >= total;
 }
 
 function displayForUser(userId, profileMap, fallback) {

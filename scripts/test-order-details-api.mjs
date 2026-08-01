@@ -179,7 +179,7 @@ const normalized = normalizeOrderDetails(
 assert.equal(normalized.readiness.ready, false);
 assert.deepEqual(
   normalized.readiness.missing,
-  ["Production staff assigned", "No active blocker"],
+  ["Production staff assigned", "Blocker cleared"],
 );
 assert.equal(normalized.confirmedAt, null, "no invented order-confirmed timestamp");
 assert.equal(

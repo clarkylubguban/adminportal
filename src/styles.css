@@ -26167,6 +26167,130 @@ textarea,
   color: #5b616b;
 }
 
+.workboard-outcome-tag {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid rgba(17, 17, 17, 0.18);
+  color: #4b5563;
+  display: inline-flex;
+  font-size: 10px;
+  font-weight: 900;
+  justify-content: center;
+  letter-spacing: 0;
+  line-height: 1;
+  min-height: 23px;
+  padding: 0 8px;
+  text-transform: uppercase;
+  width: max-content;
+}
+
+.calendar-page {
+  gap: 16px;
+}
+
+.calendar-summary {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.calendar-summary article {
+  background: #ffffff;
+  border: 1px solid var(--ops-border, #d8d8d8);
+  padding: 14px;
+}
+
+.calendar-summary span,
+.calendar-summary small {
+  color: #555555;
+  display: block;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.calendar-summary strong {
+  display: block;
+  font-size: 28px;
+  margin: 6px 0;
+}
+
+.calendar-event-list {
+  display: grid;
+  gap: 14px;
+}
+
+.calendar-day-group {
+  display: grid;
+  gap: 8px;
+}
+
+.calendar-day-group h2 {
+  align-items: center;
+  display: flex;
+  font-size: 13px;
+  justify-content: space-between;
+  letter-spacing: 0;
+  margin: 0;
+  text-transform: uppercase;
+}
+
+.calendar-day-group h2 span {
+  color: #666666;
+}
+
+.calendar-event {
+  background: #ffffff;
+  border: 1px solid var(--ops-border, #d8d8d8);
+  color: inherit;
+  cursor: pointer;
+  display: grid;
+  gap: 4px;
+  padding: 14px;
+  text-align: left;
+  width: 100%;
+}
+
+.calendar-event:hover {
+  border-color: #111111;
+}
+
+.calendar-event.overdue {
+  border-left: 4px solid #e23f32;
+}
+
+.calendar-event.today {
+  border-left: 4px solid #111111;
+}
+
+.calendar-event.upcoming {
+  border-left: 4px solid #ddff4f;
+}
+
+.calendar-event span {
+  color: #555555;
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.calendar-event strong {
+  font-size: 15px;
+}
+
+.calendar-event small {
+  color: #666666;
+  font-size: 12px;
+}
+
+@media (max-width: 760px) {
+  .calendar-summary {
+    grid-template-columns: 1fr;
+  }
+}
+
 .workboard-card-reference,
 .workboard-card-date,
 .workboard-card-attention {

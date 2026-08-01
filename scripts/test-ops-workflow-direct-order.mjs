@@ -39,11 +39,23 @@ assert.equal(unapproved.ok, false, "unapproved quote cannot convert");
 const zeroQuote = buildOpsWorkflowUpdates("confirm_order", {}, { ...baseInquiry, quoted_amount: 0 });
 assert.equal(zeroQuote.ok, false, "zero quote cannot convert");
 
-const production = buildOpsWorkflowUpdates("advance_production", { productionStage: "embroidery", assignedStaff: "QA Staff" }, { ...baseInquiry, status: "won", quote_status: "approved", odoo_so: "" });
-assert.equal(production.ok, true, "production can start with blank Odoo and parked payment");
+const unpaidProduction = buildOpsWorkflowUpdates("advance_production", { productionStage: "embroidery", assignedStaff: "QA Staff" }, { ...baseInquiry, status: "won", quote_status: "approved", odoo_so: "" });
+assert.equal(unpaidProduction.ok, false, "production cannot start until payment is fully confirmed");
+assert.match(unpaidProduction.error, /confirmed payment/);
+
+const paidProduction = buildOpsWorkflowUpdates("advance_production", { productionStage: "embroidery", assignedStaff: "QA Staff" }, {
+  ...baseInquiry,
+  status: "won",
+  quote_status: "approved",
+  odoo_so: "",
+  payment_status: "paid",
+  payment_verified_amount: 1500,
+  payment_confirmed_amount: 1500,
+});
+assert.equal(paidProduction.ok, true, "production can start with blank Odoo after full payment");
 
 const missing = buildOpsWorkflowUpdates("advance_production", { productionStage: "embroidery", assignedStaff: "" }, { ...baseInquiry, status: "won", quote_status: "approved", assigned_staff: "" });
 assert.equal(missing.ok, false, "normal production requirements still apply");
 assert.match(missing.error, /assigned staff/);
 
-console.log("PASS direct TRRY order conversion and parked payment/Odoo workflow gates");
+console.log("PASS direct TRRY order conversion and locked payment/Odoo workflow gates");

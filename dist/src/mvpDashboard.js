@@ -22,14 +22,14 @@ const INQUIRY_QUEUES = [
   ["lost", "LOST"],
 ];
 
-const PRODUCTION_STAGES = [
+  const PRODUCTION_STAGES = [
   ["queued", "Queued"],
-  ["printing", "DTF Printing"],
-  ["embroidery", "Embroidery"],
-  ["screen_printing", "Screen Printing"],
+  ["printing", "In Production"],
+  ["embroidery", "In Production"],
+  ["screen_printing", "In Production"],
   ["in_production", "In Production"],
   ["qc", "Quality Check"],
-  ["ready", "Ready"],
+  ["ready", "Ready for Pickup/Delivery"],
   ["completed", "Completed"],
 ];
 
@@ -135,13 +135,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   const activeLegacyMatch = (value) => assignmentUsers().find((user) => sameAssignmentLabel(value, user.displayName) || sameAssignmentLabel(value, user.email));
   const owner = (item) => assignmentDisplay({ userId: item.ownerUserId, legacy: item.owner || item.ownerId, empty: "Unassigned" });
   const assigned = (item) => assignmentDisplay({ userId: item.assignedUserId, legacy: item.assignedStaff || item.assigned, empty: "Not Yet Assigned" });
-  const stageLabel = (value) => PRODUCTION_STAGES.find(([stage]) => stage === value)?.[1] || "Queued";
+  const stageLabel = (value) => ACTIVE_STAGES.includes(value) ? "In Production" : PRODUCTION_STAGES.find(([stage]) => stage === value)?.[1] || "Queued";
   const query = (name) => new URLSearchParams(window.location.search).get(name) || "";
 
   function assignmentDisplay({ userId, legacy, empty }) {
     if (userId) return assignmentName(findAssignmentUser(userId)) || "Inactive user (historical)";
     const legacyText = String(legacy || "").trim();
     if (!legacyText) return empty;
+    if (["unassigned", "not assigned", "not set", "not yet assigned"].includes(legacyText.toLowerCase())) return empty;
     return assignmentName(activeLegacyMatch(legacyText)) || "Inactive user (historical)";
   }
 
@@ -445,7 +446,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         const route = isReleasedToProduction(item) ? `/production?order=${encodeURIComponent(item.id)}` : `/orders?order=${encodeURIComponent(item.id)}`;
         rows.push(priority(item, blocked ? `Blocked: ${blocked}` : "Order is overdue", dueState.label, route, dueState.key === "overdue" ? "danger" : "warning"));
       }
-      else if (paymentLabel(item) === "For Verification") rows.push(priority(item, "Payment proof submitted / parked for later review", "Parked", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
+      else if (paymentLabel(item) === "For Verification") rows.push(priority(item, "Payment proof submitted / awaiting admin review", "Needs review", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
       else if (dueState.key === "today" || productionStage(item) === "ready") rows.push(priority(item, productionStage(item) === "ready" ? "Ready for release" : "Due today", dueState.label, `/orders?order=${encodeURIComponent(item.id)}`, ""));
     });
     inquiries.forEach((item) => {
@@ -475,8 +476,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return [
       bottleneck("Overdue follow-ups", overdueFollowUps, "Customer follow-ups are past their scheduled date.", "/inquiries?stage=follow_due", "danger"),
       bottleneck("Quotation queue", quoteBacklog, "New inquiries still need quotation action.", "/inquiries?stage=new", quoteBacklog ? "warning" : ""),
-      bottleneck("Payment parked", awaitingPayment, "Payment workflow is parked for this release.", "/orders?payment=awaiting", awaitingPayment ? "warning" : ""),
-      bottleneck("Payment proof parked", paymentProofs, "Receipts or payment proof stay visible but do not block production.", "/orders", paymentProofs ? "warning" : ""),
+      bottleneck("Payment waiting", awaitingPayment, "Confirmed orders still need payment completion.", "/orders?payment=awaiting", awaitingPayment ? "warning" : ""),
+      bottleneck("Payment proof review", paymentProofs, "Receipts or payment proof need owner review before production.", "/orders", paymentProofs ? "warning" : ""),
       bottleneck("Artwork attention", artworkAttention, "Artwork is missing, pending, or needs revision on open orders.", "/orders", artworkAttention ? "warning" : ""),
       bottleneck("Blocked release", blockedRelease, "Production release requirements are not fully satisfied.", "/orders", blockedRelease ? "danger" : ""),
       bottleneck("Overdue production", overdueProduction, "Released production jobs are past due.", "/production?due=overdue", overdueProduction ? "danger" : ""),
@@ -1103,7 +1104,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ${orderDetailGrid([
         ["Production stage", production.label],
         ["Assigned staff", order.assignedStaff],
-        ["Current blocker", order.blockerReason || "None"],
+        ["Missing blocker note", order.blockerReason || "No blocker note recorded"],
         ["Production note", order.productionNote],
       ])}
       <button class="mvp-secondary-action" data-mvp-view-production="${html(order.id)}" type="button">VIEW IN PRODUCTION</button>
@@ -1142,7 +1143,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const stage = productionStage(item);
     if ([...ACTIVE_STAGES, "qc", "ready", "completed"].includes(stage)) return true;
     if (stage !== "queued") return false;
-    return readyForProduction(item);
+    return releaseRequirementsComplete(item);
   }
   function orderFooterAction(item, gate) {
     const stage = productionStage(item);
@@ -1216,11 +1217,24 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderActionRequired(item) {
     if (isOrderClosed(item)) return false;
     const dueState = due(item);
-    return Boolean(blockedReason(item) || dueState.key === "today" || dueState.key === "overdue" || orderArtworkKey(item) !== "approved");
+    return Boolean(blockedReason(item) || dueState.key === "today" || dueState.key === "overdue" || orderArtworkKey(item) !== "approved" || !paymentSatisfiesProductionGate(item));
   }
 
   function readyForProduction(item) {
-    return Boolean(productionStage(item) === "queued" && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && !["Unassigned", "Not Yet Assigned"].includes(assigned(item)) && !blockedReason(item));
+    return Boolean(productionStage(item) === "queued" && releaseRequirementsComplete(item) && !blockedReason(item));
+  }
+
+  function releaseRequirementsComplete(item) {
+    return Boolean(product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && !["Unassigned", "Not Yet Assigned"].includes(assigned(item)) && paymentSatisfiesProductionGate(item));
+  }
+
+  function paymentSatisfiesProductionGate(item) {
+    const status = key(item.paymentStatus);
+    const total = amount(item.quotedAmount || item.amountDue);
+    const verified = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
+    return total > 0
+      && verified >= total
+      && ["confirmed", "paid", "full_payment_confirmed"].includes(status);
   }
 
   function readinessCell(readiness) {
@@ -1275,7 +1289,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     renderArtwork,
   }) {
     const orders = items.filter((item) => key(item.status) === "won");
-    const productionJobs = orders;
+    const productionJobs = orders.filter(isReleasedToProduction);
     const stageQuery = query("stage");
     const dueQuery = query("due");
     const staffQuery = query("staff");
@@ -1304,7 +1318,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return !search || [jobReference(item), orderReference(item), sourceInquiryReference(item), item.customer, method, itemDisplay(item), product(item), assigned(item)].join(" ").toLowerCase().includes(search);
     });
     const selectedId = state.productionId || query("order");
-    const selected = productionJobs.find((item) => item.id === selectedId) || orders.find((item) => item.id === selectedId);
+    const selected = productionJobs.find((item) => item.id === selectedId);
     const activeJobs = productionJobs.filter((item) => !isOrderClosed(item));
     const counts = {
       active: activeJobs.length,
@@ -1327,7 +1341,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const tabs = [
       ["all", "All", items.length],
       ["queued", "Queue", items.filter((item) => productionStage(item) === "queued").length],
-      ["in_progress", "In Progress", items.filter((item) => ACTIVE_STAGES.includes(productionStage(item))).length],
+      ["in_progress", "In Production", items.filter((item) => ACTIVE_STAGES.includes(productionStage(item))).length],
       ["qc", "Quality Check", items.filter((item) => productionStage(item) === "qc").length],
       ["ready", "Ready", items.filter((item) => productionStage(item) === "ready").length],
       ["completed", "Completed", items.filter((item) => productionStage(item) === "completed").length],
@@ -1346,7 +1360,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         productionItemCell(item),
         cell(quantityDisplay(item)),
         cell(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item)),
-        status(stageLabel(stage), stage),
+        status(stageLabel(stage), canonicalProductionStageForDisplay(stage)),
         `<span class="mvp-due ${dueState.key}" title="${html(dueState.label)}">${html(dueShortLabel(dueState, item))}</span>`,
         productionAttentionCell(blocker),
       ]);
@@ -1549,7 +1563,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     }
     return `<section class="mvp-production-detail-section">
       <h3>BLOCKER</h3>
-      <p class="mvp-production-empty">No active blocker.</p>
+      <p class="mvp-production-empty">No blocker note recorded.</p>
       ${job.permissions?.canSetBlocker ? `<label class="mvp-production-field"><span>Blocker reason</span><textarea data-mvp-production-blocker="${html(job.id)}" maxlength="500" ${saving ? "disabled" : ""}>${html(value)}</textarea></label><button class="mvp-secondary-action" data-mvp-set-production-blocker="${html(job.id)}" type="button" ${saving ? "disabled" : ""}>${saving ? "SAVING..." : "SET BLOCKER"}</button>` : ""}
     </section>`;
   }
@@ -1643,7 +1657,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (!item.dueDate) missing.push("due date");
     if (artworkLabel(item) !== "Artwork Approved") missing.push("artwork approval");
     if (["Not Yet Assigned", "Unassigned"].includes(assigned(item))) missing.push("assigned staff");
-    if (item.blockedReason && !missing.length) missing.push(item.blockedReason);
+    if (Number(item.quotedAmount || item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) missing.push("payment");
+    if (item.blockedReason) missing.push(item.blockedReason);
     return missing;
   }
 
@@ -2115,7 +2130,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return true;
   }  function fulfillment(item) { const value = key(item.fulfillmentMethod); return value === "pickup" ? "Pickup" : value === "delivery" ? "Delivery" : "Not set"; }
   function tracking(item) { const labels = { ready_for_pickup: "Ready for Pickup", out_for_delivery: "Out for Delivery", delivered: "Delivered", completed: "Completed" }; return labels[key(item.trackingSubstatus)] || "Not set"; }
-  function paymentSummary(item) { const total = amount(item.quotedAmount); const selected = amount(item.paymentSelectedAmount); const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Method", paymentMethodLabel(item.paymentMethod)], ["Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Total Amount", money(total)], ["Amount Verified", money(paid)], ["Balance", money(balance)]]); }
+  function paymentSummary(item) { const total = amount(item.quotedAmount); if (total <= 0) return ""; const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Quoted Amount", money(total)], ["Paid Amount", money(paid)], ["Balance", money(balance)], ["Payment Status", paymentLabel(item)]]); }
   function paymentTypeLabel(value) { const text = key(value); if (text === "down_payment") return "50% Down Payment"; if (text === "full") return "Full Payment"; if (text === "shop") return "Pay at Shop"; return "Not selected"; }
   function paymentMethodLabel(value) { const text = key(value); if (text === "online") return "Pay Online"; if (text === "cash") return "Cash at Shop"; if (text === "gcash") return "GCash"; if (text === "bank_transfer") return "Bank Transfer"; if (text === "card") return "Card"; if (text === "other") return "Other"; return "Not selected"; }
   function labelFromKey(value) { const text = String(value || "").trim(); return text ? text.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Payment Event"; }

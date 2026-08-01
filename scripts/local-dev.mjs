@@ -55,6 +55,12 @@ async function handleRequest(request, response) {
       await handlePaymentsRequest(request, response);
       return;
     }
+    if (/^\/api\/inquiries\/[^/]+\/payment-confirmations\/?$/.test(routePath)) {
+      const { default: handleWorkflowRequest } = await import("../api/inquiries/[id]/workflow.js");
+      request.query = { ...(request.query || {}), _opsAction: "payment-confirmations" };
+      await handleWorkflowRequest(request, response);
+      return;
+    }
     if (/^\/api\/inquiries\/[^/]+\/follow-ups\/?$/.test(routePath)) {
       const { default: handleFollowUpsRequest } = await import("../api/inquiries/[id]/follow-ups.js");
       await handleFollowUpsRequest(request, response);
