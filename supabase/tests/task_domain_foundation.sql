@@ -2,6 +2,8 @@
 -- and 202607250002 migrations have applied. This test rolls back all fixtures.
 
 begin;
+create extension if not exists pgtap;
+select plan(1);
 
 do $$
 declare
@@ -9,7 +11,7 @@ declare
   v_staff_id uuid := '91000000-0000-4000-8000-000000000002';
 begin
   insert into auth.users (
-    instance_id, id, aud, role, email, encrypted_password, confirmed_at,
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
   )
   values
@@ -28,8 +30,8 @@ begin
     user_id, email, role, display_name, is_active, is_test
   )
   values
-    (v_owner_id, 'task-owner@invalid.example', 'owner', 'Synthetic Owner', true, true),
-    (v_staff_id, 'task-staff@invalid.example', 'staff', 'Synthetic Staff', true, true);
+    (v_owner_id, 'task-owner@invalid.example', 'owner', 'Synthetic Owner', true, false),
+    (v_staff_id, 'task-staff@invalid.example', 'staff', 'Synthetic Staff', true, false);
 end;
 $$;
 
@@ -266,4 +268,6 @@ end;
 $$;
 
 reset role;
+select pass('task domain foundation contract');
+select * from finish();
 rollback;

@@ -1,5 +1,7 @@
 -- Disposable local database only. Validates canonical schema constraints.
 begin;
+create extension if not exists pgtap;
+select plan(1);
 
 do $$
 declare
@@ -54,11 +56,18 @@ begin
   end;
 
   begin
+    insert into public.tasks (task_code, title, brief, source_type, status, priority)
+    values ('TSK-920006', 'Missing assignee', 'Synthetic.', 'MANUAL', 'TO_DO', 'MEDIUM');
+    raise exception 'active task without assignee was accepted';
+  exception when check_violation then null;
+  end;
+
+  begin
     insert into public.tasks (
       task_code, title, brief, source_type, status, priority, completed_at
     )
     values (
-      'TSK-920006', 'Invalid lifecycle timestamp', 'Synthetic.',
+      'TSK-920007', 'Invalid lifecycle timestamp', 'Synthetic.',
       'MANUAL', 'TO_DO', 'MEDIUM', clock_timestamp()
     );
     raise exception 'nonterminal completion timestamp was accepted';
@@ -73,4 +82,6 @@ begin
 end;
 $$;
 
+select pass('task domain schema constraints');
+select * from finish();
 rollback;

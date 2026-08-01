@@ -1,6 +1,8 @@
 -- Run only against a disposable local Supabase database. Exercises lifecycle,
 -- role, timer, stale-version, revision, cancellation, reopen, and archive paths.
 begin;
+create extension if not exists pgtap;
+select plan(1);
 
 do $$
 declare
@@ -10,7 +12,7 @@ declare
   v_disabled_id uuid := '93000000-0000-4000-8000-000000000004';
 begin
   insert into auth.users (
-    instance_id, id, aud, role, email, encrypted_password, confirmed_at,
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
   )
   select
@@ -28,9 +30,9 @@ begin
     user_id, email, role, display_name, is_active, is_test
   )
   values
-    (v_owner_id, 'branch-owner@invalid.example', 'owner', 'Synthetic Owner', true, true),
-    (v_admin_id, 'branch-admin@invalid.example', 'admin', 'Synthetic Admin', true, true),
-    (v_staff_id, 'branch-staff@invalid.example', 'staff', 'Synthetic Staff', true, true),
+    (v_owner_id, 'branch-owner@invalid.example', 'owner', 'Synthetic Owner', true, false),
+    (v_admin_id, 'branch-admin@invalid.example', 'admin', 'Synthetic Admin', true, false),
+    (v_staff_id, 'branch-staff@invalid.example', 'staff', 'Synthetic Staff', true, false),
     (v_disabled_id, 'branch-disabled@invalid.example', 'staff', 'Synthetic Disabled', false, true);
 end;
 $$;
@@ -193,6 +195,9 @@ begin
   end;
 
   v_result := public.task_reopen(v_task_id, v_version, 'Synthetic reopen.', 'branches-reopen');
+  if v_result ->> 'status' <> 'DRAFT' then
+    raise exception 'CANCELLED reopen did not restore DRAFT';
+  end if;
   v_version := (v_result ->> 'version')::bigint;
   perform public.task_reopen(
     v_task_id, v_version - 1, 'Synthetic reopen.', 'branches-reopen'
@@ -205,6 +210,8 @@ begin
   exception when unique_violation then null;
   end;
 
+  v_result := public.task_approve_draft(v_task_id, v_version, 'branches-reapprove-after-cancel');
+  v_version := (v_result ->> 'version')::bigint;
   perform set_config('request.jwt.claim.sub', v_staff_id::text, true);
   v_result := public.task_start_work(v_task_id, v_version, 'branches-restart');
   v_version := (v_result ->> 'version')::bigint;
@@ -286,6 +293,11 @@ begin
     'Synthetic DRAFT cancellation.', 'branches-draft-cancel'
   );
   if v_result ->> 'status' <> 'CANCELLED' then raise exception 'DRAFT cancellation failed'; end if;
+  if not exists (
+    select 1 from public.task_events
+    where task_id = (v_result ->> 'id')::uuid
+      and event_type = 'DISCARDED'
+  ) then raise exception 'DRAFT discard was not audited'; end if;
 
   v_result := public.task_create(
     'Synthetic owner-gated draft', 'Disposable.', 'MANUAL', null, null,
@@ -325,7 +337,7 @@ begin
   end if;
 
   perform set_config('request.jwt.claim.sub', v_owner_id::text, true);
-  update public.admin_users set is_active = true where user_id = v_disabled_id;
+  update public.admin_users set is_active = true, is_test = false where user_id = v_disabled_id;
   v_result := public.task_create(
     'Synthetic later-disabled assignee', 'Disposable.', 'MANUAL', null, null,
     'LOW', v_disabled_id, v_owner_id, false, null, null, null, null,
@@ -337,6 +349,14 @@ begin
     v_disabled_task_id, v_disabled_version, 'branches-disabled-approve'
   );
   v_disabled_version := (v_result ->> 'version')::bigint;
+  update public.tasks
+  set status = 'DONE',
+      completed_at = clock_timestamp()
+  where id = v_disabled_task_id;
+  select version
+  into v_disabled_version
+  from public.tasks
+  where id = v_disabled_task_id;
   update public.admin_users set is_active = false where user_id = v_disabled_id;
 
   perform set_config('request.jwt.claim.sub', v_disabled_id::text, true);
@@ -347,7 +367,19 @@ begin
     raise exception 'disabled account mutation was accepted';
   exception when insufficient_privilege then null;
   end;
+
+  perform set_config('request.jwt.claim.sub', v_owner_id::text, true);
+  begin
+    perform public.task_reopen(
+      v_disabled_task_id, v_disabled_version, 'Synthetic disabled DONE reopen.',
+      'branches-disabled-done-reopen'
+    );
+    raise exception 'DONE reopen with ineligible historical assignee was accepted';
+  exception when sqlstate '22023' then null;
+  end;
 end;
 $$;
 
+select pass('task domain lifecycle branches');
+select * from finish();
 rollback;

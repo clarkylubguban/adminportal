@@ -1,5 +1,7 @@
 -- API-specific replay contract. Disposable local Supabase database only.
 begin;
+create extension if not exists pgtap;
+select plan(1);
 
 do $$
 declare
@@ -10,7 +12,7 @@ declare
   v_second jsonb;
 begin
   insert into auth.users (
-    instance_id, id, aud, role, email, encrypted_password, confirmed_at,
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
   )
   values
@@ -29,8 +31,8 @@ begin
     user_id, email, role, display_name, is_active, is_test
   )
   values
-    (v_owner, 'api-owner@invalid.example', 'owner', 'Synthetic API Owner', true, true),
-    (v_staff, 'api-staff@invalid.example', 'staff', 'Synthetic API Staff', true, true);
+    (v_owner, 'api-owner@invalid.example', 'owner', 'Synthetic API Owner', true, false),
+    (v_staff, 'api-staff@invalid.example', 'staff', 'Synthetic API Staff', true, false);
 
   update public.task_feature_flags set enabled = true where feature = 'TASK_DOMAIN';
   perform set_config('request.jwt.claim.role', 'authenticated', true);
@@ -106,4 +108,6 @@ begin
 end;
 $$;
 
+select pass('task domain API idempotency contract');
+select * from finish();
 rollback;

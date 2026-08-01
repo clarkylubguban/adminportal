@@ -15,6 +15,12 @@ const functionsPath = join(
   "migrations",
   "202607250002_create_task_domain_functions.sql",
 );
+const alignmentPath = join(
+  root,
+  "supabase",
+  "migrations",
+  "202608010001_align_task_foundation_phase_8_1.sql",
+);
 const testsRoot = join(root, "supabase", "tests");
 const testPaths = {
   foundation: join(testsRoot, "task_domain_foundation.sql"),
@@ -30,6 +36,7 @@ const concurrencyHarnessPath = join(root, "scripts", "verify-task-concurrency.mj
 const [
   schema,
   functions,
+  alignment,
   foundationTest,
   schemaTest,
   lifecycleTest,
@@ -41,6 +48,7 @@ const [
 ] = await Promise.all([
     readFile(schemaPath, "utf8"),
     readFile(functionsPath, "utf8"),
+    readFile(alignmentPath, "utf8"),
     readFile(testPaths.foundation, "utf8"),
     readFile(testPaths.schema, "utf8"),
     readFile(testPaths.lifecycle, "utf8"),
@@ -111,7 +119,12 @@ requireText(
   "revoke all on table public.tasks",
   "revoked direct task mutation",
 );
-forbid(schema, /\bis_test\s*=\s*(?:true|false)\b/i, "is_test assignment filtering");
+requireText(alignment, "coalesce(actor.is_test, false) = false", "is_test actor filtering");
+requireText(alignment, "coalesce(account.is_test, false) = false", "is_test assignment filtering");
+requireText(alignment, "tasks_active_assignee_check", "active task assignee invariant");
+requireText(alignment, "'DISCARDED'", "discard audit event");
+requireText(alignment, "v_next_status := 'DRAFT'", "CANCELLED reopen to DRAFT");
+requireText(alignment, "perform public.task_active_user_role(v_task.assigned_user_id);", "DONE reopen assignee eligibility");
 forbid(
   `${schema}\n${functions}`,
   /set search_path = pg_catalog, public/,
@@ -196,7 +209,7 @@ requireText(lifecycleTest, "TO_DO to DONE shortcut", "forbidden shortcut test");
 requireText(lifecycleTest, "admin bypassed owner-required approval", "owner gate test");
 requireText(lifecycleTest, "disabled account mutation", "disabled account test");
 requireText(lifecycleTest, "TIME_ENTRY_CORRECTED", "time correction audit test");
-requireText(rlsTest, "active is_test account was excluded", "is_test assignment test");
+requireText(rlsTest, "active is_test account was assignment eligible", "is_test assignment test");
 requireText(rlsTest, "manager-only draft events leaked", "staff event visibility test");
 requireText(rlsTest, "feature-off RLS exposed", "feature-off RLS test");
 requireText(concurrencyTest, "SIMULTANEOUS SUBMIT", "submit concurrency test");
@@ -227,7 +240,7 @@ for (const [name, sql] of Object.entries({
 })) {
   requireText(sql, "rollback;", `${name} rollback`);
   forbid(sql, /@(?!invalid\.example)/, `${name} non-synthetic email domain`);
-  forbid(sql, /email_confirmed_at/, `${name} incompatible Auth fixture column`);
+  forbid(sql, /[^_]confirmed_at/, `${name} generated Auth fixture column`);
 }
 
 const appFiles = await readdir(join(root, "src"), { recursive: true }).catch(
