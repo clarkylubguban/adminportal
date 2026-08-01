@@ -1,4 +1,4 @@
-﻿const TERMINAL_STATUSES = new Set(["lost", "cancelled", "canceled"]);
+const TERMINAL_STATUSES = new Set(["lost", "cancelled", "canceled"]);
 const ACTIVE_STAGES = new Set(["printing", "embroidery", "screen_printing"]);
 
 export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().toISOString()) {
@@ -10,14 +10,13 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
     const odooSO = cleanText(body.odooSO, 120);
     if (key(inquiry.quote_status) !== "approved") return failure("quote approval is required");
     if (!(Number(inquiry.quoted_amount) > 0)) return failure("a valid quoted amount is required");
-    if (!odooSO) return failure("a confirmed Odoo sales order is required");
-    return success({ status: "won", odoo_so: odooSO, next_action: "Odoo Sales Order recorded" });
+    return success({ status: "won", odoo_so: odooSO || inquiry.odoo_so || null, next_action: odooSO ? "Odoo Sales Order recorded" : "TRRY order confirmed" });
   }
 
   if (!["save_production", "advance_production"].includes(action)) {
     return failure("invalid workflow action");
   }
-  if (!isConfirmedOrder(inquiry)) return failure("a confirmed order and Odoo sales order are required");
+  if (!isConfirmedOrder(inquiry)) return failure("a confirmed TRRY order is required");
 
   const currentStage = canonicalStage(inquiry.production_stage);
   if (["ready", "completed"].includes(currentStage) && action === "save_production") {
@@ -50,8 +49,7 @@ export function canonicalStage(value) {
 
 export function isConfirmedOrder(inquiry) {
   return key(inquiry.status) === "won"
-    && key(inquiry.quote_status) === "approved"
-    && Boolean(cleanText(inquiry.odoo_so, 120));
+    && key(inquiry.quote_status) === "approved";
 }
 
 function nextStage(stage, inquiry) {
@@ -64,17 +62,25 @@ function nextStage(stage, inquiry) {
 
 function productionGate(inquiry) {
   const missing = [];
-  if (!cleanText(inquiry.odoo_so, 120)) missing.push("Odoo SO");
   if (!cleanText(inquiry.product_desc || inquiry.product, 500)) missing.push("product or service");
   if (!cleanText(inquiry.quantity, 120)) missing.push("quantity");
   if (!inquiry.due_date) missing.push("due date");
   if (key(inquiry.artwork_status) !== "approved") missing.push("artwork approval");
   if (!cleanText(inquiry.assigned_staff, 120)) missing.push("assigned staff");
-  if (Number(inquiry.amount_due) > 0 && !["confirmed", "paid"].includes(key(inquiry.payment_status))) missing.push("confirmed payment");
+  if (Number(inquiry.quoted_amount || inquiry.amount_due) > 0 && !paymentSatisfiesProductionGate(inquiry)) missing.push("confirmed payment");
   if (cleanText(inquiry.blocked_reason, 500)) missing.push("blocked reason");
   return missing;
 }
 
+
+function paymentSatisfiesProductionGate(inquiry) {
+  const total = Number(inquiry.quoted_amount || inquiry.amount_due);
+  const verified = Number(inquiry.payment_verified_amount || inquiry.payment_confirmed_amount);
+  const status = key(inquiry.payment_status);
+  if (!Number.isFinite(total) || total <= 0) return false;
+  if (["paid", "full_payment_confirmed", "confirmed"].includes(status)) return Number.isFinite(verified) && verified >= total;
+  return false;
+}
 function productionFields(body, now) {
   return {
     assigned_staff: cleanText(body.assignedStaff, 120) || null,

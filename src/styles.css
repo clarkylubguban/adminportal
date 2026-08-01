@@ -22338,3 +22338,82 @@ pre,
 .my-task-card-main strong {
   letter-spacing: 0 !important;
 }
+/* Admin order drawer payment confirmation. */
+.mvp-payment-confirmation {
+  gap: 10px;
+}
+
+.mvp-payment-warning {
+  border: 1px solid var(--mvp-ink);
+  display: grid;
+  gap: 3px;
+  padding: 8px;
+}
+
+.mvp-payment-warning strong,
+.mvp-payment-warning span,
+.mvp-payment-message {
+  font-family: var(--trry-font-ui);
+  font-size: 8px;
+  line-height: 1.4;
+  text-transform: uppercase;
+}
+
+.mvp-payment-warning span {
+  color: var(--mvp-muted);
+}
+
+.mvp-payment-form {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: 1fr 1fr;
+}
+
+.mvp-payment-form label {
+  display: grid;
+  gap: 5px;
+}
+
+.mvp-payment-form label.wide {
+  grid-column: 1 / -1;
+}
+
+.mvp-payment-form label span {
+  color: var(--mvp-muted);
+  font-family: var(--trry-font-ui);
+  font-size: 8px;
+  text-transform: uppercase;
+}
+
+.mvp-payment-form input,
+.mvp-payment-form select,
+.mvp-payment-form textarea {
+  background: var(--mvp-white);
+  border: 1px solid var(--mvp-ink);
+  border-radius: 6px;
+  color: var(--mvp-ink);
+  font: inherit;
+  min-height: 36px;
+  padding: 7px;
+  width: 100%;
+}
+
+.mvp-payment-form textarea {
+  min-height: 62px;
+  resize: vertical;
+}
+
+.mvp-payment-message {
+  color: var(--mvp-muted);
+  margin: 0;
+}
+
+.mvp-payment-message.error {
+  color: var(--mvp-red);
+}
+
+@media (max-width: 640px) {
+  .mvp-payment-form {
+    grid-template-columns: 1fr;
+  }
+}

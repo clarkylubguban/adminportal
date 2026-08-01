@@ -284,6 +284,7 @@ let opsSoDraft = null;
 let opsSoSavingId = null;
 let opsArtworkRequests = {};
 let opsCustomerActionRequests = {};
+let mvpPaymentConfirmationRequests = {};
 let expandedOpsInquiryId = null;
 let selectedOrderDashboardId = null;
 let orderDashboardSaveError = "";
@@ -2161,7 +2162,7 @@ function renderMvpOrdersPage() {
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
     schemaNotice: renderOrderDashboardSchemaNotice(),
-    renderPayment: renderOpsPaymentStage,
+    renderPayment: renderMvpPaymentConfirmation,
     renderTracking: renderOpsCustomerTracking,
   });
 }
@@ -2324,9 +2325,32 @@ function canOpsPrepareProof(item) {
 
 function canOpsRequestPayment(item) {
   const state = getOpsNormalizedCustomerState(item);
-  return state.quote === "approved" && state.artwork === "approved" && state.payment !== "confirmed";
+  return state.quote === "approved" && state.artwork === "approved" && !isOpsPaymentConfirmed(state.payment);
 }
 
+
+function isOpsPaymentConfirmed(value) {
+  return ["confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(String(value || "").trim().toLowerCase());
+}
+
+function getOpsPaymentTypeLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "down_payment") return "50% Down Payment";
+  if (key === "full") return "Full Payment";
+  if (key === "shop") return "Pay at Shop";
+  return "Not selected";
+}
+
+function getOpsPaymentMethodLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "online") return "Pay Online";
+  if (key === "cash") return "Cash at Shop";
+  if (key === "gcash") return "GCash at Shop";
+  if (key === "bank_transfer") return "Bank Transfer";
+  if (key === "card") return "Card";
+  if (key === "other") return "Other";
+  return "Not selected";
+}
 function getOpsInquiryCurrentTask(item) {
   const state = getOpsNormalizedCustomerState(item);
   if (["submitted", "under_review", "revision_requested"].includes(state.artwork)) return { stage: "artwork", text: state.artwork === "revision_requested" ? "Review requested artwork changes" : "Review uploaded artwork" };
@@ -2338,8 +2362,9 @@ function getOpsInquiryCurrentTask(item) {
   if (canOpsPrepareProof(item) && hasOpsFinalProof(item)) return { stage: "artwork", text: "Send approved design" };
   if (state.artwork === "approval_required") return { stage: "artwork", text: "Waiting for customer artwork approval" };
   if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment receipt" };
+  if (canOpsRequestPayment(item) && ["pay_at_shop", "payment_pending_at_shop"].includes(state.payment)) return { stage: "payment", text: "Confirm shop payment" };
   if (canOpsRequestPayment(item)) return { stage: "payment", text: "Request payment" };
-  if (state.payment === "confirmed" && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
+  if (isOpsPaymentConfirmed(state.payment) && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
   if (canEditOpsCustomerTracking(item)) return { stage: "fulfillment", text: "Update customer tracking" };
   return { stage: "inquiry", text: item.next || "Review inquiry" };
 }
@@ -2349,7 +2374,7 @@ function getOpsInquiryStages(item) {
   const state = getOpsNormalizedCustomerState(item);
   const quoteComplete = ["ready", "approved"].includes(state.quote) || Boolean(item.quotePublishedAt);
   const artworkComplete = state.artwork === "approved";
-  const paymentComplete = state.payment === "confirmed";
+  const paymentComplete = isOpsPaymentConfirmed(state.payment);
   const productionActive = ["printing", "embroidery", "screen_printing", "qc", "ready", "in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(state.production) || state.status === "won";
   const fulfillmentActive = canEditOpsCustomerTracking(item) || ["ready_for_pickup", "out_for_delivery", "delivered", "completed"].includes(item.trackingSubstatus);
   const stageState = (key, complete, unlocked) => {
@@ -2592,6 +2617,13 @@ const opsCustomerActionLabels = {
     proof_submitted: "Receipt Received",
     under_review: "Receipt Under Review",
     confirmed: "Payment Confirmed",
+    paid: "Fully Paid",
+    full_payment_confirmed: "Full Payment Confirmed",
+    down_payment_confirmed: "Down Payment Confirmed",
+    partially_paid: "Partially Paid",
+    pay_at_shop: "Pay at Shop",
+    payment_pending_at_shop: "Pending at Shop",
+    correction_required: "Correction Required",
   },
 };
 
@@ -2695,25 +2727,60 @@ function renderOpsPaymentStage(item) {
   const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
   body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
 
-  if (status === "confirmed") {
-    body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
+  if (isOpsPaymentConfirmed(status)) {
+    body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
   } else if (!canOpsRequestPayment(item)) {
     body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
-  } else if (status === "required") {
+  } else if (["pay_at_shop", "payment_pending_at_shop"].includes(status)) {
+    body += `<div class="ops-stage-mini-grid"><div><span>Selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Customer status</span><strong>PAY AT SHOP</strong></div><div><span>Amount to collect</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div></div><p class="ops-stage-muted"><strong>SHOP PAYMENT PENDING</strong>Confirm only after staff receives payment at the shop.</p><div class="ops-customer-action-form compact"><label><span>Cash amount received</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? item.amountDue ?? "")}" /></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM CASH PAYMENT", action: "confirm_cash_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
+  } else if (["required", "correction_required"].includes(status)) {
     body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>PAYMENT REQUESTED</strong></div></div><p class="ops-stage-muted"><strong>${item.paymentRejectedAt ? "NEW RECEIPT NEEDED" : "PAYMENT REQUESTED"}</strong>Awaiting receipt.</p>`;
   } else if (["proof_submitted", "under_review"].includes(status)) {
     const receipt = item.paymentProofPath ? renderOpsAssetButton({ label: isReceiptLoading ? "LOADING..." : receiptUnavailable ? "TRY AGAIN" : "REVIEW RECEIPT", asset: "payment-proof", id: item.id, disabled: isReceiptLoading }) : `<span class="ops-customer-empty">No receipt uploaded.</span>`;
     const receiptPreview = receiptOpened ? `<figure class="ops-payment-receipt-preview"><img alt="Uploaded payment receipt for ${escapeHtml(item.id)}" src="${escapeHtml(request.signedUrl)}" /><figcaption>Receipt opened for ${escapeHtml(item.id)}</figcaption></figure>` : "";
     const receiptError = receiptUnavailable ? `<p class="ops-customer-action-message error">RECEIPT UNAVAILABLE</p>` : "";
-    body += `<div class="ops-stage-mini-grid"><div><span>Inquiry reference</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>RECEIPT RECEIVED</strong></div><div><span>Uploaded</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div><div><span>Receipt file</span><strong>${escapeHtml(item.paymentProofPath || "-")}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Reason for new receipt</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div>${receiptPreview}${receiptError}<div class="ops-stage-actions">${receipt}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}${renderOpsActionButton({ label: "REQUEST NEW RECEIPT", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading })}</div>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Inquiry reference</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Selected amount</span><strong>${formatOpsValue(item.paymentSelectedAmount ?? item.amountDue)}</strong></div><div><span>Payment type</span><strong>${escapeHtml(getOpsPaymentTypeLabel(item.paymentType))}</strong></div><div><span>Reference</span><strong>${escapeHtml(item.paymentReference || "-")}</strong></div><div><span>Customer note</span><strong>${escapeHtml(item.paymentCustomerNote || "-")}</strong></div><div><span>Uploaded</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div><div><span>Receipt file</span><strong>${escapeHtml(item.paymentReceiptFilename || item.paymentProofPath || "-")}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentSelectedAmount ?? item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Reason for new receipt</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div>${receiptPreview}${receiptError}<div class="ops-stage-actions">${receipt}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}${renderOpsActionButton({ label: "REQUEST NEW RECEIPT", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading })}</div>`;
   } else {
-    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "proof_submitted", "under_review", "confirmed"].includes(status) })}</div>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentSelectedAmount ?? item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "correction_required", "proof_submitted", "under_review", "pay_at_shop", "payment_pending_at_shop", "confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(status) })}</div>`;
   }
 
   if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW RECEIPT NEEDED</strong>${escapeHtml(item.paymentReviewNote || "Replacement receipt requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
 
-  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && status !== "confirmed", body });
+  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && !isOpsPaymentConfirmed(status), body });
 }
+
+function renderMvpPaymentConfirmation(item) {
+  const request = mvpPaymentConfirmationRequests[item.id] || {};
+  const status = String(item.paymentStatus || "").trim().toLowerCase();
+  const paid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount ?? 0) || 0;
+  const total = Number(item.quotedAmount || item.amountDue || 0) || 0;
+  const balance = Math.max(Math.round((total - paid) * 100) / 100, 0);
+  const isLoading = request.status === "loading";
+  const isPaid = ["paid", "confirmed", "full_payment_confirmed"].includes(status) && balance <= 0;
+  const isShop = ["pay_at_shop", "payment_pending_at_shop"].includes(status) || String(item.paymentType || "").toLowerCase() === "shop";
+  const isOnline = ["proof_submitted", "under_review", "required", "correction_required"].includes(status) || String(item.paymentMethod || "").toLowerCase() === "online";
+
+  if (isPaid) {
+    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">PAYMENT CONFIRMED. ${escapeHtml(formatOpsValue(paid))} recorded${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}.</p></section>`;
+  }
+
+  if (!isShop && !isOnline) {
+    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">Payment method has not been selected by the customer.</p></section>`;
+  }
+
+  const title = isShop ? "CONFIRM PAYMENT RECEIVED" : "REVIEW & CONFIRM ONLINE PAYMENT";
+  const warning = isShop
+    ? "Confirm only after staff receives payment at the shop."
+    : "Review the Messenger receipt before confirming. This does not use in-app receipt upload.";
+  const message = request.status === "error"
+    ? `<p class="mvp-payment-message error" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation failed.")}</p>`
+    : request.status === "success"
+      ? `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation saved.")}</p>`
+      : `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(warning)}</p>`;
+
+  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number</span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label></div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
+}
+
 function renderOpsProductionStage(item) {
   const current = getOpsInquiryCurrentTask(item).stage === "production";
   if (item.status === "sent") {
@@ -2858,7 +2925,7 @@ function setOpsCustomerActionInlineMessage(sourceElement, message, status = "err
 function getOpsActionLoadingLabel(action) {
   if (action === "publish_quote") return "SENDING...";
   if (action === "require_payment") return "REQUESTING...";
-  if (action === "confirm_payment") return "CONFIRMING...";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING...";
   if (action === "request_new_payment_proof") return "REQUESTING...";
   return "SAVING...";
 }
@@ -2866,7 +2933,7 @@ function getOpsActionLoadingLabel(action) {
 function getOpsActionSavingMessage(action) {
   if (action === "publish_quote") return "SENDING QUOTE...";
   if (action === "require_payment") return "REQUESTING PAYMENT...";
-  if (action === "confirm_payment") return "CONFIRMING PAYMENT...";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING PAYMENT...";
   if (action === "request_new_payment_proof") return "REQUESTING NEW RECEIPT...";
   return "SAVING CUSTOMER ACTION...";
 }
@@ -2875,7 +2942,7 @@ function getOpsActionSuccessMessage(action) {
   if (action === "save_quote_draft") return "QUOTE DRAFT SAVED.";
   if (action === "publish_quote") return "QUOTE PUBLISHED FOR CUSTOMER.";
   if (action === "require_payment") return "PAYMENT REQUESTED.";
-  if (action === "confirm_payment") return "PAYMENT CONFIRMED.";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "PAYMENT CONFIRMED.";
   if (action === "request_new_payment_proof") return "NEW RECEIPT NEEDED.";
   return "CUSTOMER ACTION SAVED.";
 }
@@ -3193,11 +3260,14 @@ function todayIsoDate() {
 }
 function renderOpsOdooAction(item) {
   if (opsSoDraft?.id === item.id) {
-    const value = opsSoDraft.value ?? "";
     const isSaving = opsSoSavingId === item.id;
-    return `<div class="ops-so-editor"><span>Customer confirmed? Enter the Odoo SO number</span><input class="ops-so-input" data-ops-so-input="${item.id}" value="${escapeHtml(value)}" placeholder="e.g. SO-2216" ${isSaving ? "disabled" : ""} /><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${value.trim() && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : "Confirm Odoo SO & Create Order"}</button><button class="ops-light-button mini" data-ops-cancel-so type="button" ${isSaving ? "disabled" : ""}>Cancel</button></div></div>`;
+    return `<div class="ops-so-editor ops-order-confirm-card"><strong>CREATE CONFIRMED ORDER?</strong><p>This approved inquiry will be added to Orders.</p><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>${isSaving ? "CREATING..." : "CONFIRM &amp; CREATE ORDER"}</button><button class="ops-light-button mini" data-ops-cancel-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>CANCEL</button></div></div>`;
   }
-  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">Confirm Odoo SO &amp; Create Order</button>`;
+  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">CREATE ORDER</button>`;
+}
+
+function createConfirmedOrderReference(item) {
+  return String(item.odooSO || item.orderCode || item.orderReference || item.reference || item.id || "").trim();
 }
 
 function renderOpsProductionCard(item) {
@@ -3317,8 +3387,8 @@ function normalizeOpsDate(value) {
 
 async function confirmOpsSO(id) {
   if (opsSoSavingId) return;
-  const so = (opsSoDraft?.value || "").trim();
   const current = opsInquiries.find((item) => item.id === id);
+  const so = current ? createConfirmedOrderReference(current) : "";
   if (!so || !current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
   opsSoSavingId = id;
 
@@ -3360,6 +3430,46 @@ async function requestOpsWorkflowAction(inquiryId, body) {
   if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Workflow update failed.");
   return payload;
 }
+
+async function requestMvpPaymentConfirmation(inquiryId, body) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/payment-confirmations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Payment confirmation failed.");
+  return payload;
+}
+
+async function confirmMvpOrderPayment(inquiryId, form) {
+  if (!inquiryId || mvpPaymentConfirmationRequests[inquiryId]?.status === "loading") return;
+  const amountReceived = Number(String(form.amountReceived || "").replace(/,/g, ""));
+  if (!Number.isFinite(amountReceived) || amountReceived <= 0) {
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "error", message: "Enter a positive amount received." } };
+    return;
+  }
+
+  mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "loading", message: "Saving payment confirmation..." } };
+  render();
+
+  try {
+    const payload = await requestMvpPaymentConfirmation(inquiryId, {
+      ...form,
+      amountReceived,
+      idempotencyKey: `admin-payment-${inquiryId}-${amountReceived}-${Date.now()}`,
+    });
+    if (!payload?.inquiry) throw new Error("Payment confirmation returned no saved order.");
+    opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...payload.inquiry } : item);
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "success", message: "Payment confirmation saved." } };
+  } catch (error) {
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "error", message: error.message || "Payment confirmation failed." } };
+  }
+}
+
 function getAssignmentUserById(userId) {
   return assignmentUsers.find((user) => user.userId === userId) || null;
 }
@@ -5890,6 +6000,7 @@ function bindEvents() {
     navigate: navigateTo,
     copy: copyToClipboard,
     saveProduction: saveMvpProductionFields,
+    confirmPayment: confirmMvpOrderPayment,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,
     handleInquiryFollowUpOutcome: handleMvpInquiryFollowUpOutcome,
   });
@@ -6457,17 +6568,10 @@ function bindOpsBoardEvents() {
   });
   document.querySelectorAll("[data-ops-add-so]").forEach((button) => {
     button.addEventListener("click", () => {
-      opsSoDraft = { id: button.dataset.opsAddSo, value: "" };
+      if (button.disabled || opsSoSavingId) return;
+      opsSoDraft = { id: button.dataset.opsAddSo };
       render();
-      document.querySelector(`[data-ops-so-input="${button.dataset.opsAddSo}"]`)?.focus();
-    });
-  });
-
-  document.querySelectorAll("[data-ops-so-input]").forEach((input) => {
-    input.addEventListener("input", (event) => {
-      opsSoDraft = { id: input.dataset.opsSoInput, value: event.target.value };
-      render();
-      const soField = document.querySelector(`[data-ops-so-input="${input.dataset.opsSoInput}"]`); if (soField) { soField.focus(); soField.setSelectionRange?.(soField.value.length, soField.value.length); }
+      document.querySelector(`[data-ops-confirm-so="${button.dataset.opsAddSo}"]`)?.focus();
     });
   });
 
@@ -6481,9 +6585,12 @@ function bindOpsBoardEvents() {
     });
   });
 
-  document.querySelector("[data-ops-cancel-so]")?.addEventListener("click", () => {
-    opsSoDraft = null;
-    render();
+  document.querySelectorAll("[data-ops-cancel-so]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (opsSoSavingId) return;
+      opsSoDraft = null;
+      render();
+    });
   });
 }
 async function copyToClipboard(value) {
