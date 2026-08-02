@@ -1340,11 +1340,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const active = stageQuery || state.production.stage;
     const tabs = [
       ["all", "All", items.length],
-      ["queued", "Queue", items.filter((item) => productionStage(item) === "queued").length],
-      ["in_progress", "In Production", items.filter((item) => ACTIVE_STAGES.includes(productionStage(item))).length],
-      ["qc", "Quality Check", items.filter((item) => productionStage(item) === "qc").length],
-      ["ready", "Ready", items.filter((item) => productionStage(item) === "ready").length],
-      ["completed", "Completed", items.filter((item) => productionStage(item) === "completed").length],
+      ["queued", "QUEUED", items.filter((item) => productionStage(item) === "queued").length],
+      ["in_progress", "IN PRODUCTION", items.filter((item) => ACTIVE_STAGES.includes(productionStage(item))).length],
+      ["qc", "QUALITY CHECK", items.filter((item) => productionStage(item) === "qc").length],
+      ["ready", "READY FOR PICKUP/DELIVERY", items.filter((item) => productionStage(item) === "ready").length],
+      ["completed", "COMPLETED", items.filter((item) => productionStage(item) === "completed").length],
     ];
     return `<nav class="mvp-production-stage-tabs" aria-label="Production status filters">${tabs.map(([value, label, count]) => `<button type="button" data-mvp-production-stage="${html(value)}" class="${active === value || (!active && value === "all") ? "active" : ""}"><span>${html(label)}</span><strong>${count}</strong></button>`).join("")}</nav>`;
   }

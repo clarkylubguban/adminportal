@@ -111,7 +111,7 @@ function mapReorderRequestToOrder(request, clients, requestItems) {
   const items = requestItems.filter((item) =>
     [item.reorder_request_id, item.request_id].some((id) => String(id) === String(request.id))
   );
-  const clientName = getFirstValue(client, ["name", "client_name", "business_name", "company_name"]) || "Urban Coffee";
+  const clientName = getFirstValue(client, ["name", "client_name", "business_name", "company_name"]) || "Client";
   const itemLines = buildItemLines(items, request);
   const totalQuantity = itemLines.reduce((total, item) => total + item.qty, 0);
   const requestedQuantity = totalQuantity || Number(getFirstValue(request, ["total_quantity", "quantity", "qty"])) || 0;

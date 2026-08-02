@@ -21673,6 +21673,7 @@ body,
   gap: 8px;
   overflow-x: auto;
   padding-bottom: 8px;
+  scrollbar-gutter: stable;
 }
 
 .my-tasks-filters button,
@@ -26208,6 +26209,22 @@ textarea,
   font-weight: 900;
   letter-spacing: 0;
   text-transform: uppercase;
+  white-space: nowrap;
+}
+
+@media (max-width: 640px) {
+  .my-tasks-filters {
+    display: grid;
+    gap: 8px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    overflow-x: visible;
+  }
+
+  .my-tasks-filters button {
+    min-width: 0;
+    padding: 0 10px;
+    white-space: normal;
+  }
 }
 
 .calendar-summary strong {

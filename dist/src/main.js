@@ -163,50 +163,23 @@ const statusOptions = [
 ];
 
 const clientProgram = {
-  id: "urban-coffee",
-  supabaseClientId: "91a0967d-c946-43f7-b03d-f289fe3f5eec",
-  name: "Urban Coffee",
-  initials: "UC",
-  domain: "urbancoffee.trryapparel.com",
-  status: "Active",
-  accountType: "Recurring Reorder",
+  id: "",
+  supabaseClientId: "",
+  name: "No client program connected",
+  initials: "--",
+  domain: "",
+  status: "Inactive",
+  accountType: "Not connected",
   primaryContact: "Not set",
   contactEmail: "Not set",
   contactNumber: "Not set",
-  approvedProducts: 2,
+  approvedProducts: 0,
   savedEmployees: 0,
   activeOrders: 0,
   lastOrderDate: "None yet",
 };
 
-const products = [
-  {
-    code: "TRRY-UC-P001",
-    product: "Admin Polo Uniform",
-    client: "Urban Coffee",
-    category: "Uniforms",
-    color: "Black",
-    logoPlacement: "Left Chest Embroidery",
-    fabric: "Cotton Blend",
-    status: "Approved",
-    visible: "Yes",
-    created: "MVP Setup",
-    updated: "Recently",
-  },
-  {
-    code: "TRRY-UC-P002",
-    product: "Embroidered Staff Cap",
-    client: "Urban Coffee",
-    category: "Caps",
-    color: "Navy",
-    logoPlacement: "Front Embroidery",
-    fabric: "Cotton",
-    status: "Approved",
-    visible: "Yes",
-    created: "MVP Setup",
-    updated: "Recently",
-  },
-];
+const products = [];
 
 const imageAngleLabels = ["Front", "Back", "Detail", "Size Chart"];
 
@@ -278,14 +251,7 @@ const emptyOpsExtract = {
   suggestedReply: "",
 };
 
-const localOpsInquiries = [
-  { id: "TRY-0148", customer: "Ma. Theresa Cafe", service: "DTF Print", qty: "30 pcs", dueDate: "2026-07-11", followUpDate: null, next: "Reply with fabric options", assigned: "Jena", source: "FB", status: "new", odooSO: "" },
-  { id: "TRY-0147", customer: "Kagawad Lito / Brgy. Hinaplanon", service: "Uniform + Embroidery", qty: "45 pcs", dueDate: "2026-07-07", followUpDate: null, next: "Ask sizes + logo file", assigned: "Jena", source: "FB", status: "followup", odooSO: "" },
-  { id: "TRY-0146", customer: "Iligan Riders Club", service: "Screen Print", qty: "60 pcs", dueDate: "2026-07-15", followUpDate: null, next: "Prepare quotation", assigned: "Clark", source: "Referral", status: "quote", odooSO: "" },
-  { id: "TRY-0145", customer: "St. Michael's College Org", service: "Org Shirts (DTF)", qty: "120 pcs", dueDate: "2026-07-22", followUpDate: "2026-07-07", next: "Follow up - quote sent Jul 6", assigned: "Clark", source: "Portal", status: "sent", odooSO: "" },
-  { id: "TRY-0144", customer: "D' Native Grill", service: "Staff Uniforms", qty: "18 pcs", dueDate: "2026-07-14", followUpDate: null, next: "Schedule production", assigned: "Clark", source: "Walk-in", status: "won", odooSO: "SO-2214" },
-  { id: "TRY-0143", customer: "J&M Trading", service: "Cap Embroidery", qty: "25 pcs", dueDate: null, followUpDate: null, next: "Went with another supplier", assigned: "Jena", source: "FB", status: "lost", odooSO: "" },
-];
+const localOpsInquiries = [];
 const shouldLoadSupabaseOps = isSupabaseReady();
 
 let opsInquiries = shouldLoadSupabaseOps ? [] : [...localOpsInquiries];
@@ -300,12 +266,7 @@ const opsProduction = [
   { name: "Ready for Pickup", jobs: 0, note: "Production tracking not connected yet." },
 ];
 
-const opsPriorities = [
-  { text: "Follow up pending quotation - St. Michael's College Org", tag: "Quote Sent", tone: "sent" },
-  { text: "Ask missing details - Brgy. Hinaplanon needs sizes + logo file", tag: "Follow Up", tone: "followup" },
-  { text: "Create TRRY order - Iligan Riders Club confirmed 60 pcs", tag: "Confirmed", tone: "won" },
-  { text: "Check production queue - embroidery due this week", tag: "Production", tone: "followup" },
-];
+const opsPriorities = [];
 
 let opsRawMessage = "";
 let opsExtractFields = null;
@@ -356,77 +317,7 @@ const orderProductionStages = [
   { value: "ready", label: "Ready" },
   { value: "completed", label: "Completed" },
 ];
-const localOrders = [
-  {
-    id: "TRRY-UC-0003",
-    client: "Urban Coffee",
-    clientInitials: "UC",
-    requestedBy: "Urban Coffee Admin",
-    requesterRole: "Portal Admin",
-    requesterEmail: "orders@urbancoffee.trryapparel.com",
-    requesterPhone: "To be added",
-    clientAddress: "urbancoffee.trryapparel.com",
-    cityState: "Private client portal",
-    items: "Admin Polo Uniform",
-    itemCount: 1,
-    qty: 18,
-    fulfillment: "Delivery",
-    neededDate: "June 28, 2026",
-    daysUntilNeeded: "Production window",
-    status: "Pending Review",
-    shipTo: "Urban Coffee - Main Branch",
-    shipAddress: "Delivery address to be confirmed",
-    itemLines: [{ name: "Admin Polo Uniform - Black", qty: 18 }],
-    updated: "New request",
-  },
-  {
-    id: "TRRY-UC-0002",
-    client: "Urban Coffee",
-    clientInitials: "UC",
-    requestedBy: "Urban Coffee Admin",
-    requesterRole: "Portal Admin",
-    requesterEmail: "orders@urbancoffee.trryapparel.com",
-    requesterPhone: "To be added",
-    clientAddress: "urbancoffee.trryapparel.com",
-    cityState: "Private client portal",
-    items: "Embroidered Staff Cap",
-    itemCount: 1,
-    qty: 24,
-    fulfillment: "Pickup",
-    neededDate: "June 30, 2026",
-    daysUntilNeeded: "Approved queue",
-    status: "Approved",
-    shipTo: "Urban Coffee - Pickup",
-    shipAddress: "Pickup schedule to be coordinated",
-    itemLines: [{ name: "Embroidered Staff Cap - Navy", qty: 24 }],
-    updated: "Approved",
-  },
-  {
-    id: "TRRY-UC-0001",
-    client: "Urban Coffee",
-    clientInitials: "UC",
-    requestedBy: "Urban Coffee Admin",
-    requesterRole: "Portal Admin",
-    requesterEmail: "orders@urbancoffee.trryapparel.com",
-    requesterPhone: "To be added",
-    clientAddress: "urbancoffee.trryapparel.com",
-    cityState: "Private client portal",
-    items: "Admin Polo Uniform, Embroidered Staff Cap",
-    itemCount: 2,
-    qty: 42,
-    fulfillment: "Delivery",
-    neededDate: "July 02, 2026",
-    daysUntilNeeded: "In production",
-    status: "In Production",
-    shipTo: "Urban Coffee - Operations",
-    shipAddress: "Delivery address to be confirmed",
-    itemLines: [
-      { name: "Admin Polo Uniform - Black", qty: 18 },
-      { name: "Embroidered Staff Cap - Navy", qty: 24 },
-    ],
-    updated: "Moved to production",
-  },
-];
+const localOrders = [];
 
 const shouldLoadSupabaseOrders = isSupabaseReady();
 
@@ -558,14 +449,13 @@ const routes = {
   "/my-tasks": "My Tasks",
   "/workboard": "Workboard",
   "/calendar": "Calendar",
-  "/reorders": "Reorders",
   "/overview": "Overview",
   "/staff": "Staff",
   "/settings": "Settings",
 };
 
 const defaultRoutePath = "/";
-const parkedAdminRoutes = new Set(["/inbox", "/customers", "/clients", "/products", "/products-services", "/catalog"]);
+const parkedAdminRoutes = new Set(["/inbox", "/customers", "/clients", "/products", "/products-services", "/catalog", "/reorders"]);
 const ADMIN_ACCESS_SESSION_KEY = "trry_admin_access_unlocked";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "trry_admin_sidebar_collapsed_v3";
 
@@ -1207,7 +1097,7 @@ async function loadOpsBoardInquiries() {
   hasLoadedOpsInquiries = true;
 
   const result = await getOpsBoardInquiries(localOpsInquiries, adminAuthSession);
-  opsInquiries = result.inquiries;
+  opsInquiries = filterOperationalRecords(result.inquiries);
   opsLoadState = result.status;
   opsLoadError = result.error?.message ?? "";
 
@@ -1217,11 +1107,42 @@ async function loadOpsBoardInquiries() {
 
 async function refreshOpsInquiryDataForPayment(inquiryId) {
   const result = await getOpsBoardInquiries(localOpsInquiries, adminAuthSession);
-  opsInquiries = result.inquiries;
+  opsInquiries = filterOperationalRecords(result.inquiries);
   opsLoadState = result.status;
   opsLoadError = result.error?.message ?? "";
   hasLoadedOpsInquiries = true;
   if (isAdminPayAtShopUiEnabled()) await loadOpsPaymentHistory(inquiryId, true, { silent: true });
+}
+
+function filterOperationalRecords(records = []) {
+  return (Array.isArray(records) ? records : []).filter((record) => !isOperationalDemoRecord(record));
+}
+
+function isOperationalDemoRecord(record) {
+  const isLocalBrowserHarness = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+  const text = [
+    record?.id,
+    record?.taskCode,
+    record?.orderCode,
+    record?.orderReference,
+    record?.reference,
+    record?.title,
+    record?.customer,
+    record?.company,
+    record?.client,
+    record?.service,
+    record?.productDesc,
+    record?.items,
+    record?.brief,
+    record?.message,
+    record?.internalNote,
+    record?.productionNote,
+    record?.sourceRecordId,
+  ].filter(Boolean).join(" ").toLowerCase();
+  return /\[(dry run|demo|test)\]/i.test(text)
+    || /\b(demo|sample)\b/.test(text)
+    || /\bwb-dr-\d+\b/i.test(text)
+    || (!isLocalBrowserHarness && (/\bqa[-_\s]/i.test(text) || /\bsynthetic\b/i.test(text)));
 }
 function isLocalTaskQaMode() {
   const value = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_MODE ?? "false").trim().toLowerCase();
@@ -1324,7 +1245,7 @@ function getMyTasksApiFilters() {
 function sortMyTasks(tasks) {
   const now = Date.now();
   return [...tasks]
-    .filter((task) => task.status !== "DRAFT")
+    .filter((task) => task.status !== "DRAFT" && !isOperationalDemoRecord(task))
     .sort((a, b) => getTaskSortWeight(a, now) - getTaskSortWeight(b, now) || compareTaskDate(a, b));
 }
 
@@ -1345,7 +1266,7 @@ function compareTaskDate(a, b) {
 }
 
 function sortWorkboardTasks(tasks) {
-  return [...tasks].sort((a, b) => compareWorkboardTasks(a, b));
+  return [...tasks].filter((task) => !isOperationalDemoRecord(task)).sort((a, b) => compareWorkboardTasks(a, b));
 }
 
 function compareWorkboardTasks(a, b) {
@@ -1983,9 +1904,7 @@ function getVisibleMyTasks() {
     if (task.status === "DRAFT") return false;
     if (myTasksFilter === "active" && ["DONE", "CANCELLED"].includes(task.status)) return false;
     if (myTasksFilter === "to_do" && task.status !== "TO_DO") return false;
-    if (myTasksFilter === "in_progress" && task.status !== "IN_PROGRESS") return false;
-    if (myTasksFilter === "needs_revision" && task.status !== "NEEDS_REVISION") return false;
-    if (myTasksFilter === "for_review" && task.status !== "FOR_REVIEW") return false;
+    if (myTasksFilter === "in_progress" && !["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"].includes(task.status)) return false;
     if (myTasksFilter === "completed" && task.status !== "DONE") return false;
     if (!normalized) return true;
     return [task.taskCode, task.title, task.sourceType, task.priority, task.status].join(" ").toLowerCase().includes(normalized);
@@ -2056,6 +1975,7 @@ function renderMyTaskGroups(groups, visibleTasks) {
 
 function renderMyTaskCard(task) {
   const action = getPrimaryTaskAction(task);
+  const outcome = getMyTaskOutcomeLabel(task);
   return `<article class="my-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
     <button class="my-task-card-main" data-task-open="${escapeHtml(task.id)}" type="button">
       <span class="my-task-code">${escapeHtml(task.taskCode || "TASK")}</span>
@@ -2065,6 +1985,7 @@ function renderMyTaskCard(task) {
     <div class="my-task-card-meta">
       ${renderTaskPriority(task.priority)}
       ${renderTaskStatus(task.status)}
+      ${outcome ? `<span class="workboard-outcome-tag">${escapeHtml(outcome)}</span>` : ""}
       <span>${escapeHtml(formatTaskDue(task))}</span>
       <span>${escapeHtml(task.openTimeEntry ? formatElapsed(getRunningElapsedSeconds(task)) : formatDuration(task.totalClosedDurationSeconds))}</span>
     </div>
@@ -2104,9 +2025,10 @@ function renderTaskDetailBody(detail) {
   const task = detail.task;
   const latestSubmission = (detail.submissions || []).at(-1) || null;
   const latestRevision = [...(detail.submissions || [])].reverse().find((submission) => submission.reviewDecision === "REVISION_REQUESTED" && submission.reviewNote);
+  const outcome = getMyTaskOutcomeLabel(task);
   return `<div class="my-task-drawer-content">
     <section class="my-task-detail-hero">
-      <div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}</div>
+      <div>${renderTaskStatus(task.status)}${outcome ? `<span class="workboard-outcome-tag">${escapeHtml(outcome)}</span>` : ""}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}</div>
       <p>${escapeHtml(task.brief || "No brief provided.")}</p>
       ${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}
     </section>
@@ -2161,11 +2083,18 @@ function renderTaskStatus(status) {
   return `<span class="my-task-status ${statusToClass(status || "unknown")}">${escapeHtml(formatTaskStatus(status))}</span>`;
 }
 
+function getMyTaskOutcomeLabel(task) {
+  if (task?.status === "FOR_REVIEW") return "Waiting for review";
+  if (task?.status === "NEEDS_REVISION") return "Revision requested";
+  return "";
+}
+
 function renderTaskPriority(priority) {
   return `<span class="my-task-priority ${statusToClass(priority || "normal")}">${escapeHtml(formatTaskPriority(priority))}</span>`;
 }
 
 function formatTaskStatus(status) {
+  if (["FOR_REVIEW", "NEEDS_REVISION"].includes(status)) return "IN PROGRESS";
   return String(status || "UNKNOWN").replace(/_/g, " ");
 }
 
@@ -5234,7 +5163,7 @@ function renderClientsPage() {
         .includes(normalizedQuery));
 
   const cards = [
-    { label: "Total Clients", value: "1", icon: "clients", delta: "Urban Coffee active", clientFilter: "All", active: clientKpiFilter === "All" },
+    { label: "Total Clients", value: "0", icon: "clients", delta: "Client module parked", clientFilter: "All", active: clientKpiFilter === "All" },
     { label: "Active Portals", value: "1", icon: "ready", delta: "Private portal live", clientFilter: "Active", active: clientKpiFilter === "Active" },
     { label: "Pending Setup", value: "0", icon: "calendar", delta: "No blocked setup", clientFilter: "Pending Setup", active: clientKpiFilter === "Pending Setup" },
     { label: "High Activity", value: "0", icon: "factory", delta: "No high activity yet", clientFilter: "High Activity", active: clientKpiFilter === "High Activity" },
@@ -5303,7 +5232,7 @@ function renderClientsPage() {
           ${
             clientMatches
               ? ""
-              : `<div class="empty-state compact-empty"><strong>No clients found</strong><span>Try searching for Urban Coffee or the portal domain.</span></div>`
+              : `<div class="empty-state compact-empty"><strong>No clients found</strong><span>Client records are parked until the integration is connected.</span></div>`
           }
         </article>
         ${selectedClientId === clientProgram.id && clientMatches ? renderClientPanel() : ""}
@@ -6975,7 +6904,6 @@ function renderSidebar(currentRoute) {
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
         ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>`).join("")}
-        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -7038,7 +6966,7 @@ function renderTopHeader() {
       </div>
       <div class="global-search-wrap">
         <label class="global-search">
-          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders, clients, products..." type="search" />
+          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search inquiries, orders, production, or tasks..." type="search" />
           ${renderIcon("search", "search-icon")}
         </label>
         ${renderGlobalSearchHint()}
@@ -7080,19 +7008,7 @@ function renderGlobalSearchHint() {
   const normalized = globalSearchQuery.trim().toLowerCase();
   if (!normalized) return "";
 
-  if ("urban coffee".includes(normalized)) {
-    return `<button class="search-suggestion" data-route-target="/orders" type="button">Search Orders</button>`;
-  }
-
-  if (
-    "admin polo uniform".includes(normalized) ||
-    "embroidered staff cap".includes(normalized) ||
-    normalized.includes("cap")
-  ) {
-    return `<button class="search-suggestion" data-route-target="/orders" type="button">Search Orders</button>`;
-  }
-
-  if ("orders".includes(normalized) || "reorder".includes(normalized) || normalized.includes("trry-uc")) {
+  if ("orders".includes(normalized) || normalized.includes("trry")) {
     return `<button class="search-suggestion" data-route-target="/orders" type="button">Open Orders</button>`;
   }
 

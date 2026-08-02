@@ -23,19 +23,19 @@ const users = {
 };
 
 const tasks = new Map([
-  task("task-running", "WB-DR-001", "[DRY RUN] Running screen print timer", "IN_PROGRESS", { open: true, priority: "HIGH", titleSuffix: "", deadlineHours: 2 }),
-  task("task-forgot", "WB-DR-002", "[DRY RUN] Upload finished embroidery photos before opening portal", "TO_DO", { priority: "MEDIUM", deadlineHours: 4 }),
-  task("task-todo", "WB-DR-003", "[DRY RUN] Start regular production content task", "TO_DO", { priority: "LOW", deadlineHours: 6 }),
-  task("task-revision", "WB-DR-004", "[DRY RUN] Revise CTA poster for uniform inquiry", "NEEDS_REVISION", { priority: "URGENT", reviewerUserId: inactive, deadlineHours: -4 }),
-  task("task-none", "WB-DR-005", "[DRY RUN] Confirm shop checklist without timer", "TO_DO", { mode: "NONE", priority: "MEDIUM", deadlineHours: 8 }),
-  task("task-none-revision", "WB-DR-006", "[DRY RUN] Update non-timed revision note", "NEEDS_REVISION", { mode: "NONE", priority: "HIGH", deadlineHours: 9 }),
-  task("task-review-recorded", "WB-DR-007", "[DRY RUN] Submitted recorded work", "FOR_REVIEW", { priority: "LOW", duration: 1860 }),
-  task("task-review-no-time", "WB-DR-008", "[DRY RUN] Submitted without recorded time", "FOR_REVIEW", { priority: "MEDIUM", noTime: true }),
-  task("task-review-none", "WB-DR-009", "[DRY RUN] Submitted with time not required", "FOR_REVIEW", { mode: "NONE", notRequired: true }),
-  task("task-done", "WB-DR-010", "[DRY RUN] Completed recorded-duration task", "DONE", { duration: 3660 }),
-  task("task-long", "WB-DR-011", "[DRY RUN] Long title containment validation for embroidered campaign photography, detailed proofing, post copy, and upload handoff", "TO_DO", { brief: "Synthetic long brief: keep all copy contained inside the drawer and cards without horizontal overflow. This does not contain customer, payment, artwork, or private staff data.", priority: "URGENT", deadlineHours: -26 }),
-  task("task-other-staff", "WB-DR-012", "[DRY RUN] Staff B private task", "TO_DO", { assignedUserId: staffB }),
-  task("task-draft", "WB-DR-013", "[DRY RUN] Draft hidden from staff", "DRAFT"),
+  task("task-running", "WB-QA-001", "Running screen print timer", "IN_PROGRESS", { open: true, priority: "HIGH", titleSuffix: "", deadlineHours: 2 }),
+  task("task-forgot", "WB-QA-002", "Upload finished embroidery photos before opening portal", "TO_DO", { priority: "MEDIUM", deadlineHours: 4 }),
+  task("task-todo", "WB-QA-003", "Start regular production content task", "TO_DO", { priority: "LOW", deadlineHours: 6 }),
+  task("task-revision", "WB-QA-004", "Revise CTA poster for uniform inquiry", "NEEDS_REVISION", { priority: "URGENT", reviewerUserId: inactive, deadlineHours: -4 }),
+  task("task-none", "WB-QA-005", "Confirm shop checklist without timer", "TO_DO", { mode: "NONE", priority: "MEDIUM", deadlineHours: 8 }),
+  task("task-none-revision", "WB-QA-006", "Update non-timed revision note", "NEEDS_REVISION", { mode: "NONE", priority: "HIGH", deadlineHours: 9 }),
+  task("task-review-recorded", "WB-QA-007", "Submitted recorded work", "FOR_REVIEW", { priority: "LOW", duration: 1860 }),
+  task("task-review-no-time", "WB-QA-008", "Submitted without recorded time", "FOR_REVIEW", { priority: "MEDIUM", noTime: true }),
+  task("task-review-none", "WB-QA-009", "Submitted with time not required", "FOR_REVIEW", { mode: "NONE", notRequired: true }),
+  task("task-done", "WB-QA-010", "Completed recorded-duration task", "DONE", { duration: 3660 }),
+  task("task-long", "WB-QA-011", "Long title containment validation for embroidered campaign photography, detailed proofing, post copy, and upload handoff", "TO_DO", { brief: "Synthetic long brief: keep all copy contained inside the drawer and cards without horizontal overflow. This does not contain customer, payment, artwork, or private staff data.", priority: "URGENT", deadlineHours: -26 }),
+  task("task-other-staff", "WB-QA-012", "Staff B private task", "TO_DO", { assignedUserId: staffB }),
+  task("task-draft", "WB-QA-013", "Draft hidden from staff", "DRAFT"),
 ]);
 
 const submissions = new Map([
