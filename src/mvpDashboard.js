@@ -979,6 +979,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const production = productionDisplay(detailItem);
     const reference = order?.reference || orderReference(listItem);
     const customer = order?.customerName || listItem.customer || "Unnamed customer";
+    const footer = order
+      ? `<footer class="mvp-drawer-footer">${orderFooterAction(detailItem, order.readiness?.missing || [])}</footer>`
+      : "";
     return `<button class="mvp-drawer-backdrop mvp-order-detail-backdrop" data-mvp-close type="button" aria-label="Close order details"></button>
       <aside class="mvp-drawer order mvp-order-detail-drawer" role="dialog" aria-modal="true" aria-labelledby="mvp-order-detail-title" tabindex="-1">
         <header class="mvp-order-detail-header">
@@ -995,6 +998,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
           <button class="mvp-order-detail-close" type="button" data-mvp-close aria-label="Close order details">&times;</button>
         </header>
         <div class="mvp-drawer-body mvp-order-detail-body">${body}</div>
+        ${footer}
       </aside>`;
   }
 
@@ -1051,6 +1055,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       assignedStaff: order.assignedStaff,
       assigned: order.assignedStaff,
       owner: order.owner,
+      readiness: order.readiness,
     };
   }
 

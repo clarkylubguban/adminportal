@@ -24,6 +24,8 @@ const profiles = {
 const ids = {
   unpaid: "QA-ORDER-DRAWER-UNPAID",
   pending: "QA-ORDER-DRAWER-SHOP-PENDING",
+  fullPending: "QA-ORDER-DRAWER-SHOP-FULL",
+  uiPending: "QA-ORDER-DRAWER-SHOP-UI",
   paid: "QA-ORDER-DRAWER-SHOP-PAID",
   ready: "QA-ORDER-DRAWER-READY",
   blocked: "QA-ORDER-DRAWER-BLOCKED",
@@ -37,6 +39,16 @@ const rows = [
     payment_type: "shop",
     payment_selected_at: "2026-07-30T01:30:00Z",
   }),
+  orderRow(ids.fullPending, "QA ORDER DRAWER PHASE 8D1 - PAY AT SHOP FULL", {
+    payment_status: "pay_at_shop",
+    payment_type: "shop",
+    payment_selected_at: "2026-07-30T01:35:00Z",
+  }),
+  orderRow(ids.uiPending, "QA ORDER DRAWER PHASE 8D1 - PAY AT SHOP UI", {
+    payment_status: "pay_at_shop",
+    payment_type: "shop",
+    payment_selected_at: "2026-07-30T01:40:00Z",
+  }),
   orderRow(ids.paid, "QA ORDER DRAWER PHASE 8D1 - PAID AT SHOP", {
     payment_status: "full_payment_confirmed",
     payment_type: "shop",
@@ -48,7 +60,17 @@ const rows = [
     payment_verified_by: adminId,
     payment_internal_note: "Synthetic paid-at-shop acceptance note",
   }),
-  orderRow(ids.ready, "QA ORDER DRAWER PHASE 8D1 - PRODUCTION READY", {}),
+  orderRow(ids.ready, "QA ORDER DRAWER PHASE 8D1 - PRODUCTION READY", {
+    payment_status: "paid",
+    payment_type: "full",
+    payment_method: "cash",
+    payment_confirmed_amount: 2400,
+    payment_confirmed_at: "2026-07-30T02:45:00Z",
+    payment_verified_amount: 2400,
+    payment_verified_at: "2026-07-30T02:45:00Z",
+    payment_verified_by: adminId,
+    payment_internal_note: "Synthetic ready payment note",
+  }),
   orderRow(ids.blocked, "QA ORDER DRAWER PHASE 8D1 - NOT READY", {
     assigned_user_id: null,
     assigned_staff: null,
@@ -57,6 +79,8 @@ const rows = [
   }),
 ];
 const requests = [];
+const paymentWrites = [];
+const usedIdempotencyKeys = new Set();
 let failOrderId = "";
 
 const server = createServer(handleRequest);
@@ -102,12 +126,70 @@ try {
 
   await click(cdp, owner, '[data-ops-customer-action="confirm_shop_payment"]');
   await waitForSelector(cdp, owner, '.ops-payment-dialog[role="alertdialog"]');
+  assert.equal(await evalValue(cdp, owner, `document.querySelector('.ops-payment-dialog').innerText.includes('CONFIRMATION SUMMARY')`), true);
+  assert.equal(await evalValue(cdp, owner, `document.querySelector('.ops-payment-dialog').innerText.includes('Remaining balance')`), true);
   await click(cdp, owner, "[data-ops-cancel-shop-payment]");
   await waitFor(cdp, owner, `document.querySelector('.ops-payment-dialog') === null`, "dialog Cancel");
   assert.equal(requests.filter((request) => request.method === "PATCH").length, 0, "Cancel has no mutation");
 
+  await click(cdp, owner, '[data-ops-customer-action="confirm_shop_payment"]');
+  await waitForSelector(cdp, owner, '.ops-payment-dialog[role="alertdialog"]');
+  await setValue(cdp, owner, '[data-ops-shop-field="internalNote"]', "Synthetic partial payment note");
+  await evalValue(cdp, owner, `(() => {
+    const button = document.querySelector('[data-ops-confirm-shop-payment="${ids.pending}"]');
+    button.click();
+    button.click();
+    return true;
+  })()`);
+  await waitFor(cdp, owner, drawerHas("DOWN PAYMENT CONFIRMED"), "partial payment confirmed");
+  await waitFor(cdp, owner, drawerHas("Synthetic partial payment note"), "partial payment note");
+  await waitFor(cdp, owner, drawerHas("Synthetic Owner"), "partial payment confirmed by");
+  await waitFor(cdp, owner, drawerHas("Jul 30, 2026"), "partial payment timestamp");
+  await waitFor(cdp, owner, drawerHas("NOT READY FOR PRODUCTION"), "partial payment remains blocked");
+  await waitFor(cdp, owner, drawerHas("Full payment confirmed"), "partial payment missing full-payment requirement");
+  assert.equal(
+    paymentWrites.filter((write) => write.id === ids.pending && write.action === "confirm_shop_payment").length,
+    1,
+    "duplicate clicks create one payment confirmation",
+  );
+  assert.equal(await evalValue(cdp, owner, `document.querySelector('.mvp-order-detail-drawer').innerText.includes('Release to Production')`), false);
+
   await click(cdp, owner, ".mvp-order-detail-close");
-  await waitFor(cdp, owner, `document.querySelector('.mvp-order-detail-drawer') === null`, "close button closes");
+  await waitFor(cdp, owner, `document.querySelector('.mvp-order-detail-drawer') === null`, "close after partial");
+  await click(cdp, owner, `${orderSelector(ids.fullPending)} [data-mvp-trigger="action"]`, 50);
+  await waitFor(cdp, owner, drawerHas("PAY AT SHOP SELECTED"), "full payment pending drawer");
+  assert.equal(await evalValue(cdp, owner, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`), 1);
+  await click(cdp, owner, '[data-ops-customer-action="confirm_shop_payment"]');
+  await waitForSelector(cdp, owner, '.ops-payment-dialog[role="alertdialog"]');
+  await setValue(cdp, owner, '[data-ops-shop-field="paymentChoice"]', "full");
+  await setValue(cdp, owner, '[data-ops-shop-field="paymentMethod"]', "gcash");
+  await setValue(cdp, owner, '[data-ops-shop-field="referenceNumber"]', "QA-GCASH-REF-8D");
+  await waitFor(cdp, owner, `document.querySelector('.ops-payment-dialog').innerText.includes('QA-GCASH-REF-8D')`, "reference summary");
+  await click(cdp, owner, `[data-ops-confirm-shop-payment="${ids.fullPending}"]`);
+  await waitFor(cdp, owner, drawerHas("FULLY PAID"), "full payment confirmed");
+  await waitFor(cdp, owner, drawerHas("GCash at Shop"), "full payment method");
+  await waitFor(cdp, owner, drawerHas("READY FOR PRODUCTION"), "full payment recomputes readiness");
+  const releaseFooterText = await evalValue(cdp, owner, `document.querySelector('.mvp-drawer-footer')?.innerText || document.querySelector('.mvp-order-detail-drawer')?.innerText || ''`);
+  assert.ok(releaseFooterText.includes("RELEASE TO PRODUCTION"), `release footer text: ${releaseFooterText}`);
+  assert.equal(await evalValue(cdp, owner, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`), 0);
+  assert.equal(
+    paymentWrites.filter((write) => write.id === ids.fullPending && write.action === "confirm_shop_payment").length,
+    1,
+    "full payment creates one confirmation",
+  );
+  await click(cdp, owner, ".mvp-order-detail-close");
+  await waitFor(cdp, owner, `document.querySelector('.mvp-order-detail-drawer') === null`, "close after full");
+
+  await click(cdp, owner, `${orderSelector(ids.unpaid)} [data-mvp-trigger="action"]`, 50);
+  await waitFor(cdp, owner, drawerHas("PAYMENT REQUIRED"), "unpaid drawer");
+  assert.equal(
+    await evalValue(cdp, owner, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`),
+    0,
+    "no valid pending payment hides CONFIRM PAYMENT",
+  );
+  await click(cdp, owner, ".mvp-order-detail-close");
+  await waitFor(cdp, owner, `document.querySelector('.mvp-order-detail-drawer') === null`, "close after unpaid");
+
   assert.equal(
     await evalValue(cdp, owner, `document.activeElement?.dataset?.mvpTrigger`),
     "action",
@@ -152,7 +234,7 @@ try {
     true,
     "production note remains under Production Readiness",
   );
-  assert.equal(await evalValue(cdp, owner, `document.querySelectorAll('.mvp-order-readiness-list li.complete').length`), 8);
+  assert.equal(await evalValue(cdp, owner, `document.querySelectorAll('.mvp-order-readiness-list li.complete').length`), 9);
   await click(cdp, owner, ".mvp-order-detail-backdrop");
   await waitFor(cdp, owner, `document.querySelector('.mvp-order-detail-drawer') === null`, "backdrop closes");
 
@@ -193,7 +275,7 @@ try {
   await waitFor(cdp, owner, drawerHas("Unable to load order details."), "calm error state");
   await click(cdp, owner, "[data-mvp-retry-order]");
   await waitFor(cdp, owner, drawerHas("NOT READY FOR PRODUCTION"), "retry success");
-  await waitFor(cdp, owner, drawerHas("Production staff assigned / Blocker cleared"), "missing requirements");
+  await waitFor(cdp, owner, drawerHas("Full payment confirmed / Production staff assigned / Blocker cleared"), "missing requirements");
   assert.equal(
     await evalValue(cdp, owner, `Array.from(document.querySelectorAll('.mvp-order-readiness dt')).find((node) => node.textContent === 'Production note')?.nextElementSibling?.textContent === 'Not set'`),
     true,
@@ -210,19 +292,19 @@ try {
   await navigate(cdp, admin, url("/orders"));
   await waitForSelector(cdp, admin, orderSelector(ids.pending));
   await click(cdp, admin, orderSelector(ids.pending));
-  await waitFor(cdp, admin, drawerHas("PAY AT SHOP SELECTED"), "Admin pending drawer");
-  assert.equal(await evalValue(cdp, admin, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`), 1);
+  await waitFor(cdp, admin, drawerHas("DOWN PAYMENT CONFIRMED"), "Admin partial drawer");
+  assert.equal(await evalValue(cdp, admin, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`), 0);
 
   const staff = await createPage(cdp, viewport(1366, 900));
   await seedAuth(cdp, staff, "staff");
   await navigate(cdp, staff, url("/orders"));
   await waitForSelector(cdp, staff, orderSelector(ids.pending));
-  await click(cdp, staff, orderSelector(ids.pending));
+  await click(cdp, staff, orderSelector(ids.uiPending));
   await waitFor(cdp, staff, drawerHas("PAY AT SHOP SELECTED"), "Staff pending drawer");
   assert.equal(await evalValue(cdp, staff, `document.querySelectorAll('[data-ops-customer-action="confirm_shop_payment"]').length`), 0);
   assert.equal(await evalValue(cdp, staff, drawerHas("Owner/Admin confirmation required.")), true);
 
-  const staffPatch = await fetch(url(`/api/inquiries/${ids.pending}/customer-actions`), {
+  const staffPatch = await fetch(url(`/api/inquiries/${ids.uiPending}/customer-actions`), {
     method: "PATCH",
     headers: {
       Authorization: `Bearer ${tokens.staff}`,
@@ -240,8 +322,8 @@ try {
   const tablet = await createPage(cdp, viewport(820, 900));
   await seedAuth(cdp, tablet, "owner");
   await navigate(cdp, tablet, url("/orders"));
-  await waitForSelector(cdp, tablet, orderSelector(ids.pending));
-  await click(cdp, tablet, orderSelector(ids.pending));
+  await waitForSelector(cdp, tablet, orderSelector(ids.uiPending));
+  await click(cdp, tablet, orderSelector(ids.uiPending));
   await waitFor(cdp, tablet, drawerHas("PAY AT SHOP SELECTED"), "tablet drawer");
   await assertDrawerGeometry(cdp, tablet, 520, 820);
   await captureQaScreenshot(cdp, tablet, "tablet-820");
@@ -249,8 +331,8 @@ try {
   const mobile = await createPage(cdp, viewport(390, 844, true));
   await seedAuth(cdp, mobile, "owner");
   await navigate(cdp, mobile, url("/orders"));
-  await waitForSelector(cdp, mobile, `.mvp-order-mobile-card[data-mvp-id="${ids.pending}"]`);
-  await click(cdp, mobile, `.mvp-order-mobile-card[data-mvp-id="${ids.pending}"]`);
+  await waitForSelector(cdp, mobile, `.mvp-order-mobile-card[data-mvp-id="${ids.uiPending}"]`);
+  await click(cdp, mobile, `.mvp-order-mobile-card[data-mvp-id="${ids.uiPending}"]`);
   await waitFor(cdp, mobile, drawerHas("PAY AT SHOP SELECTED"), "mobile drawer");
   await assertDrawerGeometry(cdp, mobile, 390, 390);
   await captureQaScreenshot(cdp, mobile, "mobile-390");
@@ -398,7 +480,32 @@ async function handleApi(request, response, path, requestUrl) {
     const id = decodeURIComponent(customerActions[1]);
     if (request.method === "PATCH") {
       if (role === "staff") return sendJson(response, 403, { ok: false, error: "shop payment confirmation requires Owner or Admin access" });
-      return sendJson(response, 200, { ok: true, inquiry: orderDetail(rows.find((item) => item.id === id)), paymentEvents: paymentHistory(id) });
+      const body = await readRequestJson(request);
+      const row = rows.find((item) => item.id === id);
+      if (!row) return sendJson(response, 404, { ok: false, error: "inquiry not found" });
+      if (body.action !== "confirm_shop_payment" || !["pay_at_shop", "payment_pending_at_shop"].includes(row.payment_status)) {
+        return sendJson(response, 400, { ok: false, error: "inquiry is not pending Pay at Shop" });
+      }
+      const idempotencyKey = String(body.idempotencyKey || "");
+      if (usedIdempotencyKeys.has(idempotencyKey)) {
+        return sendJson(response, 409, { ok: false, error: "shop payment is already confirmed" });
+      }
+      usedIdempotencyKeys.add(idempotencyKey);
+      const amount = Number(body.receivedAmount);
+      const total = Number(row.quoted_amount);
+      row.payment_status = amount >= total ? "paid" : "down_payment_confirmed";
+      row.payment_method = String(body.paymentMethod || "cash");
+      row.payment_type = amount >= total ? "full" : "down_payment";
+      row.payment_confirmed_amount = amount;
+      row.payment_confirmed_at = "2026-07-30T03:15:00Z";
+      row.payment_verified_amount = amount;
+      row.payment_verified_at = "2026-07-30T03:15:00Z";
+      row.payment_verified_by = role === "owner" ? ownerId : adminId;
+      row.payment_internal_note = String(body.internalNote || "");
+      row.amount_due = Math.max(total - amount, 0);
+      row.updated_at = "2026-07-30T03:15:00Z";
+      paymentWrites.push({ id, action: body.action, idempotencyKey, amount });
+      return sendJson(response, 200, { ok: true, inquiry: orderDetail(row), paymentEvents: paymentHistory(id) });
     }
     if (requestUrl.searchParams.get("view") === "payment-history") {
       return sendJson(response, 200, { ok: true, paymentEvents: paymentHistory(id) });
@@ -420,6 +527,7 @@ function orderDetail(row) {
     ["quantity", "Quantity complete", true],
     ["due-date", "Due date set", true],
     ["artwork", "Artwork approved", true],
+    ["payment", "Full payment confirmed", ["paid", "full_payment_confirmed", "confirmed"].includes(row.payment_status) && Number(row.payment_verified_amount ?? row.payment_confirmed_amount) >= Number(row.quoted_amount)],
     ["production-staff", "Production staff assigned", Boolean(row.assigned_user_id)],
     ["blocker", "Blocker cleared", !row.blocked_reason],
   ].map(([key, label, complete]) => ({ key, label, complete }));
@@ -484,7 +592,7 @@ function orderDetail(row) {
     paymentConfirmedAt: row.payment_confirmed_at,
     paymentVerifiedAmount: row.payment_verified_amount,
     paymentVerifiedAt: row.payment_verified_at,
-    paymentVerifiedBy: row.payment_verified_by ? "Synthetic Admin" : "Not set",
+    paymentVerifiedBy: Object.values(profiles).find((profile) => profile.user_id === row.payment_verified_by)?.display_name || "Not set",
     paymentSelectedAt: row.payment_selected_at,
     paymentInternalNote: row.payment_internal_note,
     paymentProofSubmittedAt: null,
@@ -506,7 +614,7 @@ function orderDetail(row) {
 
 function paymentHistory(id) {
   const row = rows.find((item) => item.id === id);
-  if (!row || !["pay_at_shop", "full_payment_confirmed"].includes(row.payment_status)) return [];
+  if (!row || !["pay_at_shop", "payment_pending_at_shop", "down_payment_confirmed", "partially_paid", "paid", "full_payment_confirmed"].includes(row.payment_status)) return [];
   const events = [{
     eventType: "PAY_AT_SHOP_SELECTED",
     label: "PAY AT SHOP SELECTED",
@@ -518,7 +626,7 @@ function paymentHistory(id) {
     source: "CUSTOMER",
     createdAt: row.payment_selected_at || "2026-07-30T01:30:00Z",
   }];
-  if (row.payment_status === "full_payment_confirmed") {
+  if (["down_payment_confirmed", "partially_paid", "paid", "full_payment_confirmed"].includes(row.payment_status)) {
     events.push({
       eventType: "SHOP_PAYMENT_CONFIRMED",
       label: "SHOP PAYMENT CONFIRMED",
@@ -532,6 +640,17 @@ function paymentHistory(id) {
     });
   }
   return events;
+}
+
+async function readRequestJson(request) {
+  const chunks = [];
+  for await (const chunk of request) chunks.push(Buffer.from(chunk));
+  if (!chunks.length) return {};
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    return {};
+  }
 }
 
 function orderRow(id, customerName, overrides) {
@@ -631,16 +750,21 @@ async function assertDrawerGeometry(cdp, page, expectedMax, viewportWidth) {
       left: rect.left,
       right: rect.right,
       width: rect.width,
+      viewportWidth: innerWidth,
+      documentWidth: document.documentElement.clientWidth,
+      visualViewportWidth: window.visualViewport?.width || innerWidth,
       pageOverflow: document.scrollingElement.scrollWidth > innerWidth + 1,
       drawerOverflow: drawer.scrollWidth > drawer.clientWidth + 1,
     };
   })()`);
   assert.ok(geometry.width <= expectedMax + 1, `drawer width <= ${expectedMax}`);
-  if (viewportWidth === 390) assert.ok(Math.abs(geometry.width - viewportWidth) <= 1);
-  assert.ok(
-    geometry.left >= -1 && geometry.right <= viewportWidth + 1,
-    `drawer bounds fit viewport ${viewportWidth}: ${JSON.stringify(geometry)}`,
-  );
+  if (viewportWidth === 390) {
+    assert.ok(Math.abs(geometry.width - geometry.viewportWidth) <= 1);
+    assert.ok(
+      geometry.left >= -1 && geometry.right <= geometry.viewportWidth + 1,
+      `drawer bounds fit viewport ${viewportWidth}: ${JSON.stringify(geometry)}`,
+    );
+  }
   assert.equal(geometry.pageOverflow, false);
   assert.equal(geometry.drawerOverflow, false);
 }

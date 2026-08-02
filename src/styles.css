@@ -27371,6 +27371,19 @@ textarea,
   font-weight: 800;
 }
 
+.ops-payment-confirmation-summary {
+  background: #fafaf7;
+  border: 1px solid #d7d7d2;
+  border-radius: 4px;
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+}
+
+.ops-payment-confirmation-summary dl {
+  gap: 6px;
+}
+
 .ops-payment-dialog > div:last-child button,
 .payment-review-dialog > div:last-child button {
   min-height: 40px;

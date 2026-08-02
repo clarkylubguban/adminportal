@@ -2900,11 +2900,19 @@ function getOpsPaymentStatusDisplay(item) {
 }
 
 function renderOpsPaymentSummary(item) {
+  const confirmedBy = item.paymentVerifiedBy || "";
+  const confirmedAt = item.paymentVerifiedAt || item.paymentConfirmedAt || "";
+  const confirmationRows = isOpsPaymentConfirmed(item.paymentStatus)
+    ? `
+    <div><dt>Confirmed by</dt><dd>${escapeHtml(confirmedBy || "Not available")}</dd></div>
+    <div><dt>Confirmed</dt><dd>${escapeHtml(formatOpsTrackingDate(confirmedAt))}</dd></div>`
+    : "";
   return `<dl class="ops-payment-clean-summary">
     <div><dt>Quoted amount</dt><dd>${formatOpsValue(getOpsValidQuotedAmount(item))}</dd></div>
     <div><dt>Paid amount</dt><dd>${formatOpsValue(getOpsConfirmedPaymentAmount(item))}</dd></div>
     <div><dt>Balance</dt><dd>${formatOpsValue(getOpsPaymentBalance(item))}</dd></div>
     <div><dt>Payment status</dt><dd>${escapeHtml(getOpsPaymentStatusDisplay(item))}</dd></div>
+    ${confirmationRows}
   </dl>`;
 }
 
@@ -2946,7 +2954,7 @@ function renderOpsPaymentNotes(item) {
 function renderOpsPayAtShopReadOnly(item) {
   if (!isOpsShopPaymentPending(item)) return "";
   const action = canOpsConfirmShopPayment(item)
-    ? `<div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM PAYMENT RECEIVED", action: "confirm_shop_payment", id: item.id, primary: true })}</div>`
+    ? `<div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_shop_payment", id: item.id, primary: true })}</div>`
     : `<p class="ops-stage-muted">Owner/Admin confirmation required.</p>`;
   return `<section class="ops-payment-clean-block">
     <header><strong>PAY AT SHOP SELECTED</strong></header>
@@ -3418,7 +3426,10 @@ function renderOpsShopPaymentDialog(item) {
   const allowsDp = quoteTotal >= 1000;
   const amount = getOpsShopPaymentChoiceAmount(item, confirmation.paymentChoice);
   const digital = ["gcash", "bank_transfer", "other"].includes(String(confirmation.paymentMethod || "").toLowerCase());
-  return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog shop-receiver" role="alertdialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">Receive payment</h3><dl><div><dt>Quote total</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div>${allowsDp ? `<div><dt>Required DP</dt><dd>${escapeHtml(formatOpsValue(getOpsShopPaymentChoiceAmount(item, "down_payment")))}</dd></div>` : ""}<div><dt>Full-payment amount</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div></dl><p>Opening this receiver does not record a transaction. Only final confirmation writes payment.</p><div class="ops-customer-action-form compact ops-shop-payment-form"><label><span>Payment amount choice</span><select data-ops-shop-field="paymentChoice" ${saving ? "disabled" : ""}>${allowsDp ? `<option value="down_payment" ${confirmation.paymentChoice === "down_payment" ? "selected" : ""}>Required DP</option>` : ""}<option value="full" ${confirmation.paymentChoice === "full" ? "selected" : ""}>Pay in full</option></select></label><label><span>Calculated amount</span><input data-ops-shop-field="receivedAmount" inputmode="decimal" readonly type="number" value="${escapeHtml(amount)}" /></label><label><span>Payment method</span><select data-ops-shop-field="paymentMethod" ${saving ? "disabled" : ""}><option value="cash" ${confirmation.paymentMethod === "cash" ? "selected" : ""}>Cash</option><option value="gcash" ${confirmation.paymentMethod === "gcash" ? "selected" : ""}>GCash</option><option value="bank_transfer" ${confirmation.paymentMethod === "bank_transfer" ? "selected" : ""}>Bank transfer</option><option value="other" ${confirmation.paymentMethod === "other" ? "selected" : ""}>Other</option></select></label><label><span>Reference number ${digital ? "" : "<small>Optional</small>"}</span><input data-ops-shop-field="referenceNumber" value="${escapeHtml(confirmation.referenceNumber || "")}" ${saving ? "disabled" : ""}></label><label class="wide"><span>Received by</span><input readonly value="${escapeHtml(adminUser?.displayName || adminUser?.email || "Authenticated admin")}" /></label><label class="wide"><span>Date/time</span><input readonly value="${escapeHtml(formatOpsTrackingDate(new Date().toISOString()))}" /></label><label class="wide"><span>Internal note <small>Optional</small></span><textarea data-ops-shop-field="internalNote" maxlength="${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}" rows="2" ${saving ? "disabled" : ""}>${escapeHtml(confirmation.internalNote || "")}</textarea><small>${String(confirmation.internalNote || "").length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}</small></label></div>${confirmation.error ? `<p class="ops-customer-action-message error">${escapeHtml(confirmation.error)}</p>` : ""}<div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button" ${saving ? "disabled" : ""}>CANCEL</button><button class="ops-gold-button mini" data-ops-confirm-shop-payment="${escapeHtml(item.id)}" data-ops-action-label="CONFIRM SHOP PAYMENT" type="button" ${saving ? "disabled" : ""}>${saving ? "CONFIRMING..." : "CONFIRM PAYMENT RECEIVED"}</button></div></section>`;
+  const remainingAfterConfirmation = Math.max(quoteTotal - Number(amount || 0), 0);
+  const paymentChoiceLabel = confirmation.paymentChoice === "down_payment" ? "50% Down Payment" : "Full Payment";
+  const reference = String(confirmation.referenceNumber || "").trim();
+  return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog shop-receiver" role="alertdialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">Confirm payment</h3><dl><div><dt>Quote total</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div>${allowsDp ? `<div><dt>Required DP</dt><dd>${escapeHtml(formatOpsValue(getOpsShopPaymentChoiceAmount(item, "down_payment")))}</dd></div>` : ""}<div><dt>Full-payment amount</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div></dl><p>Review the amount and method before saving. Only the final confirmation writes payment.</p><div class="ops-customer-action-form compact ops-shop-payment-form"><label><span>Payment amount choice</span><select data-ops-shop-field="paymentChoice" ${saving ? "disabled" : ""}>${allowsDp ? `<option value="down_payment" ${confirmation.paymentChoice === "down_payment" ? "selected" : ""}>Required DP</option>` : ""}<option value="full" ${confirmation.paymentChoice === "full" ? "selected" : ""}>Pay in full</option></select></label><label><span>Calculated amount</span><input data-ops-shop-field="receivedAmount" inputmode="decimal" readonly type="number" value="${escapeHtml(amount)}" /></label><label><span>Payment method</span><select data-ops-shop-field="paymentMethod" ${saving ? "disabled" : ""}><option value="cash" ${confirmation.paymentMethod === "cash" ? "selected" : ""}>Cash</option><option value="gcash" ${confirmation.paymentMethod === "gcash" ? "selected" : ""}>GCash</option><option value="bank_transfer" ${confirmation.paymentMethod === "bank_transfer" ? "selected" : ""}>Bank transfer</option><option value="other" ${confirmation.paymentMethod === "other" ? "selected" : ""}>Other</option></select></label><label><span>Reference number ${digital ? "" : "<small>Optional</small>"}</span><input data-ops-shop-field="referenceNumber" value="${escapeHtml(reference)}" ${saving ? "disabled" : ""}></label><label class="wide"><span>Received by</span><input readonly value="${escapeHtml(adminUser?.displayName || adminUser?.email || "Authenticated admin")}" /></label><label class="wide"><span>Date/time</span><input readonly value="${escapeHtml(formatOpsTrackingDate(new Date().toISOString()))}" /></label><label class="wide"><span>Internal note <small>Optional</small></span><textarea data-ops-shop-field="internalNote" maxlength="${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}" rows="2" ${saving ? "disabled" : ""}>${escapeHtml(confirmation.internalNote || "")}</textarea><small>${String(confirmation.internalNote || "").length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}</small></label></div><section class="ops-payment-confirmation-summary" data-ops-payment-confirmation-summary><h4>CONFIRMATION SUMMARY</h4><dl><div><dt>Payment type</dt><dd>${escapeHtml(paymentChoiceLabel)}</dd></div><div><dt>Amount received</dt><dd>${escapeHtml(formatOpsValue(amount))}</dd></div><div><dt>Remaining balance</dt><dd>${escapeHtml(formatOpsValue(remainingAfterConfirmation))}</dd></div><div><dt>Payment method</dt><dd>${escapeHtml(getOpsPaymentMethodLabel(confirmation.paymentMethod))}</dd></div>${reference ? `<div><dt>Reference</dt><dd>${escapeHtml(reference)}</dd></div>` : ""}</dl></section>${confirmation.error ? `<p class="ops-customer-action-message error">${escapeHtml(confirmation.error)}</p>` : ""}<div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button" ${saving ? "disabled" : ""}>CANCEL</button><button class="ops-gold-button mini" data-ops-confirm-shop-payment="${escapeHtml(item.id)}" data-ops-action-label="CONFIRM SHOP PAYMENT" type="button" ${saving ? "disabled" : ""}>${saving ? "CONFIRMING..." : "CONFIRM PAYMENT"}</button></div></section>`;
 }
 
 function renderActiveOpsShopPaymentDialog() {
@@ -3453,6 +3464,9 @@ function getOpsShopPaymentItem(inquiryId) {
     paymentType: order.paymentType,
     paymentSelectedAmount: order.paymentSelectedAmount,
     paymentSelectedAt: order.paymentSelectedAt,
+    paymentVerifiedAt: order.paymentVerifiedAt,
+    paymentConfirmedAt: order.paymentConfirmedAt,
+    paymentVerifiedBy: order.paymentVerifiedBy,
     paymentConfirmedAmount: order.paymentConfirmedAmount,
     paymentVerifiedAmount: order.paymentVerifiedAmount,
     paymentInternalNote: order.paymentInternalNote,
