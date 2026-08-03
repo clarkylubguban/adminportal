@@ -39,6 +39,24 @@ const phase87Path = join(
   "migrations",
   "20260803033132_phase_8_7_auto_plan_today.sql",
 );
+const phase88AiActivationPath = join(
+  root,
+  "supabase",
+  "migrations",
+  "20260803033201_phase_8_8_allow_ai_task_activation.sql",
+);
+const phase88DraftCompletenessPath = join(
+  root,
+  "supabase",
+  "migrations",
+  "20260803033302_phase_8_8_auto_plan_draft_completeness.sql",
+);
+const phase88DropLegacyDraftPath = join(
+  root,
+  "supabase",
+  "migrations",
+  "20260803033303_phase_8_8_drop_legacy_task_update_draft.sql",
+);
 const phase85Path = join(
   root,
   "supabase",
@@ -54,6 +72,7 @@ const testPaths = {
   concurrency: join(testsRoot, "task_domain_concurrency.sql"),
   api: join(testsRoot, "task_domain_api_contract.sql"),
   noTime: join(testsRoot, "task_domain_no_time_submission.sql"),
+  aiActivation: join(testsRoot, "phase_8_8_ai_task_activation.sql"),
 };
 const concurrencyHarnessPath = join(root, "scripts", "verify-task-concurrency.mjs");
 const n8nApiPath = join(root, "api", "_lib", "n8nTaskIngestion.js");
@@ -73,6 +92,9 @@ const [
   phase82,
   phase83,
   phase87,
+  phase88AiActivation,
+  phase88DraftCompleteness,
+  phase88DropLegacyDraft,
   phase85,
   foundationTest,
   schemaTest,
@@ -81,6 +103,7 @@ const [
   concurrencyTest,
   apiTest,
   noTimeTest,
+  aiActivationTest,
   concurrencyHarness,
   n8nApi,
   n8nRoute,
@@ -98,6 +121,9 @@ const [
     readFile(phase82Path, "utf8"),
     readFile(phase83Path, "utf8"),
     readFile(phase87Path, "utf8"),
+    readFile(phase88AiActivationPath, "utf8"),
+    readFile(phase88DraftCompletenessPath, "utf8"),
+    readFile(phase88DropLegacyDraftPath, "utf8"),
     readFile(phase85Path, "utf8"),
     readFile(testPaths.foundation, "utf8"),
     readFile(testPaths.schema, "utf8"),
@@ -106,6 +132,7 @@ const [
     readFile(testPaths.concurrency, "utf8"),
     readFile(testPaths.api, "utf8"),
     readFile(testPaths.noTime, "utf8"),
+    readFile(testPaths.aiActivation, "utf8"),
     readFile(concurrencyHarnessPath, "utf8"),
     readFile(n8nApiPath, "utf8"),
     readFile(n8nRoutePath, "utf8"),
@@ -258,6 +285,13 @@ requireText(phase85, "'timeTrackingMode', v_task.time_tracking_mode", "NONE star
 requireText(phase82, "assigned_user_id = p_assigned_user_id", "approve-and-assign assignment write");
 requireText(phase82, "status = 'TO_DO'", "approve-and-assign activation");
 requireText(apiTest, "admin activated a daily content draft", "AI/daily admin activation denial");
+requireText(phase88AiActivation, "status in ('TO_DO', 'IN_PROGRESS', 'FOR_REVIEW', 'NEEDS_REVISION', 'DONE')", "AI/Daily approved lifecycle statuses");
+requireText(phase88AiActivation, "assigned_user_id is not null", "AI/Daily activated assignee invariant");
+requireText(phase88AiActivation, "reviewer_user_id is not null", "AI/Daily activated reviewer invariant");
+requireText(phase88DraftCompleteness, "draft activation missing required fields", "AI/Daily draft completeness guard");
+requireText(phase88DraftCompleteness, "v_task.source_type in ('AI_MARKETING', 'DAILY_CONTENT') then null", "non-authoritative AI/Daily draft assignment");
+requireText(phase88DraftCompleteness, "source_type in ('AI_MARKETING', 'DAILY_CONTENT')", "AI/Daily owner activation gate");
+requireText(phase88DropLegacyDraft, "drop function if exists public.task_update_draft(uuid, bigint, text, text, text, uuid, uuid, boolean, date, timestamptz, timestamptz, timestamptz, text, text)", "legacy draft-update overload removal");
 requireText(phase83, "create table if not exists public.planning_requests", "planning request table");
 requireText(phase83, "create table if not exists public.automation_receipts", "automation receipt table");
 requireText(phase83, "planning_request_id uuid references public.planning_requests", "task planning traceability");
@@ -332,6 +366,10 @@ requireText(noTimeTest, "direct TO_DO fallback contract failed", "direct no-time
 requireText(noTimeTest, "NONE Start Work did not reach IN_PROGRESS", "NONE mode Start Work transition");
 requireText(noTimeTest, "NONE Start Work created a timer", "NONE mode timer-free Start Work");
 requireText(noTimeTest, "fallback replay duplicated submission or event", "no-time replay test");
+requireText(aiActivationTest, "AI ingestion creates unassigned traceable DRAFT tasks", "AI/Daily activation regression test");
+requireText(aiActivationTest, "admin cannot activate AI/Daily drafts", "AI/Daily admin activation denial test");
+requireText(aiActivationTest, "owner cannot activate incomplete AI/Daily draft", "AI/Daily completeness test");
+requireText(aiActivationTest, "rollback;", "AI/Daily activation rollback-only test");
 requireText(concurrencyHarness, "runRace", "actual two-session race harness");
 requireText(
   concurrencyHarness,
@@ -350,6 +388,7 @@ for (const [name, sql] of Object.entries({
   rlsTest,
   apiTest,
   noTimeTest,
+  aiActivationTest,
 })) {
   requireText(sql, "rollback;", `${name} rollback`);
   forbid(sql, /@(?!invalid\.example)/, `${name} non-synthetic email domain`);
