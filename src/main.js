@@ -1,6 +1,7 @@
 import { createMvpDashboard } from "./mvpDashboard.js";
 import {
   approveTaskDraft,
+  approveAndAssignTask,
   approveTaskWork,
   archiveTask,
   assignTask,
@@ -1165,8 +1166,12 @@ function isTaskFeatureUiEnabled() {
   return ["1", "true", "yes", "on"].includes(value) && (isSupabaseReady() || isLocalTaskQaMode());
 }
 
+function isFeatureFlagEnabled(...names) {
+  return names.some((name) => ["1", "true", "yes", "on"].includes(String(window.TRRY_ADMIN_ENV?.[name] ?? "false").trim().toLowerCase()));
+}
+
 function canViewMyTasksRoute() {
-  return isTaskFeatureUiEnabled() && ["owner", "admin", "staff"].includes(adminUser?.role);
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_MY_TASKS", "VITE_MY_TASKS_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
 }
 
 async function loadMyTasks({ silent = false } = {}) {
@@ -1273,7 +1278,7 @@ function stopMyTasksTimerTick() {
 }
 
 function canViewWorkboardRoute() {
-  return isTaskFeatureUiEnabled() && ["owner", "admin"].includes(adminUser?.role);
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_WORKBOARD", "VITE_WORKBOARD_ENABLED") && ["owner", "admin"].includes(adminUser?.role);
 }
 
 function createEmptyWorkboardDraft(task = null) {
@@ -1306,7 +1311,7 @@ async function loadWorkboardTasks({ silent = false } = {}) {
   }
   try {
     const response = await getWorkboardTasks(adminAuthSession, getWorkboardApiFilters());
-    workboardTasks = sortMyTasks(response.tasks || []);
+    workboardTasks = sortWorkboardTasks(response.tasks || []);
     workboardLoadState = "ready";
     workboardLoadError = "";
     syncMyTasksTimerTick();
@@ -1343,7 +1348,7 @@ function getWorkboardApiFilters() {
 function getVisibleWorkboardTasks() {
   const normalized = workboardSearch.trim().toLowerCase();
   return workboardTasks.filter((task) => {
-    if (workboardFilterStatus === "active" && ["DONE", "CANCELLED"].includes(task.status)) return false;
+    if (workboardFilterStatus === "active" && ["DRAFT", "CANCELLED"].includes(task.status)) return false;
     if (workboardFilterStatus === "overdue" && !isTaskOverdue(task)) return false;
     if (normalized) return [task.taskCode, task.title, task.sourceType, task.priority, task.status, getUserLabel(task.assignedUser), getUserLabel(task.reviewerUser)].join(" ").toLowerCase().includes(normalized);
     return true;
@@ -1421,7 +1426,25 @@ function renderWorkboardUserSelect(id, value, label) {
 
 function renderWorkboardTaskList(tasks) {
   if (!tasks.length) return `<div class="my-tasks-empty"><strong>${workboardTasks.length ? "No tasks match your filters" : "No task records yet"}</strong><span>${workboardTasks.length ? "Try another status or search term." : "Create a manual task draft when planning is ready."}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
+  if (workboardFilterStatus === "active") return renderWorkboardKanban(tasks);
   return `<div class="workboard-table-wrap"><table class="workboard-table"><thead><tr><th>Task</th><th>Source</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Reviewer</th><th>Deadline</th><th>Time</th><th>Action</th></tr></thead><tbody>${tasks.map(renderWorkboardRow).join("")}</tbody></table></div><div class="workboard-card-list">${tasks.map(renderWorkboardCard).join("")}</div>`;
+}
+
+function sortWorkboardTasks(tasks) {
+  const now = Date.now();
+  return [...tasks].sort((a, b) => getTaskSortWeight(a, now) - getTaskSortWeight(b, now) || compareTaskDate(a, b));
+}
+
+function renderWorkboardKanban(tasks) {
+  const columns = [
+    ["TO_DO", "TO DO", (task) => task.status === "TO_DO"],
+    ["IN_PROGRESS", "IN PROGRESS", (task) => ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"].includes(task.status)],
+    ["DONE", "COMPLETED", (task) => task.status === "DONE"],
+  ];
+  return `<div class="workboard-kanban" aria-label="Workboard Kanban">${columns.map(([key, label, predicate]) => {
+    const items = tasks.filter(predicate);
+    return `<section class="workboard-kanban-column" data-workboard-column="${key}"><header><span>${escapeHtml(label)}</span><strong>${items.length}</strong></header><div>${items.length ? items.map(renderWorkboardKanbanCard).join("") : `<article class="workboard-kanban-empty">No tasks</article>`}</div></section>`;
+  }).join("")}</div>`;
 }
 
 function renderWorkboardRow(task) {
@@ -1446,10 +1469,23 @@ function renderWorkboardCard(task) {
   </article>`;
 }
 
+function renderWorkboardKanbanCard(task) {
+  return `<article class="workboard-kanban-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
+    <button data-workboard-open="${escapeHtml(task.id)}" type="button">
+      <span>${escapeHtml(task.taskCode || "TASK")}</span>
+      <strong>${escapeHtml(task.title || "Untitled task")}</strong>
+      <small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(formatTaskDue(task))}</small>
+    </button>
+    <div>${renderTaskPriority(task.priority)}${renderTaskStatus(task.status)}${task.status === "FOR_REVIEW" ? `<span class="my-task-mode">FOR REVIEW</span>` : ""}${task.status === "NEEDS_REVISION" ? `<span class="my-task-mode">NEEDS REVISION</span>` : ""}</div>
+    <footer><span>${escapeHtml(getUserLabel(task.assignedUser))}</span><button data-workboard-open="${escapeHtml(task.id)}" type="button">${escapeHtml(getWorkboardPrimaryAction(task))}</button></footer>
+  </article>`;
+}
+
 function getWorkboardPrimaryAction(task) {
   const actions = task.allowedActions || [];
   if (actions.includes("APPROVE_WORK")) return "REVIEW";
   if (actions.includes("REQUEST_REVISION")) return "REVIEW";
+  if (actions.includes("APPROVE_AND_ASSIGN")) return "APPROVE AND ASSIGN";
   if (actions.includes("APPROVE_DRAFT")) return "APPROVE DRAFT";
   if (actions.includes("EDIT_DRAFT")) return "EDIT";
   return "OPEN";
@@ -1476,7 +1512,7 @@ function renderWorkboardDraftForm(task) {
       <label><span>Source</span>${renderWorkboardSelect("workboard-source-type", workboardDraftForm.sourceType, [["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]])}</label>
       <label><span>Priority</span>${renderWorkboardSelect("workboard-priority", workboardDraftForm.priority, [["LOW", "Low"], ["MEDIUM", "Medium"], ["HIGH", "High"], ["URGENT", "Urgent"]])}</label>
       <label><span>Assigned</span>${renderWorkboardDraftUserSelect("workboard-assigned", workboardDraftForm.assignedUserId, "Unassigned")}</label>
-      <label><span>Reviewer</span>${renderWorkboardDraftUserSelect("workboard-reviewer", workboardDraftForm.reviewerUserId, "No reviewer")}</label>
+      <label><span>Reviewer</span>${renderWorkboardDraftReviewerSelect("workboard-reviewer", workboardDraftForm.reviewerUserId, "No reviewer")}</label>
       <label><span>Time mode</span>${renderWorkboardSelect("workboard-time-mode", workboardDraftForm.timeTrackingMode, [["EXPECTED", "Expected"], ["NONE", "Time not required"]])}</label>
       <label><span>Scheduled date</span><input id="workboard-scheduled" value="${escapeHtml(workboardDraftForm.scheduledDate)}" type="date" ${busy ? "disabled" : ""} /></label>
       <label><span>Start deadline</span><input id="workboard-start-deadline" value="${escapeHtml(workboardDraftForm.startDeadline)}" type="datetime-local" ${busy ? "disabled" : ""} /></label>
@@ -1486,7 +1522,7 @@ function renderWorkboardDraftForm(task) {
       <label><span>Source record id</span><input id="workboard-source-record-id" value="${escapeHtml(workboardDraftForm.sourceRecordId)}" maxlength="200" ${busy ? "disabled" : ""} /></label>
       <label class="workboard-checkbox"><input id="workboard-draft-approval" type="checkbox" ${workboardDraftForm.draftApprovalRequired ? "checked" : ""} ${busy ? "disabled" : ""} /><span>Owner approval required</span></label>
     </div>
-    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button>${task?.allowedActions?.includes("APPROVE_DRAFT") ? `<button data-workboard-approve-draft="${escapeHtml(task.id)}" type="button" ${busy ? "disabled" : ""}>APPROVE DRAFT</button>` : ""}</div>
+    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button>${task?.allowedActions?.includes("APPROVE_AND_ASSIGN") ? `<button data-workboard-approve-assign="${escapeHtml(task.id)}" type="button" ${busy ? "disabled" : ""}>APPROVE AND ASSIGN</button>` : ""}</div>
   </form>`;
 }
 
@@ -1502,6 +1538,7 @@ function renderWorkboardTaskDetail(detail, task) {
   const latestSubmission = (detail.submissions || []).at(-1) || null;
   return `<div class="my-task-drawer-content">
     <section class="my-task-detail-hero"><div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</div><p>${escapeHtml(task.brief || "No brief provided.")}</p>${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}</section>
+    ${renderWorkboardAutomationNotice(task)}
     <section class="my-task-detail-grid">
       ${renderTaskFact("Source", formatSourceReference(task))}
       ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
@@ -1519,6 +1556,15 @@ function renderWorkboardTaskDetail(detail, task) {
   </div>`;
 }
 
+function renderWorkboardAutomationNotice(task) {
+  if (!["AI_MARKETING", "DAILY_CONTENT"].includes(task.sourceType)) return "";
+  const trace = task.automationTrace || {};
+  const suggested = trace.suggestedAssignee?.label || trace.suggestedAssignee?.reason
+    ? ` / Suggested: ${trace.suggestedAssignee.label || "Unspecified"}${trace.suggestedAssignee.reason ? ` (${trace.suggestedAssignee.reason})` : ""}`
+    : "";
+  return `<section class="my-task-warning"><strong>AI-GENERATED DRAFT</strong><p>Human approval is required. This task must stay unassigned until Owner approval activates it.</p><small>${escapeHtml(trace.planningRequestId ? `Planning ${trace.planningRequestId}` : "Planning trace pending")} / ${escapeHtml(trace.externalTaskId ? `External task ${trace.externalTaskId}` : "External task pending")}${escapeHtml(suggested)}</small></section>`;
+}
+
 function renderWorkboardLatestSubmission(submission) {
   return `<section class="my-task-warning ${submission.timeRecordingStatus === "NOT_RECORDED" ? "no-time" : ""}"><strong>LATEST SUBMISSION - ${escapeHtml(formatSubmissionTimeStatus(submission))}</strong><p>${escapeHtml(submission.submissionNote || "No note saved.")}</p>${submission.proofUrl ? `<p><b>Proof:</b> ${escapeHtml(submission.proofUrl)}</p>` : ""}${submission.noTimeReason ? `<p><b>Time not recorded reason:</b> ${escapeHtml(submission.noTimeReason)}</p>` : ""}<small>${escapeHtml(formatTaskDateTime(submission.submittedAt))} / ${escapeHtml(getUserLabel(submission.submittedByUser))}${submission.recordedDurationSeconds !== null ? ` / ${escapeHtml(formatDuration(submission.recordedDurationSeconds))}` : ""}</small></section>`;
 }
@@ -1534,12 +1580,13 @@ function renderWorkboardActionArea(task) {
   if (!actions.length) return `<section class="my-task-action-area"><strong>No available manager action</strong><span>This task is waiting on another step.</span></section>`;
   return `<section class="my-task-action-area workboard-actions"><strong>Allowed manager actions</strong>
     ${actions.includes("REQUEST_REVISION") || actions.includes("APPROVE_WORK") ? `<label><span>Review note</span><textarea id="workboard-review-note" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReviewNote)}</textarea></label>` : ""}
-    ${actions.includes("ASSIGN") ? `<label><span>Assign user</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
+    ${actions.includes("ASSIGN") || actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Assignee</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
+    ${actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Reviewer</span>${renderWorkboardDraftReviewerSelect("workboard-assign-reviewer", task.reviewerUserId || "", "Reviewer required")}</label>` : ""}
     ${actions.includes("CANCEL") || actions.includes("REOPEN") ? `<label><span>Reason</span><textarea id="workboard-reason" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReason)}</textarea></label>` : ""}
     <div class="my-task-action-buttons sticky-actions">
       ${actions.includes("EDIT_DRAFT") ? `<button data-workboard-edit-draft="${escapeHtml(task.id)}" type="button">EDIT DRAFT</button>` : ""}
       ${actions.includes("ASSIGN") ? `<button data-workboard-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ASSIGN</button>` : ""}
-      ${actions.includes("APPROVE_DRAFT") ? `<button class="primary" data-workboard-approve-draft="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE DRAFT</button>` : ""}
+      ${actions.includes("APPROVE_AND_ASSIGN") ? `<button class="primary" data-workboard-approve-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE AND ASSIGN</button>` : ""}
       ${actions.includes("REQUEST_REVISION") ? `<button data-workboard-request-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">REQUEST REVISION</button>` : ""}
       ${actions.includes("APPROVE_WORK") ? `<button class="primary" data-workboard-approve-work="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE WORK</button>` : ""}
       ${actions.includes("CANCEL") ? `<button data-workboard-cancel="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">CANCEL</button>` : ""}
@@ -1556,6 +1603,10 @@ function getEligibleAssignmentUsers(activeOnly = true) {
     if (user.assignmentEligible === false) return false;
     return ["owner", "admin", "staff"].includes(String(user.role || "").toLowerCase());
   });
+}
+
+function getEligibleReviewerUsers() {
+  return getEligibleAssignmentUsers(true).filter((user) => ["owner", "admin"].includes(String(user.role || "").toLowerCase()));
 }
 
 function getAssignmentUserLabel(user) {
@@ -1607,6 +1658,11 @@ function readWorkboardDraftForm() {
   };
 }
 
+function renderWorkboardDraftReviewerSelect(id, value, label) {
+  const users = getEligibleReviewerUsers();
+  return `<select id="${escapeHtml(id)}"><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
+}
+
 function buildWorkboardDraftPayload(task = null) {
   readWorkboardDraftForm();
   const sourceRecordType = workboardDraftForm.sourceRecordType.trim();
@@ -1643,7 +1699,7 @@ async function openWorkboardTask(taskId) {
   try {
     selectedTaskDetail = await getTaskDetail(taskId, adminAuthSession);
     taskDetailLoadState = "ready";
-    workboardTasks = sortMyTasks(workboardTasks.map((item) => item.id === selectedTaskDetail.task.id ? selectedTaskDetail.task : item));
+    workboardTasks = sortWorkboardTasks(workboardTasks.map((item) => item.id === selectedTaskDetail.task.id ? selectedTaskDetail.task : item));
     syncMyTasksTimerTick();
   } catch (error) {
     taskDetailLoadState = "error";
@@ -1712,13 +1768,23 @@ async function runWorkboardCommand(taskId, action) {
   if (!task) return;
   workboardReviewNote = document.getElementById("workboard-review-note")?.value || workboardReviewNote;
   workboardReason = document.getElementById("workboard-reason")?.value || workboardReason;
+  const selectedAssigneeUserId = document.getElementById("workboard-assign-user")?.value || null;
+  const selectedReviewerUserId = document.getElementById("workboard-assign-reviewer")?.value || null;
   workboardCommandState = "saving";
   workboardCommandError = "";
   render();
   try {
     const version = task.version;
     let response;
-    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: document.getElementById("workboard-assign-user")?.value || null }, adminAuthSession, createIdempotencyKey("assign"));
+    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: selectedAssigneeUserId }, adminAuthSession, createIdempotencyKey("assign"));
+    if (action === "approve-and-assign") response = await approveAndAssignTask(taskId, {
+      expectedVersion: version,
+      assignedUserId: selectedAssigneeUserId || task.assignedUserId || null,
+      reviewerUserId: selectedReviewerUserId || task.reviewerUserId || null,
+      startDeadline: task.startDeadline || null,
+      submissionDeadline: task.submissionDeadline || null,
+      approvalDeadline: task.approvalDeadline || null,
+    }, adminAuthSession, createIdempotencyKey("approve-and-assign"));
     if (action === "approve-draft") response = await approveTaskDraft(taskId, version, adminAuthSession, createIdempotencyKey("approve-draft"));
     if (action === "request-revision") response = await requestTaskRevision(taskId, { expectedVersion: version, reviewNote: workboardReviewNote.trim() }, adminAuthSession, createIdempotencyKey("revision-request"));
     if (action === "approve-work") response = await approveTaskWork(taskId, { expectedVersion: version, reviewNote: workboardReviewNote.trim() || null }, adminAuthSession, createIdempotencyKey("approve-work"));
@@ -5796,6 +5862,7 @@ function bindWorkboardEvents() {
     saveWorkboardDraft();
   });
   document.querySelectorAll("[data-workboard-assign]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardAssign, "assign")));
+  document.querySelectorAll("[data-workboard-approve-assign]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveAssign, "approve-and-assign")));
   document.querySelectorAll("[data-workboard-approve-draft]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveDraft, "approve-draft")));
   document.querySelectorAll("[data-workboard-request-revision]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardRequestRevision, "request-revision")));
   document.querySelectorAll("[data-workboard-approve-work]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveWork, "approve-work")));

@@ -8,6 +8,7 @@ const child = spawn(process.execPath, ["scripts/local-dev.mjs"], {
     ...process.env,
     PORT: String(port),
     VITE_ENABLE_TASK_DOMAIN: "false",
+    VITE_ENABLE_WORKBOARD: "false",
     VITE_USE_SUPABASE_DATA: "false",
     VITE_SUPABASE_URL: "",
     VITE_SUPABASE_ANON_KEY: "",
@@ -26,12 +27,14 @@ try {
   assert.equal(env.status, 200);
   const envText = await env.text();
   assert.ok(envText.includes('"VITE_ENABLE_TASK_DOMAIN": "false"'));
+  assert.ok(envText.includes('"VITE_ENABLE_WORKBOARD": "false"'));
 
   for (const [path, method] of [
     ["/api/tasks", "GET"],
     ["/api/tasks", "POST"],
     ["/api/tasks/10000000-0000-4000-8000-000000000001/draft", "PATCH"],
     ["/api/tasks/10000000-0000-4000-8000-000000000001/assign", "POST"],
+    ["/api/tasks/10000000-0000-4000-8000-000000000001/approve-and-assign", "POST"],
     ["/api/tasks/10000000-0000-4000-8000-000000000001/approve-draft", "POST"],
     ["/api/tasks/10000000-0000-4000-8000-000000000001/request-revision", "POST"],
     ["/api/tasks/10000000-0000-4000-8000-000000000001/approve", "POST"],

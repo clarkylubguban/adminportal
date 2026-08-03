@@ -10,6 +10,7 @@ const build = await readFile("scripts/build.mjs", "utf8");
 for (const required of [
   "function isTaskFeatureUiEnabled",
   "VITE_ENABLE_TASK_DOMAIN",
+  "VITE_ENABLE_MY_TASKS",
   "canViewMyTasksRoute() ? [{ label: \"My Tasks\"",
   "currentRoute === \"My Tasks\"",
   "getMyTasks(adminAuthSession",
@@ -47,6 +48,8 @@ assert.ok(localDev.includes("/api/my-tasks"));
 assert.ok(localDev.includes("../api/my-tasks.js"));
 assert.ok(localDev.includes("../api/tasks/[id].js"));
 assert.ok(localDev.includes("VITE_ENABLE_TASK_DOMAIN"));
+assert.ok(localDev.includes("VITE_ENABLE_MY_TASKS"));
 assert.ok(build.includes("VITE_ENABLE_TASK_DOMAIN"));
+assert.ok(build.includes("VITE_ENABLE_MY_TASKS"));
 
 process.stdout.write("PASS My Tasks frontend gate, route, action, fallback, and local router contracts\n");

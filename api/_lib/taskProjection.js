@@ -35,14 +35,32 @@ export function projectTask(row, actor, context = {}) {
     createdByUserId: context.createdByUserId || null,
     hasTimeEntries: Boolean(context.hasTimeEntries),
   };
+  const manager = MANAGER_ROLES.has(actor.role);
 
   return {
     ...task,
+    ...(manager ? {
+      automationTrace: {
+        planningRequestId: nullable(field(row, "planning_request_id", "planningRequestId")),
+        automationReceiptId: nullable(field(row, "automation_receipt_id", "automationReceiptId")),
+        externalTaskId: nullable(field(row, "external_task_id", "externalTaskId")),
+        suggestedAssignee: sanitizeSuggestedAssignee(field(row, "automation_metadata", "automationMetadata")?.suggestedAssignee),
+      },
+    } : {}),
     assignedUser: projectUser(context.assignedUser),
     reviewerUser: projectUser(context.reviewerUser),
     allowedActions: calculateAllowedActions(internal, actor, openTimeEntry),
     openTimeEntry,
     totalClosedDurationSeconds,
+  };
+}
+
+function sanitizeSuggestedAssignee(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return {
+    label: nullable(value.label),
+    externalUserId: nullable(value.externalUserId),
+    reason: nullable(value.reason),
   };
 }
 

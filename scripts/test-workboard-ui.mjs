@@ -12,11 +12,14 @@ for (const required of [
   "renderWorkboardPage()",
   "canViewWorkboardRoute() ? [{ label: \"Workboard\"",
   "path === \"/workboard\" && !canViewWorkboardRoute()",
+  "VITE_ENABLE_WORKBOARD",
   "getWorkboardTasks(adminAuthSession",
   "CREATE TASK",
   "CREATE DRAFT",
   "SAVE DRAFT",
-  "APPROVE DRAFT",
+  "APPROVE AND ASSIGN",
+  "workboard-kanban",
+  "approveAndAssignTask",
   "REQUEST REVISION",
   "APPROVE WORK",
   "CANCEL",
@@ -37,6 +40,7 @@ for (const required of [
   "updateTaskDraft",
   "assignTask",
   "approveTaskDraft",
+  "approveAndAssignTask",
   "requestTaskRevision",
   "approveTaskWork",
   "cancelTask",
@@ -63,6 +67,7 @@ for (const forbidden of [
 
 assert.ok(css.includes(".workboard-page"));
 assert.ok(css.includes(".workboard-table"));
+assert.ok(css.includes(".workboard-kanban"));
 assert.ok(css.includes("@media (max-width: 980px)"));
 
 process.stdout.write("PASS Workboard frontend gate, route, manager actions, and local router contracts\n");

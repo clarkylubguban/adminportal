@@ -8,6 +8,7 @@ const child = spawn(process.execPath, ["scripts/local-dev.mjs"], {
     ...process.env,
     PORT: String(port),
     VITE_ENABLE_TASK_DOMAIN: "false",
+    VITE_ENABLE_MY_TASKS: "false",
     VITE_USE_SUPABASE_DATA: "false",
     VITE_SUPABASE_URL: "",
     VITE_SUPABASE_ANON_KEY: "",
@@ -26,6 +27,7 @@ try {
   assert.equal(env.status, 200);
   const envText = await env.text();
   assert.ok(envText.includes('"VITE_ENABLE_TASK_DOMAIN": "false"'));
+  assert.ok(envText.includes('"VITE_ENABLE_MY_TASKS": "false"'));
 
   const api = await fetch(`http://127.0.0.1:${port}/api/my-tasks`);
   assert.equal(api.status, 401);

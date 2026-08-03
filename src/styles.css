@@ -22118,6 +22118,121 @@ body,
   display: none;
 }
 
+.workboard-kanban {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+.workboard-kanban-column {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  min-height: 280px;
+  overflow: hidden;
+}
+
+.workboard-kanban-column > header {
+  align-items: center;
+  background: var(--saas-surface-muted);
+  border-bottom: 1px solid var(--saas-border);
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 14px;
+}
+
+.workboard-kanban-column > header span,
+.workboard-kanban-column > header strong,
+.workboard-kanban-card > button span,
+.workboard-kanban-card footer {
+  font-family: var(--saas-mono);
+  letter-spacing: 0;
+}
+
+.workboard-kanban-column > header span {
+  color: var(--saas-muted);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.workboard-kanban-column > header strong {
+  color: var(--saas-ink);
+  font-size: 16px;
+}
+
+.workboard-kanban-column > div {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+}
+
+.workboard-kanban-card,
+.workboard-kanban-empty {
+  background: var(--saas-bg);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  padding: 12px;
+}
+
+.workboard-kanban-card.overdue {
+  border-color: var(--saas-red);
+}
+
+.workboard-kanban-card > button {
+  background: transparent;
+  border: 0;
+  color: var(--saas-ink);
+  cursor: pointer;
+  display: grid;
+  gap: 5px;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.workboard-kanban-card > button span,
+.workboard-kanban-card > button small,
+.workboard-kanban-card footer,
+.workboard-kanban-empty {
+  color: var(--saas-muted);
+  font-size: 11px;
+}
+
+.workboard-kanban-card > button strong {
+  color: var(--saas-ink);
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.workboard-kanban-card > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.workboard-kanban-card footer {
+  align-items: center;
+  border-top: 1px solid var(--saas-border);
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+  margin-top: 10px;
+  padding-top: 10px;
+}
+
+.workboard-kanban-card footer button {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 800;
+  min-height: 36px;
+  padding: 0 10px;
+}
+
 .workboard-drawer {
   max-width: 560px;
 }
@@ -22186,6 +22301,10 @@ body,
 
   .workboard-table-wrap {
     display: none;
+  }
+
+  .workboard-kanban {
+    grid-template-columns: 1fr;
   }
 
   .workboard-card-list {

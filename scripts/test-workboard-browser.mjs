@@ -14,6 +14,7 @@ const owner = "95000000-0000-4000-8000-000000000001";
 const inactive = "95000000-0000-4000-8000-000000000012";
 const received = [];
 let syntheticNow = Date.now();
+let activeQaRole = "owner";
 
 const users = {
   [staffA]: { displayName: "Synthetic Staff A", initials: "SA", role: "staff", isActive: true },
@@ -36,6 +37,8 @@ const tasks = new Map([
   task("task-long", "WB-DR-011", "[DRY RUN] Long title containment validation for embroidered campaign photography, detailed proofing, post copy, and upload handoff", "TO_DO", { brief: "Synthetic long brief: keep all copy contained inside the drawer and cards without horizontal overflow. This does not contain customer, payment, artwork, or private staff data.", priority: "URGENT", deadlineHours: -26 }),
   task("task-other-staff", "WB-DR-012", "[DRY RUN] Staff B private task", "TO_DO", { assignedUserId: staffB }),
   task("task-draft", "WB-DR-013", "[DRY RUN] Draft hidden from staff", "DRAFT"),
+  task("task-ai-draft-owner", "WB-DR-014", "[DRY RUN] AI campaign draft needs Owner approval", "DRAFT", { sourceType: "AI_MARKETING", assignedUserId: null, reviewerUserId: null, automationTrace: true }),
+  task("task-ai-draft-admin", "WB-DR-015", "[DRY RUN] Daily content draft cannot be activated by Admin", "DRAFT", { sourceType: "DAILY_CONTENT", assignedUserId: null, reviewerUserId: null, automationTrace: true }),
 ]);
 
 const submissions = new Map([
@@ -66,9 +69,12 @@ try {
   const cdpUrl = await waitForCdp(remotePort);
   const cdp = await createCdp(cdpUrl);
   const desktop = await createPage(cdp, { width: 1366, height: 900, isMobile: false, deviceScaleFactor: 1 });
-  await navigate(cdp, desktop, `http://127.0.0.1:${port}/workboard`);
+  await navigate(cdp, desktop, `http://127.0.0.1:${port}/workboard?qaRole=owner`);
   await waitForText(cdp, desktop, "Workboard");
   await waitForText(cdp, desktop, "CREATE TASK");
+  await waitForText(cdp, desktop, "TO DO");
+  await waitForText(cdp, desktop, "IN PROGRESS");
+  await waitForText(cdp, desktop, "COMPLETED");
   await assertNoCriticalConsole(cdp, desktop);
   await assertEval(cdp, desktop, `document.body.innerText.includes('Auto Plan Today') === false`, "Auto Plan hidden");
   await assertEval(cdp, desktop, `document.body.innerText.includes('Calendar Quick Direction') === false`, "Calendar Quick hidden");
@@ -82,10 +88,26 @@ try {
   await setValue(cdp, desktop, "#workboard-submission-deadline", "2026-07-26T17:30");
   assert.equal(await evalValue(cdp, desktop, `document.querySelector("#workboard-title")?.value`), "Synthetic Workboard draft", "typed title present before submit");
   await click(cdp, desktop, '[data-workboard-draft-form] button[type="submit"]');
-  await waitForText(cdp, desktop, "APPROVE DRAFT");
+  await waitForText(cdp, desktop, "APPROVE AND ASSIGN");
   assert.equal(received.find((item) => item.path === "/api/tasks" && item.method === "POST")?.body?.title, "Synthetic Workboard draft", "create payload title submitted");
-  await click(cdp, desktop, '[data-workboard-approve-draft]');
+  await setSelect(cdp, desktop, "#workboard-assign-user", staffA);
+  await setSelect(cdp, desktop, "#workboard-assign-reviewer", owner);
+  await click(cdp, desktop, '[data-workboard-approve-assign]');
   await waitForText(cdp, desktop, "TO DO");
+  await click(cdp, desktop, "[data-workboard-close]");
+
+  await setSelect(cdp, desktop, "#workboard-status-filter", "draft");
+  await waitForText(cdp, desktop, "AI campaign draft needs Owner approval");
+  await clickWorkboardTask(cdp, desktop, "AI campaign draft needs Owner approval");
+  await waitForText(cdp, desktop, "AI-GENERATED DRAFT");
+  await waitForText(cdp, desktop, "Owner approval activates it");
+  await waitForText(cdp, desktop, "Suggested: Marketing staff suggestion");
+  await setSelect(cdp, desktop, "#workboard-assign-user", staffA);
+  await setSelect(cdp, desktop, "#workboard-assign-reviewer", owner);
+  await click(cdp, desktop, '[data-workboard-approve-assign]');
+  await waitForText(cdp, desktop, "TO DO");
+  await click(cdp, desktop, "[data-workboard-close]");
+  await setSelect(cdp, desktop, "#workboard-status-filter", "active");
 
   await clickWorkboardTask(cdp, desktop, "Submitted without recorded time");
   await waitForText(cdp, desktop, "TIME NOT RECORDED");
@@ -110,8 +132,20 @@ try {
   await click(cdp, desktop, '[data-workboard-archive]');
   await waitForText(cdp, desktop, "NO AVAILABLE MANAGER ACTION");
 
+  await navigate(cdp, desktop, `http://127.0.0.1:${port}/workboard?qaRole=admin`);
+  await waitForText(cdp, desktop, "Workboard");
+  await setSelect(cdp, desktop, "#workboard-status-filter", "draft");
+  await waitForText(cdp, desktop, "Daily content draft cannot be activated by Admin");
+  await clickWorkboardTask(cdp, desktop, "Daily content draft cannot be activated by Admin");
+  await waitForText(cdp, desktop, "AI-GENERATED DRAFT");
+  await assertEval(cdp, desktop, `document.querySelector('[data-workboard-approve-assign]') === null`, "admin cannot approve-and-assign AI or daily content drafts");
+
+  await navigate(cdp, desktop, `http://127.0.0.1:${port}/workboard?qaRole=staff`);
+  await waitForText(cdp, desktop, "Overview");
+  await assertEval(cdp, desktop, `document.body.innerText.includes('Workboard') === false || document.body.innerText.includes('Task planning is not enabled')`, "staff cannot access Workboard module data");
+
   const mobile = await createPage(cdp, { width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 });
-  await navigate(cdp, mobile, `http://127.0.0.1:${port}/workboard`);
+  await navigate(cdp, mobile, `http://127.0.0.1:${port}/workboard?qaRole=owner`);
   await waitForText(cdp, mobile, "Workboard");
   await assertEval(cdp, mobile, `document.scrollingElement.scrollWidth <= window.innerWidth + 2`, "mobile no horizontal overflow");
   const smallTargets = await evalValue(cdp, mobile, `[...document.querySelectorAll('button,a,select')].map((el) => { const rect = el.getBoundingClientRect(); return { text: el.innerText.trim(), label: el.getAttribute('aria-label') || '', className: el.className || '', height: Math.round(rect.height), width: Math.round(rect.width), visible: rect.width > 0 && rect.height > 0 }; }).filter((item) => item.visible && item.height < 36).slice(0, 20)`);
@@ -123,25 +157,23 @@ try {
 
   assert.ok(received.some((item) => item.path === "/api/tasks" && item.method === "GET" && item.auth === "Bearer synthetic-staff-a-token"), "manager list auth used");
   assert.ok(received.some((item) => item.path === "/api/tasks" && item.method === "POST" && item.idempotency), "create idempotency used");
-  assert.ok(received.some((item) => item.path.includes("/approve-draft") && item.body?.expectedVersion), "approve draft expectedVersion used");
+  assert.ok(received.some((item) => item.path.includes("/approve-and-assign") && item.body?.expectedVersion && item.body?.assignedUserId && item.body?.reviewerUserId), "approve-and-assign expectedVersion used");
   assert.ok(received.some((item) => item.path.includes("/request-revision") && item.body?.reviewNote), "request revision payload used");
   assert.ok(received.some((item) => item.path.includes("/approve") && item.body?.expectedVersion), "approve work expectedVersion used");
   process.stdout.write(`PASS browser desktop/mobile Workboard QA with screenshots in ${screenshotDir}\n`);
-  await cdp.close();} finally {
+  await cdp.close();
+} finally {
   browser.kill("SIGTERM");
   await new Promise((resolve) => server.close(resolve));
 }
 
 function task(id, code, title, status, overrides = {}) {
-  const assignedUserId = overrides.assignedUserId || staffA;
-  const reviewerUserId = overrides.reviewerUserId || owner;
-  const open = overrides.open === true;
   return [id, baseTask(id, code, `${title}${overrides.titleSuffix || ""}`, status, overrides)];
 }
 
 function baseTask(id, code, title, status, overrides = {}) {
-  const assignedUserId = overrides.assignedUserId || staffA;
-  const reviewerUserId = overrides.reviewerUserId || owner;
+  const assignedUserId = Object.hasOwn(overrides, "assignedUserId") ? overrides.assignedUserId : staffA;
+  const reviewerUserId = Object.hasOwn(overrides, "reviewerUserId") ? overrides.reviewerUserId : owner;
   const open = overrides.open === true;
   return {
     id,
@@ -169,6 +201,12 @@ function baseTask(id, code, title, status, overrides = {}) {
     archivedAt: null,
     createdAt: iso(-30),
     updatedAt: iso(-1),
+    automationTrace: overrides.automationTrace ? {
+      planningRequestId: `plan-${code}`,
+      automationReceiptId: `receipt-${code}`,
+      externalTaskId: `external-${code}`,
+      suggestedAssignee: { label: "Marketing staff suggestion", reason: "Synthetic automation metadata" },
+    } : undefined,
     allowedActions: [],
     openTimeEntry: open ? { id: `${id}-time-open`, taskId: id, userId: assignedUserId, cycleNumber: 1, startedAt: iso(-0.02), endedAt: null } : null,
     totalClosedDurationSeconds: overrides.duration || 0,
@@ -183,7 +221,12 @@ async function handleRequest(request, response) {
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (path.startsWith("/api/")) return handleApi(request, response, path, url);
-  if (path === "/src/env.js") return send(response, 200, "text/javascript", `window.TRRY_ADMIN_ENV = ${JSON.stringify({ VITE_USE_SUPABASE_DATA: "false", VITE_SUPABASE_URL: "", VITE_SUPABASE_ANON_KEY: "", VITE_ENABLE_TASK_DOMAIN: "true", VITE_LOCAL_TASK_QA_MODE: "true", VITE_LOCAL_TASK_QA_ROLE: "owner", VITE_LOCAL_TASK_QA_USER_ID: owner, VITE_ADMIN_ACCESS_CODE: "" }, null, 2)};\n`);
+  if (path === "/src/env.js") {
+    const referer = new URL(request.headers.referer || `http://${request.headers.host}/workboard?qaRole=owner`);
+    activeQaRole = referer.searchParams.get("qaRole") || "owner";
+    const qaUserId = activeQaRole === "staff" ? staffA : owner;
+    return send(response, 200, "text/javascript", `window.TRRY_ADMIN_ENV = ${JSON.stringify({ VITE_USE_SUPABASE_DATA: "false", VITE_SUPABASE_URL: "", VITE_SUPABASE_ANON_KEY: "", VITE_ENABLE_TASK_DOMAIN: "true", VITE_ENABLE_WORKBOARD: "true", VITE_ENABLE_MY_TASKS: "false", VITE_LOCAL_TASK_QA_MODE: "true", VITE_LOCAL_TASK_QA_ROLE: activeQaRole, VITE_LOCAL_TASK_QA_USER_ID: qaUserId, VITE_ADMIN_ACCESS_CODE: "" }, null, 2)};\n`);
+  }
   const filePath = normalize(join(root, path === "/" || !extname(path) ? "index.html" : path));
   if (!filePath.startsWith(root)) return send(response, 403, "text/plain", "Forbidden");
   try {
@@ -198,7 +241,7 @@ async function handleApi(request, response, path, url) {
   const auth = request.headers.authorization || "";
   const idempotency = request.headers["idempotency-key"] || "";
   const body = await readJsonBody(request);
-  received.push({ path, method: request.method, auth, idempotency, body });
+  received.push({ path, search: url.search, method: request.method, auth, idempotency, body });
   if (auth !== "Bearer synthetic-staff-a-token") return sendJson(response, 401, { ok: false, error: { code: "AUTH_REQUIRED", message: "Authentication required." } });
   if (path === "/api/assignment-users") {
     return sendJson(response, 200, {
@@ -227,7 +270,7 @@ async function handleApi(request, response, path, url) {
   }
   if (path === "/api/tasks" && request.method === "POST") {
     const id = `task-created-${Date.now()}`;
-    const created = { ...baseTask(id, `WB-DR-${tasks.size + 1}`, body.title, "DRAFT"), brief: body.brief, sourceType: body.sourceType || "MANUAL", priority: body.priority || "MEDIUM", assignedUserId: body.assignedUserId || staffA, reviewerUserId: body.reviewerUserId || owner, assignedUser: users[body.assignedUserId || staffA], reviewerUser: users[body.reviewerUserId || owner], timeTrackingMode: body.timeTrackingMode || "EXPECTED", submissionDeadline: body.submissionDeadline || iso(24), version: 1 };
+    const created = { ...baseTask(id, `WB-DR-${tasks.size + 1}`, body.title, "DRAFT"), brief: body.brief, sourceType: body.sourceType || "MANUAL", priority: body.priority || "MEDIUM", assignedUserId: body.assignedUserId || null, reviewerUserId: body.reviewerUserId || owner, assignedUser: users[body.assignedUserId] || null, reviewerUser: users[body.reviewerUserId || owner], timeTrackingMode: body.timeTrackingMode || "EXPECTED", submissionDeadline: body.submissionDeadline || iso(24), version: 1 };
     tasks.set(id, created);
     return sendJson(response, 200, mutation(created));
   }
@@ -240,6 +283,7 @@ async function handleApi(request, response, path, url) {
   if (Number(body.expectedVersion) !== current.version) return sendJson(response, 409, { ok: false, error: { code: "VERSION_CONFLICT", message: "Task version is stale.", details: { currentVersion: current.version } } });
   if (action === "draft" && request.method === "PATCH") return updateDraft(response, current, body);
   if (action === "assign") return assignExisting(response, current, body);
+  if (action === "approve-and-assign") return approveAndAssign(response, current, body);
   if (action === "approve-draft") return approveDraft(response, current, body);
   if (action === "request-revision") return requestRevision(response, current, body);
   if (action === "approve") return approveWork(response, current, body);
@@ -265,6 +309,16 @@ function assignExisting(response, current, body) {
   return sendJson(response, 200, mutation(current));
 }
 function approveDraft(response, current) { current.status = "TO_DO"; current.version += 1; return sendJson(response, 200, mutation(current)); }
+function approveAndAssign(response, current, body) {
+  if (!body.assignedUserId || !body.reviewerUserId) return sendJson(response, 400, { ok: false, error: { code: "VALIDATION_ERROR", message: "Assignee and reviewer are required." } });
+  current.assignedUserId = body.assignedUserId;
+  current.assignedUser = users[body.assignedUserId];
+  current.reviewerUserId = body.reviewerUserId;
+  current.reviewerUser = users[body.reviewerUserId];
+  current.status = "TO_DO";
+  current.version += 1;
+  return sendJson(response, 200, mutation(current));
+}
 function requestRevision(response, current, body) {
   current.status = "NEEDS_REVISION";
   current.version += 1;
@@ -333,12 +387,14 @@ function detail(current) {
 }
 
 function project(current) {
-  const projected = { ...current, allowedActions: allowed(current) };
-  return projected;
+  return { ...current, allowedActions: allowed(current) };
 }
 
 function allowed(current) {
-  if (current.status === "DRAFT" && current.assignedUserId && current.reviewerUserId) return ["EDIT_DRAFT", "ASSIGN", "APPROVE_DRAFT", "CANCEL"];
+  if (current.status === "DRAFT") {
+    if (activeQaRole === "admin" && ["AI_MARKETING", "DAILY_CONTENT"].includes(current.sourceType)) return [];
+    return ["EDIT_DRAFT", "APPROVE_AND_ASSIGN", "CANCEL"];
+  }
   if (current.status === "TO_DO" && current.timeTrackingMode === "EXPECTED") return ["ASSIGN", "CANCEL"];
   if (current.status === "TO_DO" && current.timeTrackingMode === "NONE") return ["ASSIGN", "CANCEL"];
   if (current.status === "IN_PROGRESS" && current.timeTrackingMode === "EXPECTED") return ["SUBMIT_FOR_REVIEW"];
@@ -441,7 +497,7 @@ async function waitForText(cdp, page, text, timeout = 7000) {
 
 async function clickWorkboardTask(cdp, page, text) {
   const expression = `(() => {
-    const visible = [...document.querySelectorAll('.workboard-table tr, .workboard-card-list .my-task-card')].find((node) => node.innerText.includes(${JSON.stringify(text)}));
+    const visible = [...document.querySelectorAll('.workboard-table tr, .workboard-card-list .my-task-card, .workboard-kanban-card')].find((node) => node.innerText.includes(${JSON.stringify(text)}));
     const id = visible?.querySelector('[data-workboard-open]')?.dataset.workboardOpen;
     const el = id ? document.querySelector('[data-workboard-open="' + CSS.escape(id) + '"]') : [...document.querySelectorAll('[data-workboard-open]')].find((node) => node.innerText.includes(${JSON.stringify(text)}));
     if (!el) return false;
@@ -478,6 +534,12 @@ async function click(cdp, page, selector) {
 async function setValue(cdp, page, selector, value) {
   const expression = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
   assert.equal(await evalValue(cdp, page, expression), true, `input missing: ${selector}`);
+}
+
+async function setSelect(cdp, page, selector, value) {
+  const expression = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`;
+  assert.equal(await evalValue(cdp, page, expression), true, `select missing: ${selector}`);
+  await waitForIdle(500);
 }
 
 async function screenshot(cdp, page, filename) {

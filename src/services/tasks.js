@@ -32,6 +32,10 @@ export async function approveTaskDraft(taskId, expectedVersion, session, idempot
   return taskCommand(taskId, "approve-draft", { expectedVersion }, session, idempotencyKey);
 }
 
+export async function approveAndAssignTask(taskId, body, session, idempotencyKey = createIdempotencyKey("approve-and-assign")) {
+  return taskCommand(taskId, "approve-and-assign", body, session, idempotencyKey);
+}
+
 export async function requestTaskRevision(taskId, body, session, idempotencyKey = createIdempotencyKey("revision-request")) {
   return taskCommand(taskId, "request-revision", body, session, idempotencyKey);
 }

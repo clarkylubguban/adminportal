@@ -187,7 +187,7 @@ async function handleRequest(request, response) {
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (path.startsWith("/api/")) return handleApi(request, response, path, url);
-  if (path === "/src/env.js") return send(response, 200, "text/javascript", `window.TRRY_ADMIN_ENV = ${JSON.stringify({ VITE_USE_SUPABASE_DATA: "false", VITE_SUPABASE_URL: "", VITE_SUPABASE_ANON_KEY: "", VITE_ENABLE_TASK_DOMAIN: "true", VITE_LOCAL_TASK_QA_MODE: "true", VITE_ADMIN_ACCESS_CODE: "" }, null, 2)};\n`);
+  if (path === "/src/env.js") return send(response, 200, "text/javascript", `window.TRRY_ADMIN_ENV = ${JSON.stringify({ VITE_USE_SUPABASE_DATA: "false", VITE_SUPABASE_URL: "", VITE_SUPABASE_ANON_KEY: "", VITE_ENABLE_TASK_DOMAIN: "true", VITE_ENABLE_MY_TASKS: "true", VITE_ENABLE_WORKBOARD: "false", VITE_LOCAL_TASK_QA_MODE: "true", VITE_ADMIN_ACCESS_CODE: "" }, null, 2)};\n`);
   const filePath = normalize(join(root, path === "/" || !extname(path) ? "index.html" : path));
   if (!filePath.startsWith(root)) return send(response, 403, "text/plain", "Forbidden");
   try {

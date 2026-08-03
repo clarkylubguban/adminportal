@@ -27,7 +27,7 @@ run([
 await sleep(12_000);
 
 pipe(
-  ["exec", "supabase_db_Admin_portal", "pg_dump", "-U", "supabase_admin", "-d", "postgres", "-n", "storage", "--schema-only", "--section=pre-data", "--clean", "--if-exists", "--no-owner", "--no-privileges"],
+  ["exec", "supabase_db_Admin_portal", "pg_dump", "-h", "127.0.0.1", "-U", "supabase_admin", "-d", "postgres", "-n", "storage", "--schema-only", "--section=pre-data", "--clean", "--if-exists", "--no-owner", "--no-privileges"],
   ["exec", "-i", container, "psql", "-U", "supabase_admin", "-d", "postgres", "-X", "-v", "ON_ERROR_STOP=1", "-q"],
 );
 psql("alter table storage.buckets add constraint buckets_pkey primary key (id);");

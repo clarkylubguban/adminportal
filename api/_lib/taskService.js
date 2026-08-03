@@ -11,7 +11,8 @@ const TASK_SELECT = [
   "source_record_id", "status", "priority", "time_tracking_mode", "assigned_user_id", "reviewer_user_id",
   "draft_approval_required", "scheduled_date", "start_deadline",
   "submission_deadline", "approval_deadline", "version", "completed_at",
-  "cancelled_at", "archived_at", "created_at", "updated_at",
+  "cancelled_at", "archived_at", "planning_request_id", "automation_receipt_id",
+  "external_task_id", "automation_metadata", "created_at", "updated_at",
 ].join(",");
 const TIME_SELECT = [
   "id", "task_id", "user_id", "cycle_number", "started_at", "ended_at",
