@@ -69,7 +69,8 @@ async function handleRequest(request, response) {
     }
 
 
-    if (await handleTaskApiRoute(routePath, request, response)) return;
+  if (await handleTaskApiRoute(routePath, request, response)) return;
+  if (await handleIntegrationApiRoute(routePath, request, response)) return;
 
     if (routePath === "/src/env.js") {
       response.writeHead(200, { "Content-Type": contentTypes[".js"] });
@@ -116,6 +117,15 @@ async function handleTaskApiRoute(routePath, request, response) {
     return true;
   }
 
+  return false;
+}
+
+async function handleIntegrationApiRoute(routePath, request, response) {
+  if (routePath === "/api/integrations/n8n/task-drafts") {
+    const { default: handleN8nTaskDraftsRequest } = await import("../api/integrations/n8n/task-drafts.js");
+    await handleN8nTaskDraftsRequest(request, response);
+    return true;
+  }
   return false;
 }
 function normalizeRoutePath(pathname) {

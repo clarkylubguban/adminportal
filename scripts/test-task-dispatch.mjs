@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import collectionHandler from "../api/tasks/index.js";
 import taskHandler from "../api/tasks/[id].js";
 import myTasksHandler from "../api/my-tasks.js";
+import n8nTaskDraftsHandler from "../api/integrations/n8n/task-drafts.js";
 
 const TASK_ID = "10000000-0000-4000-8000-000000000001";
 const ENTRY_ID = "20000000-0000-4000-8000-000000000001";
@@ -67,6 +68,10 @@ const myTasks = await invoke(myTasksHandler, "GET", "/api/my-tasks");
 assert.equal(myTasks.status, 401);
 assert.equal(myTasks.body.error.code, "AUTH_REQUIRED");
 
+const n8nDrafts = await invoke(n8nTaskDraftsHandler, "POST", "/api/integrations/n8n/task-drafts");
+assert.equal(n8nDrafts.status, 401);
+assert.equal(n8nDrafts.body.error.code, "SIGNATURE_INVALID");
+
 const collectionWrongMethod = await invoke(collectionHandler, "PATCH", "/api/tasks");
 assert.equal(collectionWrongMethod.status, 405);
 assert.equal(collectionWrongMethod.headers.allow, "GET, POST");
@@ -93,7 +98,7 @@ for (const url of [
   assert.equal(result.body.error.code, "NOT_FOUND");
 }
 
-process.stdout.write(`PASS task route dispatch preserved ${collectionRoutes.length + catchAllRoutes.length} task URLs with safe 404/405 responses\n`);
+process.stdout.write(`PASS task route dispatch preserved ${collectionRoutes.length + catchAllRoutes.length} task URLs plus n8n integration auth gate with safe 404/405 responses\n`);
 
 async function invoke(handler, method, url) {
   const request = { method, url, query: {} };

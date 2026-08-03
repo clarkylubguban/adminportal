@@ -12,7 +12,8 @@ const entrypoints = files
 const taskEntrypoints = entrypoints.filter((file) => file.startsWith("api/tasks/")).sort();
 assert.deepEqual(taskEntrypoints, ["api/tasks/[id].js", "api/tasks/index.js"]);
 assert.ok(entrypoints.includes("api/my-tasks.js"), "api/my-tasks.js must remain a separate function");
-assert.ok(entrypoints.length <= 10, `expected <= 10 Vercel functions, found ${entrypoints.length}: ${entrypoints.join(", ")}`);
+assert.ok(entrypoints.includes("api/integrations/n8n/task-drafts.js"), "n8n task draft ingestion must remain a dedicated function");
+assert.ok(entrypoints.length <= 12, `expected <= 12 Vercel functions, found ${entrypoints.length}: ${entrypoints.join(", ")}`);
 assert.equal(files.some((file) => relative(process.cwd(), file).replaceAll("\\", "/").startsWith("api/_lib/") && entrypoints.includes(file)), false);
 
 process.stdout.write(`PASS Vercel function entrypoint gate: ${entrypoints.length} functions (${entrypoints.join(", ")})\n`);

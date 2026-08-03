@@ -27,6 +27,12 @@ const phase82Path = join(
   "migrations",
   "202608030001_add_task_approve_and_assign.sql",
 );
+const phase83Path = join(
+  root,
+  "supabase",
+  "migrations",
+  "20260803033131_phase_8_3_n8n_foundation.sql",
+);
 const testsRoot = join(root, "supabase", "tests");
 const testPaths = {
   foundation: join(testsRoot, "task_domain_foundation.sql"),
@@ -38,12 +44,17 @@ const testPaths = {
   noTime: join(testsRoot, "task_domain_no_time_submission.sql"),
 };
 const concurrencyHarnessPath = join(root, "scripts", "verify-task-concurrency.mjs");
+const n8nApiPath = join(root, "api", "_lib", "n8nTaskIngestion.js");
+const n8nRoutePath = join(root, "api", "integrations", "n8n", "task-drafts.js");
+const n8nApiTestPath = join(root, "scripts", "test-n8n-ingestion-api.mjs");
+const n8nDbVerifierPath = join(root, "scripts", "verify-n8n-ingestion-db.mjs");
 
 const [
   schema,
   functions,
   alignment,
   phase82,
+  phase83,
   foundationTest,
   schemaTest,
   lifecycleTest,
@@ -52,11 +63,16 @@ const [
   apiTest,
   noTimeTest,
   concurrencyHarness,
+  n8nApi,
+  n8nRoute,
+  n8nApiTest,
+  n8nDbVerifier,
 ] = await Promise.all([
     readFile(schemaPath, "utf8"),
     readFile(functionsPath, "utf8"),
     readFile(alignmentPath, "utf8"),
     readFile(phase82Path, "utf8"),
+    readFile(phase83Path, "utf8"),
     readFile(testPaths.foundation, "utf8"),
     readFile(testPaths.schema, "utf8"),
     readFile(testPaths.lifecycle, "utf8"),
@@ -65,6 +81,10 @@ const [
     readFile(testPaths.api, "utf8"),
     readFile(testPaths.noTime, "utf8"),
     readFile(concurrencyHarnessPath, "utf8"),
+    readFile(n8nApiPath, "utf8"),
+    readFile(n8nRoutePath, "utf8"),
+    readFile(n8nApiTestPath, "utf8"),
+    readFile(n8nDbVerifierPath, "utf8"),
   ]);
 
 const failures = [];
@@ -196,6 +216,33 @@ requireText(functions, "task_write_event", "audit event writes");
 requireText(phase82, "assigned_user_id = p_assigned_user_id", "approve-and-assign assignment write");
 requireText(phase82, "status = 'TO_DO'", "approve-and-assign activation");
 requireText(apiTest, "admin activated a daily content draft", "AI/daily admin activation denial");
+requireText(phase83, "create table if not exists public.planning_requests", "planning request table");
+requireText(phase83, "create table if not exists public.automation_receipts", "automation receipt table");
+requireText(phase83, "planning_request_id uuid references public.planning_requests", "task planning traceability");
+requireText(phase83, "automation_receipt_id uuid references public.automation_receipts", "task receipt traceability");
+requireText(phase83, "external_task_id text", "external task traceability");
+requireText(phase83, "tasks_automation_receipt_external_task_uidx", "external task duplicate guard");
+requireText(phase83, "automation_receipts_execution_key unique", "execution duplicate guard");
+requireText(phase83, "automation_receipts_idempotency_key unique", "automation idempotency guard");
+requireText(phase83, "task_ingest_n8n_drafts", "n8n ingestion RPC");
+requireText(phase83, "grant execute on function public.task_ingest_n8n_drafts", "service role ingestion grant");
+requireText(phase83, "to service_role", "service role explicit authorization");
+requireText(phase83, "revoke all on function public.task_ingest_n8n_drafts", "n8n RPC public revocation");
+requireText(phase83, "'N8N_FOUNDATION', false", "n8n feature default off");
+requireText(phase83, "'AUTO_PLAN_TODAY', false", "auto plan feature default off");
+requireText(phase83, "'WORKBOARD', false", "workboard feature default off");
+requireText(phase83, "'MY_TASKS', false", "my tasks feature default off");
+requireText(phase83, "'CALENDAR', false", "calendar feature default off");
+requireText(phase83, "'AUTOMATION'", "automation audit actor");
+requireText(n8nApi, "createHmac", "HMAC signature verification");
+requireText(n8nApi, "timingSafeEqual", "timing-safe signature comparison");
+requireText(n8nApi, "x-trry-request-timestamp", "signed request timestamp header");
+requireText(n8nApi, "x-trry-request-expires-at", "signed request expiry header");
+requireText(n8nApi, "hashCanonicalPayload", "payload hash verification");
+requireText(n8nApiTest, "missing and invalid signatures", "n8n signature tests");
+requireText(n8nApiTest, "public, admin, and staff bearer callers cannot bypass", "n8n bearer bypass test");
+requireText(n8nDbVerifier, "concurrent identical requests", "n8n concurrency verifier");
+requireText(n8nDbVerifier, "operational records changed", "operational unchanged assertion");
 requireText(
   functions,
   "correction cannot open or close a timer",
