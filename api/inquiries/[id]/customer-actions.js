@@ -141,7 +141,7 @@ export default async function handler(request, response) {
       sendJson(response, 404, { ok: false, error: "online payment workflow is not available" });
       return;
     }
-    if (SHOP_PAYMENT_ACTIONS.has(action) && process.env.ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW !== "true") {
+    if (SHOP_PAYMENT_ACTIONS.has(action) && !isAdminPayAtShopWorkflowEnabled()) {
       sendJson(response, 404, { ok: false, error: "Pay at Shop confirmation is not available" });
       return;
     }
@@ -457,6 +457,13 @@ function getExpectedPaymentError(error) {
   }
 
   return null;
+}
+
+function isAdminPayAtShopWorkflowEnabled() {
+  return [
+    process.env.ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW,
+    process.env.ENABLE_ADMIN_SHOP_WORKFLOW,
+  ].some((value) => String(value || "").trim().toLowerCase() === "true");
 }
 
 function cleanPaymentMethod(value) {

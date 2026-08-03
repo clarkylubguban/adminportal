@@ -32,6 +32,7 @@ assert.match(downPaymentFix, /APPROVED_PAYMENT_AMOUNT_REQUIRED/);
 assert.match(downPaymentFix, /insert into public\.inquiry_payment_events/i);
 
 assert.match(api, /ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW/);
+assert.match(api, /ENABLE_ADMIN_SHOP_WORKFLOW/);
 assert.match(api, /ENABLE_CUSTOMER_PAYMENT_WORKFLOW/);
 assert.match(api, /confirm_shop_payment/);
 assert.match(api, /confirm_cash_payment/);
@@ -52,6 +53,7 @@ assert.match(main, /Payment remains unpaid until staff confirms receipt/);
 assert.match(main, /PAYMENT HISTORY/);
 assert.match(main, /renderPayment: renderOpsPaymentStage/);
 assert.match(build, /VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW[\s\S]+?"false"/);
+assert.match(build, /VITE_ENABLE_ADMIN_SHOP_WORKFLOW/);
 
 globalThis.window = {
   location: {
@@ -95,8 +97,8 @@ const child = spawn(process.execPath, ["scripts/local-dev.mjs"], {
     ...process.env,
     PORT: String(port),
     ENABLE_CUSTOMER_PAYMENT_WORKFLOW: "false",
-    ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW: "true",
-    VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW: "true",
+    ENABLE_ADMIN_SHOP_WORKFLOW: "true",
+    VITE_ENABLE_ADMIN_SHOP_WORKFLOW: "true",
     VITE_USE_SUPABASE_DATA: "false",
     VITE_SUPABASE_URL: "",
     VITE_SUPABASE_ANON_KEY: "",

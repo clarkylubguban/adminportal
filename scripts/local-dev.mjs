@@ -198,18 +198,26 @@ async function createEnvScript() {
     ...(await readLocalEnv(".env")),
     ...(await readLocalEnv(".env.local")),
   };
+  const adminPayAtShopWorkflow = enabledEnv(
+    process.env.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? env.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW,
+    process.env.VITE_ENABLE_ADMIN_SHOP_WORKFLOW ?? env.VITE_ENABLE_ADMIN_SHOP_WORKFLOW,
+  );
   const publicEnv = {
     VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? env.VITE_SUPABASE_URL ?? "",
     VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY ?? "",
     VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA ?? env.VITE_USE_SUPABASE_DATA ?? "true",
     VITE_ENABLE_TASK_DOMAIN: process.env.VITE_ENABLE_TASK_DOMAIN ?? env.VITE_ENABLE_TASK_DOMAIN ?? "false",
-    VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW: process.env.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? env.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? "false",
+    VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW: adminPayAtShopWorkflow ? "true" : "false",
     VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW: process.env.VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW ?? env.VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW ?? "false",
     VITE_LOCAL_TASK_QA_MODE: process.env.VITE_LOCAL_TASK_QA_MODE ?? env.VITE_LOCAL_TASK_QA_MODE ?? "false",
     VITE_ADMIN_ACCESS_CODE: process.env.VITE_ADMIN_ACCESS_CODE ?? env.VITE_ADMIN_ACCESS_CODE ?? "",
   };
 
   return `window.TRRY_ADMIN_ENV = ${JSON.stringify(publicEnv, null, 2)};\n`;
+}
+
+function enabledEnv(...values) {
+  return values.some((value) => String(value || "").trim().toLowerCase() === "true");
 }
 
 async function readLocalEnv(file = ".env") {
