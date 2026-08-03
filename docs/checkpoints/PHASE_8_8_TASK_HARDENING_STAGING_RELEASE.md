@@ -42,11 +42,38 @@ Excluded:
 - Supabase staging host: db.fszkypwovpdthqfobxrk.supabase.co
 - Supabase production project is separate: trryportalsystem / wcgtwfctpnwgpglywvvx
 
-Not yet proven:
+Proven:
 
-- Staging Auth QA identity
+- Staging Auth QA identity for Owner/Admin/Staff
+
+Still blocked:
+
 - Staging n8n endpoint identity
 - Staging n8n workflow identity
+
+Staging Auth proof captured on 2026-08-03:
+
+- Supabase project: trry-admin-staging / fszkypwovpdthqfobxrk
+- Owner QA sign-in: PASS; active test profile; Auth UUID matches admin profile UUID
+- Admin QA sign-in: PASS; active test profile; Auth UUID matches admin profile UUID
+- Staff QA sign-in: PASS; active test profile; Auth UUID matches admin profile UUID
+- Credentials, session tokens, and browser storage were not printed, stored, or committed.
+
+Local n8n inspection on 2026-08-03:
+
+- Approved n8n shape: self-hosted local Docker n8n at localhost:5678.
+- Docker Desktop context is healthy.
+- No n8n container, n8n image, `.n8n` directory, or local n8n compose file was found.
+- `http://localhost:5678/` and `http://localhost:5678/healthz` were unreachable.
+- n8n Cloud is not used.
+
+Temporary tunnel recommendation for staging verification:
+
+- Run local n8n only on localhost.
+- Put a tiny local allowlist proxy in front of n8n that forwards only the required staging webhook path and allowed method(s), not the n8n editor UI.
+- Expose that proxy through a temporary no-subscription tunnel, preferably Cloudflare Quick Tunnel via Docker, or `npx localtunnel` if Cloudflare tooling is unavailable.
+- Point only the `adminportal-staging` `N8N_AUTO_PLAN_TODAY_URL` value at the temporary tunnel webhook URL.
+- Remove the tunnel and restore/disable the staging server gate after verification.
 
 ## Staging Schema Status
 
