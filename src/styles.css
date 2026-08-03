@@ -22254,6 +22254,108 @@ body,
   grid-template-columns: repeat(7, minmax(0, 1fr));
 }
 
+.auto-plan-panel {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+}
+
+.auto-plan-heading {
+  align-items: start;
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+}
+
+.auto-plan-heading span,
+.auto-plan-direction span,
+.auto-plan-state strong {
+  color: var(--saas-ink);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 900;
+  letter-spacing: 0;
+}
+
+.auto-plan-heading span {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+}
+
+.auto-plan-icon {
+  color: var(--orange);
+  height: 18px;
+  width: 18px;
+}
+
+.auto-plan-heading p {
+  color: var(--saas-muted);
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 6px 0 0;
+}
+
+.auto-plan-direction {
+  display: grid;
+  gap: 7px;
+}
+
+.auto-plan-direction textarea {
+  background: var(--saas-surface-muted);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  font: inherit;
+  min-height: 86px;
+  padding: 12px;
+  resize: vertical;
+  width: 100%;
+}
+
+.auto-plan-state {
+  align-items: center;
+  background: var(--saas-surface-muted);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  min-height: 48px;
+  padding: 10px 12px;
+}
+
+.auto-plan-state span {
+  color: var(--saas-muted);
+  flex: 1;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.auto-plan-state.error {
+  border-color: var(--saas-red);
+}
+
+.auto-plan-state.success {
+  border-color: #2f8f5b;
+}
+
+.auto-plan-state button {
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border-strong);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  cursor: pointer;
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 900;
+  min-height: 38px;
+  padding: 0 12px;
+}
+
 .workboard-summary article {
   background: var(--saas-surface);
   border: 1px solid var(--saas-border-strong);
@@ -22612,6 +22714,17 @@ body,
 
   .workboard-page .mvp-page-title .ops-gold-button {
     min-height: 44px;
+    width: 100%;
+  }
+
+  .auto-plan-heading,
+  .auto-plan-state {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .auto-plan-heading .ops-gold-button,
+  .auto-plan-state button {
     width: 100%;
   }
 }

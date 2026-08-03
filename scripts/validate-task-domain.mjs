@@ -33,6 +33,12 @@ const phase83Path = join(
   "migrations",
   "20260803033131_phase_8_3_n8n_foundation.sql",
 );
+const phase87Path = join(
+  root,
+  "supabase",
+  "migrations",
+  "20260803033132_phase_8_7_auto_plan_today.sql",
+);
 const phase85Path = join(
   root,
   "supabase",
@@ -54,6 +60,11 @@ const n8nApiPath = join(root, "api", "_lib", "n8nTaskIngestion.js");
 const n8nRoutePath = join(root, "api", "integrations", "n8n", "task-drafts.js");
 const n8nApiTestPath = join(root, "scripts", "test-n8n-ingestion-api.mjs");
 const n8nDbVerifierPath = join(root, "scripts", "verify-n8n-ingestion-db.mjs");
+const autoPlanApiPath = join(root, "api", "_lib", "autoPlanToday.js");
+const autoPlanRoutePath = join(root, "api", "planning", "auto-plan-today.js");
+const autoPlanUiTestPath = join(root, "scripts", "test-auto-plan-ui.mjs");
+const autoPlanApiTestPath = join(root, "scripts", "test-auto-plan-api.mjs");
+const autoPlanBrowserTestPath = join(root, "scripts", "test-auto-plan-browser.mjs");
 
 const [
   schema,
@@ -61,6 +72,7 @@ const [
   alignment,
   phase82,
   phase83,
+  phase87,
   phase85,
   foundationTest,
   schemaTest,
@@ -74,12 +86,18 @@ const [
   n8nRoute,
   n8nApiTest,
   n8nDbVerifier,
+  autoPlanApi,
+  autoPlanRoute,
+  autoPlanUiTest,
+  autoPlanApiTest,
+  autoPlanBrowserTest,
 ] = await Promise.all([
     readFile(schemaPath, "utf8"),
     readFile(functionsPath, "utf8"),
     readFile(alignmentPath, "utf8"),
     readFile(phase82Path, "utf8"),
     readFile(phase83Path, "utf8"),
+    readFile(phase87Path, "utf8"),
     readFile(phase85Path, "utf8"),
     readFile(testPaths.foundation, "utf8"),
     readFile(testPaths.schema, "utf8"),
@@ -93,6 +111,11 @@ const [
     readFile(n8nRoutePath, "utf8"),
     readFile(n8nApiTestPath, "utf8"),
     readFile(n8nDbVerifierPath, "utf8"),
+    readFile(autoPlanApiPath, "utf8"),
+    readFile(autoPlanRoutePath, "utf8"),
+    readFile(autoPlanUiTestPath, "utf8"),
+    readFile(autoPlanApiTestPath, "utf8"),
+    readFile(autoPlanBrowserTestPath, "utf8"),
   ]);
 
 const failures = [];
@@ -253,6 +276,7 @@ requireText(phase83, "'WORKBOARD', false", "workboard feature default off");
 requireText(phase83, "'MY_TASKS', false", "my tasks feature default off");
 requireText(phase83, "'CALENDAR', false", "calendar feature default off");
 requireText(phase83, "'AUTOMATION'", "automation audit actor");
+requireText(phase87, "between 0 and 2000", "optional Quick Direction schema repair");
 requireText(n8nApi, "createHmac", "HMAC signature verification");
 requireText(n8nApi, "timingSafeEqual", "timing-safe signature comparison");
 requireText(n8nApi, "x-trry-request-timestamp", "signed request timestamp header");
@@ -262,6 +286,16 @@ requireText(n8nApiTest, "missing and invalid signatures", "n8n signature tests")
 requireText(n8nApiTest, "public, admin, and staff bearer callers cannot bypass", "n8n bearer bypass test");
 requireText(n8nDbVerifier, "concurrent identical requests", "n8n concurrency verifier");
 requireText(n8nDbVerifier, "operational records changed", "operational unchanged assertion");
+requireText(autoPlanRoute, "handleAutoPlanToday", "Auto Plan Today route");
+requireText(autoPlanApi, "actor.role !== \"owner\"", "Auto Plan server Owner-only gate");
+requireText(autoPlanApi, "ENABLE_AUTO_PLAN_TODAY", "Auto Plan server feature gate");
+requireText(autoPlanApi, "N8N_AUTO_PLAN_TODAY_URL", "Auto Plan server endpoint config");
+requireText(autoPlanApi, "Browser may not choose planning authority", "Auto Plan browser authority denial");
+requireText(autoPlanApi, "maximumTasks: config.maximumTasks", "Auto Plan trusted maximum task count");
+requireText(autoPlanApi, "payment_information", "Auto Plan private data exclusion");
+requireText(autoPlanApiTest, "Auto Plan Today API", "Auto Plan API test");
+requireText(autoPlanUiTest, "Auto Plan Today static UI", "Auto Plan UI test");
+requireText(autoPlanBrowserTest, "duplicate clicks should not create duplicate planning requests", "Auto Plan duplicate-click browser test");
 requireText(
   functions,
   "correction cannot open or close a timer",

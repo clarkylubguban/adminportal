@@ -13,6 +13,7 @@ import {
   getTaskDetail,
   getWorkboardTasks,
   reopenTask,
+  requestAutoPlanToday,
   requestTaskRevision,
   startTaskRevision,
   startTaskWork,
@@ -470,6 +471,11 @@ let workboardCommandError = "";
 let workboardReviewNote = "";
 let workboardReason = "";
 let workboardDraftForm = createEmptyWorkboardDraft();
+let autoPlanQuickDirection = "";
+let autoPlanState = "idle";
+let autoPlanError = "";
+let autoPlanResult = null;
+let autoPlanIdempotencyKey = "";
 let calendarEvents = [];
 let calendarLoadState = "idle";
 let calendarLoadError = "";
@@ -1295,6 +1301,10 @@ function canViewWorkboardRoute() {
   return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_WORKBOARD", "VITE_WORKBOARD_ENABLED") && ["owner", "admin"].includes(adminUser?.role);
 }
 
+function canUseAutoPlanTodayUi() {
+  return canViewWorkboardRoute() && isFeatureFlagEnabled("VITE_ENABLE_AUTO_PLAN_TODAY", "VITE_AUTO_PLAN_TODAY_ENABLED") && adminUser?.role === "owner";
+}
+
 function canViewCalendarRoute() {
   return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_CALENDAR", "VITE_CALENDAR_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
 }
@@ -1458,6 +1468,7 @@ function renderWorkboardPage() {
       <button class="ops-gold-button" data-workboard-create type="button">CREATE TASK</button>
     </div>
     ${renderWorkboardStateNotice()}
+    ${renderAutoPlanTodayPanel()}
     ${renderWorkboardSummary()}
     ${renderWorkboardFilters()}
     ${workboardLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Workboard</strong><span>Checking task records.</span></div>` : ""}
@@ -1520,6 +1531,32 @@ function renderWorkboardTaskList(tasks) {
   if (!tasks.length) return `<div class="my-tasks-empty"><strong>${workboardTasks.length ? "No tasks match your filters" : "No task records yet"}</strong><span>${workboardTasks.length ? "Try another status or search term." : "Create a manual task draft when planning is ready."}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
   if (workboardFilterStatus === "active") return renderWorkboardKanban(tasks);
   return `<div class="workboard-table-wrap"><table class="workboard-table"><thead><tr><th>Task</th><th>Source</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Reviewer</th><th>Deadline</th><th>Time</th><th>Action</th></tr></thead><tbody>${tasks.map(renderWorkboardRow).join("")}</tbody></table></div><div class="workboard-card-list">${tasks.map(renderWorkboardCard).join("")}</div>`;
+}
+
+function renderAutoPlanTodayPanel() {
+  if (!canUseAutoPlanTodayUi()) return "";
+  const busy = autoPlanState === "submitting";
+  const result = autoPlanResult;
+  const stateText = getAutoPlanStateText(result);
+  return `<section class="auto-plan-panel">
+    <div class="auto-plan-heading">
+      <div><span>${renderIcon("sparkles", "auto-plan-icon")}AUTO PLAN TODAY</span><p>Create unassigned AI marketing and daily content drafts for Owner review.</p></div>
+      <button class="ops-gold-button" data-auto-plan-submit type="button" ${busy ? "disabled" : ""}>${busy ? "GENERATING..." : "GENERATE"}</button>
+    </div>
+    <label class="auto-plan-direction"><span>Quick Direction</span><textarea id="auto-plan-quick-direction" rows="3" maxlength="500" ${busy ? "disabled" : ""} placeholder="Optional direction for today only.">${escapeHtml(autoPlanQuickDirection)}</textarea></label>
+    ${busy ? `<div class="auto-plan-state"><strong>Planning request submitting</strong><span>Waiting for canonical drafts from the configured workflow.</span></div>` : ""}
+    ${autoPlanError ? `<div class="auto-plan-state error"><strong>Planning needs attention</strong><span>${escapeHtml(autoPlanError)}</span></div>` : ""}
+    ${result ? `<div class="auto-plan-state success"><strong>${escapeHtml(stateText.title)}</strong><span>${escapeHtml(stateText.message)}</span><button data-auto-plan-drafts type="button">OPEN DRAFT VIEW</button></div>` : ""}
+  </section>`;
+}
+
+function getAutoPlanStateText(result) {
+  const count = Number(result?.draftsReceived || 0);
+  const trace = result?.traceCode ? ` Trace ${result.traceCode}.` : "";
+  if (count >= 2) return { title: `${count} drafts received`, message: `Review the unassigned drafts in Workboard before approval.${trace}` };
+  if (count === 1) return { title: "1 draft received", message: `Fewer drafts were returned than expected. Review it before approval.${trace}` };
+  if (result?.dispatchStatus === "REQUESTED") return { title: "Plan pending", message: `The planning request is traceable, but no drafts have been ingested yet.${trace}` };
+  return { title: "No valid drafts received", message: `No canonical draft was created. Try again after checking the staging workflow.${trace}` };
 }
 
 function sortWorkboardTasks(tasks) {
@@ -1852,6 +1889,36 @@ async function saveWorkboardDraft() {
     workboardCommandState = "idle";
     render();
   }
+}
+
+async function submitAutoPlanToday() {
+  if (autoPlanState === "submitting") return;
+  autoPlanQuickDirection = document.getElementById("auto-plan-quick-direction")?.value || autoPlanQuickDirection;
+  autoPlanState = "submitting";
+  autoPlanError = "";
+  autoPlanResult = null;
+  autoPlanIdempotencyKey = autoPlanIdempotencyKey || createIdempotencyKey("auto-plan");
+  render();
+  try {
+    const response = await requestAutoPlanToday({ quickDirection: autoPlanQuickDirection }, adminAuthSession, autoPlanIdempotencyKey);
+    autoPlanResult = response;
+    autoPlanState = "received";
+    workboardFilterStatus = "draft";
+    workboardFilterSource = "";
+    await loadWorkboardTasks({ silent: true });
+  } catch (error) {
+    autoPlanState = "failed";
+    autoPlanError = getTaskErrorMessage(error);
+  } finally {
+    autoPlanIdempotencyKey = "";
+    render();
+  }
+}
+
+function openAutoPlanDraftView() {
+  workboardFilterStatus = "draft";
+  workboardFilterSource = "";
+  loadWorkboardTasks();
 }
 
 async function runWorkboardCommand(taskId, action) {
@@ -6078,6 +6145,12 @@ function handleAccountEscape(event) {
 }
 function bindWorkboardEvents() {
   document.querySelector("[data-workboard-create]")?.addEventListener("click", openWorkboardCreate);
+  document.querySelector("[data-auto-plan-submit]")?.addEventListener("click", submitAutoPlanToday);
+  document.querySelector("[data-auto-plan-drafts]")?.addEventListener("click", openAutoPlanDraftView);
+  document.getElementById("auto-plan-quick-direction")?.addEventListener("input", (event) => {
+    autoPlanQuickDirection = event.target.value;
+    autoPlanError = "";
+  });
   document.querySelectorAll("[data-workboard-open]").forEach((button) => button.addEventListener("click", () => openWorkboardTask(button.dataset.workboardOpen)));
   document.querySelectorAll("[data-workboard-close]").forEach((button) => button.addEventListener("click", closeWorkboardDrawer));
   document.querySelectorAll("[data-workboard-edit-draft]").forEach((button) => button.addEventListener("click", () => openWorkboardEditDraft(button.dataset.workboardEditDraft)));

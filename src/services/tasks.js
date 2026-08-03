@@ -24,6 +24,10 @@ export async function getTaskCalendar(session, filters = {}) {
   return taskRequest(`/api/task-calendar?${params.toString()}`, { session });
 }
 
+export async function requestAutoPlanToday(body, session, idempotencyKey = createIdempotencyKey("auto-plan")) {
+  return taskRequest("/api/planning/auto-plan-today", { method: "POST", body, session, idempotencyKey });
+}
+
 export async function createTaskDraft(body, session, idempotencyKey = createIdempotencyKey("create")) {
   return taskRequest("/api/tasks", { method: "POST", body, session, idempotencyKey });
 }

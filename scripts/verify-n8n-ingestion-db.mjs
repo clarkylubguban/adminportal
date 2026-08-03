@@ -24,13 +24,33 @@ run([
   "-p", "127.0.0.1::5432",
   image,
 ]);
-await sleep(12_000);
+await waitForPostgres();
+await sleep(3000);
+await waitForPostgres();
 
-pipe(
-  ["exec", "supabase_db_Admin_portal", "pg_dump", "-h", "127.0.0.1", "-U", "supabase_admin", "-d", "postgres", "-n", "storage", "--schema-only", "--section=pre-data", "--clean", "--if-exists", "--no-owner", "--no-privileges"],
-  ["exec", "-i", container, "psql", "-U", "supabase_admin", "-d", "postgres", "-X", "-v", "ON_ERROR_STOP=1", "-q"],
-);
-psql("alter table storage.buckets add constraint buckets_pkey primary key (id);");
+psql(`
+  create schema if not exists storage;
+  create table if not exists storage.buckets (
+    id text primary key,
+    name text not null,
+    owner uuid,
+    public boolean default false,
+    file_size_limit bigint,
+    allowed_mime_types text[],
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+  );
+  create table if not exists storage.objects (
+    id uuid primary key default gen_random_uuid(),
+    bucket_id text not null,
+    name text not null,
+    owner uuid,
+    metadata jsonb,
+    created_at timestamptz default now(),
+    updated_at timestamptz default now()
+  );
+  alter table storage.objects enable row level security;
+`);
 
 const migrations = readdirSync(join(root, "supabase", "migrations"))
   .filter((name) => name.endsWith(".sql") && name !== "202607260001_complete_payment_workflow.sql")
@@ -284,4 +304,13 @@ function cleanup() {
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForPostgres() {
+  for (let i = 0; i < 60; i += 1) {
+    const result = docker(["exec", container, "psql", "-U", "supabase_admin", "-d", "postgres", "-X", "-qAt", "-c", "select 1;"]);
+    if (result.status === 0 && result.stdout.trim() === "1") return;
+    await sleep(1000);
+  }
+  throw new Error("disposable Postgres did not become ready");
 }

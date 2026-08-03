@@ -112,6 +112,12 @@ async function handleTaskApiRoute(routePath, request, response) {
     return true;
   }
 
+  if (routePath === "/api/planning/auto-plan-today") {
+    const { default: handleAutoPlanTodayRequest } = await import("../api/planning/auto-plan-today.js");
+    await handleAutoPlanTodayRequest(request, response);
+    return true;
+  }
+
   if (routePath === "/api/tasks") {
     const { default: handleTasksRequest } = await import("../api/tasks/index.js");
     await handleTasksRequest(request, response);
