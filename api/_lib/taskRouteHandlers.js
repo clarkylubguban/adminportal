@@ -10,6 +10,7 @@ import {
   parseReasonBody,
   parseSubmitBody,
   parseSubmitWithoutTimeBody,
+  parseTaskCalendarQuery,
   parseTaskListQuery,
   parseTimeCorrectionBody,
   requireIdempotencyKey,
@@ -62,6 +63,13 @@ export function handleMyTasks(request, response, dependencies = {}) {
       const { filters, pagination } = parseTaskListQuery(request, { myTasks: true });
       return service.listTasks(filters, pagination, { assignedToCaller: true });
     },
+  }, dependencies);
+}
+
+export function handleTaskCalendar(request, response, dependencies = {}) {
+  return runTaskApi(request, response, {
+    methods: ["GET"],
+    handler: async ({ service }) => service.listCalendarEvents(parseTaskCalendarQuery(request)),
   }, dependencies);
 }
 

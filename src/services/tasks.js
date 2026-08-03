@@ -16,6 +16,14 @@ export async function getWorkboardTasks(session, filters = {}) {
   return taskRequest(`/api/tasks?${params.toString()}`, { session });
 }
 
+export async function getTaskCalendar(session, filters = {}) {
+  const params = new URLSearchParams();
+  for (const key of ["from", "to", "assignedUserId", "sourceType", "status"]) {
+    if (filters[key] !== undefined && filters[key] !== null && filters[key] !== "") params.set(key, String(filters[key]));
+  }
+  return taskRequest(`/api/task-calendar?${params.toString()}`, { session });
+}
+
 export async function createTaskDraft(body, session, idempotencyKey = createIdempotencyKey("create")) {
   return taskRequest("/api/tasks", { method: "POST", body, session, idempotencyKey });
 }

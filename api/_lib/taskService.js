@@ -1,4 +1,7 @@
 import {
+  buildTaskCalendar,
+} from "./taskCalendarProjection.js";
+import {
   calculateClosedDurationSeconds,
   projectEvent,
   projectSubmission,
@@ -83,6 +86,17 @@ export function createTaskService(client, actor, options = {}) {
         pageSize: pagination.pageSize,
         total: count || 0,
       };
+    },
+
+    async listCalendarEvents(filters) {
+      const pageSize = actor.role === "staff" ? 500 : 1000;
+      const listed = await this.listTasks({
+        status: filters.status,
+        sourceType: filters.sourceType,
+        assignedUserId: filters.assignedUserId,
+        archived: false,
+      }, { page: 1, pageSize, from: 0, to: pageSize - 1 }, { assignedToCaller: actor.role === "staff" });
+      return buildTaskCalendar(listed.tasks, filters);
     },
 
     async getTask(taskId) {

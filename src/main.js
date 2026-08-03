@@ -9,6 +9,7 @@ import {
   createIdempotencyKey,
   createTaskDraft,
   getMyTasks,
+  getTaskCalendar,
   getTaskDetail,
   getWorkboardTasks,
   reopenTask,
@@ -469,6 +470,15 @@ let workboardCommandError = "";
 let workboardReviewNote = "";
 let workboardReason = "";
 let workboardDraftForm = createEmptyWorkboardDraft();
+let calendarEvents = [];
+let calendarLoadState = "idle";
+let calendarLoadError = "";
+let calendarSelectedDate = getManilaTodayKey();
+let calendarVisibleMonth = getMonthKey(calendarSelectedDate);
+let calendarAssigneeFilter = "";
+let calendarSourceFilter = "";
+let calendarStatusFilter = "";
+let calendarSelectedTask = null;
 
 const routes = {
   "/": "Overview",
@@ -477,6 +487,7 @@ const routes = {
   "/orders": "Orders",
   "/production": "Production",
   "/my-tasks": "My Tasks",
+  "/calendar": "Calendar",
   "/workboard": "Workboard",
   "/reorders": "Reorders",
   "/overview": "Overview",
@@ -529,6 +540,7 @@ function render() {
   const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
+  if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -548,8 +560,10 @@ function render() {
                   ? renderMvpProductionPage()
                   : currentRoute === "My Tasks"
                     ? renderMyTasksPage()
-                    : currentRoute === "Workboard"
-                      ? renderWorkboardPage()
+                    : currentRoute === "Calendar"
+                      ? renderCalendarPage()
+                      : currentRoute === "Workboard"
+                        ? renderWorkboardPage()
                   : currentRoute === "Overview"
                 ? renderOverviewPage()
                 : currentRoute === "Clients"
@@ -1279,6 +1293,84 @@ function stopMyTasksTimerTick() {
 
 function canViewWorkboardRoute() {
   return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_WORKBOARD", "VITE_WORKBOARD_ENABLED") && ["owner", "admin"].includes(adminUser?.role);
+}
+
+function canViewCalendarRoute() {
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_CALENDAR", "VITE_CALENDAR_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
+}
+
+async function loadTaskCalendar({ silent = false } = {}) {
+  if (!canViewCalendarRoute() || !adminAuthSession?.access_token) return;
+  if (!silent) {
+    calendarLoadState = "loading";
+    calendarLoadError = "";
+    render();
+  }
+  try {
+    const response = await getTaskCalendar(adminAuthSession, getCalendarApiFilters());
+    calendarEvents = Array.isArray(response.events) ? response.events : [];
+    calendarLoadState = "ready";
+    calendarLoadError = "";
+  } catch (error) {
+    calendarLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : "error";
+    calendarLoadError = getTaskErrorMessage(error);
+    calendarEvents = [];
+  }
+  render();
+}
+
+function getCalendarApiFilters() {
+  const bounds = getCalendarMonthBounds(calendarVisibleMonth);
+  return {
+    from: bounds.from,
+    to: bounds.to,
+    assignedUserId: calendarAssigneeFilter,
+    sourceType: calendarSourceFilter,
+    status: calendarStatusFilter,
+  };
+}
+
+function getCalendarMonthBounds(monthKey) {
+  const [year, month] = String(monthKey || getMonthKey(getManilaTodayKey())).split("-").map(Number);
+  const first = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { from: first, to: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}` };
+}
+
+function getManilaTodayKey(now = new Date()) {
+  return toManilaDateKey(now.toISOString());
+}
+
+function getMonthKey(dateKey) {
+  return String(dateKey || getManilaTodayKey()).slice(0, 7);
+}
+
+function toManilaDateKey(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+    return "";
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function formatManilaTime(value) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return "All day";
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "All day";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function createEmptyWorkboardDraft(task = null) {
@@ -2199,6 +2291,163 @@ function validateTaskSubmit(action) {
   }
   return true;
 }
+
+function renderCalendarPage() {
+  if (!canViewCalendarRoute()) {
+    return `<section class="mvp-page calendar-page"><div class="mvp-page-title"><div><span>HOME / CALENDAR</span><h1>Calendar</h1><p>Task calendar is not enabled in this environment.</p></div></div></section>`;
+  }
+  const monthLabel = formatCalendarMonth(calendarVisibleMonth);
+  const selectedEvents = getCalendarEventsForDate(calendarSelectedDate);
+  return `<section class="mvp-page calendar-page">
+    <div class="mvp-page-title">
+      <div><span>HOME / CALENDAR</span><h1>Calendar</h1><p>Read-only task schedule projected from canonical task dates.</p></div>
+      <strong>Asia/Manila</strong>
+    </div>
+    ${renderCalendarStateNotice()}
+    <div class="calendar-toolbar">
+      <div class="calendar-month-nav" aria-label="Calendar month navigation">
+        <button data-calendar-prev type="button" aria-label="Previous month">${renderIcon("chevron-right", "calendar-prev-icon")}</button>
+        <strong>${escapeHtml(monthLabel)}</strong>
+        <button data-calendar-next type="button" aria-label="Next month">${renderIcon("chevron-right", "calendar-next-icon")}</button>
+        <button data-calendar-today type="button">TODAY</button>
+      </div>
+      ${renderCalendarFilters()}
+    </div>
+    ${calendarLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Calendar</strong><span>Projecting permitted task dates.</span></div>` : ""}
+    ${calendarLoadState === "ready" ? `<div class="calendar-layout">${renderCalendarMonthGrid()}${renderCalendarAgenda(selectedEvents)}</div>` : ""}
+    ${renderCalendarTaskSummary()}
+  </section>`;
+}
+
+function renderCalendarStateNotice() {
+  if (calendarLoadState === "error") return `<div class="ops-persistence-card error"><strong>Unable to load Calendar</strong><span>${escapeHtml(calendarLoadError)}</span></div>`;
+  if (calendarLoadState === "forbidden") return `<div class="ops-persistence-card error"><strong>Calendar access is restricted</strong><span>${escapeHtml(calendarLoadError || "Your account cannot view task calendar records.")}</span></div>`;
+  if (calendarLoadState === "feature-disabled") return `<div class="ops-persistence-card"><strong>Calendar unavailable</strong><span>The task domain is disabled for this environment.</span></div>`;
+  return "";
+}
+
+function renderCalendarFilters() {
+  const assignees = [...new Map(calendarEvents.map((event) => [event.assignedUserId, { ...event.assignee, userId: event.assignedUserId }]).filter(([id]) => id)).values()];
+  const sources = [...new Set(calendarEvents.map((event) => event.sourceType).filter(Boolean))].sort();
+  const statuses = ["DRAFT", "TO_DO", "IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION", "DONE", "CANCELLED"];
+  return `<div class="calendar-filters" aria-label="Calendar filters">
+    <select id="calendar-assignee-filter"><option value="">All assignees</option>${assignees.map((user) => `<option value="${escapeHtml(user.userId)}" ${calendarAssigneeFilter === user.userId ? "selected" : ""}>${escapeHtml(getUserLabel(user))}</option>`).join("")}</select>
+    <select id="calendar-source-filter"><option value="">All sources</option>${sources.map((source) => `<option value="${escapeHtml(source)}" ${calendarSourceFilter === source ? "selected" : ""}>${escapeHtml(formatSourceType(source))}</option>`).join("")}</select>
+    <select id="calendar-status-filter"><option value="">All statuses</option>${statuses.map((status) => `<option value="${escapeHtml(status)}" ${calendarStatusFilter === status ? "selected" : ""}>${escapeHtml(formatTaskStatus(status))}</option>`).join("")}</select>
+    <button data-calendar-clear type="button">CLEAR</button>
+  </div>`;
+}
+
+function renderCalendarMonthGrid() {
+  const days = buildCalendarDays(calendarVisibleMonth);
+  const byDate = groupCalendarEventsByDate(calendarEvents);
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `<section class="calendar-month-view" aria-label="Month view">
+    <div class="calendar-weekdays">${weekdayLabels.map((day) => `<span>${day}</span>`).join("")}</div>
+    <div class="calendar-grid">${days.map((day) => renderCalendarDay(day, byDate.get(day.key) || [])).join("")}</div>
+  </section>`;
+}
+
+function renderCalendarDay(day, events) {
+  const visibleEvents = events.slice(0, 3);
+  const more = events.length - visibleEvents.length;
+  return `<button class="calendar-day ${day.inMonth ? "" : "muted"} ${day.key === calendarSelectedDate ? "selected" : ""} ${day.key === getManilaTodayKey() ? "today" : ""}" data-calendar-date="${escapeHtml(day.key)}" type="button">
+    <span>${escapeHtml(String(day.day))}</span>
+    <div>${visibleEvents.map(renderCalendarDayItem).join("")}${more > 0 ? `<small class="calendar-more">+${more} more</small>` : ""}</div>
+  </button>`;
+}
+
+function renderCalendarDayItem(event) {
+  return `<i class="calendar-dot ${escapeHtml(event.projectionTypeKey)} ${event.overdue ? "overdue" : ""}">${escapeHtml(event.taskCode || "TASK")} ${escapeHtml(shortProjectionType(event.projectionType))}</i>`;
+}
+
+function renderCalendarAgenda(events) {
+  const title = formatCalendarDateHeading(calendarSelectedDate);
+  return `<section class="calendar-agenda" aria-label="Agenda view">
+    <header><span>AGENDA</span><h2>${escapeHtml(title)}</h2></header>
+    ${events.length ? events.map(renderCalendarAgendaItem).join("") : `<div class="my-tasks-empty compact"><strong>No dated tasks</strong><span>No permitted task projections for this date.</span></div>`}
+  </section>`;
+}
+
+function renderCalendarAgendaItem(event) {
+  return `<article class="calendar-agenda-item ${event.overdue ? "overdue" : ""}">
+    <button data-calendar-event="${escapeHtml(event.key)}" type="button">
+      <span>${escapeHtml(event.projectionType)} / ${escapeHtml(formatManilaTime(event.dateTime))}</span>
+      <strong>${escapeHtml(event.taskCode || "TASK")} - ${escapeHtml(event.title || "Untitled task")}</strong>
+      <small>${escapeHtml(formatSourceType(event.sourceType))} / ${escapeHtml(formatTaskStatus(event.status))} / ${escapeHtml(getUserLabel(event.assignee))}</small>
+    </button>
+    <div>${renderTaskPriority(event.priority)}${event.overdue ? `<span class="my-task-status overdue">OVERDUE</span>` : ""}</div>
+  </article>`;
+}
+
+function renderCalendarTaskSummary() {
+  if (!calendarSelectedTask) return "";
+  return `<div class="my-task-drawer-backdrop" data-calendar-close></div><aside class="my-task-drawer calendar-drawer" aria-label="Calendar task summary">
+    <header><div><span>${escapeHtml(calendarSelectedTask.taskCode || "TASK")}</span><h2>${escapeHtml(calendarSelectedTask.title || "Untitled task")}</h2></div><button data-calendar-close type="button" aria-label="Close Calendar summary">X</button></header>
+    <div class="my-task-drawer-content">
+      <section class="my-task-detail-hero"><div>${renderTaskStatus(calendarSelectedTask.status)}${renderTaskPriority(calendarSelectedTask.priority)}</div><p>Read-only Calendar projection. Use Workboard or My Tasks for permitted task detail and actions.</p></section>
+      <section class="my-task-detail-grid">
+        ${renderTaskFact("Projection", calendarSelectedTask.projectionType)}
+        ${renderTaskFact("When", `${calendarSelectedTask.dateKey} ${formatManilaTime(calendarSelectedTask.dateTime)}`)}
+        ${renderTaskFact("Source", formatSourceType(calendarSelectedTask.sourceType))}
+        ${renderTaskFact("Assigned", getUserLabel(calendarSelectedTask.assignee))}
+      </section>
+      <section class="my-task-action-area"><strong>Read only</strong><span>Calendar cannot create, reschedule, assign, transition, or delete tasks.</span></section>
+    </div>
+  </aside>`;
+}
+
+function buildCalendarDays(monthKey) {
+  const [year, month] = String(monthKey).split("-").map(Number);
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const startOffset = first.getUTCDay();
+  const start = new Date(Date.UTC(year, month - 1, 1 - startOffset));
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start.getTime() + index * 86400000);
+    const key = date.toISOString().slice(0, 10);
+    return { key, day: date.getUTCDate(), inMonth: date.getUTCMonth() === month - 1 };
+  });
+}
+
+function groupCalendarEventsByDate(events) {
+  const grouped = new Map();
+  for (const event of events) {
+    if (!grouped.has(event.dateKey)) grouped.set(event.dateKey, []);
+    grouped.get(event.dateKey).push(event);
+  }
+  return grouped;
+}
+
+function getCalendarEventsForDate(dateKey) {
+  return calendarEvents.filter((event) => event.dateKey === dateKey);
+}
+
+function shiftCalendarMonth(delta) {
+  const [year, month] = calendarVisibleMonth.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1 + delta, 1));
+  calendarVisibleMonth = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+  calendarSelectedDate = getCalendarMonthBounds(calendarVisibleMonth).from;
+  calendarSelectedTask = null;
+  loadTaskCalendar();
+}
+
+function formatCalendarMonth(monthKey) {
+  const [year, month] = String(monthKey).split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+function formatCalendarDateHeading(dateKey) {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+function shortProjectionType(type) {
+  if (type === "SCHEDULED START") return "Start";
+  if (type === "TASK DEADLINE") return "Due";
+  if (type === "REVIEW DEADLINE") return "Review";
+  return "Done";
+}
+
 function getMvpDashboardItems() {
   return opsInquiries.map((item) => ({
     ...item,
@@ -5373,7 +5622,8 @@ function renderSidebar(currentRoute) {
     { label: "Products", path: "/products" },
     { label: "Production", path: "/production", icon: "factory" },
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
-  ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
+    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
     { label: "Catalog", path: "/catalog" },
     ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
     { label: "Settings", path: "/settings" },
@@ -5385,7 +5635,7 @@ function renderSidebar(currentRoute) {
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
         ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>`).join("")}
-        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("calendar-check", "nav-icon")}<span class="nav-label">Calendar<small>Phase 2</small></span></span><span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
+        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -5480,8 +5730,9 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
-  ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
-  ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
+    ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
+    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
   return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
 }
@@ -5953,6 +6204,56 @@ function bindMyTasksEvents() {
     taskCommandError = "";
   });
 }
+
+function bindCalendarEvents() {
+  document.querySelector("[data-calendar-prev]")?.addEventListener("click", () => shiftCalendarMonth(-1));
+  document.querySelector("[data-calendar-next]")?.addEventListener("click", () => shiftCalendarMonth(1));
+  document.querySelector("[data-calendar-today]")?.addEventListener("click", () => {
+    calendarSelectedDate = getManilaTodayKey();
+    calendarVisibleMonth = getMonthKey(calendarSelectedDate);
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.querySelectorAll("[data-calendar-date]").forEach((button) => {
+    button.addEventListener("click", () => {
+      calendarSelectedDate = button.dataset.calendarDate;
+      calendarSelectedTask = null;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-calendar-event]").forEach((button) => {
+    button.addEventListener("click", () => {
+      calendarSelectedTask = calendarEvents.find((event) => event.key === button.dataset.calendarEvent) || null;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-calendar-close]").forEach((button) => button.addEventListener("click", () => {
+    calendarSelectedTask = null;
+    render();
+  }));
+  document.getElementById("calendar-assignee-filter")?.addEventListener("change", (event) => {
+    calendarAssigneeFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.getElementById("calendar-source-filter")?.addEventListener("change", (event) => {
+    calendarSourceFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.getElementById("calendar-status-filter")?.addEventListener("change", (event) => {
+    calendarStatusFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.querySelector("[data-calendar-clear]")?.addEventListener("click", () => {
+    calendarAssigneeFilter = "";
+    calendarSourceFilter = "";
+    calendarStatusFilter = "";
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+}
 function bindEvents() {
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -6073,10 +6374,12 @@ function bindEvents() {
   });
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
+  document.body.classList.toggle("my-task-drawer-open", Boolean(document.querySelector(".my-task-drawer")));
   bindOpsBoardEvents();
   bindOrderDashboardEvents();
   bindWorkboardEvents();
   bindMyTasksEvents();
+  bindCalendarEvents();
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCatalogKey = button.dataset.catalogTab;

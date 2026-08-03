@@ -231,6 +231,21 @@ export function parseTaskListQuery(request, { myTasks = false } = {}) {
   };
 }
 
+export function parseTaskCalendarQuery(request) {
+  const query = queryObject(request);
+  assertAllowedQuery(query, new Set(["from", "to", "assignedUserId", "sourceType", "status"]));
+  const from = optionalDate(singleQueryValue(query.from, "from"), "from");
+  const to = optionalDate(singleQueryValue(query.to, "to"), "to");
+  if (from && to && to < from) throw new TaskValidationError("to must not be earlier than from.");
+  return {
+    from,
+    to,
+    assignedUserId: query.assignedUserId === undefined ? null : requireUuid(singleQueryValue(query.assignedUserId, "assignedUserId"), "assignedUserId"),
+    sourceType: query.sourceType === undefined ? null : enumValue(singleQueryValue(query.sourceType, "sourceType"), "sourceType", TASK_SOURCES),
+    status: query.status === undefined ? null : enumValue(singleQueryValue(query.status, "status"), "status", TASK_STATUSES),
+  };
+}
+
 export function parseHistoryQuery(request) {
   const query = queryObject(request);
   const cleaned = { ...query };
