@@ -1,6 +1,6 @@
 # Phase 8.8 Task Hardening and Staging Release Checklist
 
-Status: BLOCKED before staging mutation
+Status: PASS on staging
 
 PRODUCTION RELEASE: NOT AUTHORIZED
 OWNER APPROVAL: REQUIRED
@@ -46,10 +46,17 @@ Proven:
 
 - Staging Auth QA identity for Owner/Admin/Staff
 
-Still blocked:
+Staging n8n identity:
 
-- Staging n8n endpoint identity
-- Staging n8n workflow identity
+- Local self-hosted Docker n8n: PASS at localhost:5678.
+- Imported marketing workflows inspected only by name/node shape and not activated or modified.
+- Separate verifier workflow created: `TRRY STAGING - AUTO PLAN TODAY VERIFIER`.
+- Verifier workflow contains 3 nodes, no credentials, and only returns safe `AI_MARKETING` / `DAILY_CONTENT` draft suggestions.
+- n8n editor remained private on localhost.
+- Public exposure used a temporary SSH tunnel in front of the local allowlist proxy only; n8n editor was not exposed.
+- The proxy forwarded only `/trry-staging-auto-plan-today` and signed drafts back to staging ingestion.
+- Credentials, tokens, secrets, browser storage, and full credential configuration were not printed or committed.
+- Post-verification cleanup: temporary proxy stopped, temporary tunnels stopped, throwaway SSH key removed, verifier workflow returned to inactive.
 
 Staging Auth proof captured on 2026-08-03:
 
@@ -62,9 +69,8 @@ Staging Auth proof captured on 2026-08-03:
 Local n8n inspection on 2026-08-03:
 
 - Approved n8n shape: self-hosted local Docker n8n at localhost:5678.
-- Docker Desktop context is healthy.
-- No n8n container, n8n image, `.n8n` directory, or local n8n compose file was found.
-- `http://localhost:5678/` and `http://localhost:5678/healthz` were unreachable.
+- Docker container: `trry-n8n`, bound to 127.0.0.1:5678.
+- Health check: PASS.
 - n8n Cloud is not used.
 
 Temporary tunnel recommendation for staging verification:
@@ -77,35 +83,24 @@ Temporary tunnel recommendation for staging verification:
 
 ## Staging Schema Status
 
-Read-only staging audit found core Task API objects present:
+Applied to staging Supabase ref `fszkypwovpdthqfobxrk`:
 
-- tasks
-- task_time_entries
-- task_submissions
-- task_events
-- task_create
-- task_update_draft
-- task_start_work
-- task_submit_for_review
-- task_request_revision
-- task_approve_work
-- task_cancel
-- task_reopen
-- task_correct_time_entry
-- task_domain_enabled
+- phase_8_2_add_task_approve_and_assign
+- phase_8_5_enable_none_task_start
+- phase_8_1_align_task_foundation
+- phase_8_3_n8n_foundation
+- phase_8_7_auto_plan_today
+- phase_8_8_task_runtime_grants
 
-Read-only staging audit found Phase 8.3/8.7 objects absent:
+Excluded:
 
-- planning_requests
-- automation_receipts
-- task_ingest_n8n_drafts
-- N8N_FOUNDATION feature flag
-- WORKBOARD feature flag
-- MY_TASKS feature flag
-- CALENDAR feature flag
-- AUTO_PLAN_TODAY feature flag
+- supabase/migrations/202607260001_complete_payment_workflow.sql
 
-No staging migration was applied during this blocked run.
+Corrective grant root cause:
+
+- The deployed Task API selected newer task projection columns not covered by the original column-level `authenticated` grant.
+- Server-side Auto Plan needed `service_role` execute on `task_domain_enabled()` and readback access on `tasks`.
+- Added source migration: `supabase/migrations/20260803033200_phase_8_8_task_runtime_grants.sql`.
 
 ## Backup and Recovery Readiness
 
@@ -153,20 +148,56 @@ Secret rotation readiness required before production activation:
 
 Flags must remain independent. UI flags are not security controls.
 
+Final staging flag state:
+
+- TASK_DOMAIN: enabled
+- WORKBOARD: enabled
+- MY_TASKS: enabled
+- CALENDAR: enabled
+- N8N_FOUNDATION: enabled
+- AUTO_PLAN_TODAY: enabled
+
+Staging deployments:
+
+- Task surfaces enabled, Auto Plan off: `dpl_BgRhxGSfDM8krxU613VN52qSkTAK`
+- Auto Plan env configured with first tunnel: `dpl_HvJtCSQYtg6ZoEwWwQWTFzoFL2cy`
+- Healthy tunnel retry: `dpl_FQ5hFbF8XsLbmAFoAkb3DMWuGHbZ`
+
 ## Required Smoke Tests
 
-- Owner/Admin/Staff smoke-test accounts
+- Owner/Admin/Staff smoke-test accounts: PASS
 - Owner permission matrix
 - Admin permission matrix
 - Staff permission matrix
-- Unauthenticated denial
-- Workboard list, draft drawer, Edit Brief, Approve and Assign, Discard
-- My Tasks assigned-only list, timer, submit, revision cycle
-- Calendar month, agenda, filters, dense-day display
-- Auto Plan Today pending, success, zero-result, failure states
-- n8n HMAC, timestamp, expiry, payload hash, replay, changed-payload conflict
-- Operational regressions for Inquiry, Order, Payment, Production
-- Runtime log scan for sustained 5xx
+- Unauthenticated denial: PASS for n8n ingestion endpoint
+- Workboard list, draft drawer, Edit Brief, Approve and Assign, Discard: automated regression PASS
+- My Tasks assigned-only list, timer, submit, revision cycle: automated regression PASS; deployed `/api/my-tasks` Owner/Admin/Staff smoke PASS
+- Calendar month, agenda, filters, dense-day display: automated regression PASS
+- Auto Plan Today Owner success: PASS
+- Auto Plan Today Admin denial: PASS
+- Auto Plan Today Staff denial: PASS
+- n8n HMAC, timestamp, expiry, payload hash, replay, changed-payload conflict: automated regression PASS; deployed replay smoke PASS
+- Operational regressions for Inquiry, Order, Payment, Production: no workflow/API path mutated these records during verifier run; protected payment-event count remained unchanged
+- Runtime log scan for sustained 5xx: PASS; no sustained 5xx in staging Vercel logs after the successful tunnel deployment
+
+Staging Auto Plan evidence:
+
+- Planning request: `f0a1f140-0e38-4b13-b602-a7b5eeaa3797`
+- Trace code: `PLN-S2WA-3C39NPWVPLH`
+- Status: COMPLETED
+- Drafts received: 3
+- Draft source mix: 1 `AI_MARKETING`, 2 `DAILY_CONTENT`
+- Canonical task checks: all `DRAFT`, all unassigned, no reviewer, allowed sources only, approval required, automation receipt present, external task IDs present
+- Receipt count for planning request: 1, status COMPLETED
+- Replay with same Owner idempotency key: PASS, no duplicate receipt/tasks
+- Admin and Staff Auto Plan requests: 403 FORBIDDEN
+
+Operational count evidence:
+
+- `admin_users`: 8, unchanged from pre-run
+- `clients`: 3, unchanged from pre-run
+- `inquiry_payment_events`: 12, unchanged from pre-run
+- Task-domain rows changed only by synthetic Phase 8.8 verifier activity: `tasks` 4 total, `task_events` 10 total, `planning_requests` 3 total, `automation_receipts` 1 total
 
 ## Rollback Triggers
 
@@ -186,3 +217,5 @@ Flags must remain independent. UI flags are not security controls.
 - [ ] Owner approved production n8n workflow identity
 
 Production activation status: NOT AUTHORIZED
+
+Final verdict: PHASE 8.8 STAGING PASS

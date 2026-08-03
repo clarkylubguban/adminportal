@@ -58,12 +58,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   const paymentLabel = (item) => {
     const value = key(item.paymentStatus);
-    if (["confirmed", "paid"].includes(value)) return "Paid";
-    if (["proof_submitted", "under_review"].includes(value)) return "Proof Submitted";
-    if (["required", "awaiting_payment"].includes(value)) return "Awaiting Payment";
+    if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return "Paid";
+    if (["down_payment_confirmed", "partially_paid"].includes(value)) return "Partially Paid";
+    if (["proof_submitted", "under_review"].includes(value)) return "For Verification";
+    if (value === "correction_required") return "Correction Required";
+    if (["pay_at_shop", "payment_pending_at_shop"].includes(value)) return "Pay at Shop";
+    if (["required", "awaiting_payment"].includes(value)) return "Payment Required";
     return "Not Yet Requested";
   };
-
   const productionStage = (item) => {
     const value = key(item.productionStage);
     if (PRODUCTION_STAGES.some(([stage]) => stage === value)) return value;
@@ -76,7 +78,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   const confirmed = (item) => {
     const status = key(item.status);
     if (["lost", "cancelled", "canceled"].includes(status)) return false;
-    return Boolean(String(item.odooSO || "").trim()) && (status === "won" || key(item.quoteStatus) === "approved");
+    return status === "won" && key(item.quoteStatus) === "approved";
   };
 
   const blockedReason = (item) => {
@@ -85,7 +87,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const artwork = artworkLabel(item);
     if (artwork === "No Artwork") return "No artwork";
     if (artwork !== "Artwork Approved") return "Awaiting customer artwork approval";
-    if (Number(item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) return "Payment requirement not completed";
+    if (Number(item.quotedAmount || item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) return "Payment requirement not completed";
     return "";
   };
 
@@ -114,6 +116,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   const activeLegacyMatch = (value) => assignmentUsers().find((user) => sameAssignmentLabel(value, user.displayName) || sameAssignmentLabel(value, user.email));
   const owner = (item) => assignmentDisplay({ userId: item.ownerUserId, legacy: item.owner || item.ownerId, empty: "Unassigned" });
   const assigned = (item) => assignmentDisplay({ userId: item.assignedUserId, legacy: item.assignedStaff || item.assigned, empty: "Not Yet Assigned" });
+  const hasAssignedStaff = (item) => Boolean(
+    (item.assignedUserId && findAssignmentUser(item.assignedUserId)) ||
+    activeLegacyMatch(item.assignedStaff || item.assigned)
+  );
   const stageLabel = (value) => PRODUCTION_STAGES.find(([stage]) => stage === value)?.[1] || "Queued";
   const query = (name) => new URLSearchParams(window.location.search).get(name) || "";
 
@@ -170,8 +176,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const production = countBy(PRODUCTION_STAGES.map(([value]) => value), productionJobs, productionStage);
     const inProgress = ACTIVE_STAGES.reduce((sum, value) => sum + production[value], 0);
     const followUpsDue = inquiries.filter(isFollowUpDue).length;
-    const awaitingPayment = orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length;
-    const paymentProofs = orders.filter((item) => paymentLabel(item) === "Proof Submitted").length;
+    const awaitingPayment = orders.filter((item) => ["Payment Required", "Pay at Shop", "Correction Required"].includes(paymentLabel(item))).length;
+    const paymentProofs = orders.filter((item) => paymentLabel(item) === "For Verification").length;
     const blockedOrders = orders.filter((item) => blockedReason(item)).length;
     const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
     const priorities = buildPriorities(orders, inquiries);
@@ -209,7 +215,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         const route = isReleasedToProduction(item) ? `/production?order=${encodeURIComponent(item.id)}` : `/orders?order=${encodeURIComponent(item.id)}`;
         rows.push(priority(item, blocked ? `Blocked: ${blocked}` : "Order is overdue", dueState.label, route, dueState.key === "overdue" ? "danger" : "warning"));
       }
-      else if (paymentLabel(item) === "Proof Submitted") rows.push(priority(item, "Payment proof submitted / verify payment", "Needs review", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
+      else if (paymentLabel(item) === "For Verification") rows.push(priority(item, "Payment proof submitted / verify payment", "Needs review", `/orders?order=${encodeURIComponent(item.id)}`, "warning"));
       else if (dueState.key === "today" || productionStage(item) === "ready") rows.push(priority(item, productionStage(item) === "ready" ? "Ready for release" : "Due today", dueState.label, `/orders?order=${encodeURIComponent(item.id)}`, ""));
     });
     inquiries.forEach((item) => {
@@ -230,8 +236,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return Number.isFinite(follow.getTime()) && follow < today;
     }).length;
     const quoteBacklog = pipeline.new || 0;
-    const awaitingPayment = orders.filter((item) => paymentLabel(item) === "Awaiting Payment").length;
-    const paymentProofs = orders.filter((item) => paymentLabel(item) === "Proof Submitted").length;
+    const awaitingPayment = orders.filter((item) => ["Payment Required", "Pay at Shop", "Correction Required"].includes(paymentLabel(item))).length;
+    const paymentProofs = orders.filter((item) => paymentLabel(item) === "For Verification").length;
     const artworkAttention = orders.filter((item) => !isOrderClosed(item) && ["revision", "pending", "not_set"].includes(orderArtworkKey(item))).length;
     const blockedRelease = orders.filter((item) => blockedReason(item)).length;
     const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
@@ -399,7 +405,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryPrimaryAction(item, stage, renderOdoo) {
     if (stage === "new") return { kind: "quote", label: "Create Quotation", hint: "Next step" };
     if (stage === "sent") return { kind: "wait", label: "Waiting for Approval", hint: "Quote sent", disabled: true };
-    if (stage === "approved" && !item.odooSO) return { kind: "so", label: "Create Sales Order", hint: "Next step", disabled: typeof renderOdoo !== "function" };
+    if (stage === "approved" && !item.odooSO) return { kind: "so", label: "Create Order", hint: "Next step", disabled: typeof renderOdoo !== "function" };
     if (stage === "approved" && item.odooSO) return { kind: "release", label: "Release to Production", hint: "Next step", route: `/orders?order=${encodeURIComponent(item.id)}` };
     if (confirmed(item)) return { kind: "production", label: "View Production", hint: "Open job", route: `/production?order=${encodeURIComponent(item.id)}` };
     return { kind: "quote", label: "Create Quotation", hint: "Next step" };
@@ -561,14 +567,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const production = productionDisplay(item);
     const block = blockedReason(item);
     const gate = productionGate(item);
-    const canOpenProduction = Boolean(item.odooSO);
+    const canOpenProduction = true;
     const action = orderFooterAction(item, gate);
     return drawer("order", item, production.label, `
       ${detailSection("Overview", [["Order Reference", orderReference(item)], ["Source Inquiry", sourceInquiryReference(item)], ["Odoo SO", item.odooSO || "Not set"], ["Customer", item.customer], ["Item", itemDisplay(item)], ["Quantity", item.sizeBreakdown || item.qty], ["Confirmed", dateTime(item.quoteApprovedAt || item.updatedAt)], ["Due Date", dueShortLabel(due(item), item)]])}
-      ${detailSection("Readiness", [["Artwork Status", readiness.artwork], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Revision Requirement", key(item.artworkStatus) === "revision_requested" ? "Revision needed" : "None"], ["Payment Readiness", payment.label], ["Blocked Reason", block || "None"]])}
+      ${detailSection("Readiness", [["Production Readiness", readyForProduction(item) ? "READY" : "NOT READY FOR PRODUCTION"], ["Missing Requirements", gate.length ? gate.join(", ") : "None"], ["Artwork Status", readiness.artwork], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Revision Requirement", key(item.artworkStatus) === "revision_requested" ? "Revision needed" : "None"], ["Payment Readiness", payment.label], ["Current Blocker", gate.length ? gate.join(", ") : "None"]])}
       ${orderPaymentSummary(item)}
+      ${typeof renderPayment === "function" ? renderPayment(item) : ""}
       ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", tracking(item)], ["Contact", item.contact || "Not set"]])}
-      ${detailSection("Production Handoff", [["Release State", stage === "queued" ? (readyForProduction(item) ? "Ready for production" : gate.length ? `Blocked: ${gate.join(", ")}` : "Not released") : "Released to production"], ["Current Production", production.label], ["Assigned Production Staff", assigned(item)], ["Production Link", canOpenProduction ? "Available" : "Not available"], ["Blocked Reason", block || "None"]])}
+      ${detailSection("Production Handoff", [["Release State", stage === "queued" ? (readyForProduction(item) ? "READY" : `BLOCKED: ${gate.join(", ") || "requirements incomplete"}`) : "Released to production"], ["Current Production", production.label], ["Assigned Production Staff", assigned(item)], ["Production Link", canOpenProduction ? "Available" : "Not available"], ["Current Blocker", gate.length ? gate.join(", ") : "None"]])}
       ${detailSection("Internal", [["Order Owner", orderOwner(item)], ["Internal Note", item.productionNote || item.internalNote || "Not set"], ["Last Update", dateTime(item.updatedAt)]])}
       ${typeof renderTracking === "function" ? renderTracking(item) : ""}
     `, action);
@@ -592,9 +599,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function paymentSatisfiesProductionGate(item) {
     const value = key(item.paymentStatus);
-    return ["confirmed", "paid"].includes(value);
+    const total = amount(item.quotedAmount || item.amountDue);
+    const verified = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
+    if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return total > 0 && verified >= total;
+    return false;
   }
-
   function isReleasedToProduction(item) {
     if (!confirmed(item)) return false;
     const status = key(item.status);
@@ -629,8 +638,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function paymentState(item) {
     const value = key(item.paymentStatus);
     const dueAmount = amount(item.amountDue || item.quotedAmount);
-    const paidAmount = amount(item.paymentConfirmedAmount);
-    if (["confirmed", "paid"].includes(value)) return { key: "paid", label: "PAID", tone: "completed" };
+    const paidAmount = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
+    if (["confirmed", "paid", "full_payment_confirmed"].includes(value)) return { key: "paid", label: "PAID", tone: "completed" };
+    if (["down_payment_confirmed", "partially_paid"].includes(value)) return { key: "partial", label: "PARTIALLY PAID", tone: "payment" };
+    if (["pay_at_shop", "payment_pending_at_shop"].includes(value)) return { key: "shop", label: "PAY AT SHOP", tone: "payment" };
+    if (["correction_required"].includes(value)) return { key: "correction", label: "CORRECTION REQUIRED", tone: "overdue" };
     if (["proof_submitted", "under_review"].includes(value)) return { key: "verification", label: "FOR VERIFICATION", tone: "payment" };
     if (["50_dp", "50%_dp", "half_down", "half_deposit"].includes(value) || key(item.paymentLabel) === "50%_dp" || key(item.paymentLabel) === "50_dp") return { key: "deposit", label: paidAmount && dueAmount && paidAmount * 2 === dueAmount ? "50% DP" : "PARTIAL", tone: "payment" };
     if (["partial", "deposit", "down_payment"].includes(value)) return { key: "partial", label: "PARTIAL", tone: "payment" };
@@ -642,16 +654,20 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderPaymentSummary(item) {
     const total = amount(item.quotedAmount);
     const dueAmount = amount(item.amountDue || item.quotedAmount);
-    const paid = amount(item.paymentConfirmedAmount);
-    const balance = Math.max(dueAmount - paid, 0);
+    const selected = amount(item.paymentSelectedAmount);
+    const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount);
+    const balance = Math.max(total - paid, 0);
     const payment = paymentState(item);
-    return detailSection("Payment", [["Payment State", payment.label], ["Amount Due", money(dueAmount)], ["Amount Received", money(paid)], ["Balance", money(balance)], ["Verification State", ["verification", "paid"].includes(payment.key) ? payment.label : "Not verified"]]);
+    return detailSection("Payment", [["Payment State", payment.label], ["Payment Method", paymentMethodLabel(item.paymentMethod)], ["Payment Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Quote Total", money(total)], ["Amount Due", money(dueAmount)], ["Amount Verified", money(paid)], ["Balance", money(balance)], ["Verified At", dateTime(item.paymentVerifiedAt || item.paymentConfirmedAt)]]);
   }
   function productionDisplay(item) {
     const stage = productionStage(item);
     const block = blockedReason(item);
-    if (block && stage === "queued") return { key: "blocked", label: "BLOCKED", tone: "overdue", detail: block };
-    if (stage === "queued") return { key: stage, label: readyForProduction(item) ? "READY" : "NOT RELEASED", tone: readyForProduction(item) ? "ready" : "queued" };
+    if (stage === "queued") {
+      const gate = productionGate(item);
+      if (gate.length) return { key: "blocked", label: "BLOCKED", tone: "overdue", detail: gate.join(", ") };
+      return { key: stage, label: "READY", tone: "ready" };
+    }
     if (stage === "qc") return { key: stage, label: "QC", tone: stage };
     if (stage === "ready") return { key: stage, label: fulfillment(item) === "Delivery" ? "READY FOR DELIVERY" : "READY FOR PICKUP", tone: "ready" };
     if (stage === "completed") return { key: stage, label: "COMPLETED", tone: "completed" };
@@ -674,7 +690,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function readyForProduction(item) {
-    return Boolean(productionStage(item) === "queued" && item.odooSO && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && !["Unassigned", "Not Yet Assigned"].includes(assigned(item)) && paymentSatisfiesProductionGate(item) && !blockedReason(item));
+    return Boolean(productionStage(item) === "queued" && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && hasAssignedStaff(item) && paymentSatisfiesProductionGate(item) && !blockedReason(item));
   }
 
   function readinessCell(readiness) {
@@ -850,18 +866,17 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function productionGate(item) {
     const missing = [];
-    if (!item.odooSO) missing.push("Odoo SO");
     if (!product(item) || product(item) === "Not set") missing.push("product");
     if (!item.service || !item.qty) missing.push("service and quantity");
     if (!item.dueDate) missing.push("due date");
     if (artworkLabel(item) !== "Artwork Approved") missing.push("artwork approval");
-    if (["Not Yet Assigned", "Unassigned"].includes(assigned(item))) missing.push("assigned staff");
-    if (Number(item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) missing.push("payment");
-    if (item.blockedReason && !missing.length) missing.push(item.blockedReason);
+    if (!hasAssignedStaff(item)) missing.push("assigned staff");
+    if (Number(item.quotedAmount || item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) missing.push("payment");
+    if (item.blockedReason) missing.push(item.blockedReason);
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, saveProduction, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
+  function bind({ root = document, rerender, navigate, copy, saveProduction, confirmPayment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-filter]").forEach((field) => {
@@ -932,6 +947,21 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       await saveProduction(id, { assignedUserId: staff === "__legacy__" ? null : staff, productionNote: note, blockedReason: blocked });
       rerender();
     }));
+    root.querySelectorAll("[data-mvp-confirm-payment]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpConfirmPayment;
+      const form = button.closest("[data-mvp-payment-confirmation]");
+      const message = form?.querySelector("[data-mvp-payment-message]");
+      const amountReceived = form?.querySelector(`[data-mvp-payment-field="amountReceived"]`)?.value || "";
+      const paymentSource = form?.querySelector(`[data-mvp-payment-field="paymentSource"]`)?.value || "";
+      const referenceNumber = form?.querySelector(`[data-mvp-payment-field="referenceNumber"]`)?.value || "";
+      const internalNote = form?.querySelector(`[data-mvp-payment-field="internalNote"]`)?.value || "";
+      if (message) message.textContent = "Saving payment confirmation...";
+      button.disabled = true;
+      button.textContent = "Confirming...";
+      await confirmPayment?.(id, { amountReceived, paymentSource, referenceNumber, internalNote });
+      rerender();
+    }));
     root.querySelectorAll("[data-mvp-advance]").forEach((button) => button.addEventListener("click", async () => {
       if (button.disabled) return;
       const id = button.dataset.mvpAdvance;
@@ -955,7 +985,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (fields.includes("stage")) controls.push(select(scope, "stage", "All Stages", PRODUCTION_STAGES, values.stage));
     if (fields.includes("production")) controls.push(select(scope, "production", "All Production", PRODUCTION_STAGES, values.production));
     if (fields.includes("artwork")) controls.push(select(scope, "artwork", "All Artwork", [["approved", "Art approved"], ["pending", "Art pending"], ["revision", "Revision needed"], ["not_set", "Not set"]], values.artwork));
-    if (fields.includes("payment")) controls.push(select(scope, "payment", "All Payments", scope === "order" ? ["NOT SET", "UNPAID", "FOR VERIFICATION", "PARTIAL", "50% DP", "PAID"] : ["Not Yet Requested", "Awaiting Payment", "Proof Submitted", "Paid"], values.payment));
+    if (fields.includes("payment")) controls.push(select(scope, "payment", "All Payments", scope === "order" ? ["NOT SET", "UNPAID", "FOR VERIFICATION", "PARTIAL", "50% DP", "PAID"] : ["Not Yet Requested", "Payment Required", "Pay at Shop", "Correction Required", "For Verification", "Down Payment Confirmed", "Paid"], values.payment));
     if (fields.includes("fulfillment")) controls.push(select(scope, "fulfillment", "All Fulfillment", [["pickup", "Pickup"], ["delivery", "Delivery"]], values.fulfillment));
     if (fields.includes("blocker")) controls.push(select(scope, "blocker", "All Blockers", [["blocked", "Blocked"], ["clear", "Not blocked"]], values.blocker));
     if (fields.includes("due")) controls.push(select(scope, "due", scope === "inquiry" ? "All Follow-up" : "All Dates", [["overdue", "Overdue"], ["today", "Due today"], ["week", "This week"]], values.due));
@@ -1120,7 +1150,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryDue(item) { if (!item.followUpDate) return "none"; const date = new Date(`${item.followUpDate}T00:00:00`); const today = new Date(`${todayIso()}T00:00:00`); if (date < today) return "overdue"; if (+date === +today) return "today"; return "week"; }
   function fulfillment(item) { const value = key(item.fulfillmentMethod); return value === "pickup" ? "Pickup" : value === "delivery" ? "Delivery" : "Not set"; }
   function tracking(item) { const labels = { ready_for_pickup: "Ready for Pickup", out_for_delivery: "Out for Delivery", delivered: "Delivered", completed: "Completed" }; return labels[key(item.trackingSubstatus)] || "Not set"; }
-  function paymentSummary(item) { const total = amount(item.quotedAmount); const paid = amount(item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Total Amount", money(total)], ["Amount Paid", money(paid)], ["Balance", money(balance)]]); }
+  function paymentSummary(item) { const total = amount(item.quotedAmount); const selected = amount(item.paymentSelectedAmount); const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Method", paymentMethodLabel(item.paymentMethod)], ["Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Total Amount", money(total)], ["Amount Verified", money(paid)], ["Balance", money(balance)]]); }
+  function paymentTypeLabel(value) { const text = key(value); if (text === "down_payment") return "50% Down Payment"; if (text === "full") return "Full Payment"; if (text === "shop") return "Pay at Shop"; return "Not selected"; }
+  function paymentMethodLabel(value) { const text = key(value); if (text === "online") return "Pay Online"; if (text === "cash") return "Cash at Shop"; if (text === "gcash") return "GCash"; if (text === "bank_transfer") return "Bank Transfer"; if (text === "card") return "Card"; if (text === "other") return "Other"; return "Not selected"; }
   function amount(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
   function messageValue(message, labels) { for (const label of labels) { const match = String(message || "").match(new RegExp(`^${label}:\\s*(.+)$`, "im")); if (match?.[1]?.trim()) return match[1].trim(); } return ""; }
   function customerNotes(item) {

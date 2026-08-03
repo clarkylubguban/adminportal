@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import collectionHandler from "../api/tasks/index.js";
 import taskHandler from "../api/tasks/[id].js";
-import myTasksHandler from "../api/my-tasks.js";
-import calendarHandler from "../api/task-calendar.js";
-import n8nTaskDraftsHandler from "../api/integrations/n8n/task-drafts.js";
+import taskViewsHandler from "../api/task-views.js";
+import taskAutomationHandler from "../api/task-automation.js";
 
 const TASK_ID = "10000000-0000-4000-8000-000000000001";
 const ENTRY_ID = "20000000-0000-4000-8000-000000000001";
@@ -65,19 +64,19 @@ for (const [method, url] of rewriteRoutes) {
 const unknownRewriteAction = await invoke(taskHandler, "POST", `/api/tasks/${TASK_ID}?_taskAction=unsupported`);
 assert.equal(unknownRewriteAction.status, 404);
 assert.equal(unknownRewriteAction.body.error.code, "NOT_FOUND");
-const myTasks = await invoke(myTasksHandler, "GET", "/api/my-tasks");
+const myTasks = await invoke(taskViewsHandler, "GET", "/api/my-tasks");
 assert.equal(myTasks.status, 401);
 assert.equal(myTasks.body.error.code, "AUTH_REQUIRED");
 
-const calendar = await invoke(calendarHandler, "GET", "/api/task-calendar?from=2026-08-01&to=2026-08-31");
+const calendar = await invoke(taskViewsHandler, "GET", "/api/task-calendar?from=2026-08-01&to=2026-08-31");
 assert.equal(calendar.status, 401);
 assert.equal(calendar.body.error.code, "AUTH_REQUIRED");
 
-const calendarMutation = await invoke(calendarHandler, "POST", "/api/task-calendar");
+const calendarMutation = await invoke(taskViewsHandler, "POST", "/api/task-calendar");
 assert.equal(calendarMutation.status, 405);
 assert.equal(calendarMutation.headers.allow, "GET");
 
-const n8nDrafts = await invoke(n8nTaskDraftsHandler, "POST", "/api/integrations/n8n/task-drafts");
+const n8nDrafts = await invoke(taskAutomationHandler, "POST", "/api/integrations/n8n/task-drafts");
 assert.equal(n8nDrafts.status, 401);
 assert.equal(n8nDrafts.body.error.code, "SIGNATURE_INVALID");
 

@@ -101,19 +101,19 @@ async function handleRequest(request, response) {
 
 async function handleTaskApiRoute(routePath, request, response) {
   if (routePath === "/api/my-tasks") {
-    const { default: handleMyTasksRequest } = await import("../api/my-tasks.js");
+    const { default: handleMyTasksRequest } = await import("../api/task-views.js");
     await handleMyTasksRequest(request, response);
     return true;
   }
 
   if (routePath === "/api/task-calendar") {
-    const { default: handleTaskCalendarRequest } = await import("../api/task-calendar.js");
+    const { default: handleTaskCalendarRequest } = await import("../api/task-views.js");
     await handleTaskCalendarRequest(request, response);
     return true;
   }
 
   if (routePath === "/api/planning/auto-plan-today") {
-    const { default: handleAutoPlanTodayRequest } = await import("../api/planning/auto-plan-today.js");
+    const { default: handleAutoPlanTodayRequest } = await import("../api/task-automation.js");
     await handleAutoPlanTodayRequest(request, response);
     return true;
   }
@@ -135,7 +135,7 @@ async function handleTaskApiRoute(routePath, request, response) {
 
 async function handleIntegrationApiRoute(routePath, request, response) {
   if (routePath === "/api/integrations/n8n/task-drafts") {
-    const { default: handleN8nTaskDraftsRequest } = await import("../api/integrations/n8n/task-drafts.js");
+    const { default: handleN8nTaskDraftsRequest } = await import("../api/task-automation.js");
     await handleN8nTaskDraftsRequest(request, response);
     return true;
   }

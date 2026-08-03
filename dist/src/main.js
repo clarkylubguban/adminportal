@@ -1,6 +1,7 @@
 import { createMvpDashboard } from "./mvpDashboard.js";
 import {
   approveTaskDraft,
+  approveAndAssignTask,
   approveTaskWork,
   archiveTask,
   assignTask,
@@ -8,9 +9,11 @@ import {
   createIdempotencyKey,
   createTaskDraft,
   getMyTasks,
+  getTaskCalendar,
   getTaskDetail,
   getWorkboardTasks,
   reopenTask,
+  requestAutoPlanToday,
   requestTaskRevision,
   startTaskRevision,
   startTaskWork,
@@ -284,6 +287,7 @@ let opsSoDraft = null;
 let opsSoSavingId = null;
 let opsArtworkRequests = {};
 let opsCustomerActionRequests = {};
+let mvpPaymentConfirmationRequests = {};
 let expandedOpsInquiryId = null;
 let selectedOrderDashboardId = null;
 let orderDashboardSaveError = "";
@@ -467,6 +471,20 @@ let workboardCommandError = "";
 let workboardReviewNote = "";
 let workboardReason = "";
 let workboardDraftForm = createEmptyWorkboardDraft();
+let autoPlanQuickDirection = "";
+let autoPlanState = "idle";
+let autoPlanError = "";
+let autoPlanResult = null;
+let autoPlanIdempotencyKey = "";
+let calendarEvents = [];
+let calendarLoadState = "idle";
+let calendarLoadError = "";
+let calendarSelectedDate = getManilaTodayKey();
+let calendarVisibleMonth = getMonthKey(calendarSelectedDate);
+let calendarAssigneeFilter = "";
+let calendarSourceFilter = "";
+let calendarStatusFilter = "";
+let calendarSelectedTask = null;
 
 const routes = {
   "/": "Overview",
@@ -475,6 +493,7 @@ const routes = {
   "/orders": "Orders",
   "/production": "Production",
   "/my-tasks": "My Tasks",
+  "/calendar": "Calendar",
   "/workboard": "Workboard",
   "/reorders": "Reorders",
   "/overview": "Overview",
@@ -527,6 +546,7 @@ function render() {
   const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
+  if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -546,8 +566,10 @@ function render() {
                   ? renderMvpProductionPage()
                   : currentRoute === "My Tasks"
                     ? renderMyTasksPage()
-                    : currentRoute === "Workboard"
-                      ? renderWorkboardPage()
+                    : currentRoute === "Calendar"
+                      ? renderCalendarPage()
+                      : currentRoute === "Workboard"
+                        ? renderWorkboardPage()
                   : currentRoute === "Overview"
                 ? renderOverviewPage()
                 : currentRoute === "Clients"
@@ -1164,8 +1186,12 @@ function isTaskFeatureUiEnabled() {
   return ["1", "true", "yes", "on"].includes(value) && (isSupabaseReady() || isLocalTaskQaMode());
 }
 
+function isFeatureFlagEnabled(...names) {
+  return names.some((name) => ["1", "true", "yes", "on"].includes(String(window.TRRY_ADMIN_ENV?.[name] ?? "false").trim().toLowerCase()));
+}
+
 function canViewMyTasksRoute() {
-  return isTaskFeatureUiEnabled() && ["owner", "admin", "staff"].includes(adminUser?.role);
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_MY_TASKS", "VITE_MY_TASKS_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
 }
 
 async function loadMyTasks({ silent = false } = {}) {
@@ -1272,7 +1298,89 @@ function stopMyTasksTimerTick() {
 }
 
 function canViewWorkboardRoute() {
-  return isTaskFeatureUiEnabled() && ["owner", "admin"].includes(adminUser?.role);
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_WORKBOARD", "VITE_WORKBOARD_ENABLED") && ["owner", "admin"].includes(adminUser?.role);
+}
+
+function canUseAutoPlanTodayUi() {
+  return canViewWorkboardRoute() && isFeatureFlagEnabled("VITE_ENABLE_AUTO_PLAN_TODAY", "VITE_AUTO_PLAN_TODAY_ENABLED") && adminUser?.role === "owner";
+}
+
+function canViewCalendarRoute() {
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_CALENDAR", "VITE_CALENDAR_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
+}
+
+async function loadTaskCalendar({ silent = false } = {}) {
+  if (!canViewCalendarRoute() || !adminAuthSession?.access_token) return;
+  if (!silent) {
+    calendarLoadState = "loading";
+    calendarLoadError = "";
+    render();
+  }
+  try {
+    const response = await getTaskCalendar(adminAuthSession, getCalendarApiFilters());
+    calendarEvents = Array.isArray(response.events) ? response.events : [];
+    calendarLoadState = "ready";
+    calendarLoadError = "";
+  } catch (error) {
+    calendarLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : "error";
+    calendarLoadError = getTaskErrorMessage(error);
+    calendarEvents = [];
+  }
+  render();
+}
+
+function getCalendarApiFilters() {
+  const bounds = getCalendarMonthBounds(calendarVisibleMonth);
+  return {
+    from: bounds.from,
+    to: bounds.to,
+    assignedUserId: calendarAssigneeFilter,
+    sourceType: calendarSourceFilter,
+    status: calendarStatusFilter,
+  };
+}
+
+function getCalendarMonthBounds(monthKey) {
+  const [year, month] = String(monthKey || getMonthKey(getManilaTodayKey())).split("-").map(Number);
+  const first = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { from: first, to: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}` };
+}
+
+function getManilaTodayKey(now = new Date()) {
+  return toManilaDateKey(now.toISOString());
+}
+
+function getMonthKey(dateKey) {
+  return String(dateKey || getManilaTodayKey()).slice(0, 7);
+}
+
+function toManilaDateKey(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+    return "";
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function formatManilaTime(value) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return "All day";
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "All day";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function createEmptyWorkboardDraft(task = null) {
@@ -1305,7 +1413,7 @@ async function loadWorkboardTasks({ silent = false } = {}) {
   }
   try {
     const response = await getWorkboardTasks(adminAuthSession, getWorkboardApiFilters());
-    workboardTasks = sortMyTasks(response.tasks || []);
+    workboardTasks = sortWorkboardTasks(response.tasks || []);
     workboardLoadState = "ready";
     workboardLoadError = "";
     syncMyTasksTimerTick();
@@ -1342,7 +1450,7 @@ function getWorkboardApiFilters() {
 function getVisibleWorkboardTasks() {
   const normalized = workboardSearch.trim().toLowerCase();
   return workboardTasks.filter((task) => {
-    if (workboardFilterStatus === "active" && ["DONE", "CANCELLED"].includes(task.status)) return false;
+    if (workboardFilterStatus === "active" && ["DRAFT", "CANCELLED"].includes(task.status)) return false;
     if (workboardFilterStatus === "overdue" && !isTaskOverdue(task)) return false;
     if (normalized) return [task.taskCode, task.title, task.sourceType, task.priority, task.status, getUserLabel(task.assignedUser), getUserLabel(task.reviewerUser)].join(" ").toLowerCase().includes(normalized);
     return true;
@@ -1360,6 +1468,7 @@ function renderWorkboardPage() {
       <button class="ops-gold-button" data-workboard-create type="button">CREATE TASK</button>
     </div>
     ${renderWorkboardStateNotice()}
+    ${renderAutoPlanTodayPanel()}
     ${renderWorkboardSummary()}
     ${renderWorkboardFilters()}
     ${workboardLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Workboard</strong><span>Checking task records.</span></div>` : ""}
@@ -1420,7 +1529,51 @@ function renderWorkboardUserSelect(id, value, label) {
 
 function renderWorkboardTaskList(tasks) {
   if (!tasks.length) return `<div class="my-tasks-empty"><strong>${workboardTasks.length ? "No tasks match your filters" : "No task records yet"}</strong><span>${workboardTasks.length ? "Try another status or search term." : "Create a manual task draft when planning is ready."}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
+  if (workboardFilterStatus === "active") return renderWorkboardKanban(tasks);
   return `<div class="workboard-table-wrap"><table class="workboard-table"><thead><tr><th>Task</th><th>Source</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Reviewer</th><th>Deadline</th><th>Time</th><th>Action</th></tr></thead><tbody>${tasks.map(renderWorkboardRow).join("")}</tbody></table></div><div class="workboard-card-list">${tasks.map(renderWorkboardCard).join("")}</div>`;
+}
+
+function renderAutoPlanTodayPanel() {
+  if (!canUseAutoPlanTodayUi()) return "";
+  const busy = autoPlanState === "submitting";
+  const result = autoPlanResult;
+  const stateText = getAutoPlanStateText(result);
+  return `<section class="auto-plan-panel">
+    <div class="auto-plan-heading">
+      <div><span>${renderIcon("sparkles", "auto-plan-icon")}AUTO PLAN TODAY</span><p>Create unassigned AI marketing and daily content drafts for Owner review.</p></div>
+      <button class="ops-gold-button" data-auto-plan-submit type="button" ${busy ? "disabled" : ""}>${busy ? "GENERATING..." : "GENERATE"}</button>
+    </div>
+    <label class="auto-plan-direction"><span>Quick Direction</span><textarea id="auto-plan-quick-direction" rows="3" maxlength="500" ${busy ? "disabled" : ""} placeholder="Optional direction for today only.">${escapeHtml(autoPlanQuickDirection)}</textarea></label>
+    ${busy ? `<div class="auto-plan-state"><strong>Planning request submitting</strong><span>Waiting for canonical drafts from the configured workflow.</span></div>` : ""}
+    ${autoPlanError ? `<div class="auto-plan-state error"><strong>Planning needs attention</strong><span>${escapeHtml(autoPlanError)}</span></div>` : ""}
+    ${result ? `<div class="auto-plan-state success"><strong>${escapeHtml(stateText.title)}</strong><span>${escapeHtml(stateText.message)}</span><button data-auto-plan-drafts type="button">OPEN DRAFT VIEW</button></div>` : ""}
+  </section>`;
+}
+
+function getAutoPlanStateText(result) {
+  const count = Number(result?.draftsReceived || 0);
+  const trace = result?.traceCode ? ` Trace ${result.traceCode}.` : "";
+  if (count >= 2) return { title: `${count} drafts received`, message: `Review the unassigned drafts in Workboard before approval.${trace}` };
+  if (count === 1) return { title: "1 draft received", message: `Fewer drafts were returned than expected. Review it before approval.${trace}` };
+  if (result?.dispatchStatus === "REQUESTED") return { title: "Plan pending", message: `The planning request is traceable, but no drafts have been ingested yet.${trace}` };
+  return { title: "No valid drafts received", message: `No canonical draft was created. Try again after checking the staging workflow.${trace}` };
+}
+
+function sortWorkboardTasks(tasks) {
+  const now = Date.now();
+  return [...tasks].sort((a, b) => getTaskSortWeight(a, now) - getTaskSortWeight(b, now) || compareTaskDate(a, b));
+}
+
+function renderWorkboardKanban(tasks) {
+  const columns = [
+    ["TO_DO", "TO DO", (task) => task.status === "TO_DO"],
+    ["IN_PROGRESS", "IN PROGRESS", (task) => ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"].includes(task.status)],
+    ["DONE", "COMPLETED", (task) => task.status === "DONE"],
+  ];
+  return `<div class="workboard-kanban" aria-label="Workboard Kanban">${columns.map(([key, label, predicate]) => {
+    const items = tasks.filter(predicate);
+    return `<section class="workboard-kanban-column" data-workboard-column="${key}"><header><span>${escapeHtml(label)}</span><strong>${items.length}</strong></header><div>${items.length ? items.map(renderWorkboardKanbanCard).join("") : `<article class="workboard-kanban-empty">No tasks</article>`}</div></section>`;
+  }).join("")}</div>`;
 }
 
 function renderWorkboardRow(task) {
@@ -1445,10 +1598,23 @@ function renderWorkboardCard(task) {
   </article>`;
 }
 
+function renderWorkboardKanbanCard(task) {
+  return `<article class="workboard-kanban-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
+    <button data-workboard-open="${escapeHtml(task.id)}" type="button">
+      <span>${escapeHtml(task.taskCode || "TASK")}</span>
+      <strong>${escapeHtml(task.title || "Untitled task")}</strong>
+      <small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(formatTaskDue(task))}</small>
+    </button>
+    <div>${renderTaskPriority(task.priority)}${renderTaskStatus(task.status)}${task.status === "FOR_REVIEW" ? `<span class="my-task-mode">FOR REVIEW</span>` : ""}${task.status === "NEEDS_REVISION" ? `<span class="my-task-mode">NEEDS REVISION</span>` : ""}</div>
+    <footer><span>${escapeHtml(getUserLabel(task.assignedUser))}</span><button data-workboard-open="${escapeHtml(task.id)}" type="button">${escapeHtml(getWorkboardPrimaryAction(task))}</button></footer>
+  </article>`;
+}
+
 function getWorkboardPrimaryAction(task) {
   const actions = task.allowedActions || [];
   if (actions.includes("APPROVE_WORK")) return "REVIEW";
   if (actions.includes("REQUEST_REVISION")) return "REVIEW";
+  if (actions.includes("APPROVE_AND_ASSIGN")) return "APPROVE AND ASSIGN";
   if (actions.includes("APPROVE_DRAFT")) return "APPROVE DRAFT";
   if (actions.includes("EDIT_DRAFT")) return "EDIT";
   return "OPEN";
@@ -1475,7 +1641,7 @@ function renderWorkboardDraftForm(task) {
       <label><span>Source</span>${renderWorkboardSelect("workboard-source-type", workboardDraftForm.sourceType, [["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]])}</label>
       <label><span>Priority</span>${renderWorkboardSelect("workboard-priority", workboardDraftForm.priority, [["LOW", "Low"], ["MEDIUM", "Medium"], ["HIGH", "High"], ["URGENT", "Urgent"]])}</label>
       <label><span>Assigned</span>${renderWorkboardDraftUserSelect("workboard-assigned", workboardDraftForm.assignedUserId, "Unassigned")}</label>
-      <label><span>Reviewer</span>${renderWorkboardDraftUserSelect("workboard-reviewer", workboardDraftForm.reviewerUserId, "No reviewer")}</label>
+      <label><span>Reviewer</span>${renderWorkboardDraftReviewerSelect("workboard-reviewer", workboardDraftForm.reviewerUserId, "No reviewer")}</label>
       <label><span>Time mode</span>${renderWorkboardSelect("workboard-time-mode", workboardDraftForm.timeTrackingMode, [["EXPECTED", "Expected"], ["NONE", "Time not required"]])}</label>
       <label><span>Scheduled date</span><input id="workboard-scheduled" value="${escapeHtml(workboardDraftForm.scheduledDate)}" type="date" ${busy ? "disabled" : ""} /></label>
       <label><span>Start deadline</span><input id="workboard-start-deadline" value="${escapeHtml(workboardDraftForm.startDeadline)}" type="datetime-local" ${busy ? "disabled" : ""} /></label>
@@ -1485,7 +1651,7 @@ function renderWorkboardDraftForm(task) {
       <label><span>Source record id</span><input id="workboard-source-record-id" value="${escapeHtml(workboardDraftForm.sourceRecordId)}" maxlength="200" ${busy ? "disabled" : ""} /></label>
       <label class="workboard-checkbox"><input id="workboard-draft-approval" type="checkbox" ${workboardDraftForm.draftApprovalRequired ? "checked" : ""} ${busy ? "disabled" : ""} /><span>Owner approval required</span></label>
     </div>
-    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button>${task?.allowedActions?.includes("APPROVE_DRAFT") ? `<button data-workboard-approve-draft="${escapeHtml(task.id)}" type="button" ${busy ? "disabled" : ""}>APPROVE DRAFT</button>` : ""}</div>
+    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button>${task?.allowedActions?.includes("APPROVE_AND_ASSIGN") ? `<button data-workboard-approve-assign="${escapeHtml(task.id)}" type="button" ${busy ? "disabled" : ""}>APPROVE AND ASSIGN</button>` : ""}</div>
   </form>`;
 }
 
@@ -1501,6 +1667,7 @@ function renderWorkboardTaskDetail(detail, task) {
   const latestSubmission = (detail.submissions || []).at(-1) || null;
   return `<div class="my-task-drawer-content">
     <section class="my-task-detail-hero"><div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</div><p>${escapeHtml(task.brief || "No brief provided.")}</p>${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}</section>
+    ${renderWorkboardAutomationNotice(task)}
     <section class="my-task-detail-grid">
       ${renderTaskFact("Source", formatSourceReference(task))}
       ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
@@ -1518,6 +1685,15 @@ function renderWorkboardTaskDetail(detail, task) {
   </div>`;
 }
 
+function renderWorkboardAutomationNotice(task) {
+  if (!["AI_MARKETING", "DAILY_CONTENT"].includes(task.sourceType)) return "";
+  const trace = task.automationTrace || {};
+  const suggested = trace.suggestedAssignee?.label || trace.suggestedAssignee?.reason
+    ? ` / Suggested: ${trace.suggestedAssignee.label || "Unspecified"}${trace.suggestedAssignee.reason ? ` (${trace.suggestedAssignee.reason})` : ""}`
+    : "";
+  return `<section class="my-task-warning"><strong>AI-GENERATED DRAFT</strong><p>Human approval is required. This task must stay unassigned until Owner approval activates it.</p><small>${escapeHtml(trace.planningRequestId ? `Planning ${trace.planningRequestId}` : "Planning trace pending")} / ${escapeHtml(trace.externalTaskId ? `External task ${trace.externalTaskId}` : "External task pending")}${escapeHtml(suggested)}</small></section>`;
+}
+
 function renderWorkboardLatestSubmission(submission) {
   return `<section class="my-task-warning ${submission.timeRecordingStatus === "NOT_RECORDED" ? "no-time" : ""}"><strong>LATEST SUBMISSION - ${escapeHtml(formatSubmissionTimeStatus(submission))}</strong><p>${escapeHtml(submission.submissionNote || "No note saved.")}</p>${submission.proofUrl ? `<p><b>Proof:</b> ${escapeHtml(submission.proofUrl)}</p>` : ""}${submission.noTimeReason ? `<p><b>Time not recorded reason:</b> ${escapeHtml(submission.noTimeReason)}</p>` : ""}<small>${escapeHtml(formatTaskDateTime(submission.submittedAt))} / ${escapeHtml(getUserLabel(submission.submittedByUser))}${submission.recordedDurationSeconds !== null ? ` / ${escapeHtml(formatDuration(submission.recordedDurationSeconds))}` : ""}</small></section>`;
 }
@@ -1533,12 +1709,13 @@ function renderWorkboardActionArea(task) {
   if (!actions.length) return `<section class="my-task-action-area"><strong>No available manager action</strong><span>This task is waiting on another step.</span></section>`;
   return `<section class="my-task-action-area workboard-actions"><strong>Allowed manager actions</strong>
     ${actions.includes("REQUEST_REVISION") || actions.includes("APPROVE_WORK") ? `<label><span>Review note</span><textarea id="workboard-review-note" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReviewNote)}</textarea></label>` : ""}
-    ${actions.includes("ASSIGN") ? `<label><span>Assign user</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
+    ${actions.includes("ASSIGN") || actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Assignee</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
+    ${actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Reviewer</span>${renderWorkboardDraftReviewerSelect("workboard-assign-reviewer", task.reviewerUserId || "", "Reviewer required")}</label>` : ""}
     ${actions.includes("CANCEL") || actions.includes("REOPEN") ? `<label><span>Reason</span><textarea id="workboard-reason" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReason)}</textarea></label>` : ""}
     <div class="my-task-action-buttons sticky-actions">
       ${actions.includes("EDIT_DRAFT") ? `<button data-workboard-edit-draft="${escapeHtml(task.id)}" type="button">EDIT DRAFT</button>` : ""}
       ${actions.includes("ASSIGN") ? `<button data-workboard-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ASSIGN</button>` : ""}
-      ${actions.includes("APPROVE_DRAFT") ? `<button class="primary" data-workboard-approve-draft="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE DRAFT</button>` : ""}
+      ${actions.includes("APPROVE_AND_ASSIGN") ? `<button class="primary" data-workboard-approve-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE AND ASSIGN</button>` : ""}
       ${actions.includes("REQUEST_REVISION") ? `<button data-workboard-request-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">REQUEST REVISION</button>` : ""}
       ${actions.includes("APPROVE_WORK") ? `<button class="primary" data-workboard-approve-work="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE WORK</button>` : ""}
       ${actions.includes("CANCEL") ? `<button data-workboard-cancel="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">CANCEL</button>` : ""}
@@ -1555,6 +1732,10 @@ function getEligibleAssignmentUsers(activeOnly = true) {
     if (user.assignmentEligible === false) return false;
     return ["owner", "admin", "staff"].includes(String(user.role || "").toLowerCase());
   });
+}
+
+function getEligibleReviewerUsers() {
+  return getEligibleAssignmentUsers(true).filter((user) => ["owner", "admin"].includes(String(user.role || "").toLowerCase()));
 }
 
 function getAssignmentUserLabel(user) {
@@ -1606,6 +1787,11 @@ function readWorkboardDraftForm() {
   };
 }
 
+function renderWorkboardDraftReviewerSelect(id, value, label) {
+  const users = getEligibleReviewerUsers();
+  return `<select id="${escapeHtml(id)}"><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
+}
+
 function buildWorkboardDraftPayload(task = null) {
   readWorkboardDraftForm();
   const sourceRecordType = workboardDraftForm.sourceRecordType.trim();
@@ -1642,7 +1828,7 @@ async function openWorkboardTask(taskId) {
   try {
     selectedTaskDetail = await getTaskDetail(taskId, adminAuthSession);
     taskDetailLoadState = "ready";
-    workboardTasks = sortMyTasks(workboardTasks.map((item) => item.id === selectedTaskDetail.task.id ? selectedTaskDetail.task : item));
+    workboardTasks = sortWorkboardTasks(workboardTasks.map((item) => item.id === selectedTaskDetail.task.id ? selectedTaskDetail.task : item));
     syncMyTasksTimerTick();
   } catch (error) {
     taskDetailLoadState = "error";
@@ -1705,19 +1891,59 @@ async function saveWorkboardDraft() {
   }
 }
 
+async function submitAutoPlanToday() {
+  if (autoPlanState === "submitting") return;
+  autoPlanQuickDirection = document.getElementById("auto-plan-quick-direction")?.value || autoPlanQuickDirection;
+  autoPlanState = "submitting";
+  autoPlanError = "";
+  autoPlanResult = null;
+  autoPlanIdempotencyKey = autoPlanIdempotencyKey || createIdempotencyKey("auto-plan");
+  render();
+  try {
+    const response = await requestAutoPlanToday({ quickDirection: autoPlanQuickDirection }, adminAuthSession, autoPlanIdempotencyKey);
+    autoPlanResult = response;
+    autoPlanState = "received";
+    workboardFilterStatus = "draft";
+    workboardFilterSource = "";
+    await loadWorkboardTasks({ silent: true });
+  } catch (error) {
+    autoPlanState = "failed";
+    autoPlanError = getTaskErrorMessage(error);
+  } finally {
+    autoPlanIdempotencyKey = "";
+    render();
+  }
+}
+
+function openAutoPlanDraftView() {
+  workboardFilterStatus = "draft";
+  workboardFilterSource = "";
+  loadWorkboardTasks();
+}
+
 async function runWorkboardCommand(taskId, action) {
   if (workboardCommandState === "saving") return;
   const task = selectedTaskDetail?.task?.id === taskId ? selectedTaskDetail.task : workboardTasks.find((item) => item.id === taskId);
   if (!task) return;
   workboardReviewNote = document.getElementById("workboard-review-note")?.value || workboardReviewNote;
   workboardReason = document.getElementById("workboard-reason")?.value || workboardReason;
+  const selectedAssigneeUserId = document.getElementById("workboard-assign-user")?.value || null;
+  const selectedReviewerUserId = document.getElementById("workboard-assign-reviewer")?.value || null;
   workboardCommandState = "saving";
   workboardCommandError = "";
   render();
   try {
     const version = task.version;
     let response;
-    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: document.getElementById("workboard-assign-user")?.value || null }, adminAuthSession, createIdempotencyKey("assign"));
+    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: selectedAssigneeUserId }, adminAuthSession, createIdempotencyKey("assign"));
+    if (action === "approve-and-assign") response = await approveAndAssignTask(taskId, {
+      expectedVersion: version,
+      assignedUserId: selectedAssigneeUserId || task.assignedUserId || null,
+      reviewerUserId: selectedReviewerUserId || task.reviewerUserId || null,
+      startDeadline: task.startDeadline || null,
+      submissionDeadline: task.submissionDeadline || null,
+      approvalDeadline: task.approvalDeadline || null,
+    }, adminAuthSession, createIdempotencyKey("approve-and-assign"));
     if (action === "approve-draft") response = await approveTaskDraft(taskId, version, adminAuthSession, createIdempotencyKey("approve-draft"));
     if (action === "request-revision") response = await requestTaskRevision(taskId, { expectedVersion: version, reviewNote: workboardReviewNote.trim() }, adminAuthSession, createIdempotencyKey("revision-request"));
     if (action === "approve-work") response = await approveTaskWork(taskId, { expectedVersion: version, reviewNote: workboardReviewNote.trim() || null }, adminAuthSession, createIdempotencyKey("approve-work"));
@@ -2078,7 +2304,7 @@ function applyTaskCommandResponse(response) {
     history: response.history || selectedTaskDetail?.history || [],
   };
   myTasks = sortMyTasks(upsertTaskRecord(myTasks, response.task));
-  workboardTasks = sortMyTasks(upsertTaskRecord(workboardTasks, response.task));
+  workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, response.task));
   taskFallbackOpen = false;
   taskSubmissionNote = "";
   taskProofUrl = "";
@@ -2096,7 +2322,7 @@ async function refreshTaskAfterConflict(taskId) {
     const detail = await getTaskDetail(taskId, adminAuthSession);
     selectedTaskDetail = detail;
     myTasks = sortMyTasks(upsertTaskRecord(myTasks, detail.task));
-    workboardTasks = sortMyTasks(upsertTaskRecord(workboardTasks, detail.task));
+    workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, detail.task));
   } catch {
     await loadMyTasks({ silent: true });
   }
@@ -2132,6 +2358,163 @@ function validateTaskSubmit(action) {
   }
   return true;
 }
+
+function renderCalendarPage() {
+  if (!canViewCalendarRoute()) {
+    return `<section class="mvp-page calendar-page"><div class="mvp-page-title"><div><span>HOME / CALENDAR</span><h1>Calendar</h1><p>Task calendar is not enabled in this environment.</p></div></div></section>`;
+  }
+  const monthLabel = formatCalendarMonth(calendarVisibleMonth);
+  const selectedEvents = getCalendarEventsForDate(calendarSelectedDate);
+  return `<section class="mvp-page calendar-page">
+    <div class="mvp-page-title">
+      <div><span>HOME / CALENDAR</span><h1>Calendar</h1><p>Read-only task schedule projected from canonical task dates.</p></div>
+      <strong>Asia/Manila</strong>
+    </div>
+    ${renderCalendarStateNotice()}
+    <div class="calendar-toolbar">
+      <div class="calendar-month-nav" aria-label="Calendar month navigation">
+        <button data-calendar-prev type="button" aria-label="Previous month">${renderIcon("chevron-right", "calendar-prev-icon")}</button>
+        <strong>${escapeHtml(monthLabel)}</strong>
+        <button data-calendar-next type="button" aria-label="Next month">${renderIcon("chevron-right", "calendar-next-icon")}</button>
+        <button data-calendar-today type="button">TODAY</button>
+      </div>
+      ${renderCalendarFilters()}
+    </div>
+    ${calendarLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Calendar</strong><span>Projecting permitted task dates.</span></div>` : ""}
+    ${calendarLoadState === "ready" ? `<div class="calendar-layout">${renderCalendarMonthGrid()}${renderCalendarAgenda(selectedEvents)}</div>` : ""}
+    ${renderCalendarTaskSummary()}
+  </section>`;
+}
+
+function renderCalendarStateNotice() {
+  if (calendarLoadState === "error") return `<div class="ops-persistence-card error"><strong>Unable to load Calendar</strong><span>${escapeHtml(calendarLoadError)}</span></div>`;
+  if (calendarLoadState === "forbidden") return `<div class="ops-persistence-card error"><strong>Calendar access is restricted</strong><span>${escapeHtml(calendarLoadError || "Your account cannot view task calendar records.")}</span></div>`;
+  if (calendarLoadState === "feature-disabled") return `<div class="ops-persistence-card"><strong>Calendar unavailable</strong><span>The task domain is disabled for this environment.</span></div>`;
+  return "";
+}
+
+function renderCalendarFilters() {
+  const assignees = [...new Map(calendarEvents.map((event) => [event.assignedUserId, { ...event.assignee, userId: event.assignedUserId }]).filter(([id]) => id)).values()];
+  const sources = [...new Set(calendarEvents.map((event) => event.sourceType).filter(Boolean))].sort();
+  const statuses = ["DRAFT", "TO_DO", "IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION", "DONE", "CANCELLED"];
+  return `<div class="calendar-filters" aria-label="Calendar filters">
+    <select id="calendar-assignee-filter"><option value="">All assignees</option>${assignees.map((user) => `<option value="${escapeHtml(user.userId)}" ${calendarAssigneeFilter === user.userId ? "selected" : ""}>${escapeHtml(getUserLabel(user))}</option>`).join("")}</select>
+    <select id="calendar-source-filter"><option value="">All sources</option>${sources.map((source) => `<option value="${escapeHtml(source)}" ${calendarSourceFilter === source ? "selected" : ""}>${escapeHtml(formatSourceType(source))}</option>`).join("")}</select>
+    <select id="calendar-status-filter"><option value="">All statuses</option>${statuses.map((status) => `<option value="${escapeHtml(status)}" ${calendarStatusFilter === status ? "selected" : ""}>${escapeHtml(formatTaskStatus(status))}</option>`).join("")}</select>
+    <button data-calendar-clear type="button">CLEAR</button>
+  </div>`;
+}
+
+function renderCalendarMonthGrid() {
+  const days = buildCalendarDays(calendarVisibleMonth);
+  const byDate = groupCalendarEventsByDate(calendarEvents);
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `<section class="calendar-month-view" aria-label="Month view">
+    <div class="calendar-weekdays">${weekdayLabels.map((day) => `<span>${day}</span>`).join("")}</div>
+    <div class="calendar-grid">${days.map((day) => renderCalendarDay(day, byDate.get(day.key) || [])).join("")}</div>
+  </section>`;
+}
+
+function renderCalendarDay(day, events) {
+  const visibleEvents = events.slice(0, 3);
+  const more = events.length - visibleEvents.length;
+  return `<button class="calendar-day ${day.inMonth ? "" : "muted"} ${day.key === calendarSelectedDate ? "selected" : ""} ${day.key === getManilaTodayKey() ? "today" : ""}" data-calendar-date="${escapeHtml(day.key)}" type="button">
+    <span>${escapeHtml(String(day.day))}</span>
+    <div>${visibleEvents.map(renderCalendarDayItem).join("")}${more > 0 ? `<small class="calendar-more">+${more} more</small>` : ""}</div>
+  </button>`;
+}
+
+function renderCalendarDayItem(event) {
+  return `<i class="calendar-dot ${escapeHtml(event.projectionTypeKey)} ${event.overdue ? "overdue" : ""}">${escapeHtml(event.taskCode || "TASK")} ${escapeHtml(shortProjectionType(event.projectionType))}</i>`;
+}
+
+function renderCalendarAgenda(events) {
+  const title = formatCalendarDateHeading(calendarSelectedDate);
+  return `<section class="calendar-agenda" aria-label="Agenda view">
+    <header><span>AGENDA</span><h2>${escapeHtml(title)}</h2></header>
+    ${events.length ? events.map(renderCalendarAgendaItem).join("") : `<div class="my-tasks-empty compact"><strong>No dated tasks</strong><span>No permitted task projections for this date.</span></div>`}
+  </section>`;
+}
+
+function renderCalendarAgendaItem(event) {
+  return `<article class="calendar-agenda-item ${event.overdue ? "overdue" : ""}">
+    <button data-calendar-event="${escapeHtml(event.key)}" type="button">
+      <span>${escapeHtml(event.projectionType)} / ${escapeHtml(formatManilaTime(event.dateTime))}</span>
+      <strong>${escapeHtml(event.taskCode || "TASK")} - ${escapeHtml(event.title || "Untitled task")}</strong>
+      <small>${escapeHtml(formatSourceType(event.sourceType))} / ${escapeHtml(formatTaskStatus(event.status))} / ${escapeHtml(getUserLabel(event.assignee))}</small>
+    </button>
+    <div>${renderTaskPriority(event.priority)}${event.overdue ? `<span class="my-task-status overdue">OVERDUE</span>` : ""}</div>
+  </article>`;
+}
+
+function renderCalendarTaskSummary() {
+  if (!calendarSelectedTask) return "";
+  return `<div class="my-task-drawer-backdrop" data-calendar-close></div><aside class="my-task-drawer calendar-drawer" aria-label="Calendar task summary">
+    <header><div><span>${escapeHtml(calendarSelectedTask.taskCode || "TASK")}</span><h2>${escapeHtml(calendarSelectedTask.title || "Untitled task")}</h2></div><button data-calendar-close type="button" aria-label="Close Calendar summary">X</button></header>
+    <div class="my-task-drawer-content">
+      <section class="my-task-detail-hero"><div>${renderTaskStatus(calendarSelectedTask.status)}${renderTaskPriority(calendarSelectedTask.priority)}</div><p>Read-only Calendar projection. Use Workboard or My Tasks for permitted task detail and actions.</p></section>
+      <section class="my-task-detail-grid">
+        ${renderTaskFact("Projection", calendarSelectedTask.projectionType)}
+        ${renderTaskFact("When", `${calendarSelectedTask.dateKey} ${formatManilaTime(calendarSelectedTask.dateTime)}`)}
+        ${renderTaskFact("Source", formatSourceType(calendarSelectedTask.sourceType))}
+        ${renderTaskFact("Assigned", getUserLabel(calendarSelectedTask.assignee))}
+      </section>
+      <section class="my-task-action-area"><strong>Read only</strong><span>Calendar cannot create, reschedule, assign, transition, or delete tasks.</span></section>
+    </div>
+  </aside>`;
+}
+
+function buildCalendarDays(monthKey) {
+  const [year, month] = String(monthKey).split("-").map(Number);
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const startOffset = first.getUTCDay();
+  const start = new Date(Date.UTC(year, month - 1, 1 - startOffset));
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start.getTime() + index * 86400000);
+    const key = date.toISOString().slice(0, 10);
+    return { key, day: date.getUTCDate(), inMonth: date.getUTCMonth() === month - 1 };
+  });
+}
+
+function groupCalendarEventsByDate(events) {
+  const grouped = new Map();
+  for (const event of events) {
+    if (!grouped.has(event.dateKey)) grouped.set(event.dateKey, []);
+    grouped.get(event.dateKey).push(event);
+  }
+  return grouped;
+}
+
+function getCalendarEventsForDate(dateKey) {
+  return calendarEvents.filter((event) => event.dateKey === dateKey);
+}
+
+function shiftCalendarMonth(delta) {
+  const [year, month] = calendarVisibleMonth.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1 + delta, 1));
+  calendarVisibleMonth = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+  calendarSelectedDate = getCalendarMonthBounds(calendarVisibleMonth).from;
+  calendarSelectedTask = null;
+  loadTaskCalendar();
+}
+
+function formatCalendarMonth(monthKey) {
+  const [year, month] = String(monthKey).split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+function formatCalendarDateHeading(dateKey) {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+function shortProjectionType(type) {
+  if (type === "SCHEDULED START") return "Start";
+  if (type === "TASK DEADLINE") return "Due";
+  if (type === "REVIEW DEADLINE") return "Review";
+  return "Done";
+}
+
 function getMvpDashboardItems() {
   return opsInquiries.map((item) => ({
     ...item,
@@ -2161,7 +2544,7 @@ function renderMvpOrdersPage() {
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
     schemaNotice: renderOrderDashboardSchemaNotice(),
-    renderPayment: renderOpsPaymentStage,
+    renderPayment: renderMvpPaymentConfirmation,
     renderTracking: renderOpsCustomerTracking,
   });
 }
@@ -2324,9 +2707,32 @@ function canOpsPrepareProof(item) {
 
 function canOpsRequestPayment(item) {
   const state = getOpsNormalizedCustomerState(item);
-  return state.quote === "approved" && state.artwork === "approved" && state.payment !== "confirmed";
+  return state.quote === "approved" && state.artwork === "approved" && !isOpsPaymentConfirmed(state.payment);
 }
 
+
+function isOpsPaymentConfirmed(value) {
+  return ["confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(String(value || "").trim().toLowerCase());
+}
+
+function getOpsPaymentTypeLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "down_payment") return "50% Down Payment";
+  if (key === "full") return "Full Payment";
+  if (key === "shop") return "Pay at Shop";
+  return "Not selected";
+}
+
+function getOpsPaymentMethodLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  if (key === "online") return "Pay Online";
+  if (key === "cash") return "Cash at Shop";
+  if (key === "gcash") return "GCash at Shop";
+  if (key === "bank_transfer") return "Bank Transfer";
+  if (key === "card") return "Card";
+  if (key === "other") return "Other";
+  return "Not selected";
+}
 function getOpsInquiryCurrentTask(item) {
   const state = getOpsNormalizedCustomerState(item);
   if (["submitted", "under_review", "revision_requested"].includes(state.artwork)) return { stage: "artwork", text: state.artwork === "revision_requested" ? "Review requested artwork changes" : "Review uploaded artwork" };
@@ -2338,8 +2744,9 @@ function getOpsInquiryCurrentTask(item) {
   if (canOpsPrepareProof(item) && hasOpsFinalProof(item)) return { stage: "artwork", text: "Send approved design" };
   if (state.artwork === "approval_required") return { stage: "artwork", text: "Waiting for customer artwork approval" };
   if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment receipt" };
+  if (canOpsRequestPayment(item) && ["pay_at_shop", "payment_pending_at_shop"].includes(state.payment)) return { stage: "payment", text: "Confirm shop payment" };
   if (canOpsRequestPayment(item)) return { stage: "payment", text: "Request payment" };
-  if (state.payment === "confirmed" && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
+  if (isOpsPaymentConfirmed(state.payment) && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
   if (canEditOpsCustomerTracking(item)) return { stage: "fulfillment", text: "Update customer tracking" };
   return { stage: "inquiry", text: item.next || "Review inquiry" };
 }
@@ -2349,7 +2756,7 @@ function getOpsInquiryStages(item) {
   const state = getOpsNormalizedCustomerState(item);
   const quoteComplete = ["ready", "approved"].includes(state.quote) || Boolean(item.quotePublishedAt);
   const artworkComplete = state.artwork === "approved";
-  const paymentComplete = state.payment === "confirmed";
+  const paymentComplete = isOpsPaymentConfirmed(state.payment);
   const productionActive = ["printing", "embroidery", "screen_printing", "qc", "ready", "in_production", "qc_finishing", "ready_for_fulfillment", "completed"].includes(state.production) || state.status === "won";
   const fulfillmentActive = canEditOpsCustomerTracking(item) || ["ready_for_pickup", "out_for_delivery", "delivered", "completed"].includes(item.trackingSubstatus);
   const stageState = (key, complete, unlocked) => {
@@ -2592,6 +2999,13 @@ const opsCustomerActionLabels = {
     proof_submitted: "Receipt Received",
     under_review: "Receipt Under Review",
     confirmed: "Payment Confirmed",
+    paid: "Fully Paid",
+    full_payment_confirmed: "Full Payment Confirmed",
+    down_payment_confirmed: "Down Payment Confirmed",
+    partially_paid: "Partially Paid",
+    pay_at_shop: "Pay at Shop",
+    payment_pending_at_shop: "Pending at Shop",
+    correction_required: "Correction Required",
   },
 };
 
@@ -2695,25 +3109,60 @@ function renderOpsPaymentStage(item) {
   const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
   body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
 
-  if (status === "confirmed") {
-    body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
+  if (isOpsPaymentConfirmed(status)) {
+    body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
   } else if (!canOpsRequestPayment(item)) {
     body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
-  } else if (status === "required") {
+  } else if (["pay_at_shop", "payment_pending_at_shop"].includes(status)) {
+    body += `<div class="ops-stage-mini-grid"><div><span>Selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Customer status</span><strong>PAY AT SHOP</strong></div><div><span>Amount to collect</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div></div><p class="ops-stage-muted"><strong>SHOP PAYMENT PENDING</strong>Confirm only after staff receives payment at the shop.</p><div class="ops-customer-action-form compact"><label><span>Cash amount received</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? item.amountDue ?? "")}" /></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM CASH PAYMENT", action: "confirm_cash_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
+  } else if (["required", "correction_required"].includes(status)) {
     body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>PAYMENT REQUESTED</strong></div></div><p class="ops-stage-muted"><strong>${item.paymentRejectedAt ? "NEW RECEIPT NEEDED" : "PAYMENT REQUESTED"}</strong>Awaiting receipt.</p>`;
   } else if (["proof_submitted", "under_review"].includes(status)) {
     const receipt = item.paymentProofPath ? renderOpsAssetButton({ label: isReceiptLoading ? "LOADING..." : receiptUnavailable ? "TRY AGAIN" : "REVIEW RECEIPT", asset: "payment-proof", id: item.id, disabled: isReceiptLoading }) : `<span class="ops-customer-empty">No receipt uploaded.</span>`;
     const receiptPreview = receiptOpened ? `<figure class="ops-payment-receipt-preview"><img alt="Uploaded payment receipt for ${escapeHtml(item.id)}" src="${escapeHtml(request.signedUrl)}" /><figcaption>Receipt opened for ${escapeHtml(item.id)}</figcaption></figure>` : "";
     const receiptError = receiptUnavailable ? `<p class="ops-customer-action-message error">RECEIPT UNAVAILABLE</p>` : "";
-    body += `<div class="ops-stage-mini-grid"><div><span>Inquiry reference</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>RECEIPT RECEIVED</strong></div><div><span>Uploaded</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div><div><span>Receipt file</span><strong>${escapeHtml(item.paymentProofPath || "-")}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Reason for new receipt</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div>${receiptPreview}${receiptError}<div class="ops-stage-actions">${receipt}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}${renderOpsActionButton({ label: "REQUEST NEW RECEIPT", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading })}</div>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Inquiry reference</span><strong>${escapeHtml(item.id)}</strong></div><div><span>Selected amount</span><strong>${formatOpsValue(item.paymentSelectedAmount ?? item.amountDue)}</strong></div><div><span>Payment type</span><strong>${escapeHtml(getOpsPaymentTypeLabel(item.paymentType))}</strong></div><div><span>Reference</span><strong>${escapeHtml(item.paymentReference || "-")}</strong></div><div><span>Customer note</span><strong>${escapeHtml(item.paymentCustomerNote || "-")}</strong></div><div><span>Uploaded</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentProofSubmittedAt))}</strong></div><div><span>Receipt file</span><strong>${escapeHtml(item.paymentReceiptFilename || item.paymentProofPath || "-")}</strong></div></div><div class="ops-customer-action-form compact"><label><span>Confirmed amount</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.paymentSelectedAmount ?? item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /></label><label class="wide"><span>Reason for new receipt</span><textarea data-ops-customer-field="paymentReviewNote" rows="2">${escapeHtml(item.paymentReviewNote || "")}</textarea></label></div>${receiptPreview}${receiptError}<div class="ops-stage-actions">${receipt}${renderOpsActionButton({ label: "CONFIRM PAYMENT", action: "confirm_payment", id: item.id, primary: true, disabled: isLoading || !item.paymentProofPath })}${renderOpsActionButton({ label: "REQUEST NEW RECEIPT", action: "request_new_payment_proof", id: item.id, tone: "danger", disabled: isLoading })}</div>`;
   } else {
-    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "proof_submitted", "under_review", "confirmed"].includes(status) })}</div>`;
+    body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div></div><div class="ops-customer-action-form compact"><input data-ops-customer-field="confirmedAmount" type="hidden" value="${escapeHtml(item.paymentSelectedAmount ?? item.paymentConfirmedAmount ?? item.amountDue ?? "")}" /><label class="wide"><span>Payment instructions</span><textarea data-ops-customer-field="paymentInstructions" rows="2">${escapeHtml(item.paymentInstructions || "")}</textarea></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "REQUEST PAYMENT", action: "require_payment", id: item.id, primary: true, disabled: isLoading || ["required", "correction_required", "proof_submitted", "under_review", "pay_at_shop", "payment_pending_at_shop", "confirmed", "paid", "full_payment_confirmed", "down_payment_confirmed", "partially_paid"].includes(status) })}</div>`;
   }
 
   if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW RECEIPT NEEDED</strong>${escapeHtml(item.paymentReviewNote || "Replacement receipt requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
 
-  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && status !== "confirmed", body });
+  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && !isOpsPaymentConfirmed(status), body });
 }
+
+function renderMvpPaymentConfirmation(item) {
+  const request = mvpPaymentConfirmationRequests[item.id] || {};
+  const status = String(item.paymentStatus || "").trim().toLowerCase();
+  const paid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount ?? 0) || 0;
+  const total = Number(item.quotedAmount || item.amountDue || 0) || 0;
+  const balance = Math.max(Math.round((total - paid) * 100) / 100, 0);
+  const isLoading = request.status === "loading";
+  const isPaid = ["paid", "confirmed", "full_payment_confirmed"].includes(status) && balance <= 0;
+  const isShop = ["pay_at_shop", "payment_pending_at_shop"].includes(status) || String(item.paymentType || "").toLowerCase() === "shop";
+  const isOnline = ["proof_submitted", "under_review", "required", "correction_required"].includes(status) || String(item.paymentMethod || "").toLowerCase() === "online";
+
+  if (isPaid) {
+    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">PAYMENT CONFIRMED. ${escapeHtml(formatOpsValue(paid))} recorded${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}.</p></section>`;
+  }
+
+  if (!isShop && !isOnline) {
+    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">Payment method has not been selected by the customer.</p></section>`;
+  }
+
+  const title = isShop ? "CONFIRM PAYMENT RECEIVED" : "REVIEW & CONFIRM ONLINE PAYMENT";
+  const warning = isShop
+    ? "Confirm only after staff receives payment at the shop."
+    : "Review the Messenger receipt before confirming. This does not use in-app receipt upload.";
+  const message = request.status === "error"
+    ? `<p class="mvp-payment-message error" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation failed.")}</p>`
+    : request.status === "success"
+      ? `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation saved.")}</p>`
+      : `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(warning)}</p>`;
+
+  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number</span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label></div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
+}
+
 function renderOpsProductionStage(item) {
   const current = getOpsInquiryCurrentTask(item).stage === "production";
   if (item.status === "sent") {
@@ -2858,7 +3307,7 @@ function setOpsCustomerActionInlineMessage(sourceElement, message, status = "err
 function getOpsActionLoadingLabel(action) {
   if (action === "publish_quote") return "SENDING...";
   if (action === "require_payment") return "REQUESTING...";
-  if (action === "confirm_payment") return "CONFIRMING...";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING...";
   if (action === "request_new_payment_proof") return "REQUESTING...";
   return "SAVING...";
 }
@@ -2866,7 +3315,7 @@ function getOpsActionLoadingLabel(action) {
 function getOpsActionSavingMessage(action) {
   if (action === "publish_quote") return "SENDING QUOTE...";
   if (action === "require_payment") return "REQUESTING PAYMENT...";
-  if (action === "confirm_payment") return "CONFIRMING PAYMENT...";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING PAYMENT...";
   if (action === "request_new_payment_proof") return "REQUESTING NEW RECEIPT...";
   return "SAVING CUSTOMER ACTION...";
 }
@@ -2875,7 +3324,7 @@ function getOpsActionSuccessMessage(action) {
   if (action === "save_quote_draft") return "QUOTE DRAFT SAVED.";
   if (action === "publish_quote") return "QUOTE PUBLISHED FOR CUSTOMER.";
   if (action === "require_payment") return "PAYMENT REQUESTED.";
-  if (action === "confirm_payment") return "PAYMENT CONFIRMED.";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "PAYMENT CONFIRMED.";
   if (action === "request_new_payment_proof") return "NEW RECEIPT NEEDED.";
   return "CUSTOMER ACTION SAVED.";
 }
@@ -3193,11 +3642,14 @@ function todayIsoDate() {
 }
 function renderOpsOdooAction(item) {
   if (opsSoDraft?.id === item.id) {
-    const value = opsSoDraft.value ?? "";
     const isSaving = opsSoSavingId === item.id;
-    return `<div class="ops-so-editor"><span>Customer confirmed? Enter the Odoo SO number</span><input class="ops-so-input" data-ops-so-input="${item.id}" value="${escapeHtml(value)}" placeholder="e.g. SO-2216" ${isSaving ? "disabled" : ""} /><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${value.trim() && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : "Confirm Odoo SO & Create Order"}</button><button class="ops-light-button mini" data-ops-cancel-so type="button" ${isSaving ? "disabled" : ""}>Cancel</button></div></div>`;
+    return `<div class="ops-so-editor ops-order-confirm-card"><strong>CREATE CONFIRMED ORDER?</strong><p>This approved inquiry will be added to Orders.</p><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>${isSaving ? "CREATING..." : "CONFIRM &amp; CREATE ORDER"}</button><button class="ops-light-button mini" data-ops-cancel-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>CANCEL</button></div></div>`;
   }
-  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">Confirm Odoo SO &amp; Create Order</button>`;
+  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">CREATE ORDER</button>`;
+}
+
+function createConfirmedOrderReference(item) {
+  return String(item.odooSO || item.orderCode || item.orderReference || item.reference || item.id || "").trim();
 }
 
 function renderOpsProductionCard(item) {
@@ -3317,8 +3769,8 @@ function normalizeOpsDate(value) {
 
 async function confirmOpsSO(id) {
   if (opsSoSavingId) return;
-  const so = (opsSoDraft?.value || "").trim();
   const current = opsInquiries.find((item) => item.id === id);
+  const so = current ? createConfirmedOrderReference(current) : "";
   if (!so || !current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
   opsSoSavingId = id;
 
@@ -3360,6 +3812,46 @@ async function requestOpsWorkflowAction(inquiryId, body) {
   if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Workflow update failed.");
   return payload;
 }
+
+async function requestMvpPaymentConfirmation(inquiryId, body) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/payment-confirmations`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Payment confirmation failed.");
+  return payload;
+}
+
+async function confirmMvpOrderPayment(inquiryId, form) {
+  if (!inquiryId || mvpPaymentConfirmationRequests[inquiryId]?.status === "loading") return;
+  const amountReceived = Number(String(form.amountReceived || "").replace(/,/g, ""));
+  if (!Number.isFinite(amountReceived) || amountReceived <= 0) {
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "error", message: "Enter a positive amount received." } };
+    return;
+  }
+
+  mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "loading", message: "Saving payment confirmation..." } };
+  render();
+
+  try {
+    const payload = await requestMvpPaymentConfirmation(inquiryId, {
+      ...form,
+      amountReceived,
+      idempotencyKey: `admin-payment-${inquiryId}-${amountReceived}-${Date.now()}`,
+    });
+    if (!payload?.inquiry) throw new Error("Payment confirmation returned no saved order.");
+    opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...payload.inquiry } : item);
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "success", message: "Payment confirmation saved." } };
+  } catch (error) {
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "error", message: error.message || "Payment confirmation failed." } };
+  }
+}
+
 function getAssignmentUserById(userId) {
   return assignmentUsers.find((user) => user.userId === userId) || null;
 }
@@ -5197,7 +5689,8 @@ function renderSidebar(currentRoute) {
     { label: "Products", path: "/products" },
     { label: "Production", path: "/production", icon: "factory" },
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
-  ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
+    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
     { label: "Catalog", path: "/catalog" },
     ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
     { label: "Settings", path: "/settings" },
@@ -5209,7 +5702,7 @@ function renderSidebar(currentRoute) {
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
         ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>`).join("")}
-        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("calendar-check", "nav-icon")}<span class="nav-label">Calendar<small>Phase 2</small></span></span><span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
+        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -5304,8 +5797,9 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
-  ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
-  ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
+    ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
+    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
   return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
 }
@@ -5651,6 +6145,12 @@ function handleAccountEscape(event) {
 }
 function bindWorkboardEvents() {
   document.querySelector("[data-workboard-create]")?.addEventListener("click", openWorkboardCreate);
+  document.querySelector("[data-auto-plan-submit]")?.addEventListener("click", submitAutoPlanToday);
+  document.querySelector("[data-auto-plan-drafts]")?.addEventListener("click", openAutoPlanDraftView);
+  document.getElementById("auto-plan-quick-direction")?.addEventListener("input", (event) => {
+    autoPlanQuickDirection = event.target.value;
+    autoPlanError = "";
+  });
   document.querySelectorAll("[data-workboard-open]").forEach((button) => button.addEventListener("click", () => openWorkboardTask(button.dataset.workboardOpen)));
   document.querySelectorAll("[data-workboard-close]").forEach((button) => button.addEventListener("click", closeWorkboardDrawer));
   document.querySelectorAll("[data-workboard-edit-draft]").forEach((button) => button.addEventListener("click", () => openWorkboardEditDraft(button.dataset.workboardEditDraft)));
@@ -5686,6 +6186,7 @@ function bindWorkboardEvents() {
     saveWorkboardDraft();
   });
   document.querySelectorAll("[data-workboard-assign]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardAssign, "assign")));
+  document.querySelectorAll("[data-workboard-approve-assign]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveAssign, "approve-and-assign")));
   document.querySelectorAll("[data-workboard-approve-draft]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveDraft, "approve-draft")));
   document.querySelectorAll("[data-workboard-request-revision]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardRequestRevision, "request-revision")));
   document.querySelectorAll("[data-workboard-approve-work]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveWork, "approve-work")));
@@ -5774,6 +6275,56 @@ function bindMyTasksEvents() {
   document.getElementById("task-no-time-reason")?.addEventListener("input", (event) => {
     taskNoTimeReason = event.target.value;
     taskCommandError = "";
+  });
+}
+
+function bindCalendarEvents() {
+  document.querySelector("[data-calendar-prev]")?.addEventListener("click", () => shiftCalendarMonth(-1));
+  document.querySelector("[data-calendar-next]")?.addEventListener("click", () => shiftCalendarMonth(1));
+  document.querySelector("[data-calendar-today]")?.addEventListener("click", () => {
+    calendarSelectedDate = getManilaTodayKey();
+    calendarVisibleMonth = getMonthKey(calendarSelectedDate);
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.querySelectorAll("[data-calendar-date]").forEach((button) => {
+    button.addEventListener("click", () => {
+      calendarSelectedDate = button.dataset.calendarDate;
+      calendarSelectedTask = null;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-calendar-event]").forEach((button) => {
+    button.addEventListener("click", () => {
+      calendarSelectedTask = calendarEvents.find((event) => event.key === button.dataset.calendarEvent) || null;
+      render();
+    });
+  });
+  document.querySelectorAll("[data-calendar-close]").forEach((button) => button.addEventListener("click", () => {
+    calendarSelectedTask = null;
+    render();
+  }));
+  document.getElementById("calendar-assignee-filter")?.addEventListener("change", (event) => {
+    calendarAssigneeFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.getElementById("calendar-source-filter")?.addEventListener("change", (event) => {
+    calendarSourceFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.getElementById("calendar-status-filter")?.addEventListener("change", (event) => {
+    calendarStatusFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.querySelector("[data-calendar-clear]")?.addEventListener("click", () => {
+    calendarAssigneeFilter = "";
+    calendarSourceFilter = "";
+    calendarStatusFilter = "";
+    calendarSelectedTask = null;
+    loadTaskCalendar();
   });
 }
 function bindEvents() {
@@ -5890,15 +6441,18 @@ function bindEvents() {
     navigate: navigateTo,
     copy: copyToClipboard,
     saveProduction: saveMvpProductionFields,
+    confirmPayment: confirmMvpOrderPayment,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,
     handleInquiryFollowUpOutcome: handleMvpInquiryFollowUpOutcome,
   });
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
+  document.body.classList.toggle("my-task-drawer-open", Boolean(document.querySelector(".my-task-drawer")));
   bindOpsBoardEvents();
   bindOrderDashboardEvents();
   bindWorkboardEvents();
   bindMyTasksEvents();
+  bindCalendarEvents();
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCatalogKey = button.dataset.catalogTab;
@@ -6457,17 +7011,10 @@ function bindOpsBoardEvents() {
   });
   document.querySelectorAll("[data-ops-add-so]").forEach((button) => {
     button.addEventListener("click", () => {
-      opsSoDraft = { id: button.dataset.opsAddSo, value: "" };
+      if (button.disabled || opsSoSavingId) return;
+      opsSoDraft = { id: button.dataset.opsAddSo };
       render();
-      document.querySelector(`[data-ops-so-input="${button.dataset.opsAddSo}"]`)?.focus();
-    });
-  });
-
-  document.querySelectorAll("[data-ops-so-input]").forEach((input) => {
-    input.addEventListener("input", (event) => {
-      opsSoDraft = { id: input.dataset.opsSoInput, value: event.target.value };
-      render();
-      const soField = document.querySelector(`[data-ops-so-input="${input.dataset.opsSoInput}"]`); if (soField) { soField.focus(); soField.setSelectionRange?.(soField.value.length, soField.value.length); }
+      document.querySelector(`[data-ops-confirm-so="${button.dataset.opsAddSo}"]`)?.focus();
     });
   });
 
@@ -6481,9 +7028,12 @@ function bindOpsBoardEvents() {
     });
   });
 
-  document.querySelector("[data-ops-cancel-so]")?.addEventListener("click", () => {
-    opsSoDraft = null;
-    render();
+  document.querySelectorAll("[data-ops-cancel-so]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (opsSoSavingId) return;
+      opsSoDraft = null;
+      render();
+    });
   });
 }
 async function copyToClipboard(value) {

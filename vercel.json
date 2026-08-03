@@ -4,6 +4,22 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/my-tasks",
+      "destination": "/api/task-views"
+    },
+    {
+      "source": "/api/task-calendar",
+      "destination": "/api/task-views"
+    },
+    {
+      "source": "/api/planning/auto-plan-today",
+      "destination": "/api/task-automation"
+    },
+    {
+      "source": "/api/integrations/n8n/task-drafts",
+      "destination": "/api/task-automation"
+    },
+    {
       "source": "/api/tasks/:id/history",
       "destination": "/api/tasks/:id?_taskAction=history"
     },

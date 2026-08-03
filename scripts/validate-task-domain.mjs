@@ -57,11 +57,11 @@ const testPaths = {
 };
 const concurrencyHarnessPath = join(root, "scripts", "verify-task-concurrency.mjs");
 const n8nApiPath = join(root, "api", "_lib", "n8nTaskIngestion.js");
-const n8nRoutePath = join(root, "api", "integrations", "n8n", "task-drafts.js");
+const n8nRoutePath = join(root, "api", "task-automation.js");
 const n8nApiTestPath = join(root, "scripts", "test-n8n-ingestion-api.mjs");
 const n8nDbVerifierPath = join(root, "scripts", "verify-n8n-ingestion-db.mjs");
 const autoPlanApiPath = join(root, "api", "_lib", "autoPlanToday.js");
-const autoPlanRoutePath = join(root, "api", "planning", "auto-plan-today.js");
+const autoPlanRoutePath = join(root, "api", "task-automation.js");
 const autoPlanUiTestPath = join(root, "scripts", "test-auto-plan-ui.mjs");
 const autoPlanApiTestPath = join(root, "scripts", "test-auto-plan-api.mjs");
 const autoPlanBrowserTestPath = join(root, "scripts", "test-auto-plan-browser.mjs");
