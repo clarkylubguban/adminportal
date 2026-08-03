@@ -206,13 +206,15 @@ begin
     v_none_id, (v_none ->> 'version')::bigint, 'no-time-approve-none'
   );
   perform set_config('request.jwt.claim.sub', v_staff_a::text, true);
-  begin
-    perform public.task_start_work(
-      v_none_id, (v_result ->> 'version')::bigint, 'no-time-invalid-start-none'
-    );
-    raise exception 'NONE task allowed Start Work';
-  exception when sqlstate '55000' then null;
-  end;
+  v_result := public.task_start_work(
+    v_none_id, (v_result ->> 'version')::bigint, 'no-time-start-none'
+  );
+  if v_result ->> 'status' <> 'IN_PROGRESS' then
+    raise exception 'NONE Start Work did not reach IN_PROGRESS';
+  end if;
+  if exists (select 1 from public.task_time_entries where task_id = v_none_id) then
+    raise exception 'NONE Start Work created a timer';
+  end if;
   v_result := public.task_submit_for_review(
     v_none_id, (v_result ->> 'version')::bigint,
     'Synthetic no-tracking submission.', null, 'no-time-submit-none'
@@ -234,13 +236,15 @@ begin
     'Synthetic no-tracking revision.', 'no-time-revise-none'
   );
   perform set_config('request.jwt.claim.sub', v_staff_a::text, true);
-  begin
-    perform public.task_start_revision(
-      v_none_id, (v_result ->> 'version')::bigint, 'no-time-invalid-revision-start'
-    );
-    raise exception 'NONE task allowed Start Revision';
-  exception when sqlstate '55000' then null;
-  end;
+  v_result := public.task_start_revision(
+    v_none_id, (v_result ->> 'version')::bigint, 'no-time-start-none-revision'
+  );
+  if v_result ->> 'status' <> 'IN_PROGRESS' then
+    raise exception 'NONE Start Revision did not reach IN_PROGRESS';
+  end if;
+  if exists (select 1 from public.task_time_entries where task_id = v_none_id) then
+    raise exception 'NONE Start Revision created a timer';
+  end if;
   v_result := public.task_submit_for_review(
     v_none_id, (v_result ->> 'version')::bigint,
     'Synthetic no-tracking revision complete.', null, 'no-time-submit-none-revision'

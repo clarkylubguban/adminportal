@@ -170,13 +170,14 @@ export function calculateAllowedActions(task, actor, openTimeEntry = null) {
   if (task.status === "TO_DO" && assignee && task.timeTrackingMode === "EXPECTED") {
     actions.push("START_WORK", "SUBMIT_WITHOUT_RECORDED_TIME");
   }
-  if (task.status === "TO_DO" && assignee && task.timeTrackingMode === "NONE") actions.push("SUBMIT_FOR_REVIEW");
+  if (task.status === "TO_DO" && assignee && task.timeTrackingMode === "NONE") actions.push("START_WORK", "SUBMIT_FOR_REVIEW");
   if (task.status === "IN_PROGRESS" && assignee && task.timeTrackingMode === "EXPECTED" && openTimeEntry?.userId === actor.userId) actions.push("SUBMIT_FOR_REVIEW");
+  if (task.status === "IN_PROGRESS" && assignee && task.timeTrackingMode === "NONE" && !openTimeEntry) actions.push("SUBMIT_FOR_REVIEW");
   if (task.status === "FOR_REVIEW" && (owner || (admin && reviewer))) actions.push("REQUEST_REVISION", "APPROVE_WORK");
   if (task.status === "NEEDS_REVISION" && assignee && task.timeTrackingMode === "EXPECTED") {
     actions.push("START_REVISION", "SUBMIT_WITHOUT_RECORDED_TIME");
   }
-  if (task.status === "NEEDS_REVISION" && assignee && task.timeTrackingMode === "NONE") actions.push("SUBMIT_FOR_REVIEW");
+  if (task.status === "NEEDS_REVISION" && assignee && task.timeTrackingMode === "NONE") actions.push("START_REVISION", "SUBMIT_FOR_REVIEW");
   if (["DRAFT", "TO_DO", "IN_PROGRESS", "NEEDS_REVISION"].includes(task.status) && (owner || adminOwnManual)) actions.push("CANCEL");
   if (owner && TERMINAL_STATUSES.has(task.status)) actions.push("REOPEN");
   if (TERMINAL_STATUSES.has(task.status) && !task.archivedAt && !openTimeEntry && (owner || adminOwnManual)) actions.push("ARCHIVE");

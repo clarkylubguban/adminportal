@@ -466,6 +466,10 @@ test("allowed actions reflect status, assignment, reviewer, and manager scope", 
     ["START_WORK", "SUBMIT_WITHOUT_RECORDED_TIME"],
   );
   assert.deepEqual(
+    calculateAllowedActions({ ...base, status: "TO_DO", sourceType: "MANUAL", timeTrackingMode: "NONE" }, ACTORS.staff),
+    ["START_WORK", "SUBMIT_FOR_REVIEW"],
+  );
+  assert.deepEqual(
     calculateAllowedActions({ ...base, status: "FOR_REVIEW" }, ACTORS.admin),
     ["REQUEST_REVISION", "APPROVE_WORK"],
   );
@@ -522,12 +526,22 @@ test("forgot-to-start API rejects non-assignees and unknown fields", async () =>
   assert.equal(unknown.status, 400);
 });
 
-test("NONE mode submits directly without timer actions or fabricated duration", async () => {
+test("NONE mode starts without timer and submits without fabricated duration", async () => {
   const domain = new MemoryDomain();
   const todo = domain.seedTask({ status: "TO_DO", assignedUserId: IDS.staff, timeTrackingMode: "NONE" });
-  const startDenied = await action(handleStartWork, ACTORS.staff, domain, todo.id, "start", todo.version);
-  assert.notEqual(startDenied.status, 200);
-  const submitted = await action(handleSubmit, ACTORS.staff, domain, todo.id, "submit", todo.version, {
+  const initialVersion = todo.version;
+  const started = await action(handleStartWork, ACTORS.staff, domain, todo.id, "start", initialVersion, undefined, "none-start");
+  assertOk(started);
+  assert.equal(started.body.task.status, "IN_PROGRESS");
+  assert.equal(domain.timeEntries.filter((entry) => entry.taskId === todo.id).length, 0);
+  assert.equal(domain.events.filter((event) => event.taskId === todo.id && event.eventType === "STARTED").length, 1);
+
+  const replay = await action(handleStartWork, ACTORS.staff, domain, todo.id, "start", initialVersion, undefined, "none-start");
+  assertOk(replay);
+  assert.equal(replay.body.replayed, true);
+  assert.equal(domain.events.filter((event) => event.taskId === todo.id && event.eventType === "STARTED").length, 1);
+
+  const submitted = await action(handleSubmit, ACTORS.staff, domain, todo.id, "submit", started.body.task.version, {
     submissionNote: "Synthetic checklist complete.",
   }, "none-submit");
   assertOk(submitted);
@@ -536,7 +550,11 @@ test("NONE mode submits directly without timer actions or fabricated duration", 
   assert.equal(domain.timeEntries.filter((entry) => entry.taskId === todo.id).length, 0);
 
   const revision = domain.seedTask({ status: "NEEDS_REVISION", assignedUserId: IDS.staff, timeTrackingMode: "NONE" });
-  const revisionSubmitted = await action(handleSubmit, ACTORS.staff, domain, revision.id, "submit", revision.version, {
+  const revisionStarted = await action(handleStartRevision, ACTORS.staff, domain, revision.id, "start-revision", revision.version, undefined, "none-revision-start");
+  assertOk(revisionStarted);
+  assert.equal(revisionStarted.body.task.status, "IN_PROGRESS");
+  assert.equal(domain.timeEntries.filter((entry) => entry.taskId === revision.id).length, 0);
+  const revisionSubmitted = await action(handleSubmit, ACTORS.staff, domain, revision.id, "submit", revisionStarted.body.task.version, {
     submissionNote: "Synthetic revision complete.",
   }, "none-revision-submit");
   assertOk(revisionSubmitted);
@@ -875,16 +893,19 @@ class MemoryDomain {
       return this.record(task, "DRAFT_APPROVED", actor);
     }
     if (command === "task_start_work") {
-      if (task.status !== "TO_DO" || task.timeTrackingMode !== "EXPECTED" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may start expected-time task");
+      if (task.status !== "TO_DO" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may start task");
+      if (!["EXPECTED", "NONE"].includes(task.timeTrackingMode)) throw dbError("55000", "invalid time tracking mode");
       task.status = "IN_PROGRESS";
-      this.timeEntries.push({
-        id: IDS.entry,
-        taskId: task.id,
-        userId: actor.userId,
-        cycleNumber: this.submissions.filter((row) => row.taskId === task.id).length + 1,
-        startedAt: new Date().toISOString(),
-        endedAt: null,
-      });
+      if (task.timeTrackingMode === "EXPECTED") {
+        this.timeEntries.push({
+          id: IDS.entry,
+          taskId: task.id,
+          userId: actor.userId,
+          cycleNumber: this.submissions.filter((row) => row.taskId === task.id).length + 1,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+        });
+      }
       return this.record(task, "STARTED", actor);
     }
     if (command === "task_submit_for_review") {
@@ -898,7 +919,7 @@ class MemoryDomain {
         cycleNumber = entry.cycleNumber;
         timeRecordingStatus = "RECORDED";
       } else {
-        if (!["TO_DO", "NEEDS_REVISION"].includes(task.status) || entry) throw dbError("55000", "invalid no-time task state");
+        if (!["TO_DO", "IN_PROGRESS", "NEEDS_REVISION"].includes(task.status) || entry) throw dbError("55000", "invalid no-time task state");
         cycleNumber = nextCycle(this, task.id);
         timeRecordingStatus = "NOT_REQUIRED";
       }
@@ -941,16 +962,19 @@ class MemoryDomain {
       return this.record(task, "REVISION_REQUESTED", actor);
     }
     if (command === "task_start_revision") {
-      if (task.status !== "NEEDS_REVISION" || task.timeTrackingMode !== "EXPECTED" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may revise expected-time task");
+      if (task.status !== "NEEDS_REVISION" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may revise task");
+      if (!["EXPECTED", "NONE"].includes(task.timeTrackingMode)) throw dbError("55000", "invalid time tracking mode");
       task.status = "IN_PROGRESS";
-      this.timeEntries.push({
-        id: `20000000-0000-4000-8000-${String(this.timeEntries.length + 1).padStart(12, "0")}`,
-        taskId: task.id,
-        userId: actor.userId,
-        cycleNumber: this.submissions.filter((row) => row.taskId === task.id).length + 1,
-        startedAt: new Date().toISOString(),
-        endedAt: null,
-      });
+      if (task.timeTrackingMode === "EXPECTED") {
+        this.timeEntries.push({
+          id: `20000000-0000-4000-8000-${String(this.timeEntries.length + 1).padStart(12, "0")}`,
+          taskId: task.id,
+          userId: actor.userId,
+          cycleNumber: this.submissions.filter((row) => row.taskId === task.id).length + 1,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+        });
+      }
       return this.record(task, "REVISION_STARTED", actor);
     }
     if (command === "task_approve_work") {

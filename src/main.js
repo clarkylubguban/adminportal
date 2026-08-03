@@ -2145,7 +2145,7 @@ function applyTaskCommandResponse(response) {
     history: response.history || selectedTaskDetail?.history || [],
   };
   myTasks = sortMyTasks(upsertTaskRecord(myTasks, response.task));
-  workboardTasks = sortMyTasks(upsertTaskRecord(workboardTasks, response.task));
+  workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, response.task));
   taskFallbackOpen = false;
   taskSubmissionNote = "";
   taskProofUrl = "";
@@ -2163,7 +2163,7 @@ async function refreshTaskAfterConflict(taskId) {
     const detail = await getTaskDetail(taskId, adminAuthSession);
     selectedTaskDetail = detail;
     myTasks = sortMyTasks(upsertTaskRecord(myTasks, detail.task));
-    workboardTasks = sortMyTasks(upsertTaskRecord(workboardTasks, detail.task));
+    workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, detail.task));
   } catch {
     await loadMyTasks({ silent: true });
   }

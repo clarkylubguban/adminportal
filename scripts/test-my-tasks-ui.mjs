@@ -18,9 +18,11 @@ for (const required of [
   "NO WORK TIME RECORDED",
   "SUBMIT WITHOUT RECORDED TIME",
   "START WORK NOW",
+  "START REVISION",
   "TIME NOT RECORDED",
   "TIME NOT REQUIRED",
   "task.timeTrackingMode === \"NONE\"",
+  "VITE_ENABLE_WORKBOARD",
   "validateTaskSubmit(\"submit-no-time\")",
   "createIdempotencyKey",
   "expectedVersion",
@@ -51,5 +53,6 @@ assert.ok(localDev.includes("VITE_ENABLE_TASK_DOMAIN"));
 assert.ok(localDev.includes("VITE_ENABLE_MY_TASKS"));
 assert.ok(build.includes("VITE_ENABLE_TASK_DOMAIN"));
 assert.ok(build.includes("VITE_ENABLE_MY_TASKS"));
+assert.ok(build.includes("VITE_ENABLE_WORKBOARD"));
 
 process.stdout.write("PASS My Tasks frontend gate, route, action, fallback, and local router contracts\n");

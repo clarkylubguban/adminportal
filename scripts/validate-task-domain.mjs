@@ -33,6 +33,12 @@ const phase83Path = join(
   "migrations",
   "20260803033131_phase_8_3_n8n_foundation.sql",
 );
+const phase85Path = join(
+  root,
+  "supabase",
+  "migrations",
+  "202608030002_enable_none_task_start.sql",
+);
 const testsRoot = join(root, "supabase", "tests");
 const testPaths = {
   foundation: join(testsRoot, "task_domain_foundation.sql"),
@@ -55,6 +61,7 @@ const [
   alignment,
   phase82,
   phase83,
+  phase85,
   foundationTest,
   schemaTest,
   lifecycleTest,
@@ -73,6 +80,7 @@ const [
     readFile(alignmentPath, "utf8"),
     readFile(phase82Path, "utf8"),
     readFile(phase83Path, "utf8"),
+    readFile(phase85Path, "utf8"),
     readFile(testPaths.foundation, "utf8"),
     readFile(testPaths.schema, "utf8"),
     readFile(testPaths.lifecycle, "utf8"),
@@ -200,6 +208,14 @@ for (const command of commands) {
   );
 }
 
+for (const command of ["task_start_work", "task_start_revision", "task_submit_for_review"]) {
+  requireText(
+    phase85,
+    `create or replace function public.${command}(`,
+    `phase 8.5 override for ${command}`,
+  );
+}
+
 requireText(functions, "for update", "transactional row locking");
 requireText(functions, "task version conflict", "optimistic concurrency");
 requireText(functions, "task_idempotency_replay", "idempotent command replay");
@@ -213,6 +229,9 @@ requireText(functions, "'replayed', p_replayed", "explicit command replay respon
 requireText(functions, "pg_advisory_xact_lock", "cross-command idempotency serialization");
 requireText(functions, "clock_timestamp()", "server timestamps");
 requireText(functions, "task_write_event", "audit event writes");
+requireText(phase85, "v_task.time_tracking_mode = 'NONE'", "NONE timer-free start branch");
+requireText(phase85, "v_task.status not in ('TO_DO', 'IN_PROGRESS', 'NEEDS_REVISION')", "NONE submit from started state");
+requireText(phase85, "'timeTrackingMode', v_task.time_tracking_mode", "NONE start audit trace");
 requireText(phase82, "assigned_user_id = p_assigned_user_id", "approve-and-assign assignment write");
 requireText(phase82, "status = 'TO_DO'", "approve-and-assign activation");
 requireText(apiTest, "admin activated a daily content draft", "AI/daily admin activation denial");
@@ -276,7 +295,8 @@ requireText(concurrencyTest, "SIMULTANEOUS REVIEWER DECISIONS", "review concurre
 requireText(apiTest, "one idempotency key mutated two tasks", "cross-task idempotency test");
 requireText(apiTest, "first command incorrectly reported replay", "explicit replay flag test");
 requireText(noTimeTest, "direct TO_DO fallback contract failed", "direct no-time fallback test");
-requireText(noTimeTest, "NONE task allowed Start Work", "NONE mode Start Work denial");
+requireText(noTimeTest, "NONE Start Work did not reach IN_PROGRESS", "NONE mode Start Work transition");
+requireText(noTimeTest, "NONE Start Work created a timer", "NONE mode timer-free Start Work");
 requireText(noTimeTest, "fallback replay duplicated submission or event", "no-time replay test");
 requireText(concurrencyHarness, "runRace", "actual two-session race harness");
 requireText(
