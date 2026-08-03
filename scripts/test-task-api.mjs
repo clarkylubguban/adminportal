@@ -3,6 +3,7 @@ import { authenticateTaskRequest, mapTaskError } from "../api/_lib/taskApi.js";
 import { calculateAllowedActions, projectEvent, projectTask } from "../api/_lib/taskProjection.js";
 import {
   handleApproveDraft,
+  handleApproveAndAssign,
   handleApproveWork,
   handleArchive,
   handleAssign,
@@ -236,6 +237,106 @@ test("admin and staff mutation boundaries remain separated", async () => {
   assertOk(adminApproved);
 });
 
+test("approve-and-assign atomically activates permitted drafts", async () => {
+  const domain = new MemoryDomain();
+  const manual = domain.seedTask({
+    sourceType: "PRODUCTION",
+    assignedUserId: null,
+    reviewerUserId: null,
+    draftApprovalRequired: false,
+  });
+  const initialVersion = manual.version;
+  const approved = await invoke(handleApproveAndAssign, ACTORS.admin, domain.service(ACTORS.admin), {
+    method: "POST",
+    url: `/api/tasks/${manual.id}/approve-and-assign`,
+    query: { id: manual.id },
+    headers: { "idempotency-key": "approve-assign-production" },
+    body: {
+      expectedVersion: initialVersion,
+      assignedUserId: IDS.staff,
+      reviewerUserId: IDS.admin,
+      submissionDeadline: "2026-07-26T08:00:00Z",
+    },
+  });
+  assertOk(approved);
+  assert.equal(approved.body.task.status, "TO_DO");
+  assert.equal(approved.body.task.assignedUserId, IDS.staff);
+  assert.equal(approved.body.task.reviewerUserId, IDS.admin);
+  assert.equal(domain.events.filter((event) => event.eventType === "DRAFT_APPROVED").length, 1);
+  assert.equal(domain.events.filter((event) => event.eventType === "ASSIGNED").length, 0);
+
+  const replay = await invoke(handleApproveAndAssign, ACTORS.admin, domain.service(ACTORS.admin), {
+    method: "POST",
+    url: `/api/tasks/${manual.id}/approve-and-assign`,
+    query: { id: manual.id },
+    headers: { "idempotency-key": "approve-assign-production" },
+    body: {
+      expectedVersion: initialVersion,
+      assignedUserId: IDS.staff,
+      reviewerUserId: IDS.admin,
+      submissionDeadline: "2026-07-26T08:00:00Z",
+    },
+  });
+  assertOk(replay);
+  assert.equal(replay.body.replayed, true);
+  assert.equal(domain.events.filter((event) => event.eventType === "DRAFT_APPROVED").length, 1);
+});
+
+test("approve-and-assign denies staff, stale versions, missing reviewer, and AI activation by admin", async () => {
+  const domain = new MemoryDomain();
+  const aiDraft = domain.seedTask({
+    sourceType: "DAILY_CONTENT",
+    assignedUserId: null,
+    reviewerUserId: null,
+    draftApprovalRequired: true,
+  });
+  const adminDenied = await invoke(handleApproveAndAssign, ACTORS.admin, domain.service(ACTORS.admin), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-ai-admin" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.admin },
+  });
+  assert.equal(adminDenied.status, 403);
+
+  const staffDenied = await invoke(handleApproveAndAssign, ACTORS.staff, domain.service(ACTORS.staff), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-ai-staff" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.admin },
+  });
+  assert.equal(staffDenied.status, 403);
+
+  const missingReviewer = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-missing-reviewer" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff },
+  });
+  assert.equal(missingReviewer.status, 400);
+
+  const stale = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-stale" },
+    body: { expectedVersion: aiDraft.version + 1, assignedUserId: IDS.staff, reviewerUserId: IDS.owner },
+  });
+  assert.equal(stale.body.error.code, "VERSION_CONFLICT");
+
+  const ownerApproved = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-ai-owner" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.owner },
+  });
+  assertOk(ownerApproved);
+  assert.equal(ownerApproved.body.task.status, "TO_DO");
+});
+
 test("time correction is owner-only and preserves open/closed shape", async () => {
   const domain = new MemoryDomain();
   const task = domain.seedTask({ status: "DONE", assignedUserId: IDS.staff });
@@ -357,7 +458,7 @@ test("allowed actions reflect status, assignment, reviewer, and manager scope", 
   };
   assert.deepEqual(
     calculateAllowedActions(base, ACTORS.owner),
-    ["EDIT_DRAFT", "ASSIGN", "APPROVE_DRAFT", "CANCEL"],
+    ["EDIT_DRAFT", "ASSIGN", "APPROVE_DRAFT", "APPROVE_AND_ASSIGN", "CANCEL"],
   );
   assert.deepEqual(calculateAllowedActions(base, ACTORS.admin), ["ASSIGN"]);
   assert.deepEqual(
@@ -758,6 +859,21 @@ class MemoryDomain {
       task.status = "TO_DO";
       return this.record(task, "DRAFT_APPROVED", actor);
     }
+    if (command === "task_approve_and_assign") {
+      const adminAllowed = actor.role === "admin"
+        && ["MANUAL", "PRODUCTION", "SHOP_TASK"].includes(task.sourceType)
+        && !task.draftApprovalRequired;
+      if (task.status !== "DRAFT" || !(actor.role === "owner" || adminAllowed)) throw dbError("42501", "approval forbidden");
+      if (!this.isEligibleAssignee(args.p_assigned_user_id)) throw dbError("42501", "target user cannot be assigned");
+      if (!this.isEligibleReviewer(args.p_reviewer_user_id)) throw dbError("42501", "reviewer cannot approve");
+      task.assignedUserId = args.p_assigned_user_id;
+      task.reviewerUserId = args.p_reviewer_user_id;
+      task.startDeadline = args.p_start_deadline || task.startDeadline;
+      task.submissionDeadline = args.p_submission_deadline || task.submissionDeadline;
+      task.approvalDeadline = args.p_approval_deadline || task.approvalDeadline;
+      task.status = "TO_DO";
+      return this.record(task, "DRAFT_APPROVED", actor);
+    }
     if (command === "task_start_work") {
       if (task.status !== "TO_DO" || task.timeTrackingMode !== "EXPECTED" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may start expected-time task");
       task.status = "IN_PROGRESS";
@@ -901,6 +1017,14 @@ class MemoryDomain {
       error.currentVersion = task.version;
       throw error;
     }
+  }
+
+  isEligibleAssignee(userId) {
+    return [IDS.staff, IDS.admin, IDS.owner].includes(userId);
+  }
+
+  isEligibleReviewer(userId) {
+    return [IDS.admin, IDS.owner].includes(userId);
   }
 
   record(task, eventType, actor) {

@@ -1,6 +1,7 @@
 import { runTaskApi, TaskApiError } from "./taskApi.js";
 import {
   parseApproveBody,
+  parseApproveAndAssignBody,
   parseAssignBody,
   parseCreateTask,
   parseDraftUpdate,
@@ -123,6 +124,19 @@ export function handleAssign(request, response, dependencies = {}) {
 
 export function handleApproveDraft(request, response, dependencies = {}) {
   return versionOnlyCommand(request, response, dependencies, "task_approve_draft");
+}
+
+export function handleApproveAndAssign(request, response, dependencies = {}) {
+  return command(request, response, dependencies, "task_approve_and_assign", parseApproveAndAssignBody, (taskId, body, key) => ({
+    p_task_id: taskId,
+    p_expected_version: body.expectedVersion,
+    p_assigned_user_id: body.assignedUserId,
+    p_reviewer_user_id: body.reviewerUserId,
+    p_start_deadline: body.startDeadline,
+    p_submission_deadline: body.submissionDeadline,
+    p_approval_deadline: body.approvalDeadline,
+    p_idempotency_key: key,
+  }));
 }
 
 export function handleStartWork(request, response, dependencies = {}) {

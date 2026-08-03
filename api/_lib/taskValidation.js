@@ -244,6 +244,24 @@ export function parseAssignBody(body) {
   return { ...parsed, assignedUserId: optionalUuid(body.assignedUserId, "assignedUserId") };
 }
 
+export function parseApproveAndAssignBody(body) {
+  const parsed = parseExpectedVersionBody(body, [
+    "assignedUserId",
+    "reviewerUserId",
+    "startDeadline",
+    "submissionDeadline",
+    "approvalDeadline",
+  ]);
+  return {
+    ...parsed,
+    assignedUserId: requireUuid(body.assignedUserId, "assignedUserId"),
+    reviewerUserId: requireUuid(body.reviewerUserId, "reviewerUserId"),
+    startDeadline: optionalTimestamp(body.startDeadline, "startDeadline"),
+    submissionDeadline: optionalTimestamp(body.submissionDeadline, "submissionDeadline"),
+    approvalDeadline: optionalTimestamp(body.approvalDeadline, "approvalDeadline"),
+  };
+}
+
 export function parseSubmitBody(body) {
   const parsed = parseExpectedVersionBody(body, ["submissionNote", "proofUrl"]);
   return {

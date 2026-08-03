@@ -18,6 +18,7 @@ const catchAllRoutes = [
   ["PATCH", `/api/tasks/${TASK_ID}/draft`],
   ["POST", `/api/tasks/${TASK_ID}/assign`],
   ["POST", `/api/tasks/${TASK_ID}/approve-draft`],
+  ["POST", `/api/tasks/${TASK_ID}/approve-and-assign`],
   ["POST", `/api/tasks/${TASK_ID}/start`],
   ["POST", `/api/tasks/${TASK_ID}/submit`],
   ["POST", `/api/tasks/${TASK_ID}/submit-without-time`],
@@ -48,6 +49,7 @@ for (const [method, url] of catchAllRoutes) {
 const rewriteRoutes = [
   ["GET", `/api/tasks/${TASK_ID}?_taskAction=history`],
   ["POST", `/api/tasks/${TASK_ID}?_taskAction=start`],
+  ["POST", `/api/tasks/${TASK_ID}?_taskAction=approve-and-assign`],
   ["POST", `/api/tasks/${TASK_ID}?_taskAction=time-entry-correct&entryId=${ENTRY_ID}`],
 ];
 

@@ -86,7 +86,7 @@ const adminRows = [
   `('${admin}','race-admin@invalid.example','admin','Synthetic Race Admin',true,false)`,
   ...staff.map(
     (id, index) =>
-      `('${id}','race-staff-${index}@invalid.example','staff','Synthetic Race Staff ${index}',true,${index === 0 ? "true" : "false"})`,
+      `('${id}','race-staff-${index}@invalid.example','staff','Synthetic Race Staff ${index}',true,false)`,
   ),
 ].join(",");
 const taskRows = [

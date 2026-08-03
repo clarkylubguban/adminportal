@@ -21,6 +21,12 @@ const alignmentPath = join(
   "migrations",
   "202608010001_align_task_foundation_phase_8_1.sql",
 );
+const phase82Path = join(
+  root,
+  "supabase",
+  "migrations",
+  "202608030001_add_task_approve_and_assign.sql",
+);
 const testsRoot = join(root, "supabase", "tests");
 const testPaths = {
   foundation: join(testsRoot, "task_domain_foundation.sql"),
@@ -37,6 +43,7 @@ const [
   schema,
   functions,
   alignment,
+  phase82,
   foundationTest,
   schemaTest,
   lifecycleTest,
@@ -49,6 +56,7 @@ const [
     readFile(schemaPath, "utf8"),
     readFile(functionsPath, "utf8"),
     readFile(alignmentPath, "utf8"),
+    readFile(phase82Path, "utf8"),
     readFile(testPaths.foundation, "utf8"),
     readFile(testPaths.schema, "utf8"),
     readFile(testPaths.lifecycle, "utf8"),
@@ -146,6 +154,7 @@ const commands = [
   "task_update_draft",
   "task_assign",
   "task_approve_draft",
+  "task_approve_and_assign",
   "task_start_work",
   "task_submit_for_review",
   "task_submit_without_time",
@@ -160,12 +169,12 @@ const commands = [
 
 for (const command of commands) {
   requireText(
-    functions,
+    `${functions}\n${phase82}`,
     `create or replace function public.${command}(`,
     `command ${command}`,
   );
   requireText(
-    functions,
+    `${functions}\n${phase82}`,
     `grant execute on function public.${command}(`,
     `authenticated grant for ${command}`,
   );
@@ -184,6 +193,9 @@ requireText(functions, "'replayed', p_replayed", "explicit command replay respon
 requireText(functions, "pg_advisory_xact_lock", "cross-command idempotency serialization");
 requireText(functions, "clock_timestamp()", "server timestamps");
 requireText(functions, "task_write_event", "audit event writes");
+requireText(phase82, "assigned_user_id = p_assigned_user_id", "approve-and-assign assignment write");
+requireText(phase82, "status = 'TO_DO'", "approve-and-assign activation");
+requireText(apiTest, "admin activated a daily content draft", "AI/daily admin activation denial");
 requireText(
   functions,
   "correction cannot open or close a timer",

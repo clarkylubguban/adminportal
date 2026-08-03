@@ -145,6 +145,10 @@ export function calculateAllowedActions(task, actor, openTimeEntry = null) {
     && task.reviewerUserId
     && (owner || (admin && task.sourceType === "MANUAL" && !task.draftApprovalRequired))
   ) actions.push("APPROVE_DRAFT");
+  if (
+    task.status === "DRAFT"
+    && (owner || (admin && ["MANUAL", "PRODUCTION", "SHOP_TASK"].includes(task.sourceType) && !task.draftApprovalRequired))
+  ) actions.push("APPROVE_AND_ASSIGN");
   if (task.status === "TO_DO" && assignee && task.timeTrackingMode === "EXPECTED") {
     actions.push("START_WORK", "SUBMIT_WITHOUT_RECORDED_TIME");
   }
