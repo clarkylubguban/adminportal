@@ -67,17 +67,17 @@ begin
   v_version := (v_a ->> 'version')::bigint;
   v_a := public.task_update_draft(
     v_task_a, v_version, 'Synthetic RLS task A updated', 'Disposable updated.',
-    'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a'
+    'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a', 'EXPECTED', null, null
   );
   v_version := (v_a ->> 'version')::bigint;
   perform public.task_update_draft(
     v_task_a, v_version - 1, 'Synthetic RLS task A updated', 'Disposable updated.',
-    'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a'
+    'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a', 'EXPECTED', null, null
   );
   begin
     perform public.task_update_draft(
       v_task_a, v_version - 1, 'Conflicting draft title', 'Disposable updated.',
-      'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a'
+      'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a', 'EXPECTED', null, null
     );
     raise exception 'conflicting draft update replay was accepted';
   exception when unique_violation then null;

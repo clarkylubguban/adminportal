@@ -40,6 +40,10 @@
       "destination": "/api/tasks/:id?_taskAction=approve-draft"
     },
     {
+      "source": "/api/tasks/:id/approve-and-assign",
+      "destination": "/api/tasks/:id?_taskAction=approve-and-assign"
+    },
+    {
       "source": "/api/tasks/:id/start",
       "destination": "/api/tasks/:id?_taskAction=start"
     },

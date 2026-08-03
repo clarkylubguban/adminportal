@@ -118,6 +118,18 @@ export function mapTaskError(error) {
     }
     return new TaskApiError("INVALID_TRANSITION", 409, "Task state does not permit this action.");
   }
+  if (code === "22023" && message.includes("draft activation missing required fields:")) {
+    const fields = message.split("draft activation missing required fields:")[1]
+      .split(",")
+      .map((field) => field.trim())
+      .filter(Boolean);
+    return new TaskApiError(
+      "VALIDATION_ERROR",
+      400,
+      `Complete required planning fields before activation: ${fields.join(", ")}.`,
+      { missingFields: fields },
+    );
+  }
   if (["22023", "23514", "23P01"].includes(code)) {
     return new TaskApiError("VALIDATION_ERROR", 400, "Task request is invalid.");
   }

@@ -152,8 +152,15 @@ export function parseDraftUpdate(body, currentTask) {
   assertAllowedKeys(body, new Set([
     "expectedVersion", "title", "brief", "priority", "assignedUserId", "reviewerUserId",
     "draftApprovalRequired", "scheduledDate", "startDeadline", "submissionDeadline", "approvalDeadline",
-    "timeTrackingMode",
+    "timeTrackingMode", "sourceRecordType", "sourceRecordId",
   ]));
+  const sourceRecordType = body.sourceRecordType === undefined
+    ? currentTask.sourceRecordType
+    : optionalText(body.sourceRecordType, "sourceRecordType", 64);
+  const sourceRecordId = body.sourceRecordId === undefined
+    ? currentTask.sourceRecordId
+    : optionalText(body.sourceRecordId, "sourceRecordId", 200);
+  validateSourcePair(sourceRecordType, sourceRecordId);
   const merged = {
     title: body.title ?? currentTask.title,
     brief: body.brief ?? currentTask.brief,
@@ -173,6 +180,8 @@ export function parseDraftUpdate(body, currentTask) {
     brief: requireText(merged.brief, "brief", 10000),
     priority: enumValue(merged.priority, "priority", TASK_PRIORITIES),
     timeTrackingMode: enumValue(merged.timeTrackingMode, "timeTrackingMode", TASK_TIME_TRACKING_MODES),
+    sourceRecordType,
+    sourceRecordId,
     assignedUserId: optionalUuid(merged.assignedUserId, "assignedUserId"),
     reviewerUserId: optionalUuid(merged.reviewerUserId, "reviewerUserId"),
     draftApprovalRequired: booleanValue(merged.draftApprovalRequired, "draftApprovalRequired"),

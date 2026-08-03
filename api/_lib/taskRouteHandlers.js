@@ -117,17 +117,27 @@ export function handleUpdateDraft(request, response, dependencies = {}) {
       p_approval_deadline: body.approvalDeadline,
       p_idempotency_key: requireIdempotencyKey(request),
       p_time_tracking_mode: body.timeTrackingMode,
+      p_source_record_type: body.sourceRecordType,
+      p_source_record_id: body.sourceRecordId,
     }, taskId);
   }, "PATCH"), dependencies);
 }
 
 export function handleAssign(request, response, dependencies = {}) {
-  return command(request, response, dependencies, "task_assign", parseAssignBody, (taskId, body, key) => ({
-    p_task_id: taskId,
-    p_expected_version: body.expectedVersion,
-    p_assigned_user_id: body.assignedUserId,
-    p_idempotency_key: key,
-  }));
+  return runTaskApi(request, response, mutationConfig(async ({ service, readBody }) => {
+    const taskId = taskIdFromRequest(request);
+    const body = parseAssignBody(await readBody(request));
+    const current = await service.getTask(taskId);
+    if (current.task.status === "DRAFT") {
+      throw new TaskApiError("INVALID_TRANSITION", 409, "Draft tasks must be approved and assigned in one action.");
+    }
+    return service.execute("task_assign", {
+      p_task_id: taskId,
+      p_expected_version: body.expectedVersion,
+      p_assigned_user_id: body.assignedUserId,
+      p_idempotency_key: requireIdempotencyKey(request),
+    }, taskId);
+  }), dependencies);
 }
 
 export function handleApproveDraft(request, response, dependencies = {}) {

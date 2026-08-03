@@ -37,7 +37,7 @@ const tasks = new Map([
   task("task-long", "WB-DR-011", "[DRY RUN] Long title containment validation for embroidered campaign photography, detailed proofing, post copy, and upload handoff", "TO_DO", { brief: "Synthetic long brief: keep all copy contained inside the drawer and cards without horizontal overflow. This does not contain customer, payment, artwork, or private staff data.", priority: "URGENT", deadlineHours: -26 }),
   task("task-other-staff", "WB-DR-012", "[DRY RUN] Staff B private task", "TO_DO", { assignedUserId: staffB }),
   task("task-draft", "WB-DR-013", "[DRY RUN] Draft hidden from staff", "DRAFT"),
-  task("task-ai-draft-owner", "WB-DR-014", "[DRY RUN] AI campaign draft needs Owner approval", "DRAFT", { sourceType: "AI_MARKETING", assignedUserId: null, reviewerUserId: null, automationTrace: true }),
+  task("task-ai-draft-owner", "WB-DR-014", "[DRY RUN] AI campaign draft needs Owner approval", "DRAFT", { sourceType: "AI_MARKETING", assignedUserId: null, reviewerUserId: null, scheduledDate: null, submissionDeadline: null, automationTrace: true }),
   task("task-ai-draft-admin", "WB-DR-015", "[DRY RUN] Daily content draft cannot be activated by Admin", "DRAFT", { sourceType: "DAILY_CONTENT", assignedUserId: null, reviewerUserId: null, automationTrace: true }),
 ]);
 
@@ -97,11 +97,61 @@ try {
   await click(cdp, desktop, "[data-workboard-close]");
 
   await setSelect(cdp, desktop, "#workboard-status-filter", "draft");
+  await waitForText(cdp, desktop, "Draft hidden from staff");
+  await clickWorkboardTask(cdp, desktop, "Draft hidden from staff");
+  await waitForText(cdp, desktop, "APPROVE AND ASSIGN");
+  await click(cdp, desktop, "[data-workboard-edit-draft]");
+  await waitForText(cdp, desktop, "SAVE DRAFT");
+  await setSelect(cdp, desktop, "#workboard-assigned", staffB);
+  await setSelect(cdp, desktop, "#workboard-reviewer", owner);
+  await click(cdp, desktop, '[data-workboard-draft-form] button[type="submit"]');
+  await waitForText(cdp, desktop, "APPROVE AND ASSIGN");
+  await click(cdp, desktop, '[data-workboard-approve-assign]');
+  await waitForText(cdp, desktop, "TO DO");
+  assert.equal(tasks.get("task-draft").assignedUserId, staffB, "approve-and-assign preserves selected assignee after edit");
+  assert.equal(tasks.get("task-draft").reviewerUserId, owner, "edit-form approve-and-assign preserves selected reviewer");
+  await click(cdp, desktop, "[data-workboard-close]");
+
   await waitForText(cdp, desktop, "AI campaign draft needs Owner approval");
   await clickWorkboardTask(cdp, desktop, "AI campaign draft needs Owner approval");
   await waitForText(cdp, desktop, "AI-GENERATED DRAFT");
   await waitForText(cdp, desktop, "Owner approval activates it");
-  await waitForText(cdp, desktop, "Suggested: Marketing staff suggestion");
+  await waitForText(cdp, desktop, "PLANNING CHECK");
+  await waitForText(cdp, desktop, "Missing required: assignee, reviewer, submission deadline");
+  await waitForText(cdp, desktop, "REQUIRED PLANNING FIELDS");
+  await waitForText(cdp, desktop, "OPTIONAL PLANNING FIELDS");
+  await waitForText(cdp, desktop, "SCHEDULED DATE OPTIONAL");
+  await waitForText(cdp, desktop, "Marketing staff suggestion (Synthetic automation metadata) / SUGGESTION ONLY");
+  await waitForText(cdp, desktop, "Use EDIT DRAFT to complete required planning fields before activation.");
+  await assertEval(cdp, desktop, `document.querySelector('[data-workboard-assign]') === null`, "draft hides standalone assign action");
+  await assertEval(cdp, desktop, `document.querySelector('[data-workboard-approve-assign]')?.disabled === true`, "incomplete AI draft disables approve-and-assign");
+  await waitForText(cdp, desktop, "Complete required planning fields before activation: submission deadline.");
+  await setSelect(cdp, desktop, "#workboard-assign-user", staffA);
+  await setSelect(cdp, desktop, "#workboard-assign-reviewer", owner);
+  await assertEval(cdp, desktop, `document.querySelector('[data-workboard-approve-assign]')?.disabled === true`, "missing deadline keeps approve-and-assign disabled after selecting users");
+  await waitForText(cdp, desktop, "Complete required planning fields before activation: submission deadline.");
+  assert.equal(tasks.get("task-ai-draft-owner").assignedUserId, null, "missing deadline leaves AI draft unassigned");
+  await click(cdp, desktop, "[data-workboard-edit-draft]");
+  await waitForText(cdp, desktop, "SAVE DRAFT");
+  await assertEval(cdp, desktop, `document.querySelector("#workboard-source-type")?.disabled === true`, "source type immutable during edit");
+  await assertEval(cdp, desktop, `document.querySelector("#workboard-assigned")?.disabled === true`, "AI draft assignment disabled during edit");
+  await setSelect(cdp, desktop, "#workboard-priority", "HIGH");
+  await setSelect(cdp, desktop, "#workboard-time-mode", "NONE");
+  await setValue(cdp, desktop, "#workboard-title", "[DRY RUN] AI campaign draft needs Owner approval updated");
+  await setValue(cdp, desktop, "#workboard-brief", "Synthetic AI draft updated through Edit Draft with complete canonical planning fields.");
+  await setValue(cdp, desktop, "#workboard-scheduled", "2026-07-27");
+  await setValue(cdp, desktop, "#workboard-start-deadline", "2026-07-27T09:00");
+  await setValue(cdp, desktop, "#workboard-submission-deadline", "2026-07-27T17:00");
+  await setValue(cdp, desktop, "#workboard-approval-deadline", "2026-07-28T10:00");
+  await setValue(cdp, desktop, "#workboard-source-record-type", "campaign");
+  await setValue(cdp, desktop, "#workboard-source-record-id", "ai-staging-brief");
+  await click(cdp, desktop, '[data-workboard-draft-form] button[type="submit"]');
+  await waitForText(cdp, desktop, "Missing required: assignee, reviewer");
+  assert.equal(tasks.get("task-ai-draft-owner").assignedUserId, null, "Edit Draft keeps AI draft unassigned");
+  assert.equal(tasks.get("task-ai-draft-owner").priority, "HIGH", "Edit Draft persists priority");
+  assert.equal(tasks.get("task-ai-draft-owner").timeTrackingMode, "NONE", "Edit Draft persists time mode");
+  assert.equal(tasks.get("task-ai-draft-owner").sourceType, "AI_MARKETING", "Edit Draft preserves source type");
+  assert.equal(tasks.get("task-ai-draft-owner").sourceRecordType, "campaign", "Edit Draft persists source record type");
   await setSelect(cdp, desktop, "#workboard-assign-user", staffA);
   await setSelect(cdp, desktop, "#workboard-assign-reviewer", owner);
   await click(cdp, desktop, '[data-workboard-approve-assign]');
@@ -191,10 +241,10 @@ function baseTask(id, code, title, status, overrides = {}) {
     assignedUser: users[assignedUserId],
     reviewerUser: users[reviewerUserId],
     draftApprovalRequired: false,
-    scheduledDate: iso(-1),
-    startDeadline: null,
-    submissionDeadline: iso(overrides.deadlineHours ?? 24),
-    approvalDeadline: null,
+    scheduledDate: Object.hasOwn(overrides, "scheduledDate") ? overrides.scheduledDate : iso(-1),
+    startDeadline: Object.hasOwn(overrides, "startDeadline") ? overrides.startDeadline : null,
+    submissionDeadline: Object.hasOwn(overrides, "submissionDeadline") ? overrides.submissionDeadline : iso(overrides.deadlineHours ?? 24),
+    approvalDeadline: Object.hasOwn(overrides, "approvalDeadline") ? overrides.approvalDeadline : null,
     version: 1,
     completedAt: status === "DONE" ? iso(-1) : null,
     cancelledAt: null,
@@ -298,7 +348,25 @@ async function handleApi(request, response, path, url) {
 
 function updateDraft(response, current, body) {
   if (Number(body.expectedVersion) !== current.version) return sendJson(response, 409, { ok: false, error: { code: "VERSION_CONFLICT", message: "Task version is stale." } });
-  Object.assign(current, { title: body.title || current.title, brief: body.brief || current.brief, priority: body.priority || current.priority, assignedUserId: body.assignedUserId || current.assignedUserId, reviewerUserId: body.reviewerUserId || current.reviewerUserId, assignedUser: users[body.assignedUserId || current.assignedUserId], reviewerUser: users[body.reviewerUserId || current.reviewerUserId], timeTrackingMode: body.timeTrackingMode || current.timeTrackingMode });
+  const automationDraft = ["AI_MARKETING", "DAILY_CONTENT"].includes(current.sourceType);
+  const assignedUserId = automationDraft ? null : Object.hasOwn(body, "assignedUserId") ? body.assignedUserId : current.assignedUserId;
+  const reviewerUserId = Object.hasOwn(body, "reviewerUserId") ? body.reviewerUserId : current.reviewerUserId;
+  Object.assign(current, {
+    title: body.title || current.title,
+    brief: body.brief || current.brief,
+    priority: body.priority || current.priority,
+    assignedUserId,
+    reviewerUserId,
+    assignedUser: users[assignedUserId],
+    reviewerUser: users[reviewerUserId],
+    timeTrackingMode: body.timeTrackingMode || current.timeTrackingMode,
+    sourceRecordType: Object.hasOwn(body, "sourceRecordType") ? body.sourceRecordType : current.sourceRecordType,
+    sourceRecordId: Object.hasOwn(body, "sourceRecordId") ? body.sourceRecordId : current.sourceRecordId,
+    scheduledDate: Object.hasOwn(body, "scheduledDate") ? body.scheduledDate : current.scheduledDate,
+    startDeadline: Object.hasOwn(body, "startDeadline") ? body.startDeadline : current.startDeadline,
+    submissionDeadline: Object.hasOwn(body, "submissionDeadline") ? body.submissionDeadline : current.submissionDeadline,
+    approvalDeadline: Object.hasOwn(body, "approvalDeadline") ? body.approvalDeadline : current.approvalDeadline,
+  });
   current.version += 1;
   return sendJson(response, 200, mutation(current));
 }
@@ -310,11 +378,20 @@ function assignExisting(response, current, body) {
 }
 function approveDraft(response, current) { current.status = "TO_DO"; current.version += 1; return sendJson(response, 200, mutation(current)); }
 function approveAndAssign(response, current, body) {
-  if (!body.assignedUserId || !body.reviewerUserId) return sendJson(response, 400, { ok: false, error: { code: "VALIDATION_ERROR", message: "Assignee and reviewer are required." } });
+  const missing = [];
+  if (!current.title) missing.push("title");
+  if (!current.brief) missing.push("brief/instructions");
+  if (!current.priority) missing.push("priority");
+  if (!current.timeTrackingMode) missing.push("time tracking mode");
+  if (!body.assignedUserId) missing.push("assignee");
+  if (!body.reviewerUserId) missing.push("reviewer");
+  if (!(body.submissionDeadline || current.submissionDeadline)) missing.push("submission deadline");
+  if (missing.length) return sendJson(response, 400, { ok: false, error: { code: "VALIDATION_ERROR", message: `Complete required planning fields before activation: ${missing.join(", ")}.`, details: { missingFields: missing } } });
   current.assignedUserId = body.assignedUserId;
   current.assignedUser = users[body.assignedUserId];
   current.reviewerUserId = body.reviewerUserId;
   current.reviewerUser = users[body.reviewerUserId];
+  current.submissionDeadline = body.submissionDeadline || current.submissionDeadline;
   current.status = "TO_DO";
   current.version += 1;
   return sendJson(response, 200, mutation(current));

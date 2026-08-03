@@ -162,7 +162,47 @@ export async function signInAdminWithPassword(email, password) {
   return storeAdminAuthSession(await response.json());
 }
 
+export async function requestAdminPasswordReset(email, redirectTo = getAdminPasswordResetRedirectUrl()) {
+  const config = getSupabaseConfig();
+  const normalizedEmail = String(email || "").trim();
+
+  if (!isSupabaseReady()) {
+    throw new Error("Supabase env is missing or disabled.");
+  }
+  if (!normalizedEmail) {
+    throw new Error("Enter the email address for your admin account.");
+  }
+
+  const url = new URL(`${config.url}/auth/v1/recover`);
+  url.searchParams.set("redirect_to", redirectTo);
+
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      apikey: config.anonKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email: normalizedEmail }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(getPasswordResetRequestError(message, response.status));
+  }
+
+  return { email: normalizedEmail, redirectTo };
+}
+
 export function readInviteSessionFromUrl() {
+  return readAuthSessionFromUrl("invite");
+}
+
+export function readRecoverySessionFromUrl() {
+  return readAuthSessionFromUrl("recovery");
+}
+
+function readAuthSessionFromUrl(expectedType) {
   const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
   const accessToken = params.get("access_token") || "";
   const refreshToken = params.get("refresh_token") || "";
@@ -174,7 +214,7 @@ export function readInviteSessionFromUrl() {
     return { error };
   }
 
-  if (!accessToken || type !== "invite") {
+  if (!accessToken || type !== expectedType) {
     return null;
   }
 
@@ -188,17 +228,25 @@ export function readInviteSessionFromUrl() {
 }
 
 export async function updateAdminInvitePassword(inviteSession, password) {
+  return updateAdminAuthPassword(inviteSession, password, "Invalid or expired invitation link.");
+}
+
+export async function updateAdminRecoveryPassword(recoverySession, password) {
+  return updateAdminAuthPassword(recoverySession, password, "Invalid or expired recovery link.");
+}
+
+async function updateAdminAuthPassword(authSession, password, invalidSessionMessage) {
   const config = getSupabaseConfig();
 
-  if (!inviteSession?.access_token || !isSupabaseReady()) {
-    throw new Error("Invalid or expired invitation link.");
+  if (!authSession?.access_token || !isSupabaseReady()) {
+    throw new Error(invalidSessionMessage);
   }
 
   const response = await fetch(`${config.url}/auth/v1/user`, {
     method: "PUT",
     headers: {
       apikey: config.anonKey,
-      Authorization: `Bearer ${inviteSession.access_token}`,
+      Authorization: `Bearer ${authSession.access_token}`,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -212,6 +260,25 @@ export async function updateAdminInvitePassword(inviteSession, password) {
 
   clearAdminAuthSession();
   return response.json();
+}
+
+export function getAdminPasswordResetRedirectUrl() {
+  const host = String(window.location.hostname || "").toLowerCase();
+  if (host === "adminportal-staging.vercel.app" || host.startsWith("adminportal-staging-")) {
+    return "https://adminportal-staging.vercel.app/reset-password";
+  }
+  return `${window.location.origin}/reset-password`;
+}
+
+function getPasswordResetRequestError(message, status) {
+  const normalized = String(message || "").toLowerCase();
+  if (status === 429 || normalized.includes("rate")) {
+    return "Too many reset requests. Wait a minute and try again.";
+  }
+  if (normalized.includes("redirect")) {
+    return "Password reset redirect is not configured for Admin Staging.";
+  }
+  return "Unable to send password reset email. Check the address and try again.";
 }
 export async function getCurrentAdminAuthSession() {
   const storedSession = readStoredAdminAuthSession();

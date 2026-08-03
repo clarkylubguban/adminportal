@@ -14,6 +14,12 @@ assert.ok(source.includes('return "All day"'), "date-only Calendar fields must r
 assert.ok(source.includes("data-calendar-prev"), "previous month control missing");
 assert.ok(source.includes("data-calendar-next"), "next month control missing");
 assert.ok(source.includes("data-calendar-today"), "Today control missing");
+assert.ok(source.includes("calendar-icon-button"), "compact Calendar icon button missing");
+assert.ok(source.includes("calendar-legend"), "Calendar legend missing");
+assert.ok(source.includes("calendar-auth-required"), "Calendar auth-required state missing");
+assert.ok(source.includes("data-calendar-login-again"), "Calendar login-again action missing");
+assert.ok(source.includes("Tasks without canonical dates"), "Calendar empty canonical-date explanation missing");
+assert.ok(source.includes("shortTaskTitle"), "Calendar task title shortening missing");
 assert.ok(source.includes("calendarAssigneeFilter"), "assignee filter state missing");
 assert.ok(source.includes("calendarSourceFilter"), "source filter state missing");
 assert.ok(source.includes("calendarStatusFilter"), "status filter state missing");
@@ -22,7 +28,15 @@ assert.ok(!source.includes("data-calendar-create"), "Calendar create control mus
 assert.ok(!source.includes("data-calendar-reschedule"), "Calendar reschedule control must not exist");
 assert.ok(service.includes("/api/task-calendar"), "Calendar client service endpoint missing");
 assert.ok(styles.includes(".calendar-grid"), "Calendar grid styles missing");
+assert.ok(styles.includes("grid-template-columns: minmax(0, 1fr)"), "Calendar layout must use a single full-width column");
+assert.ok(styles.includes(".calendar-icon-button svg"), "Calendar navigation SVG dimensions missing");
+assert.ok(styles.includes("max-width: 16px"), "Calendar navigation SVG max width missing");
 assert.ok(styles.includes("@media (max-width: 640px)"), "Calendar mobile styles missing");
+assert.ok(!styles.includes("order: -1"), "Agenda must not be moved above the month grid on mobile");
+assert.ok(source.includes("calendar-agenda-meta"), "Agenda metadata layout missing");
+assert.ok(source.includes("<b>Status</b>"), "Agenda status field missing");
+assert.ok(source.includes("<b>Source</b>"), "Agenda source field missing");
+assert.ok(source.includes("<b>Assignee</b>"), "Agenda assignee field missing");
 
 assert.equal(toManilaDateKey("2028-02-29T15:59:00.000Z"), "2028-02-29", "leap-day Manila placement failed");
 assert.equal(toManilaDateKey("2028-02-29T16:00:00.000Z"), "2028-03-01", "midnight Manila boundary failed");
@@ -50,5 +64,8 @@ assert.equal(projected.events.find((event) => event.projectionType === "REVIEW D
 const done = buildTaskCalendar([{ ...task, status: "DONE", completedAt: "2026-08-01T01:00:00.000Z" }], { from: "2026-08-01", to: "2026-08-01" }, new Date("2026-08-04T00:00:00.000Z"));
 assert.equal(done.events.find((event) => event.projectionType === "COMPLETED").overdue, false, "completion must never be overdue");
 assert.equal(done.events.every((event) => event.overdue === false), true, "DONE projections must not be actively overdue");
+
+const noDates = buildTaskCalendar([{ ...task, scheduledDate: null, submissionDeadline: null, approvalDeadline: null, completedAt: null }], { from: "2026-08-01", to: "2026-08-31" }, new Date("2026-08-04T00:00:00.000Z"));
+assert.equal(noDates.events.length, 0, "tasks without canonical dates must not become fake Calendar events");
 
 process.stdout.write("PASS Calendar UI contracts and Asia/Manila projection rules\n");

@@ -150,6 +150,22 @@ test("strict validation rejects unknown fields, malformed values, and missing co
     body: { expectedVersion: 1, startedAt: "2026-07-25T12:00:00Z", endedAt: "2026-07-25T11:00:00Z", reason: "Synthetic correction." },
   });
   assert.equal(badTime.status, 400);
+
+  const draft = domain.seedTask({ sourceType: "MANUAL", assignedUserId: null, reviewerUserId: null });
+  const sourceEdit = await invoke(handleUpdateDraft, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "PATCH",
+    url: `/api/tasks/${draft.id}/draft`,
+    query: { id: draft.id },
+    headers: { "idempotency-key": "validation-source-record-edit" },
+    body: {
+      expectedVersion: draft.version,
+      sourceRecordType: "campaign",
+      sourceRecordId: "manual-brief-1",
+    },
+  });
+  assertOk(sourceEdit);
+  assert.equal(sourceEdit.body.task.sourceRecordType, "campaign");
+  assert.equal(sourceEdit.body.task.sourceRecordId, "manual-brief-1");
 });
 
 test("full create-to-archive lifecycle executes through route handlers", async () => {
@@ -167,10 +183,11 @@ test("full create-to-archive lifecycle executes through route handlers", async (
   version = resultVersion(await action(handleUpdateDraft, ACTORS.owner, domain, taskId, "draft", version, {
     title: "Synthetic revised task",
   }, "PATCH"));
-  version = resultVersion(await action(handleAssign, ACTORS.owner, domain, taskId, "assign", version, {
+  version = resultVersion(await action(handleApproveAndAssign, ACTORS.owner, domain, taskId, "approve-and-assign", version, {
     assignedUserId: IDS.staff,
+    reviewerUserId: IDS.admin,
+    submissionDeadline: "2026-07-26T08:00:00Z",
   }));
-  version = resultVersion(await action(handleApproveDraft, ACTORS.owner, domain, taskId, "approve-draft", version));
   version = resultVersion(await action(handleStartWork, ACTORS.staff, domain, taskId, "start", version));
   version = resultVersion(await action(handleSubmit, ACTORS.staff, domain, taskId, "submit", version, {
     submissionNote: "Synthetic cycle one.",
@@ -289,22 +306,34 @@ test("approve-and-assign denies staff, stale versions, missing reviewer, and AI 
     assignedUserId: null,
     reviewerUserId: null,
     draftApprovalRequired: true,
+    submissionDeadline: null,
   });
   const adminDenied = await invoke(handleApproveAndAssign, ACTORS.admin, domain.service(ACTORS.admin), {
     method: "POST",
     url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
     query: { id: aiDraft.id },
     headers: { "idempotency-key": "approve-assign-ai-admin" },
-    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.admin },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.admin, submissionDeadline: "2026-07-26T08:00:00Z" },
   });
   assert.equal(adminDenied.status, 403);
+
+  const staleAssign = await invoke(handleAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "assign-ai-draft-stale-client" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff },
+  });
+  assert.equal(staleAssign.status, 409);
+  assert.equal(staleAssign.body.error.code, "INVALID_TRANSITION");
+  assert.equal(aiDraft.status, "DRAFT");
 
   const staffDenied = await invoke(handleApproveAndAssign, ACTORS.staff, domain.service(ACTORS.staff), {
     method: "POST",
     url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
     query: { id: aiDraft.id },
     headers: { "idempotency-key": "approve-assign-ai-staff" },
-    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.admin },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.admin, submissionDeadline: "2026-07-26T08:00:00Z" },
   });
   assert.equal(staffDenied.status, 403);
 
@@ -322,16 +351,32 @@ test("approve-and-assign denies staff, stale versions, missing reviewer, and AI 
     url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
     query: { id: aiDraft.id },
     headers: { "idempotency-key": "approve-assign-stale" },
-    body: { expectedVersion: aiDraft.version + 1, assignedUserId: IDS.staff, reviewerUserId: IDS.owner },
+    body: { expectedVersion: aiDraft.version + 1, assignedUserId: IDS.staff, reviewerUserId: IDS.owner, submissionDeadline: "2026-07-26T08:00:00Z" },
   });
   assert.equal(stale.body.error.code, "VERSION_CONFLICT");
+
+  const missingDeadline = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-ai-missing-deadline" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.owner },
+  });
+  assert.equal(missingDeadline.status, 400);
+  assert.equal(missingDeadline.body.error.code, "VALIDATION_ERROR");
+  assert.match(missingDeadline.body.error.message, /submission deadline/);
+  assert.deepEqual(missingDeadline.body.error.details.missingFields, ["submission deadline"]);
+  assert.equal(aiDraft.status, "DRAFT");
+  assert.equal(aiDraft.assignedUserId, null);
+  assert.equal(aiDraft.reviewerUserId, null);
+  assert.equal(domain.events.filter((event) => event.eventType === "DRAFT_APPROVED").length, 0);
 
   const ownerApproved = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
     method: "POST",
     url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
     query: { id: aiDraft.id },
     headers: { "idempotency-key": "approve-assign-ai-owner" },
-    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.owner },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.owner, submissionDeadline: "2026-07-26T08:00:00Z" },
   });
   assertOk(ownerApproved);
   assert.equal(ownerApproved.body.task.status, "TO_DO");
@@ -458,9 +503,9 @@ test("allowed actions reflect status, assignment, reviewer, and manager scope", 
   };
   assert.deepEqual(
     calculateAllowedActions(base, ACTORS.owner),
-    ["EDIT_DRAFT", "ASSIGN", "APPROVE_DRAFT", "APPROVE_AND_ASSIGN", "CANCEL"],
+    ["EDIT_DRAFT", "APPROVE_DRAFT", "APPROVE_AND_ASSIGN", "CANCEL"],
   );
-  assert.deepEqual(calculateAllowedActions(base, ACTORS.admin), ["ASSIGN"]);
+  assert.deepEqual(calculateAllowedActions(base, ACTORS.admin), []);
   assert.deepEqual(
     calculateAllowedActions({ ...base, status: "TO_DO", sourceType: "MANUAL" }, ACTORS.staff),
     ["START_WORK", "SUBMIT_WITHOUT_RECORDED_TIME"],
@@ -856,6 +901,8 @@ class MemoryDomain {
         brief: args.p_brief,
         priority: args.p_priority,
         timeTrackingMode: args.p_time_tracking_mode || "EXPECTED",
+        sourceRecordType: args.p_source_record_type,
+        sourceRecordId: args.p_source_record_id,
         assignedUserId: args.p_assigned_user_id,
         reviewerUserId: args.p_reviewer_user_id,
         draftApprovalRequired: args.p_draft_approval_required,
@@ -882,12 +929,22 @@ class MemoryDomain {
         && ["MANUAL", "PRODUCTION", "SHOP_TASK"].includes(task.sourceType)
         && !task.draftApprovalRequired;
       if (task.status !== "DRAFT" || !(actor.role === "owner" || adminAllowed)) throw dbError("42501", "approval forbidden");
+      const finalSubmissionDeadline = args.p_submission_deadline || task.submissionDeadline;
+      const missing = [];
+      if (!String(task.title || "").trim()) missing.push("title");
+      if (!String(task.brief || "").trim()) missing.push("brief/instructions");
+      if (!["LOW", "MEDIUM", "HIGH", "URGENT"].includes(task.priority)) missing.push("priority");
+      if (!["EXPECTED", "NONE"].includes(task.timeTrackingMode)) missing.push("time tracking mode");
+      if (!args.p_assigned_user_id) missing.push("assignee");
+      if (!args.p_reviewer_user_id) missing.push("reviewer");
+      if (!finalSubmissionDeadline) missing.push("submission deadline");
+      if (missing.length) throw dbError("22023", `draft activation missing required fields: ${missing.join(", ")}`);
       if (!this.isEligibleAssignee(args.p_assigned_user_id)) throw dbError("42501", "target user cannot be assigned");
       if (!this.isEligibleReviewer(args.p_reviewer_user_id)) throw dbError("42501", "reviewer cannot approve");
       task.assignedUserId = args.p_assigned_user_id;
       task.reviewerUserId = args.p_reviewer_user_id;
       task.startDeadline = args.p_start_deadline || task.startDeadline;
-      task.submissionDeadline = args.p_submission_deadline || task.submissionDeadline;
+      task.submissionDeadline = finalSubmissionDeadline;
       task.approvalDeadline = args.p_approval_deadline || task.approvalDeadline;
       task.status = "TO_DO";
       return this.record(task, "DRAFT_APPROVED", actor);

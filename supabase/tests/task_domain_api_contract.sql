@@ -14,6 +14,8 @@ declare
   v_production jsonb;
   v_daily jsonb;
   v_approved jsonb;
+  v_planning uuid;
+  v_ingested jsonb;
 begin
   insert into auth.users (
     instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
@@ -148,11 +150,34 @@ begin
   end if;
 
   perform set_config('request.jwt.claim.sub', v_owner::text, true);
-  v_daily := public.task_create(
-    'Synthetic API daily draft', 'Disposable API contract task.', 'DAILY_CONTENT',
-    null, null, 'MEDIUM', null, null, true,
-    null, null, null, null, null, null, 'api-create-daily'
+  insert into public.planning_requests (
+    request_code, requested_by_user_id, quick_direction, maximum_tasks, status, planning_context
+  )
+  values (
+    'PLN-APICONTRACT', v_owner, 'Disposable API contract planning request.', 3, 'REQUESTED', '{}'::jsonb
+  )
+  returning id into v_planning;
+
+  v_ingested := public.task_ingest_n8n_drafts(
+    'n8n-local',
+    'TRRY STAGING - AUTO PLAN TODAY VERIFIER',
+    'api-contract-exec',
+    v_planning,
+    'api-contract-ingest',
+    repeat('c', 64),
+    jsonb_build_array(jsonb_build_object(
+      'externalTaskId', 'api-contract-daily',
+      'sourceType', 'DAILY_CONTENT',
+      'title', 'Synthetic API daily draft',
+      'brief', 'Disposable API contract task.',
+      'priority', 'MEDIUM'
+    ))
   );
+  select public.task_command_result(
+    ((v_ingested -> 'taskIds') ->> 0)::uuid,
+    v_owner,
+    'owner'
+  ) into v_daily;
 
   perform set_config('request.jwt.claim.sub', v_admin::text, true);
   begin
@@ -193,7 +218,7 @@ begin
     v_staff,
     v_owner,
     null,
-    null,
+    clock_timestamp() + interval '1 day',
     null,
     'api-approve-assign-daily-owner'
   );

@@ -156,7 +156,7 @@ export function calculateAllowedActions(task, actor, openTimeEntry = null) {
   const actions = [];
 
   if (task.status === "DRAFT" && (owner || (admin && task.sourceType === "MANUAL"))) actions.push("EDIT_DRAFT");
-  if (manager && ["DRAFT", "TO_DO", "NEEDS_REVISION"].includes(task.status) && !openTimeEntry) actions.push("ASSIGN");
+  if (manager && ["TO_DO", "NEEDS_REVISION"].includes(task.status) && !openTimeEntry) actions.push("ASSIGN");
   if (
     task.status === "DRAFT"
     && task.assignedUserId

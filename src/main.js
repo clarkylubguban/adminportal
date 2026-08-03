@@ -50,11 +50,15 @@ import {
 import {
   getCurrentAdminAuthSession,
   getSupabaseConfig,
+  getAdminPasswordResetRedirectUrl,
   readInviteSessionFromUrl,
+  readRecoverySessionFromUrl,
   isSupabaseReady,
+  requestAdminPasswordReset,
   signInAdminWithPassword,
   signOutAdmin,
   updateAdminInvitePassword,
+  updateAdminRecoveryPassword,
 } from "./lib/supabaseClient.js";
 
 const mvpDashboard = createMvpDashboard({
@@ -64,6 +68,15 @@ const mvpDashboard = createMvpDashboard({
     error: assignmentLoadError,
   }),
 });
+
+const TASK_PRIORITIES = new Set(["LOW", "MEDIUM", "HIGH", "URGENT"]);
+const TASK_TIME_TRACKING_MODES = new Set(["EXPECTED", "NONE"]);
+const TASK_PRIORITY_LABELS = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+  URGENT: "Urgent",
+};
 
 const lucideIcons = {
   "layout-dashboard": '<rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect>',
@@ -456,6 +469,7 @@ let taskNoTimeReason = "";
 let taskFallbackOpen = false;
 let myTasksClock = Date.now();
 let myTasksTickHandle = null;
+let myTasksLastFullTickRender = 0;
 let workboardTasks = [];
 let workboardLoadState = "idle";
 let workboardLoadError = "";
@@ -519,18 +533,33 @@ let adminLoginPassword = "";
 let adminLoginPasswordVisible = false;
 let adminLoginError = "";
 let adminLoginNotice = "";
+let passwordResetEmail = "";
+let passwordResetStatus = "idle";
+let passwordResetError = "";
+let passwordResetNotice = "";
 let adminAuthMessage = "";
 let adminShellMessage = "";
 let passwordSetupDraft = { password: "", confirm: "" };
 let passwordSetupStatus = "idle";
 let passwordSetupError = "";
 let passwordSetupSession = null;
+let passwordSetupMode = "invite";
 let isSidebarCollapsed = getStoredSidebarCollapsed();
 let isMobileSidebarOpen = false;
 
 function render() {
   if (isPasswordSetupRoute()) {
-    renderPasswordSetupScreen();
+    renderPasswordSetupScreen("invite");
+    return;
+  }
+
+  if (isPasswordResetRoute()) {
+    renderPasswordSetupScreen("recovery");
+    return;
+  }
+
+  if (isForgotPasswordRoute()) {
+    renderForgotPasswordScreen();
     return;
   }
 
@@ -683,6 +712,7 @@ function renderAdminLoginScreen() {
           ${adminLoginError ? `<p class="admin-access-error" role="alert">${escapeHtml(adminLoginError)}</p>` : ""}
           <button type="submit" ${isSigningIn ? "disabled" : ""}>${isSigningIn ? "SIGNING IN..." : "SIGN IN"}</button>
         </form>
+        <button class="admin-auth-link" data-forgot-password type="button" ${isSigningIn ? "disabled" : ""}>Forgot Password?</button>
         <p class="admin-login-note">Authorized staff only.</p>
       </section>
     </main>
@@ -693,23 +723,106 @@ function renderAdminLoginScreen() {
 
 function getAdminLoginNotice() {
   if (adminLoginNotice) return adminLoginNotice;
+  if (new URLSearchParams(window.location.search).get("password_reset") === "1") {
+    return "PASSWORD UPDATED. YOU CAN NOW SIGN IN.";
+  }
   return new URLSearchParams(window.location.search).get("password_set") === "1"
     ? "PASSWORD SET. YOU CAN NOW SIGN IN."
     : "";
 }
 
-function renderPasswordSetupScreen() {
+function renderForgotPasswordScreen() {
+  const isSending = passwordResetStatus === "sending";
+  document.getElementById("root").innerHTML = `
+    <main class="admin-access-page">
+      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin password reset request">
+        <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
+        <div class="admin-access-heading">
+          <h1>Reset password</h1>
+          <span>Enter your Admin Staging email address.</span>
+        </div>
+        <form class="admin-access-form" id="admin-forgot-password-form">
+          <label for="admin-reset-email">EMAIL</label>
+          <input id="admin-reset-email" value="${escapeHtml(passwordResetEmail)}" type="email" autocomplete="email" inputmode="email" aria-invalid="${passwordResetError ? "true" : "false"}" ${isSending ? "disabled" : ""} />
+          ${passwordResetNotice ? `<p class="admin-access-success" role="status">${escapeHtml(passwordResetNotice)}</p>` : ""}
+          ${passwordResetError ? `<p class="admin-access-error" role="alert">${escapeHtml(passwordResetError)}</p>` : ""}
+          <button type="submit" ${isSending ? "disabled" : ""}>${isSending ? "SENDING..." : "SEND RESET LINK"}</button>
+        </form>
+        <button class="admin-auth-link" data-back-to-login type="button" ${isSending ? "disabled" : ""}>Back to Login</button>
+        <p class="admin-login-note">Authorized staff only.</p>
+      </section>
+    </main>
+  `;
+
+  bindForgotPasswordEvents();
+}
+
+function bindForgotPasswordEvents() {
+  const email = document.getElementById("admin-reset-email");
+  const form = document.getElementById("admin-forgot-password-form");
+
+  email?.addEventListener("input", (event) => {
+    passwordResetEmail = event.target.value;
+    passwordResetError = "";
+    passwordResetNotice = "";
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitPasswordResetRequest();
+  });
+
+  document.querySelector("[data-back-to-login]")?.addEventListener("click", () => {
+    passwordResetError = "";
+    passwordResetNotice = "";
+    navigateTo("/");
+    render();
+  });
+
+  email?.focus();
+}
+
+async function submitPasswordResetRequest() {
+  const email = passwordResetEmail.trim();
+  if (!email) {
+    passwordResetError = "Enter the email address for your admin account.";
+    render();
+    return;
+  }
+
+  passwordResetStatus = "sending";
+  passwordResetError = "";
+  passwordResetNotice = "";
+  render();
+
+  try {
+    await requestAdminPasswordReset(email, getAdminPasswordResetRedirectUrl());
+    passwordResetStatus = "sent";
+    passwordResetNotice = "RESET LINK REQUESTED. CHECK THE EMAIL INBOX FOR THIS ACCOUNT.";
+  } catch (error) {
+    console.error("Admin password reset request failed.", error);
+    passwordResetStatus = "idle";
+    passwordResetError = error.message || "Unable to send password reset email. Check the address and try again.";
+  }
+  render();
+}
+
+function renderPasswordSetupScreen(mode = "invite") {
+  passwordSetupMode = mode;
   const inviteError = passwordSetupSession?.error || "";
   const isSaving = passwordSetupStatus === "saving";
   const isInvalid = !passwordSetupSession?.access_token || Boolean(inviteError);
-  const message = inviteError || (isInvalid ? "Invitation link is expired or invalid." : "Create your password to activate your staff account.");
+  const isRecovery = mode === "recovery";
+  const invalidMessage = isRecovery ? "Recovery link is expired or invalid." : "Invitation link is expired or invalid.";
+  const activeMessage = isRecovery ? "Choose a new password for your Admin Staging account." : "Create your password to activate your staff account.";
+  const message = inviteError || (isInvalid ? invalidMessage : activeMessage);
 
   document.getElementById("root").innerHTML = `
     <main class="admin-access-page">
-      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin password setup">
+      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin ${isRecovery ? "password reset" : "password setup"}">
         <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
         <div class="admin-access-heading">
-          <h1>Set password</h1>
+          <h1>${isRecovery ? "Set new password" : "Set password"}</h1>
           <span>${escapeHtml(message)}</span>
         </div>
         <form class="admin-access-form" id="admin-password-setup-form">
@@ -718,8 +831,9 @@ function renderPasswordSetupScreen() {
           <label for="admin-confirm-password">CONFIRM PASSWORD</label>
           <input id="admin-confirm-password" value="${escapeHtml(passwordSetupDraft.confirm)}" type="password" autocomplete="new-password" aria-invalid="${passwordSetupError ? "true" : "false"}" ${isInvalid || isSaving ? "disabled" : ""} />
           ${passwordSetupError ? `<p class="admin-access-error" role="alert">${escapeHtml(passwordSetupError)}</p>` : ""}
-          <button type="submit" ${isInvalid || isSaving ? "disabled" : ""}>${isSaving ? "SAVING..." : "SAVE PASSWORD"}</button>
+          <button type="submit" ${isInvalid || isSaving ? "disabled" : ""}>${isSaving ? "SAVING..." : isRecovery ? "SAVE NEW PASSWORD" : "SAVE PASSWORD"}</button>
         </form>
+        ${isInvalid ? `<button class="admin-auth-link" data-back-to-login type="button">Back to Login</button>` : ""}
         <p class="admin-login-note">Authorized staff only.</p>
       </section>
     </main>
@@ -748,6 +862,14 @@ function bindPasswordSetupEvents() {
     await submitPasswordSetup();
   });
 
+  document.querySelector("[data-back-to-login]")?.addEventListener("click", () => {
+    passwordSetupSession = null;
+    passwordSetupDraft = { password: "", confirm: "" };
+    passwordSetupError = "";
+    navigateTo("/");
+    render();
+  });
+
   password?.focus();
 }
 
@@ -762,7 +884,11 @@ async function submitPasswordSetup() {
   render();
 
   try {
-    await updateAdminInvitePassword(passwordSetupSession, passwordSetupDraft.password);
+    if (passwordSetupMode === "recovery") {
+      await updateAdminRecoveryPassword(passwordSetupSession, passwordSetupDraft.password);
+    } else {
+      await updateAdminInvitePassword(passwordSetupSession, passwordSetupDraft.password);
+    }
     passwordSetupDraft = { password: "", confirm: "" };
     passwordSetupStatus = "idle";
     passwordSetupError = "";
@@ -770,13 +896,17 @@ async function submitPasswordSetup() {
     adminAuthSession = null;
     adminUser = null;
     adminAuthStatus = "login";
-    adminLoginNotice = "PASSWORD SET. YOU CAN NOW SIGN IN.";
-    window.history.replaceState({}, "", "/?password_set=1");
+    adminLoginNotice = passwordSetupMode === "recovery"
+      ? "PASSWORD UPDATED. YOU CAN NOW SIGN IN."
+      : "PASSWORD SET. YOU CAN NOW SIGN IN.";
+    window.history.replaceState({}, "", passwordSetupMode === "recovery" ? "/?password_reset=1" : "/?password_set=1");
     render();
   } catch (error) {
-    console.error("Admin invite password setup failed.", error);
+    console.error("Admin password setup failed.", error);
     passwordSetupStatus = "idle";
-    passwordSetupError = error.message || "Unable to set password. Try a new invitation link.";
+    passwordSetupError = error.message || (passwordSetupMode === "recovery"
+      ? "Unable to set password. Try a new recovery link."
+      : "Unable to set password. Try a new invitation link.");
     render();
   }
 }
@@ -832,6 +962,15 @@ function bindAdminLoginEvents() {
     adminLoginPasswordVisible = !adminLoginPasswordVisible;
     render();
     document.getElementById("admin-login-password")?.focus();
+  });
+
+  document.querySelector("[data-forgot-password]")?.addEventListener("click", () => {
+    passwordResetEmail = adminLoginEmail.trim();
+    passwordResetStatus = "idle";
+    passwordResetError = "";
+    passwordResetNotice = "";
+    navigateTo("/forgot-password");
+    render();
   });
 
   form?.addEventListener("submit", async (event) => {
@@ -893,7 +1032,22 @@ async function approveAdminSession(session) {
 async function initializeAdminAuth() {
   if (isPasswordSetupRoute()) {
     passwordSetupSession = readInviteSessionFromUrl();
+    passwordSetupMode = "invite";
     adminAuthStatus = "password-setup";
+    render();
+    return;
+  }
+
+  if (isPasswordResetRoute()) {
+    passwordSetupSession = readRecoverySessionFromUrl();
+    passwordSetupMode = "recovery";
+    adminAuthStatus = "password-reset";
+    render();
+    return;
+  }
+
+  if (isForgotPasswordRoute()) {
+    adminAuthStatus = "forgot-password";
     render();
     return;
   }
@@ -1284,7 +1438,7 @@ function syncMyTasksTimerTick() {
     if (!myTasksTickHandle) {
       myTasksTickHandle = window.setInterval(() => {
         myTasksClock = Date.now();
-        render();
+        renderMyTasksTimerTick();
       }, 1000);
     }
     return;
@@ -1295,6 +1449,37 @@ function syncMyTasksTimerTick() {
 function stopMyTasksTimerTick() {
   if (myTasksTickHandle) window.clearInterval(myTasksTickHandle);
   myTasksTickHandle = null;
+  myTasksLastFullTickRender = 0;
+}
+
+function renderMyTasksTimerTick() {
+  updateMyTasksTimerLabels();
+  if (isTaskSubmitFieldFocused()) return;
+  if (Date.now() - myTasksLastFullTickRender < 5000) return;
+  myTasksLastFullTickRender = Date.now();
+  render();
+}
+
+function updateMyTasksTimerLabels() {
+  const taskMap = new Map(myTasks.map((task) => [task.id, task]));
+  if (selectedTaskDetail?.task?.id) taskMap.set(selectedTaskDetail.task.id, selectedTaskDetail.task);
+  document.querySelectorAll("[data-task-elapsed]").forEach((element) => {
+    const task = taskMap.get(element.dataset.taskElapsed);
+    if (task?.openTimeEntry?.startedAt) {
+      element.textContent = formatElapsed(getRunningElapsedSeconds(task));
+    }
+  });
+}
+
+function isTaskSubmitFieldFocused() {
+  const active = document.activeElement;
+  return isEditableElement(active) && Boolean(active.closest(".my-task-action-area"));
+}
+
+function isEditableElement(element) {
+  if (!element) return false;
+  const tag = String(element.tagName || "").toLowerCase();
+  return ["input", "textarea", "select"].includes(tag) || element.isContentEditable;
 }
 
 function canViewWorkboardRoute() {
@@ -1310,7 +1495,14 @@ function canViewCalendarRoute() {
 }
 
 async function loadTaskCalendar({ silent = false } = {}) {
-  if (!canViewCalendarRoute() || !adminAuthSession?.access_token) return;
+  if (!canViewCalendarRoute()) return;
+  if (!adminAuthSession?.access_token) {
+    calendarLoadState = "auth-required";
+    calendarLoadError = "Authentication required.";
+    calendarEvents = [];
+    render();
+    return;
+  }
   if (!silent) {
     calendarLoadState = "loading";
     calendarLoadError = "";
@@ -1322,7 +1514,7 @@ async function loadTaskCalendar({ silent = false } = {}) {
     calendarLoadState = "ready";
     calendarLoadError = "";
   } catch (error) {
-    calendarLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : "error";
+    calendarLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : error.code === "AUTH_REQUIRED" ? "auth-required" : "error";
     calendarLoadError = getTaskErrorMessage(error);
     calendarEvents = [];
   }
@@ -1399,7 +1591,7 @@ function createEmptyWorkboardDraft(task = null) {
     draftApprovalRequired: task?.draftApprovalRequired === true,
     scheduledDate: task?.scheduledDate || "",
     startDeadline: toLocalDatetimeInput(task?.startDeadline || ""),
-    submissionDeadline: toLocalDatetimeInput(task?.submissionDeadline || defaultDeadline),
+    submissionDeadline: task ? toLocalDatetimeInput(task.submissionDeadline || "") : defaultDeadline,
     approvalDeadline: toLocalDatetimeInput(task?.approvalDeadline || ""),
   };
 }
@@ -1518,8 +1710,8 @@ function renderWorkboardFilters() {
   </div>`;
 }
 
-function renderWorkboardSelect(id, value, options) {
-  return `<select id="${escapeHtml(id)}">${options.map(([optionValue, label]) => `<option value="${escapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`;
+function renderWorkboardSelect(id, value, options, config = {}) {
+  return `<select id="${escapeHtml(id)}" ${config.disabled ? "disabled" : ""}>${options.map(([optionValue, label]) => `<option value="${escapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`;
 }
 
 function renderWorkboardUserSelect(id, value, label) {
@@ -1634,13 +1826,15 @@ function renderWorkboardDrawer() {
 
 function renderWorkboardDraftForm(task) {
   const busy = workboardCommandState === "saving";
+  const isEdit = Boolean(task);
+  const isAutomationDraft = isAutomatedTaskSource(workboardDraftForm.sourceType);
   return `<form class="workboard-form" data-workboard-draft-form>
     <label><span>Title</span><input id="workboard-title" value="${escapeHtml(workboardDraftForm.title)}" maxlength="200" ${busy ? "disabled" : ""} /></label>
-    <label><span>Brief</span><textarea id="workboard-brief" rows="5" ${busy ? "disabled" : ""}>${escapeHtml(workboardDraftForm.brief)}</textarea></label>
+    <label><span>Brief / instructions</span><textarea id="workboard-brief" rows="5" ${busy ? "disabled" : ""}>${escapeHtml(workboardDraftForm.brief)}</textarea></label>
     <div class="workboard-form-grid">
-      <label><span>Source</span>${renderWorkboardSelect("workboard-source-type", workboardDraftForm.sourceType, [["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]])}</label>
+      <label><span>Source</span>${renderWorkboardSelect("workboard-source-type", workboardDraftForm.sourceType, [["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]], { disabled: busy || isEdit })}${isEdit ? `<small class="workboard-field-help">Source type is immutable after draft creation.</small>` : ""}</label>
       <label><span>Priority</span>${renderWorkboardSelect("workboard-priority", workboardDraftForm.priority, [["LOW", "Low"], ["MEDIUM", "Medium"], ["HIGH", "High"], ["URGENT", "Urgent"]])}</label>
-      <label><span>Assigned</span>${renderWorkboardDraftUserSelect("workboard-assigned", workboardDraftForm.assignedUserId, "Unassigned")}</label>
+      <label><span>${isAutomationDraft ? "Assignee selected during approval" : "Assigned"}</span>${renderWorkboardDraftUserSelect("workboard-assigned", isAutomationDraft ? "" : workboardDraftForm.assignedUserId, isAutomationDraft ? "Unassigned until approval" : "Unassigned", { disabled: busy || isAutomationDraft })}</label>
       <label><span>Reviewer</span>${renderWorkboardDraftReviewerSelect("workboard-reviewer", workboardDraftForm.reviewerUserId, "No reviewer")}</label>
       <label><span>Time mode</span>${renderWorkboardSelect("workboard-time-mode", workboardDraftForm.timeTrackingMode, [["EXPECTED", "Expected"], ["NONE", "Time not required"]])}</label>
       <label><span>Scheduled date</span><input id="workboard-scheduled" value="${escapeHtml(workboardDraftForm.scheduledDate)}" type="date" ${busy ? "disabled" : ""} /></label>
@@ -1649,15 +1843,15 @@ function renderWorkboardDraftForm(task) {
       <label><span>Approval deadline</span><input id="workboard-approval-deadline" value="${escapeHtml(workboardDraftForm.approvalDeadline)}" type="datetime-local" ${busy ? "disabled" : ""} /></label>
       <label><span>Source record type</span><input id="workboard-source-record-type" value="${escapeHtml(workboardDraftForm.sourceRecordType)}" maxlength="64" ${busy ? "disabled" : ""} /></label>
       <label><span>Source record id</span><input id="workboard-source-record-id" value="${escapeHtml(workboardDraftForm.sourceRecordId)}" maxlength="200" ${busy ? "disabled" : ""} /></label>
-      <label class="workboard-checkbox"><input id="workboard-draft-approval" type="checkbox" ${workboardDraftForm.draftApprovalRequired ? "checked" : ""} ${busy ? "disabled" : ""} /><span>Owner approval required</span></label>
+      <label class="workboard-checkbox"><input id="workboard-draft-approval" type="checkbox" ${workboardDraftForm.draftApprovalRequired || isAutomationDraft ? "checked" : ""} ${busy || isAutomationDraft ? "disabled" : ""} /><span>Owner approval required</span></label>
     </div>
-    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button>${task?.allowedActions?.includes("APPROVE_AND_ASSIGN") ? `<button data-workboard-approve-assign="${escapeHtml(task.id)}" type="button" ${busy ? "disabled" : ""}>APPROVE AND ASSIGN</button>` : ""}</div>
+    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button></div>
   </form>`;
 }
 
-function renderWorkboardDraftUserSelect(id, value, label) {
+function renderWorkboardDraftUserSelect(id, value, label, config = {}) {
   const users = getEligibleAssignmentUsers(true);
-  return `<select id="${escapeHtml(id)}"><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
+  return `<select id="${escapeHtml(id)}" ${config.disabled ? "disabled" : ""}><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
 }
 
 function renderWorkboardTaskDetail(detail, task) {
@@ -1678,6 +1872,7 @@ function renderWorkboardTaskDetail(detail, task) {
       ${renderTaskFact("Approval", formatTaskDateTime(task.approvalDeadline))}
       ${renderTaskFact("Recorded", formatTaskTimeSummary(task))}
     </section>
+    ${task.status === "DRAFT" ? renderWorkboardPlanningCheck(task) : ""}
     ${latestSubmission ? renderWorkboardLatestSubmission(latestSubmission) : ""}
     ${renderTaskSubmissions(detail.submissions || [])}
     ${renderWorkboardHistory(detail.history || [])}
@@ -1686,12 +1881,51 @@ function renderWorkboardTaskDetail(detail, task) {
 }
 
 function renderWorkboardAutomationNotice(task) {
-  if (!["AI_MARKETING", "DAILY_CONTENT"].includes(task.sourceType)) return "";
+  if (!isAutomatedTaskSource(task.sourceType)) return "";
   const trace = task.automationTrace || {};
   const suggested = trace.suggestedAssignee?.label || trace.suggestedAssignee?.reason
-    ? ` / Suggested: ${trace.suggestedAssignee.label || "Unspecified"}${trace.suggestedAssignee.reason ? ` (${trace.suggestedAssignee.reason})` : ""}`
+    ? ` / Suggestion only: ${trace.suggestedAssignee.label || "Unspecified"}${trace.suggestedAssignee.reason ? ` (${trace.suggestedAssignee.reason})` : ""}`
     : "";
   return `<section class="my-task-warning"><strong>AI-GENERATED DRAFT</strong><p>Human approval is required. This task must stay unassigned until Owner approval activates it.</p><small>${escapeHtml(trace.planningRequestId ? `Planning ${trace.planningRequestId}` : "Planning trace pending")} / ${escapeHtml(trace.externalTaskId ? `External task ${trace.externalTaskId}` : "External task pending")}${escapeHtml(suggested)}</small></section>`;
+}
+
+function renderWorkboardPlanningCheck(task) {
+  const missing = getDraftActivationMissingFields(task);
+  const trace = task.automationTrace || {};
+  const suggested = trace.suggestedAssignee?.label || trace.suggestedAssignee?.reason
+    ? `${trace.suggestedAssignee.label || "Unspecified"}${trace.suggestedAssignee.reason ? ` (${trace.suggestedAssignee.reason})` : ""}`
+    : "None";
+  return `<section class="workboard-planning-check">
+    <div class="workboard-planning-check-header"><strong>PLANNING CHECK</strong>${missing.length ? `<span class="missing">Missing required: ${escapeHtml(missing.join(", "))}</span>` : `<span class="ready">Required planning fields complete</span>`}</div>
+    ${missing.length ? `<p class="workboard-planning-guidance">Use EDIT DRAFT to complete required planning fields before activation.</p>` : ""}
+    <div class="workboard-planning-groups">
+      <div>
+        <h4>Required planning fields</h4>
+        <div class="my-task-detail-grid compact">
+          ${renderPlanningCheckFact("Title", task.title || "Not set", missing.includes("title"))}
+          ${renderPlanningCheckFact("Brief / instructions", task.brief || "Not set", missing.includes("brief/instructions"))}
+          ${renderPlanningCheckFact("Priority", formatTaskPriorityLabel(task.priority), missing.includes("priority"))}
+          ${renderPlanningCheckFact("Time tracking mode", formatTaskTimeMode(task.timeTrackingMode), missing.includes("time tracking mode"))}
+          ${renderPlanningCheckFact("Submission deadline", formatTaskDateTime(task.submissionDeadline), missing.includes("submission deadline"))}
+          ${renderPlanningCheckFact("Assignee", getUserLabel(task.assignedUser), missing.includes("assignee"))}
+          ${renderPlanningCheckFact("Reviewer", getUserLabel(task.reviewerUser), missing.includes("reviewer"))}
+        </div>
+      </div>
+      <div>
+        <h4>Optional planning fields</h4>
+        <div class="my-task-detail-grid compact">
+          ${renderPlanningCheckFact("Scheduled date optional", formatTaskDate(task.scheduledDate))}
+          ${renderPlanningCheckFact("Start deadline optional", formatTaskDateTime(task.startDeadline))}
+          ${renderPlanningCheckFact("Approval deadline optional", formatTaskDateTime(task.approvalDeadline))}
+          ${renderPlanningCheckFact("Suggested assignee", `${suggested} / SUGGESTION ONLY`)}
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function renderPlanningCheckFact(label, value, isMissing = false) {
+  return `<div class="${isMissing ? "planning-missing" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "Not set")}</strong></div>`;
 }
 
 function renderWorkboardLatestSubmission(submission) {
@@ -1706,16 +1940,20 @@ function renderWorkboardHistory(history) {
 function renderWorkboardActionArea(task) {
   const actions = task.allowedActions || [];
   const busy = workboardCommandState === "saving";
+  const showAssignAction = actions.includes("ASSIGN") && !(task.status === "DRAFT" && actions.includes("APPROVE_AND_ASSIGN"));
+  const approveMissing = actions.includes("APPROVE_AND_ASSIGN") ? getDraftPlanningBlockingFields(task) : [];
+  const approveBlocked = approveMissing.length > 0;
   if (!actions.length) return `<section class="my-task-action-area"><strong>No available manager action</strong><span>This task is waiting on another step.</span></section>`;
   return `<section class="my-task-action-area workboard-actions"><strong>Allowed manager actions</strong>
+    ${approveBlocked ? `<p class="my-task-form-error" role="status">Complete required planning fields before activation: ${escapeHtml(approveMissing.join(", "))}.</p>` : ""}
     ${actions.includes("REQUEST_REVISION") || actions.includes("APPROVE_WORK") ? `<label><span>Review note</span><textarea id="workboard-review-note" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReviewNote)}</textarea></label>` : ""}
     ${actions.includes("ASSIGN") || actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Assignee</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
     ${actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Reviewer</span>${renderWorkboardDraftReviewerSelect("workboard-assign-reviewer", task.reviewerUserId || "", "Reviewer required")}</label>` : ""}
     ${actions.includes("CANCEL") || actions.includes("REOPEN") ? `<label><span>Reason</span><textarea id="workboard-reason" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReason)}</textarea></label>` : ""}
     <div class="my-task-action-buttons sticky-actions">
       ${actions.includes("EDIT_DRAFT") ? `<button data-workboard-edit-draft="${escapeHtml(task.id)}" type="button">EDIT DRAFT</button>` : ""}
-      ${actions.includes("ASSIGN") ? `<button data-workboard-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ASSIGN</button>` : ""}
-      ${actions.includes("APPROVE_AND_ASSIGN") ? `<button class="primary" data-workboard-approve-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE AND ASSIGN</button>` : ""}
+      ${showAssignAction ? `<button data-workboard-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ASSIGN</button>` : ""}
+      ${actions.includes("APPROVE_AND_ASSIGN") ? `<button class="primary" data-workboard-approve-assign="${escapeHtml(task.id)}" ${busy || approveBlocked ? "disabled" : ""} type="button">APPROVE AND ASSIGN</button>` : ""}
       ${actions.includes("REQUEST_REVISION") ? `<button data-workboard-request-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">REQUEST REVISION</button>` : ""}
       ${actions.includes("APPROVE_WORK") ? `<button class="primary" data-workboard-approve-work="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE WORK</button>` : ""}
       ${actions.includes("CANCEL") ? `<button data-workboard-cancel="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">CANCEL</button>` : ""}
@@ -1796,18 +2034,19 @@ function buildWorkboardDraftPayload(task = null) {
   readWorkboardDraftForm();
   const sourceRecordType = workboardDraftForm.sourceRecordType.trim();
   const sourceRecordId = workboardDraftForm.sourceRecordId.trim();
+  const isAutomationDraft = isAutomatedTaskSource(task?.sourceType || workboardDraftForm.sourceType);
   return {
     ...(task ? { expectedVersion: task.version } : {}),
     title: workboardDraftForm.title.trim(),
     brief: workboardDraftForm.brief.trim(),
-    sourceType: workboardDraftForm.sourceType,
+    ...(task ? {} : { sourceType: workboardDraftForm.sourceType }),
     sourceRecordType: sourceRecordType || null,
     sourceRecordId: sourceRecordId || null,
     priority: workboardDraftForm.priority,
-    assignedUserId: workboardDraftForm.assignedUserId || null,
+    assignedUserId: isAutomationDraft ? null : workboardDraftForm.assignedUserId || null,
     reviewerUserId: workboardDraftForm.reviewerUserId || null,
     timeTrackingMode: workboardDraftForm.timeTrackingMode,
-    draftApprovalRequired: workboardDraftForm.draftApprovalRequired,
+    draftApprovalRequired: isAutomationDraft || workboardDraftForm.draftApprovalRequired,
     scheduledDate: workboardDraftForm.scheduledDate || null,
     startDeadline: fromLocalDatetimeInput(workboardDraftForm.startDeadline),
     submissionDeadline: fromLocalDatetimeInput(workboardDraftForm.submissionDeadline),
@@ -1927,19 +2166,24 @@ async function runWorkboardCommand(taskId, action) {
   if (!task) return;
   workboardReviewNote = document.getElementById("workboard-review-note")?.value || workboardReviewNote;
   workboardReason = document.getElementById("workboard-reason")?.value || workboardReason;
-  const selectedAssigneeUserId = document.getElementById("workboard-assign-user")?.value || null;
-  const selectedReviewerUserId = document.getElementById("workboard-assign-reviewer")?.value || null;
+  const commandSelection = readWorkboardCommandSelection();
+  const validationMessage = validateWorkboardCommand(action, task, commandSelection);
+  if (validationMessage) {
+    workboardCommandError = validationMessage;
+    render();
+    return;
+  }
   workboardCommandState = "saving";
   workboardCommandError = "";
   render();
   try {
     const version = task.version;
     let response;
-    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: selectedAssigneeUserId }, adminAuthSession, createIdempotencyKey("assign"));
+    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: commandSelection.assignedUserId }, adminAuthSession, createIdempotencyKey("assign"));
     if (action === "approve-and-assign") response = await approveAndAssignTask(taskId, {
       expectedVersion: version,
-      assignedUserId: selectedAssigneeUserId || task.assignedUserId || null,
-      reviewerUserId: selectedReviewerUserId || task.reviewerUserId || null,
+      assignedUserId: commandSelection.assignedUserId,
+      reviewerUserId: commandSelection.reviewerUserId,
       startDeadline: task.startDeadline || null,
       submissionDeadline: task.submissionDeadline || null,
       approvalDeadline: task.approvalDeadline || null,
@@ -1959,6 +2203,69 @@ async function runWorkboardCommand(taskId, action) {
     workboardCommandState = "idle";
     render();
   }
+}
+
+function readWorkboardCommandSelection() {
+  return {
+    assignedUserId: document.getElementById("workboard-assign-user")?.value
+      || document.getElementById("workboard-assigned")?.value
+      || null,
+    reviewerUserId: document.getElementById("workboard-assign-reviewer")?.value
+      || document.getElementById("workboard-reviewer")?.value
+      || null,
+  };
+}
+
+function validateWorkboardCommand(action, task, selection) {
+  if (action === "approve-and-assign") {
+    const missing = getDraftActivationMissingFields({
+      ...task,
+      assignedUserId: selection.assignedUserId,
+      reviewerUserId: selection.reviewerUserId,
+    });
+    if (missing.length) return `Complete required planning fields before activation: ${missing.join(", ")}.`;
+    if (!getEligibleAssignmentUsers(true).some((user) => user.userId === selection.assignedUserId)) {
+      return "Selected assignee is not eligible for task assignment.";
+    }
+    if (!getEligibleReviewerUsers().some((user) => user.userId === selection.reviewerUserId)) {
+      return "Selected reviewer is not eligible to review tasks.";
+    }
+  }
+  if (action === "assign" && task.status !== "DRAFT" && selection.assignedUserId
+      && !getEligibleAssignmentUsers(true).some((user) => user.userId === selection.assignedUserId)) {
+    return "Selected assignee is not eligible for task assignment.";
+  }
+  return "";
+}
+
+function getDraftActivationMissingFields(task) {
+  const missing = [];
+  if (!String(task?.title || "").trim()) missing.push("title");
+  if (!String(task?.brief || "").trim()) missing.push("brief/instructions");
+  if (!TASK_PRIORITIES.has(String(task?.priority || "").toUpperCase())) missing.push("priority");
+  if (!TASK_TIME_TRACKING_MODES.has(String(task?.timeTrackingMode || "").toUpperCase())) missing.push("time tracking mode");
+  if (!task?.assignedUserId) missing.push("assignee");
+  if (!task?.reviewerUserId) missing.push("reviewer");
+  if (!task?.submissionDeadline) missing.push("submission deadline");
+  return missing;
+}
+
+function getDraftPlanningBlockingFields(task) {
+  return getDraftActivationMissingFields(task).filter((field) => !["assignee", "reviewer"].includes(field));
+}
+
+function isAutomatedTaskSource(sourceType) {
+  return ["AI_MARKETING", "DAILY_CONTENT"].includes(String(sourceType || "").toUpperCase());
+}
+
+function formatTaskPriorityLabel(priority) {
+  return TASK_PRIORITY_LABELS[priority] || priority || "Not set";
+}
+
+function formatTaskTimeMode(mode) {
+  if (mode === "NONE") return "Time not required";
+  if (mode === "EXPECTED") return "Expected";
+  return "Not set";
 }
 function renderMyTasksPage() {
   if (!canViewMyTasksRoute()) {
@@ -2027,7 +2334,7 @@ function renderMyTaskMetric(label, value, note) {
 }
 
 function renderRunningTaskPin(task) {
-  return `<section class="my-tasks-running-pin"><div><span>RUNNING</span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.taskCode)} / ${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</small></div><button class="ops-gold-button mini" data-task-open="${escapeHtml(task.id)}" type="button">OPEN TASK</button></section>`;
+  return `<section class="my-tasks-running-pin"><div><span>RUNNING</span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.taskCode)} / <span data-task-elapsed="${escapeHtml(task.id)}">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</span></small></div><button class="ops-gold-button mini" data-task-open="${escapeHtml(task.id)}" type="button">OPEN TASK</button></section>`;
 }
 
 function renderMyTasksFilters() {
@@ -2069,7 +2376,7 @@ function renderMyTaskCard(task) {
       ${renderTaskPriority(task.priority)}
       ${renderTaskStatus(task.status)}
       <span>${escapeHtml(formatTaskDue(task))}</span>
-      <span>${escapeHtml(task.openTimeEntry ? formatElapsed(getRunningElapsedSeconds(task)) : formatDuration(task.totalClosedDurationSeconds))}</span>
+      <span>${task.openTimeEntry ? `<span data-task-elapsed="${escapeHtml(task.id)}">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</span>` : escapeHtml(formatDuration(task.totalClosedDurationSeconds))}</span>
     </div>
     <div class="my-task-card-actions">${action ? renderTaskQuickAction(task, action) : `<button data-task-open="${escapeHtml(task.id)}" type="button">OPEN</button>`}</div>
   </article>`;
@@ -2111,7 +2418,7 @@ function renderTaskDetailBody(detail) {
     <section class="my-task-detail-hero">
       <div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}</div>
       <p>${escapeHtml(task.brief || "No brief provided.")}</p>
-      ${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}
+      ${task.openTimeEntry ? `<strong class="my-task-running-time" data-task-elapsed="${escapeHtml(task.id)}">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}
     </section>
     ${latestRevision ? `<section class="my-task-warning"><strong>REVISION NOTE</strong><p>${escapeHtml(latestRevision.reviewNote)}</p></section>` : ""}
     <section class="my-task-detail-grid">
@@ -2120,15 +2427,15 @@ function renderTaskDetailBody(detail) {
       ${renderTaskFact("Deadline", formatTaskDateTime(task.submissionDeadline))}
       ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
       ${renderTaskFact("Reviewer", getUserLabel(task.reviewerUser))}
-      ${renderTaskFact("Recorded Time", task.openTimeEntry ? formatElapsed(getRunningElapsedSeconds(task)) : formatDuration(task.totalClosedDurationSeconds))}
+      ${renderTaskFact("Recorded Time", task.openTimeEntry ? `<span data-task-elapsed="${escapeHtml(task.id)}">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</span>` : formatDuration(task.totalClosedDurationSeconds), { html: Boolean(task.openTimeEntry) })}
     </section>
     ${renderTaskSubmissions(detail.submissions || [])}
     ${renderTaskActionArea(task, latestSubmission)}
   </div>`;
 }
 
-function renderTaskFact(label, value) {
-  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "-")}</strong></div>`;
+function renderTaskFact(label, value, options = {}) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${options.html ? value : escapeHtml(value || "-")}</strong></div>`;
 }
 
 function renderTaskSubmissions(submissions) {
@@ -2365,32 +2672,53 @@ function renderCalendarPage() {
   }
   const monthLabel = formatCalendarMonth(calendarVisibleMonth);
   const selectedEvents = getCalendarEventsForDate(calendarSelectedDate);
+  const blockedState = ["auth-required", "error", "forbidden", "feature-disabled"].includes(calendarLoadState);
   return `<section class="mvp-page calendar-page">
     <div class="mvp-page-title">
       <div><span>HOME / CALENDAR</span><h1>Calendar</h1><p>Read-only task schedule projected from canonical task dates.</p></div>
       <strong>Asia/Manila</strong>
     </div>
     ${renderCalendarStateNotice()}
-    <div class="calendar-toolbar">
-      <div class="calendar-month-nav" aria-label="Calendar month navigation">
-        <button data-calendar-prev type="button" aria-label="Previous month">${renderIcon("chevron-right", "calendar-prev-icon")}</button>
-        <strong>${escapeHtml(monthLabel)}</strong>
-        <button data-calendar-next type="button" aria-label="Next month">${renderIcon("chevron-right", "calendar-next-icon")}</button>
-        <button data-calendar-today type="button">TODAY</button>
+    ${blockedState ? "" : `<div class="calendar-toolbar">
+      <div class="calendar-toolbar-main">
+        <div class="calendar-month-nav" aria-label="Calendar month navigation">
+          <button class="calendar-icon-button" data-calendar-prev type="button" aria-label="Previous month">${renderIcon("chevron-right", "calendar-prev-icon")}</button>
+          <strong>${escapeHtml(monthLabel)}</strong>
+          <button class="calendar-icon-button" data-calendar-next type="button" aria-label="Next month">${renderIcon("chevron-right", "calendar-next-icon")}</button>
+        </div>
+        <button class="calendar-today-button" data-calendar-today type="button">TODAY</button>
       </div>
       ${renderCalendarFilters()}
     </div>
+    ${renderCalendarLegend()}`}
     ${calendarLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Calendar</strong><span>Projecting permitted task dates.</span></div>` : ""}
-    ${calendarLoadState === "ready" ? `<div class="calendar-layout">${renderCalendarMonthGrid()}${renderCalendarAgenda(selectedEvents)}</div>` : ""}
+    ${calendarLoadState === "ready" ? `${calendarEvents.length ? "" : renderCalendarEmptyState()}<div class="calendar-layout">${renderCalendarMonthGrid()}${renderCalendarAgenda(selectedEvents)}</div>` : ""}
     ${renderCalendarTaskSummary()}
   </section>`;
 }
 
 function renderCalendarStateNotice() {
+  if (calendarLoadState === "auth-required") return `<div class="calendar-auth-required ops-persistence-card error"><strong>Authentication required</strong><span>${escapeHtml(calendarLoadError || "Log in again to view the read-only task Calendar.")}</span><button data-calendar-login-again type="button">LOGIN AGAIN</button></div>`;
   if (calendarLoadState === "error") return `<div class="ops-persistence-card error"><strong>Unable to load Calendar</strong><span>${escapeHtml(calendarLoadError)}</span></div>`;
   if (calendarLoadState === "forbidden") return `<div class="ops-persistence-card error"><strong>Calendar access is restricted</strong><span>${escapeHtml(calendarLoadError || "Your account cannot view task calendar records.")}</span></div>`;
   if (calendarLoadState === "feature-disabled") return `<div class="ops-persistence-card"><strong>Calendar unavailable</strong><span>The task domain is disabled for this environment.</span></div>`;
   return "";
+}
+
+function renderCalendarLegend() {
+  const items = [
+    ["scheduledStart", "Scheduled start"],
+    ["taskDeadline", "Submission deadline"],
+    ["reviewDeadline", "Review deadline"],
+    ["completed", "Completion date"],
+    ["overdue", "Overdue"],
+  ];
+  return `<div class="calendar-legend" aria-label="Calendar projection legend">${items.map(([key, label]) => `<span><i class="${escapeHtml(key)}"></i>${escapeHtml(label)}</span>`).join("")}</div>`;
+}
+
+function renderCalendarEmptyState() {
+  const hasFilters = Boolean(calendarAssigneeFilter || calendarSourceFilter || calendarStatusFilter);
+  return `<div class="my-tasks-empty compact"><strong>${hasFilters ? "No matching dated tasks" : "No dated tasks this month"}</strong><span>${hasFilters ? "Clear filters to return to the full read-only task schedule." : "Tasks without canonical dates are intentionally not projected as Calendar events."}</span></div>`;
 }
 
 function renderCalendarFilters() {
@@ -2419,13 +2747,13 @@ function renderCalendarDay(day, events) {
   const visibleEvents = events.slice(0, 3);
   const more = events.length - visibleEvents.length;
   return `<button class="calendar-day ${day.inMonth ? "" : "muted"} ${day.key === calendarSelectedDate ? "selected" : ""} ${day.key === getManilaTodayKey() ? "today" : ""}" data-calendar-date="${escapeHtml(day.key)}" type="button">
-    <span>${escapeHtml(String(day.day))}</span>
+    <span class="calendar-day-number"><b>${escapeHtml(String(day.day))}</b>${day.key === getManilaTodayKey() ? `<em>Today</em>` : ""}</span>
     <div>${visibleEvents.map(renderCalendarDayItem).join("")}${more > 0 ? `<small class="calendar-more">+${more} more</small>` : ""}</div>
   </button>`;
 }
 
 function renderCalendarDayItem(event) {
-  return `<i class="calendar-dot ${escapeHtml(event.projectionTypeKey)} ${event.overdue ? "overdue" : ""}">${escapeHtml(event.taskCode || "TASK")} ${escapeHtml(shortProjectionType(event.projectionType))}</i>`;
+  return `<i class="calendar-dot ${escapeHtml(event.projectionTypeKey)} ${event.overdue ? "overdue" : ""}"><span>${escapeHtml(shortProjectionType(event.projectionType))}</span><strong>${escapeHtml(event.taskCode || "TASK")}</strong><small>${escapeHtml(shortTaskTitle(event.title || "Untitled task"))}</small></i>`;
 }
 
 function renderCalendarAgenda(events) {
@@ -2438,12 +2766,17 @@ function renderCalendarAgenda(events) {
 
 function renderCalendarAgendaItem(event) {
   return `<article class="calendar-agenda-item ${event.overdue ? "overdue" : ""}">
-    <button data-calendar-event="${escapeHtml(event.key)}" type="button">
-      <span>${escapeHtml(event.projectionType)} / ${escapeHtml(formatManilaTime(event.dateTime))}</span>
-      <strong>${escapeHtml(event.taskCode || "TASK")} - ${escapeHtml(event.title || "Untitled task")}</strong>
-      <small>${escapeHtml(formatSourceType(event.sourceType))} / ${escapeHtml(formatTaskStatus(event.status))} / ${escapeHtml(getUserLabel(event.assignee))}</small>
+    <button data-calendar-event="${escapeHtml(event.key)}" type="button" aria-label="Open ${escapeHtml(event.taskCode || "task")} Calendar summary">
+      <span class="calendar-agenda-type ${escapeHtml(event.projectionTypeKey)}">${escapeHtml(event.projectionType)}</span>
+      <span class="calendar-agenda-time">${escapeHtml(formatManilaTime(event.dateTime))}</span>
+      <strong><span>${escapeHtml(event.taskCode || "TASK")}</span>${escapeHtml(event.title || "Untitled task")}</strong>
+      <div class="calendar-agenda-meta" aria-label="Calendar task metadata">
+        <small><b>Status</b>${escapeHtml(formatTaskStatus(event.status))}</small>
+        <small><b>Source</b>${escapeHtml(formatSourceType(event.sourceType))}</small>
+        <small><b>Assignee</b>${escapeHtml(getUserLabel(event.assignee))}</small>
+      </div>
     </button>
-    <div>${renderTaskPriority(event.priority)}${event.overdue ? `<span class="my-task-status overdue">OVERDUE</span>` : ""}</div>
+    <div class="calendar-agenda-badges">${renderTaskPriority(event.priority)}${event.overdue ? `<span class="my-task-status overdue">OVERDUE</span>` : ""}</div>
   </article>`;
 }
 
@@ -2513,6 +2846,11 @@ function shortProjectionType(type) {
   if (type === "TASK DEADLINE") return "Due";
   if (type === "REVIEW DEADLINE") return "Review";
   return "Done";
+}
+
+function shortTaskTitle(title) {
+  const value = String(title || "").trim();
+  return value.length > 28 ? `${value.slice(0, 25)}...` : value;
 }
 
 function getMvpDashboardItems() {
@@ -6128,6 +6466,7 @@ function handleAccountOutsideClick(event) {
 
 function handleAccountEscape(event) {
   if (event.key !== "Escape") return;
+  if (isEditableElement(event.target)) return;
   let changed = false;
   if (isAccountMenuOpen) {
     isAccountMenuOpen = false;
@@ -6279,6 +6618,9 @@ function bindMyTasksEvents() {
 }
 
 function bindCalendarEvents() {
+  document.querySelector("[data-calendar-login-again]")?.addEventListener("click", async () => {
+    await logoutAdminUser();
+  });
   document.querySelector("[data-calendar-prev]")?.addEventListener("click", () => shiftCalendarMonth(-1));
   document.querySelector("[data-calendar-next]")?.addEventListener("click", () => shiftCalendarMonth(1));
   document.querySelector("[data-calendar-today]")?.addEventListener("click", () => {
@@ -7299,6 +7641,14 @@ function statusToClass(status) {
 function isPasswordSetupRoute() {
   return window.location.pathname.replace(/\/+$/, "") === "/set-password";
 }
+
+function isPasswordResetRoute() {
+  return window.location.pathname.replace(/\/+$/, "") === "/reset-password";
+}
+
+function isForgotPasswordRoute() {
+  return window.location.pathname.replace(/\/+$/, "") === "/forgot-password";
+}
 function getCurrentRoute() {
   return routes[getRoutePath()] ?? routes[defaultRoutePath];
 }
@@ -7318,6 +7668,9 @@ function navigateTo(path) {
 function normalizeRoutePath(path) {
   const url = new URL(String(path || defaultRoutePath), window.location.origin);
   const routePath = url.pathname.replace(/\/+$/, "") || "/";
+  if (["/forgot-password", "/reset-password", "/set-password"].includes(routePath)) {
+    return `${routePath}${url.search}${url.hash}`;
+  }
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;

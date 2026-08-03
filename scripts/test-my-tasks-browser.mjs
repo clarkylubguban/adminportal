@@ -94,13 +94,22 @@ try {
 
   await clickTask(cdp, desktop, "Running screen print timer");
   await waitForText(cdp, desktop, "RECORDED TIME");
-  await setValue(cdp, desktop, "#task-submission-note", "Synthetic timed submission note.");
-  await setValue(cdp, desktop, "#task-proof-url", "http://invalid.local/proof");
+  await typeText(cdp, desktop, "#task-submission-note", "Synthetic timed submission note.\nLine two survives timer refresh.");
+  await pressKey(cdp, desktop, "Escape");
+  await assertEval(cdp, desktop, `document.querySelector('.my-task-drawer') !== null`, "Escape in submission note keeps drawer open");
+  await typeText(cdp, desktop, "#task-proof-url", "http://invalid.local/proof");
+  await assertEval(cdp, desktop, `document.activeElement?.id === "task-proof-url"`, "proof URL keeps focus after typing");
+  await waitForIdle(10500);
+  await assertEval(cdp, desktop, `document.activeElement?.id === "task-proof-url"`, "proof URL keeps focus through timer refresh");
+  await assertEval(cdp, desktop, `document.querySelector("#task-submission-note")?.value === "Synthetic timed submission note.\\nLine two survives timer refresh."`, "submission note survives timer refresh");
+  await assertEval(cdp, desktop, `document.querySelector("#task-proof-url")?.value === "http://invalid.local/proof"`, "proof URL survives timer refresh");
   await click(cdp, desktop, '[data-task-submit="task-running"]');
   await waitForText(cdp, desktop, "Proof URL must start with https://");
-  await setValue(cdp, desktop, "#task-proof-url", "https://synthetic.invalid/proof");
-  await click(cdp, desktop, '[data-task-submit="task-running"]');
+  await replaceValue(cdp, desktop, "#task-proof-url", "https://synthetic.invalid/proof?copy=paste&selection=ok");
+  await rapidDoubleClick(cdp, desktop, '[data-task-submit="task-running"]');
   await waitForText(cdp, desktop, "RECORDED TIME");
+  assert.equal(submissions.get("task-running")?.length, 1, "rapid double submit created exactly one submission");
+  assert.equal(received.filter((item) => item.path === "/api/tasks/task-running/submit" && item.method === "POST").length, 1, "rapid double submit sent exactly one submit request");
   await screenshot(cdp, desktop, "desktop-task-drawer-recorded.png");
 
   await clickTask(cdp, desktop, "Upload finished embroidery photos");
@@ -167,6 +176,15 @@ try {
   await clickTask(cdp, mobile, "Long title containment validation");
   await waitForText(cdp, mobile, "Synthetic long brief");
   await assertEval(cdp, mobile, `document.querySelector('.my-task-drawer').getBoundingClientRect().width <= window.innerWidth`, "mobile drawer fits viewport");
+  await click(cdp, mobile, '[data-task-close]');
+  await clickTask(cdp, mobile, "Revise CTA poster");
+  await waitForText(cdp, mobile, "SUBMISSION NOTE");
+  await typeText(cdp, mobile, "#task-submission-note", "Mobile note entry remains focused.");
+  await typeText(cdp, mobile, "#task-proof-url", "https://synthetic.invalid/mobile-proof");
+  await waitForIdle(10500);
+  await assertEval(cdp, mobile, `document.activeElement?.id === "task-proof-url"`, "mobile proof field keeps focus through timer refresh");
+  await assertEval(cdp, mobile, `document.querySelector("#task-submission-note")?.value === "Mobile note entry remains focused."`, "mobile note survives timer refresh");
+  await assertEval(cdp, mobile, `document.querySelector("#task-proof-url")?.value === "https://synthetic.invalid/mobile-proof"`, "mobile proof survives timer refresh");
   await screenshot(cdp, mobile, "mobile-my-tasks-drawer.png");
 
   for (const [name, viewport] of [["mobile-360", { width: 360, height: 780, isMobile: true, deviceScaleFactor: 2 }], ["tablet-820", { width: 820, height: 1180, isMobile: false, deviceScaleFactor: 1 }]]) {
@@ -470,6 +488,44 @@ async function click(cdp, page, selector) {
 async function setValue(cdp, page, selector, value) {
   const expression = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
   assert.equal(await evalValue(cdp, page, expression), true, `input missing: ${selector}`);
+}
+
+async function typeText(cdp, page, selector, value) {
+  await replaceValue(cdp, page, selector, "");
+  await cdp.send("Input.insertText", { text: value }, page.sessionId);
+  await waitForIdle(250);
+  assert.equal(await evalValue(cdp, page, `document.querySelector(${JSON.stringify(selector)})?.value`), value, `typed value mismatch: ${selector}`);
+}
+
+async function replaceValue(cdp, page, selector, value) {
+  const focused = await evalValue(cdp, page, `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return false;
+    el.focus();
+    el.select();
+    document.execCommand('insertText', false, ${JSON.stringify(value)});
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return document.activeElement === el;
+  })()`);
+  assert.equal(focused, true, `input focus failed: ${selector}`);
+  await waitForIdle(250);
+}
+
+async function pressKey(cdp, page, key) {
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key }, page.sessionId);
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key }, page.sessionId);
+  await waitForIdle(250);
+}
+
+async function rapidDoubleClick(cdp, page, selector) {
+  assert.equal(await evalValue(cdp, page, `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return false;
+    el.click();
+    el.click();
+    return true;
+  })()`), true, `selector missing: ${selector}`);
+  await waitForIdle(500);
 }
 
 async function screenshot(cdp, page, filename) {
