@@ -168,9 +168,33 @@ begin
     raise exception 'failed incomplete activation left a partial assignment or event';
   end if;
 
+  begin
+    perform public.task_update_draft(
+      v_task_id, v_task_version, 'Phase 8.8 SQL draft', 'Disposable AI draft created by SQL regression.',
+      'LOW', null, v_owner, true, null, null, clock_timestamp() + interval '1 day', null,
+      'phase88-owner-reviewer-denied', 'EXPECTED', null, null
+    );
+    raise exception 'owner assigned reviewer during AI/Daily draft update';
+  exception when check_violation then
+    null;
+  end;
+
+  if exists (
+    select 1 from public.tasks
+    where id = v_task_id
+      and (status <> 'DRAFT' or assigned_user_id is not null or reviewer_user_id is not null)
+  ) or exists (
+    select 1 from public.task_events
+    where task_id = v_task_id
+      and event_type = 'DRAFT_UPDATED'
+      and idempotency_key = 'phase88-owner-reviewer-denied'
+  ) then
+    raise exception 'rejected reviewer draft update left a partial assignment or event';
+  end if;
+
   v_result := public.task_update_draft(
     v_task_id, v_task_version, 'Phase 8.8 SQL draft', 'Disposable AI draft created by SQL regression.',
-    'LOW', null, v_owner, true, null, null, clock_timestamp() + interval '1 day', null,
+    'LOW', null, null, true, null, null, clock_timestamp() + interval '1 day', null,
     'phase88-owner-complete-draft', 'EXPECTED', null, null
   );
   v_task_version := (v_result ->> 'version')::bigint;
@@ -199,7 +223,7 @@ select pass('missing AI traceability fields are rejected');
 select pass('admin cannot activate AI/Daily drafts');
 select pass('staff cannot activate AI/Daily drafts');
 select pass('denied activation leaves no partial assignment or event');
-select pass('owner cannot activate incomplete AI/Daily draft and receives missing field');
+select pass('owner cannot activate incomplete AI/Daily draft or assign reviewer before activation');
 select pass('owner approve-and-assign activates AI/Daily draft');
 select pass('owner approve-and-assign writes one immutable event');
 select * from finish();
