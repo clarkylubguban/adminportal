@@ -17879,8 +17879,8 @@ body,
   border-left: 1px solid #d9dde4;
   box-shadow: none;
   color: #0b0c0f;
-  max-width: 460px;
-  width: min(460px, 100vw);
+  max-width: 520px;
+  width: min(520px, 100vw);
 }
 
 .mvp-drawer.inquiry.locked .mvp-drawer-body {
