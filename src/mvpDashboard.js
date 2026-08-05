@@ -327,7 +327,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (!item) return "";
     const stage = quoteStage(item);
     const action = inquiryPrimaryAction(item, stage, renderOdoo);
-    const activeTab = ["conversation", "request", "artwork", "history"].includes(state.inquiryTab) ? state.inquiryTab : "conversation";
+    const activeTab = ["conversation", "request", "quotation", "artwork", "history"].includes(state.inquiryTab) ? state.inquiryTab : "conversation";
     const workflowPanel = state.inquiryActionId === item.id ? inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) : "";
     return drawer("inquiry locked", item, QUOTE_STAGES[stage], `
       <section class="mvp-inquiry-locked-shell">
@@ -335,7 +335,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         ${inquiryCompactSummary(item, stage)}
         ${inquiryNextActionPanel(item, action)}
         ${inquiryTabs(activeTab)}
-        <div class="mvp-inquiry-tab-panel">${inquiryTabContent(item, activeTab, renderArtwork)}</div>
+        ${inquiryTabPanels(item, activeTab, renderQuote, renderArtwork)}
         ${workflowPanel}
         ${inquiryMoreDetails(item)}
       </section>
@@ -360,7 +360,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function summaryItem(label, title, subtitle = "") {
-    return `<article class="mvp-inquiry-summary-item"><span>${html(label)}</span><strong>${html(title || "Not set")}</strong>${subtitle ? `<small>${html(subtitle)}</small>` : ""}</article>`;
+    return `<article class="mvp-inquiry-summary-item"><span>${html(label)}</span><b>${html(title || "Not set")}</b>${subtitle ? `<small>${html(subtitle)}</small>` : ""}</article>`;
   }
 
   function inquiryNextActionPanel(item, action) {
@@ -369,16 +369,19 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryTabs(activeTab) {
-    const tabs = [["conversation", "Conversation"], ["request", "Request"], ["artwork", "Artwork"], ["history", "History"]];
-    return `<nav class="mvp-inquiry-tabs" aria-label="Inquiry drawer tabs">${tabs.map(([id, label]) => `<button type="button" data-mvp-inquiry-tab="${id}" class="${activeTab === id ? "active" : ""}">${html(label)}</button>`).join("")}</nav>`;
+    const tabs = [["conversation", "Conversation"], ["request", "Request"], ["quotation", "Quotation"], ["artwork", "Artwork"], ["history", "History"]];
+    return `<nav class="mvp-inquiry-tabs" aria-label="Inquiry drawer tabs">${tabs.map(([id, label]) => `<button type="button" data-mvp-inquiry-tab="${id}" class="${activeTab === id ? "active" : ""}" aria-selected="${activeTab === id ? "true" : "false"}">${html(label)}</button>`).join("")}</nav>`;
   }
 
-  function inquiryTabContent(item, activeTab, renderArtwork) {
-    if (activeTab === "conversation") return customerCommunication(item);
-    if (activeTab === "request") return inquiryRequestTab(item, renderArtwork);
-    if (activeTab === "artwork") return inquiryArtworkTab(item, renderArtwork);
-    if (activeTab === "history") return inquiryHistoryTab(item);
-    return customerCommunication(item);
+  function inquiryTabPanels(item, activeTab, renderQuote, renderArtwork) {
+    const panels = [
+      ["conversation", customerCommunication(item)],
+      ["request", inquiryRequestTab(item)],
+      ["quotation", inquiryQuotationTab(item, renderQuote)],
+      ["artwork", inquiryArtworkTab(item, renderArtwork)],
+      ["history", inquiryHistoryTab(item)],
+    ];
+    return `<div class="mvp-inquiry-tab-panels">${panels.map(([id, content]) => `<section class="mvp-inquiry-tab-panel" data-mvp-inquiry-panel="${id}" ${activeTab === id ? "" : "hidden"}>${content}</section>`).join("")}</div>`;
   }
 
   function inquiryRequestTab(item) {
@@ -387,6 +390,27 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function inquiryArtworkTab(item, renderArtwork) {
     return `<div class="mvp-inquiry-detail-list">${artworkPreviewLine(item, renderArtwork)}${detailLine("Attachment State", artworkState(item))}${detailLine("Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved")}${detailLine("Revision Requirement", key(item.artworkStatus) === "revision_requested" ? "Revision needed" : "None")}</div>`;
+  }
+
+  function inquiryQuotationTab(item, renderQuote) {
+    const quote = quotationSummary(item, quoteStage(item));
+    const rows = quotationRows(item);
+    const subtotal = quotationSubtotal(rows);
+    const quoted = amount(item.quotedAmount);
+    const total = amount(item.amountDue || item.quotedAmount);
+    const discount = quoted > total ? quoted - total : 0;
+    const hasCapturedAmount = quoted > 0 || total > 0;
+    const meta = [
+      item.quotePublishedAt ? `Sent ${shortDate(item.quotePublishedAt)}` : "",
+      item.quoteValidUntil ? `Valid until ${shortDate(item.quoteValidUntil)}` : "",
+    ].filter(Boolean).join(" · ");
+    const body = hasCapturedAmount
+      ? `<div class="mvp-quotation-table" role="table" aria-label="Quotation details"><div class="mvp-quotation-head" role="row"><span>Item</span><span>Qty</span><span>Unit</span><span>Amount</span></div>${rows.map((row) => `<div class="mvp-quotation-row" role="row"><div><b>${html(row.item)}</b>${row.note ? `<small>${html(row.note)}</small>` : ""}</div><span>${html(row.qty)}</span><span>${html(row.unit)}</span><span>${html(row.amount)}</span></div>`).join("")}<div class="mvp-quotation-total"><span>Subtotal</span><b>${money(subtotal || quoted || total)}</b>${discount ? `<span>Discount</span><b>- ${money(discount)}</b>` : ""}<strong>Total</strong><strong>${money(total || quoted || subtotal)}</strong></div></div>`
+      : `<p class="mvp-quotation-legacy">This record is marked ${html(quote.title)} but its quotation amount was not captured in the stored fields. No price has been invented.</p>`;
+    const actions = typeof renderQuote === "function" && !hasExistingOrder(item)
+      ? `<details class="mvp-quotation-actions"><summary>Allowed quotation actions</summary>${renderQuote(item)}</details>`
+      : "";
+    return `<article class="mvp-quotation-panel"><header><div><span>Quotation</span><h3>${html(item.quoteCode || item.quoteReference || `QT-${item.id}`)}</h3>${meta ? `<p>${html(meta)}</p>` : ""}</div><mark>${html(quote.sub || quote.title)}</mark></header>${body}<div class="mvp-quotation-foot"><div><span>Payment terms</span><p>${html(item.paymentInstructions || item.paymentLabel || "Not set")}</p></div><div><span>Customer approval</span><p>${html(quoteApprovalLabel(item))}</p></div></div>${item.quoteNotes ? `<p class="mvp-quotation-note">${html(item.quoteNotes)}</p>` : ""}${actions}</article>`;
   }
 
   function inquiryHistoryTab(item) {
@@ -399,9 +423,22 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<section class="mvp-customer-comm"><h3>Conversation</h3><div class="mvp-comm-row"><span>Customer Link</span><div class="mvp-comm-value"><strong>${html(link)}</strong>${copyButton("Copy", link, "customer link")}</div></div><p>${html(message)}</p><div class="mvp-comm-actions"><button type="button" data-mvp-copy="${html(message)}"><span>Copy Customer Message</span></button><button type="button" data-mvp-open-messenger>Open Messenger</button></div><label class="mvp-comm-check"><input type="checkbox" /> <span>Mark message as sent</span></label></section>`;
   }
 
+  function inquirySecondaryActions(item) {
+    const link = customerLink(item);
+    return [
+      `<button type="button" data-mvp-copy="${html(item.id)}">Copy Inquiry Number</button>`,
+      link ? `<button type="button" data-mvp-copy="${html(link)}">Copy Customer Link</button>` : "",
+      `<button type="button" data-mvp-open-messenger>Open Messenger</button>`,
+    ].filter(Boolean);
+  }
+
   function inquiryActionBar(item, action) {
     const primaryHook = action.route ? `data-mvp-route="${html(action.route)}"` : `data-mvp-primary-action="${html(item.id)}"`;
-    return `<div class="mvp-inquiry-action-bar"><button type="button" class="mvp-action-primary" ${primaryHook} ${action.disabled ? "disabled" : ""}><span>${html(action.label)}</span><small>${html(action.hint)}</small></button><div class="mvp-more-wrap"><button type="button" class="mvp-action-secondary" data-mvp-more-toggle>More Actions</button>${state.inquiryMoreOpen ? `<div class="mvp-more-menu"><button type="button" data-mvp-inquiry-tab="conversation">Conversation</button><button type="button" data-mvp-inquiry-tab="request">Request</button><button type="button" data-mvp-inquiry-tab="artwork">Artwork</button><button type="button" data-mvp-inquiry-tab="history">History</button></div>` : ""}</div></div>`;
+    const secondaryActions = inquirySecondaryActions(item);
+    const moreMenu = secondaryActions.length
+      ? `<div class="mvp-more-wrap"><button type="button" class="mvp-action-secondary" data-mvp-more-toggle aria-expanded="false">More Actions</button><div class="mvp-more-menu" hidden>${secondaryActions.join("")}</div></div>`
+      : "";
+    return `<div class="mvp-inquiry-action-bar"><button type="button" class="mvp-action-primary" ${primaryHook} ${action.disabled ? "disabled" : ""}><span>${html(action.label)}</span><small>${html(action.hint)}</small></button>${moreMenu}</div>`;
   }
 
   function inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) {
@@ -414,9 +451,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryPrimaryAction(item, stage, renderOdoo) {
     if ((confirmed(item) || hasExistingOrder(item)) && productionStage(item) === "completed") return { kind: "production", label: "View Production", hint: "Read only", route: `/production?order=${encodeURIComponent(item.id)}` };
     if (confirmed(item) || hasExistingOrder(item)) return { kind: "order", label: "View Order", hint: "Open order workflow", route: `/orders?order=${encodeURIComponent(item.id)}` };
-    if (stage === "new") return { kind: "quote", label: "Create Quotation", hint: "Next step" };
     if (stage === "sent") return { kind: "wait", label: "Waiting for Approval", hint: "Quote sent", disabled: true };
     if (stage === "approved" && !item.odooSO) return { kind: "so", label: "Create Order", hint: "Next step", disabled: typeof renderOdoo !== "function" };
+    if (isQuoteDraft(item)) return { kind: "quote", label: "Edit Quotation", hint: "Send quote when ready" };
+    if (stage === "new") return { kind: "quote", label: "Create Quotation", hint: "Next step" };
     return { kind: "quote", label: "Create Quotation", hint: "Next step" };
   }
 
@@ -490,6 +528,69 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (stage === "sent") return { title: amount, sub: "Quote Sent" };
     if (item.quoteStatus === "draft" || amount !== "Not Created") return { title: amount, sub: item.quotePublishedAt ? "Quote Sent" : "Draft" };
     return { title: "Not Created", sub: "Unquoted" };
+  }
+
+  function isQuoteDraft(item) {
+    const quote = key(item.quoteStatus);
+    return !item.quotePublishedAt && !hasExistingOrder(item) && (quote === "draft" || amount(item.quotedAmount) > 0 || amount(item.amountDue) > 0 || Boolean(String(item.quoteBreakdown || "").trim()));
+  }
+
+  function quotationRows(item) {
+    const parsed = parseQuotationBreakdown(item.quoteBreakdown, item);
+    if (parsed.length) return parsed;
+    const total = amount(item.amountDue || item.quotedAmount);
+    if (!total) return [];
+    return [{
+      item: itemDisplay(item),
+      note: serviceDisplay(item) !== "-" ? serviceDisplay(item) : "",
+      qty: item.qty || item.sizeBreakdown || "-",
+      unit: unitPriceDisplay(total, item.qty),
+      amount: money(total),
+      rawAmount: total,
+    }];
+  }
+
+  function parseQuotationBreakdown(value, item) {
+    const lines = String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+    return lines.map((line) => {
+      const parts = line.split(/\s*(?:\||,)\s*/).filter(Boolean);
+      const amountText = [...parts].reverse().find((part) => /(?:₱|PHP|amount)/i.test(part) && parseMoney(part) > 0);
+      const rawAmount = amountText ? parseMoney(amountText) : 0;
+      const qty = parts.find((part) => /\b\d+\s*(?:pcs?|pieces?|shirts?|sets?)\b/i.test(part)) || item.qty || "-";
+      const unitText = parts.find((part) => part !== amountText && /(?:₱|PHP|unit)/i.test(part) && parseMoney(part) > 0);
+      const itemText = parts.find((part) => ![amountText, unitText, qty].includes(part)) || line.replace(amountText || "", "").trim() || itemDisplay(item);
+      return {
+        item: itemText,
+        note: parts.length > 3 ? parts.filter((part) => ![itemText, amountText, unitText, qty].includes(part)).join(" · ") : "",
+        qty,
+        unit: unitText ? money(parseMoney(unitText)) : unitPriceDisplay(rawAmount, qty),
+        amount: rawAmount ? money(rawAmount) : "-",
+        rawAmount,
+      };
+    });
+  }
+
+  function parseMoney(value) {
+    const text = String(value || "").replace(/[^\d.-]/g, "");
+    const number = Number(text);
+    return Number.isFinite(number) ? number : 0;
+  }
+
+  function quotationSubtotal(rows) {
+    return rows.reduce((total, row) => total + amount(row.rawAmount), 0);
+  }
+
+  function unitPriceDisplay(total, qtyValue) {
+    const qty = Number(String(qtyValue || "").replace(/[^\d.]/g, ""));
+    return qty > 0 && total > 0 ? money(Math.round((total / qty) * 100) / 100) : "-";
+  }
+
+  function quoteApprovalLabel(item) {
+    const stage = quoteStage(item);
+    if (stage === "approved") return "Approved";
+    if (stage === "sent") return "Awaiting customer response";
+    if (isQuoteDraft(item)) return "Draft not sent";
+    return "Not requested";
   }
 
   function statusSubtitle(item, stage) {
@@ -905,7 +1006,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function bind({ root = document, rerender, navigate, copy, saveProduction, confirmPayment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
-    root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { navigate(button.dataset.mvpRoute); rerender(); }));
+    bindInquiryMoreDismiss(root);
+    root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { closeInquiryMoreMenus(root); navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-filter]").forEach((field) => {
       const [scope, name] = field.dataset.mvpFilter.split(":");
@@ -917,11 +1019,25 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       element.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); open(); } });
     });
     root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => { const restore = state.returnFocus; state.inquiryId = null; state.orderId = null; state.productionId = null; state.returnFocus = null; clearQuery(); rerender(); requestAnimationFrame(() => { if (restore) root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]`)?.focus(); }); }));
-    root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); button.dataset.copied = "true"; const label = button.querySelector("small"); if (label) label.textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const nextLabel = button.querySelector("small"); if (nextLabel) nextLabel.textContent = "Copy"; }, 1300); }));
-    root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); state.inquiryTab = button.dataset.mvpInquiryTab; state.inquiryMoreOpen = false; rerender(); }));
+    root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); closeInquiryMoreMenus(root); button.dataset.copied = "true"; const label = button.querySelector("small"); if (label) label.textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const nextLabel = button.querySelector("small"); if (nextLabel) nextLabel.textContent = "Copy"; }, 1300); }));
+    root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      switchInquiryTab(root, button.dataset.mvpInquiryTab);
+    }));
     root.querySelectorAll("[data-mvp-primary-action]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); if (button.disabled) return; state.inquiryActionId = state.inquiryActionId === button.dataset.mvpPrimaryAction ? null : button.dataset.mvpPrimaryAction; state.inquiryMoreOpen = false; rerender(); }));
-    root.querySelectorAll("[data-mvp-more-toggle]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); state.inquiryMoreOpen = !state.inquiryMoreOpen; rerender(); }));
-    root.querySelectorAll("[data-mvp-open-messenger]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); window.open("https://www.messenger.com/", "_blank", "noopener,noreferrer"); }));
+    root.querySelectorAll("[data-mvp-more-toggle]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const menu = button.closest(".mvp-more-wrap")?.querySelector(".mvp-more-menu");
+      const shouldOpen = menu ? menu.hidden : false;
+      closeInquiryMoreMenus(root);
+      if (menu && shouldOpen) {
+        menu.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+      }
+    }));
+    root.querySelectorAll("[data-mvp-open-messenger]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); closeInquiryMoreMenus(root); window.open("https://www.messenger.com/", "_blank", "noopener,noreferrer"); }));
     root.querySelectorAll('[data-mvp-note-toggle]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); const wrap = button.closest('.mvp-note-wrap'); const expanded = wrap?.classList.toggle('expanded'); button.textContent = expanded ? 'SHOW LESS' : 'SHOW FULL NOTE'; }));
     root.querySelectorAll('[data-mvp-follow-preset]').forEach((button) => button.addEventListener('click', (event) => {
       event.stopPropagation();
@@ -1001,6 +1117,42 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       rerender();
     }));
   }
+
+  function switchInquiryTab(root, nextTab) {
+    const allowed = ["conversation", "request", "quotation", "artwork", "history"];
+    if (!allowed.includes(nextTab)) return;
+    const drawerBody = root.querySelector(".mvp-drawer.inquiry.locked .mvp-drawer-body");
+    const scrollTop = drawerBody?.scrollTop || 0;
+    state.inquiryTab = nextTab;
+    state.inquiryMoreOpen = false;
+    root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => {
+      const active = button.dataset.mvpInquiryTab === nextTab;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    root.querySelectorAll("[data-mvp-inquiry-panel]").forEach((panel) => {
+      panel.hidden = panel.dataset.mvpInquiryPanel !== nextTab;
+    });
+    closeInquiryMoreMenus(root);
+    if (drawerBody) drawerBody.scrollTop = scrollTop;
+  }
+
+  function bindInquiryMoreDismiss(root) {
+    if (root.__mvpInquiryMoreDismissBound) return;
+    root.__mvpInquiryMoreDismissBound = true;
+    root.addEventListener("click", (event) => {
+      if (!event.target.closest(".mvp-more-wrap")) closeInquiryMoreMenus(root);
+    });
+    root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") closeInquiryMoreMenus(root);
+    });
+  }
+
+  function closeInquiryMoreMenus(root) {
+    root.querySelectorAll(".mvp-more-menu").forEach((menu) => { menu.hidden = true; });
+    root.querySelectorAll("[data-mvp-more-toggle]").forEach((button) => button.setAttribute("aria-expanded", "false"));
+  }
+
   function filterBar(scope, items, fields) {
     const values = state[scope];
     const services = [...new Set(items.map((item) => item.service).filter(Boolean))].sort();
