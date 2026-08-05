@@ -40,7 +40,7 @@ const requiredCopy = [
   "Search clients by name, slug, or domain...",
   "Add New Client",
   "Copy Portal Link",
-  "View Products",
+  "Products module parked",
   "Search request no., client, or requested by...",
   "Update Status",
   "Add Internal Note",

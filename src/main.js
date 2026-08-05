@@ -509,13 +509,7 @@ const routes = {
   "/my-tasks": "My Tasks",
   "/calendar": "Calendar",
   "/workboard": "Workboard",
-  "/reorders": "Reorders",
   "/overview": "Overview",
-  "/clients": "Clients",
-  "/products": "Products",
-  "/catalog": "Catalog",
-  "/staff": "Staff",
-  "/settings": "Settings",
 };
 
 const defaultRoutePath = "/";
@@ -572,7 +566,7 @@ function render() {
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
+  const isAdminSaasRoute = false;
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
@@ -587,9 +581,7 @@ function render() {
         ${
           currentRoute === "Orders"
             ? renderMvpOrdersPage()
-            : currentRoute === "Reorders"
-              ? renderOrdersPage(selectedOrder, filteredOrders)
-              : currentRoute === "Inquiries"
+            : currentRoute === "Inquiries"
                 ? renderMvpInquiriesPage()
                 : currentRoute === "Production"
                   ? renderMvpProductionPage()
@@ -599,19 +591,7 @@ function render() {
                       ? renderCalendarPage()
                       : currentRoute === "Workboard"
                         ? renderWorkboardPage()
-                  : currentRoute === "Overview"
-                ? renderOverviewPage()
-                : currentRoute === "Clients"
-                  ? renderClientsPage()
-                  : currentRoute === "Products"
-                    ? renderProductsPage(selectedProduct)
-                    : currentRoute === "Catalog"
-                      ? renderCatalogPage()
-                      : currentRoute === "Staff"
-                        ? renderStaffAccessPage()
-                        : currentRoute === "Settings"
-                        ? renderSettingsPage()
-                        : renderOverviewPage()
+                  : renderOverviewPage()
         }
         ${renderFooter()}
       </section>
@@ -5048,7 +5028,7 @@ function renderCatalogDrawer(selectedProduct) {
                 ${renderCatalogDetailRow("Internal code", sourceProduct.code, true)}
                 ${renderCatalogDetailRow("Availability", sourceProduct.status || "Available")}
               </div>
-              <button class="note-button catalog-secondary-action" data-route-target="/products" type="button">Open Products record</button>`
+              <button class="note-button catalog-secondary-action" type="button" disabled>Products record parked</button>`
             : `<div class="catalog-source-empty"><strong>No source Product linked</strong><span>This Catalog item can still be edited, but staff should confirm the matching internal Product record before publishing.</span></div>`}
         </section>
 
@@ -5887,7 +5867,7 @@ function renderClientPanel() {
         <a class="primary-drawer-action" href="https://${clientProgram.domain}" target="_blank" rel="noreferrer">Open Portal</a>
         <details class="drawer-more-actions"><summary>More Actions</summary><div>
           <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
-          <button data-route-target="/products" type="button">View Products</button>
+          <button disabled type="button">Products module parked</button>
           <button data-route-target="/orders" type="button">View Orders</button>
           <button disabled title="Editing requires a connected client management backend." type="button">Edit Client</button>
         </div></details>
@@ -6023,15 +6003,10 @@ function renderSidebar(currentRoute) {
     { label: "Overview", path: "/overview" },
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
-    { label: "Clients", path: "/clients" },
-    { label: "Products", path: "/products" },
     { label: "Production", path: "/production", icon: "factory" },
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
-    { label: "Catalog", path: "/catalog" },
-    ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
-    { label: "Settings", path: "/settings" },
   ];
 
   return `
@@ -6039,8 +6014,7 @@ function renderSidebar(currentRoute) {
       <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
-        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>`).join("")}
-        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
+        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label}</span></a>`).join("")}
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -6072,10 +6046,6 @@ function renderAccountMenu(surface = "desktop") {
   const menuClass = isMobile ? "mobile-account-popover" : "admin-account-popover";
   const avatarClass = isMobile ? "mobile-avatar" : "avatar";
   const accountLabel = isMobile ? `<span class="mobile-account-label">ACCOUNT</span>` : "";
-  const manageStaff = canManageStaffAccounts()
-    ? `<button type="button" data-admin-account-action="staff">MANAGE STAFF</button>`
-    : "";
-
   return `<div class="admin-account-menu ${isMobile ? "mobile" : "desktop"} ${isAccountMenuOpen ? "open" : ""}" data-admin-account-menu>
     <button class="${triggerClass}" type="button" data-admin-account-toggle aria-haspopup="menu" aria-expanded="${isAccountMenuOpen ? "true" : "false"}">
       <span class="${avatarClass}">${getAdminInitials()}</span>${accountLabel}
@@ -6086,7 +6056,6 @@ function renderAccountMenu(surface = "desktop") {
       <strong>${escapeHtml(getAdminDisplayName())}</strong>
       <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
       <i aria-hidden="true"></i>
-      ${manageStaff}
       <button type="button" data-admin-logout>LOG OUT</button>
     </div>
   </div>`;
@@ -6103,7 +6072,7 @@ function renderTopHeader() {
       </div>
       <div class="global-search-wrap">
         <label class="global-search">
-          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders, clients, products..." type="search" />
+          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders..." type="search" />
           ${renderIcon("search", "search-icon")}
         </label>
         ${renderGlobalSearchHint()}
@@ -6144,18 +6113,6 @@ function renderMobileBottomNav(currentRoute) {
 function renderGlobalSearchHint() {
   const normalized = globalSearchQuery.trim().toLowerCase();
   if (!normalized) return "";
-
-  if ("urban coffee".includes(normalized)) {
-    return `<button class="search-suggestion" data-route-target="/clients" type="button">Open Clients</button>`;
-  }
-
-  if (
-    "admin polo uniform".includes(normalized) ||
-    "embroidered staff cap".includes(normalized) ||
-    normalized.includes("cap")
-  ) {
-    return `<button class="search-suggestion" data-route-target="/products" type="button">Open Products</button>`;
-  }
 
   if ("orders".includes(normalized) || "reorder".includes(normalized) || normalized.includes("trry-uc")) {
     return `<button class="search-suggestion" data-route-target="/orders" type="button">Open Orders</button>`;
@@ -6681,14 +6638,6 @@ function bindEvents() {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       isAccountMenuOpen = !isAccountMenuOpen;
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-admin-account-action='staff']").forEach((button) => {
-    button.addEventListener("click", () => {
-      isAccountMenuOpen = false;
-      navigateTo("/staff");
       render();
     });
   });
@@ -7452,18 +7401,6 @@ function getSearchRoute(value) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return null;
 
-  if ("urban coffee".includes(normalized)) {
-    return { path: "/clients", clientQuery: "Urban Coffee" };
-  }
-
-  if ("admin polo uniform".includes(normalized)) {
-    return { path: "/products", productQuery: "Admin Polo" };
-  }
-
-  if ("embroidered staff cap".includes(normalized) || normalized.includes("cap")) {
-    return { path: "/products", productQuery: "Cap" };
-  }
-
   if (normalized.includes("trry-uc") || "orders".includes(normalized) || "reorder".includes(normalized)) {
     return { path: "/orders", orderQuery: value.trim() };
   }
@@ -7657,6 +7594,7 @@ function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
+  if (path === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
   return routes[path] ? path : defaultRoutePath;
 }
 
@@ -7673,6 +7611,7 @@ function normalizeRoutePath(path) {
   }
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
+  if (routePath === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
 }
 
