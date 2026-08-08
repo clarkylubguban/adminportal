@@ -18,10 +18,6 @@ export function buildPaymentConfirmationUpdate({ inquiry, body = {}, adminUser =
   if (!Number.isFinite(total) || total <= 0) return failure("valid quote total required");
   if (!Number.isFinite(amount) || amount <= 0) return failure("amount received must be positive");
   if (!source) return failure("payment source is required");
-  if (remaining <= 0 || ["paid", "full_payment_confirmed", "confirmed"].includes(currentStatus)) {
-    return failure("payment is already fully confirmed");
-  }
-  if (roundMoney(amount - remaining) > 0) return failure("amount received cannot exceed remaining balance");
 
   if (idempotencyKey && hasPaymentHistoryKey(inquiry, idempotencyKey)) {
     return {
@@ -30,6 +26,11 @@ export function buildPaymentConfirmationUpdate({ inquiry, body = {}, adminUser =
       updates: {},
     };
   }
+
+  if (remaining <= 0 || ["paid", "full_payment_confirmed", "confirmed"].includes(currentStatus)) {
+    return failure("payment is already fully confirmed");
+  }
+  if (roundMoney(amount - remaining) > 0) return failure("amount received cannot exceed remaining balance");
 
   const paidTotal = roundMoney(existingPaid + amount);
   const remainingBalance = Math.max(roundMoney(total - paidTotal), 0);

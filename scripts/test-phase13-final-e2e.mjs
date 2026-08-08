@@ -22,6 +22,8 @@ const NOW = {
   complete: "2026-08-08T11:05:00.000Z",
 };
 
+global.window = { location: { search: "" }, history: { replaceState() {} }, setTimeout, open() {} };
+
 const report = {
   disposableDb: CONTAINER,
   inquiryReference: INQUIRY_ID,

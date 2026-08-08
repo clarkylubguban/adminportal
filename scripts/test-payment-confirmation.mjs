@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { buildOpsWorkflowUpdates } from "../api/_lib/opsWorkflow.js";
 import { buildPaymentConfirmationUpdate } from "../api/_lib/paymentConfirmation.js";
 
@@ -57,6 +58,71 @@ test("duplicate idempotency key returns idempotent success without new update", 
   assert.equal(result.ok, true);
   assert.equal(result.idempotent, true);
   assert.deepEqual(result.updates, {});
+});
+
+test("same idempotency key after full payment remains a durable no-op replay", () => {
+  const result = confirmPayment(order({
+    payment_status: "paid",
+    payment_confirmed_amount: 1050,
+    payment_verified_amount: 1050,
+    payment_confirmed_at: "2026-08-01T04:00:00.000Z",
+    payment_confirmed_by: ADMIN.user_id,
+    amount_due: 0,
+    payment_history: [{
+      id: "paid-replay",
+      type: "payment_confirmed",
+      amount: 1050,
+      source: "gcash",
+      referenceNumber: "P-001",
+      confirmedBy: ADMIN.user_id,
+      confirmedAt: "2026-08-01T04:00:00.000Z",
+      balanceAfter: 0,
+      status: "paid",
+    }],
+  }), { amountReceived: 1050, paymentSource: "gcash", referenceNumber: "P-001", idempotencyKey: "paid-replay" });
+  assert.equal(result.ok, true);
+  assert.equal(result.idempotent, true);
+  assert.deepEqual(result.updates, {});
+});
+
+test("same idempotency key with different replay payload never applies a second payment", () => {
+  const result = confirmPayment(order({
+    payment_status: "paid",
+    payment_confirmed_amount: 1050,
+    payment_verified_amount: 1050,
+    amount_due: 0,
+    payment_history: [{ id: "paid-replay-different", amount: 1050, referenceNumber: "P-001" }],
+  }), { amountReceived: 999, paymentSource: "cash", referenceNumber: "DIFFERENT", idempotencyKey: "paid-replay-different" });
+  assert.equal(result.ok, true);
+  assert.equal(result.idempotent, true);
+  assert.deepEqual(result.updates, {});
+});
+
+test("new idempotency key after full payment remains rejected", () => {
+  const result = confirmPayment(order({
+    payment_status: "paid",
+    payment_confirmed_amount: 1050,
+    payment_verified_amount: 1050,
+    amount_due: 0,
+    payment_history: [{ id: "original-paid-key" }],
+  }), { amountReceived: 1050, paymentSource: "gcash", idempotencyKey: "new-paid-key" });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "payment is already fully confirmed");
+});
+
+test("failed payment attempt does not mint a successful replay key", () => {
+  const failed = confirmPayment(order(), { amountReceived: 1200, paymentSource: "gcash", idempotencyKey: "failed-key" });
+  assert.equal(failed.ok, false);
+  const replay = confirmPayment(order({ payment_history: [] }), { amountReceived: 1050, paymentSource: "gcash", idempotencyKey: "failed-key" });
+  assert.equal(replay.ok, true);
+  assert.equal(replay.idempotent, false);
+  assert.equal(replay.updates.payment_history.length, 1);
+});
+
+test("payment confirmation route keeps owner/admin write authorization", () => {
+  const source = readFileSync("api/inquiries/[id]/payment-confirmations.js", "utf8");
+  assert.ok(source.includes('new Set(["owner", "admin"])'), "payment confirmation remains owner/admin only");
+  assert.ok(source.includes("owner or admin access required"), "staff denial remains encoded");
 });
 
 test("amount above remaining balance is rejected", () => {
