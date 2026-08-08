@@ -367,7 +367,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const stage = quoteStage(item);
     const action = inquiryPrimaryAction(item, stage, renderOdoo);
     const activeTab = ["details", "request", "quotation", "artwork", "history"].includes(state.inquiryTab) ? state.inquiryTab : "details";
-    const workflowPanel = state.inquiryActionId === item.id ? inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) : "";
+    const workflowPanel = state.inquiryActionId === item.id && action.kind !== "quote" ? inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) : "";
     return drawer("inquiry locked", item, QUOTE_STAGES[stage], `
       <section class="mvp-inquiry-locked-shell">
         ${inquiryLockedHeader(item, stage)}
@@ -431,6 +431,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function inquiryQuotationTab(item, renderQuote) {
     const quote = quotationSummary(item, quoteStage(item));
+    const creatingQuote = state.inquiryActionId === item.id && inquiryPrimaryAction(item, quoteStage(item)).kind === "quote";
+    if (creatingQuote) return inquiryQuotationForm(item);
+    if (isNoQuoteYet(item)) return inquiryQuotationEmptyState();
+
     const rows = quotationRows(item);
     const subtotal = quotationSubtotal(rows);
     const quoted = amount(item.quotedAmount);
@@ -448,6 +452,36 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ? `<details class="mvp-quotation-actions"><summary>Allowed quotation actions</summary>${renderQuote(item)}</details>`
       : "";
     return `<article class="mvp-quotation-panel"><header><div><span>Quotation</span><h3>${html(item.quoteCode || item.quoteReference || `QT-${item.id}`)}</h3>${meta ? `<p>${html(meta)}</p>` : ""}</div><mark>${html(quote.sub || quote.title)}</mark></header>${body}<div class="mvp-quotation-foot"><div><span>Payment terms</span><p>${html(item.paymentInstructions || item.paymentLabel || "Not set")}</p></div><div><span>Customer approval</span><p>${html(quoteApprovalLabel(item))}</p></div></div>${item.quoteNotes ? `<p class="mvp-quotation-note">${html(item.quoteNotes)}</p>` : ""}${actions}</article>`;
+  }
+
+  function inquiryQuotationEmptyState() {
+    return `<article class="mvp-quotation-empty-state">
+      <div class="mvp-quotation-empty-icon" aria-hidden="true"></div>
+      <strong>No quotation yet</strong>
+      <p>Create a quotation using the customer's request before sending a price.</p>
+    </article>`;
+  }
+
+  function inquiryQuotationForm(item) {
+    const quoted = amount(item.quotedAmount);
+    const total = amount(item.amountDue || item.quotedAmount);
+    const totalLabel = money(total || quoted);
+    return `<article class="mvp-quotation-create-card ops-stage-section" data-mvp-quote-create="${html(item.id)}">
+      <div class="ops-quote-editor mvp-quotation-create-form">
+        <h3>CREATE QUOTATION</h3>
+        <div class="mvp-quotation-create-grid">
+          <label><span>Quoted Amount</span><input data-ops-customer-field="quotedAmount" inputmode="decimal" type="text" value="${html(item.quotedAmount ?? "")}" placeholder="0.00" /></label>
+          <label><span>Valid Until</span><input data-ops-customer-field="quoteValidUntil" type="date" value="${html(item.quoteValidUntil || "")}" /></label>
+          <label class="wide"><span>Quote Breakdown</span><textarea data-ops-customer-field="quoteBreakdown" rows="4" placeholder="Optional product, quantity, and pricing details">${html(item.quoteBreakdown || "")}</textarea></label>
+          <label class="wide"><span>Quote Note</span><textarea data-ops-customer-field="quoteNotes" rows="4" placeholder="Add note for the customer">${html(item.quoteNotes || "")}</textarea></label>
+        </div>
+        <div class="mvp-quotation-total-display"><span>Quoted Total</span><strong>${html(totalLabel)}</strong></div>
+        <div class="mvp-quotation-create-actions">
+          <button class="mvp-action-secondary" data-ops-customer-action="save_quote_draft" data-ops-customer-id="${html(item.id)}" type="button">Save Draft</button>
+          <button class="mvp-action-primary" data-ops-customer-action="publish_quote" data-ops-customer-id="${html(item.id)}" type="button"><span>Publish Quote</span></button>
+        </div>
+      </div>
+    </article>`;
   }
 
   function inquiryHistoryTab(item) {
@@ -491,7 +525,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const moreMenu = secondaryActions.length
       ? `<div class="mvp-more-wrap"><button type="button" class="mvp-action-secondary" data-mvp-more-toggle aria-expanded="false">More Actions</button><div class="mvp-more-menu" hidden>${secondaryActions.join("")}</div></div>`
       : "";
-    return `<div class="mvp-inquiry-action-bar"><button type="button" class="mvp-action-primary" ${primaryHook} ${action.disabled ? "disabled" : ""}><span>${html(action.label)}</span><small>${html(action.hint)}</small></button>${moreMenu}</div>`;
+    return `<div class="mvp-inquiry-action-bar"><button type="button" class="mvp-action-primary" ${primaryHook} data-mvp-primary-kind="${html(action.kind || "")}" ${action.disabled ? "disabled" : ""}><span>${html(action.label)}</span><small>${html(action.hint)}</small></button>${moreMenu}</div>`;
   }
 
   function inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) {
@@ -620,6 +654,16 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function isQuoteDraft(item) {
     const quote = key(item.quoteStatus);
     return !item.quotePublishedAt && !hasExistingOrder(item) && (quote === "draft" || amount(item.quotedAmount) > 0 || amount(item.amountDue) > 0 || Boolean(String(item.quoteBreakdown || "").trim()));
+  }
+
+  function isNoQuoteYet(item) {
+    return !item.quotePublishedAt
+      && !hasExistingOrder(item)
+      && !["draft", "pending", "ready", "approved"].includes(key(item.quoteStatus))
+      && amount(item.quotedAmount) === 0
+      && amount(item.amountDue) === 0
+      && !String(item.quoteBreakdown || "").trim()
+      && !String(item.quoteNotes || "").trim();
   }
 
   function quotationRows(item) {
@@ -1126,7 +1170,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       event.stopPropagation();
       switchInquiryTab(root, button.dataset.mvpInquiryTab);
     }));
-    root.querySelectorAll("[data-mvp-primary-action]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); if (button.disabled) return; state.inquiryActionId = state.inquiryActionId === button.dataset.mvpPrimaryAction ? null : button.dataset.mvpPrimaryAction; state.inquiryMoreOpen = false; rerender(); }));
+    root.querySelectorAll("[data-mvp-primary-action]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); if (button.disabled) return; state.inquiryActionId = state.inquiryActionId === button.dataset.mvpPrimaryAction ? null : button.dataset.mvpPrimaryAction; if (button.dataset.mvpPrimaryKind === "quote") state.inquiryTab = "quotation"; state.inquiryMoreOpen = false; rerender(); }));
     root.querySelectorAll("[data-mvp-more-toggle]").forEach((button) => button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
