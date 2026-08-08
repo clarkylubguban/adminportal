@@ -31,7 +31,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     orderId: null,
     productionId: null,
     returnFocus: null,
-    inquiry: { search: "", stage: "all", owner: "all", service: "all", due: "all" },
+    inquiry: { search: "", stage: "all", owner: "all", service: "all", due: "all", page: 1 },
     order: { search: "", payment: "all", artwork: "all", due: "all", production: "all", owner: "all" },
     production: { search: "", staff: "all", method: "all", stage: "all", due: "all", blocker: "all" },
     inquiryTab: "conversation",
@@ -292,35 +292,74 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return !search || [item.id, item.customer, item.contact, item.service, product(item)].join(" ").toLowerCase().includes(search);
     });
     const selected = inquiries.find((item) => item.id === (state.inquiryId || query("inquiry")));
+    const pageSize = 5;
+    const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+    const currentPage = Math.min(Math.max(Number(state.inquiry.page) || 1, 1), pageCount);
+    state.inquiry.page = currentPage;
+    const visibleRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
     return `<main class="mvp-page ops-board-page mvp-inquiries-page">
-      ${pageTitle("Inquiries", "Inquiry Pipeline", `${inquiries.length} inquiries`)}
-      <p class="mvp-rule">NO QUOTATION / NO WORK</p>${notices}
+      ${inquiryDashboardHeader(inquiries.length)}
+      <p class="mvp-rule mvp-rule-hidden">NO QUOTATION / NO WORK</p>
+      ${inquiryKpiStrip(inquiries, stageFilter)}
       ${filterBar("inquiry", items, ["owner", "service", "due"])}
-      <div class="mvp-stage-cards">${INQUIRY_QUEUES.map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="${stageFilter === value ? "active" : ""}"><span>${label}</span><strong>${value === "follow_due" ? inquiries.filter(isFollowUpDue).length : inquiries.filter((item) => quoteStage(item) === value).length}</strong></button>`).join("")}</div>
-      ${inquiryTable(rows)}${inquiryDrawer(selected, renderQuote, renderOdoo, renderArtwork)}
+      ${notices}
+      ${inquiryTable(visibleRows, rows.length, currentPage, pageCount, pageSize)}${inquiryDrawer(selected, renderQuote, renderOdoo, renderArtwork)}
     </main>`;
   }
 
-  function inquiryTable(items) {
-    const headers = ["Code", "Customer", "Phone", "Item", "Request", "Service", "Qty", "Quote Status", "Next Follow-up", "Owner"];
+  function inquiryDashboardHeader(total) {
+    return `<header class="mvp-inquiry-dashboard-header">
+      <div class="mvp-inquiry-header-copy">
+        <nav class="mvp-breadcrumbs" aria-label="Breadcrumb"><span>Home</span><i aria-hidden="true">&gt;</i><b>Inquiries</b></nav>
+        <h1>Inquiry Pipeline</h1>
+        <p>Track new inquiries, quotation progress, follow-ups, and approvals.</p>
+      </div>
+      <div class="mvp-inquiry-header-actions">
+        <strong>${total} Total ${total === 1 ? "Inquiry" : "Inquiries"}</strong>
+        <button class="mvp-inquiry-new-action" type="button" disabled title="New inquiry intake remains in the existing Ops intake workflow."><span aria-hidden="true">+</span> New Inquiry</button>
+      </div>
+    </header>`;
+  }
+
+  function inquiryKpiStrip(items, stageFilter) {
+    const counts = Object.fromEntries(INQUIRY_QUEUES.map(([value]) => [value, value === "follow_due" ? items.filter(isFollowUpDue).length : items.filter((item) => quoteStage(item) === value).length]));
+    const today = todayIso();
+    const newToday = items.filter((item) => quoteStage(item) === "new" && String(item.createdAt || item.created_at || "").slice(0, 10) === today).length;
+    const overdueFollowUps = items.filter((item) => isFollowUpDue(item) && inquiryDue(item) === "overdue").length;
+    const notes = {
+      new: newToday ? `+${newToday} today` : "Needs quotation",
+      sent: `${counts.sent} awaiting response`,
+      follow_due: overdueFollowUps ? `${overdueFollowUps} overdue` : "Due today",
+      approved: "Ready for order",
+      lost: "Needs review",
+    };
+    return `<section class="mvp-stage-cards mvp-inquiry-kpi-strip" aria-label="Inquiry KPIs">${INQUIRY_QUEUES.map(([value, label]) => `<button type="button" data-mvp-stage="${value}" class="mvp-inquiry-kpi ${stageFilter === value ? "active" : ""} ${value}"><span class="mvp-inquiry-kpi-icon" aria-hidden="true">${inquiryKpiIcon(value)}</span><span class="mvp-inquiry-kpi-copy"><small>${html(inquiryKpiLabel(label))}</small><strong>${counts[value]}</strong><em>${html(notes[value])}</em></span></button>`).join("")}</section>`;
+  }
+
+  function inquiryKpiIcon(value) {
+    const icons = { new: "□", sent: "↗", follow_due: "◴", approved: "✓", lost: "×" };
+    return icons[value] || "□";
+  }
+
+  function inquiryTable(items, total, currentPage, pageCount, pageSize) {
+    const headers = ["Code", "Customer", "Item", "Request", "Service", "Qty", "Quote Status", "Follow-up", "Owner", "Action"];
     const desktopRows = items.map((item) => {
       const stage = quoteStage(item);
-      const phone = String(item.contact || "").trim();
       return row("inquiry", item.id, [
         copyButton(item.id, item.id, "inquiry code"),
-        strong(item.customer || "Unnamed customer"),
-        phone ? copyButton(phone, phone.replace(/\D/g, ""), "phone number") : cell(displayDash()),
+        customerCell(item),
         itemCell(item),
         requestCell(item),
         cell(serviceDisplay(item)),
-        cell(item.qty || displayDash()),
+        quantityCell(item),
         status(QUOTE_STAGES[stage], stage),
         followUpCell(item),
         cell(owner(item)),
+        inquiryActionCell(item),
       ]);
     });
     const mobileCards = items.map((item) => inquiryMobileCard(item, quoteStage(item))).join("");
-    return `${table("inquiry", headers, desktopRows, "NO INQUIRIES MATCH THIS FILTER")}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("NO INQUIRIES MATCH THIS FILTER")}</section>`;
+    return `${table("inquiry", headers, desktopRows, "NO INQUIRIES MATCH THIS FILTER", inquiryPagination(total, currentPage, pageCount, pageSize))}<section class="mvp-inquiry-card-list" aria-label="Inquiries">${mobileCards || empty("NO INQUIRIES MATCH THIS FILTER")}</section>`;
   }
 
   function inquiryDrawer(item, renderQuote, renderOdoo, renderArtwork) {
@@ -1008,11 +1047,25 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function bind({ root = document, rerender, navigate, copy, saveProduction, confirmPayment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
     bindInquiryMoreDismiss(root);
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { closeInquiryMoreMenus(root); navigate(button.dataset.mvpRoute); rerender(); }));
-    root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; clearQuery(); rerender(); }));
+    root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-filter]").forEach((field) => {
       const [scope, name] = field.dataset.mvpFilter.split(":");
-      field.addEventListener(field.type === "search" ? "input" : "change", () => { state[scope][name] = field.value; clearQuery(); rerender(); if (field.type === "search") focusAtEnd(field.dataset.mvpFilter); });
+      field.addEventListener(field.type === "search" ? "input" : "change", () => { state[scope][name] = field.value; if (scope === "inquiry") state.inquiry.page = 1; clearQuery(); rerender(); if (field.type === "search") focusAtEnd(field.dataset.mvpFilter); });
     });
+    root.querySelectorAll("[data-mvp-reset-filters]").forEach((button) => button.addEventListener("click", () => {
+      const scope = button.dataset.mvpResetFilters;
+      if (!state[scope]) return;
+      Object.keys(state[scope]).forEach((keyName) => { state[scope][keyName] = keyName === "page" ? 1 : "all"; });
+      if (state[scope].search !== undefined) state[scope].search = "";
+      clearQuery();
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-page]").forEach((button) => button.addEventListener("click", () => {
+      const page = Number(button.dataset.mvpPage);
+      if (!Number.isFinite(page)) return;
+      state.inquiry.page = page;
+      rerender();
+    }));
     root.querySelectorAll("[data-mvp-open]").forEach((element) => {
       const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = "conversation"; state.inquiryActionId = null; state.inquiryMoreOpen = false; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
       element.addEventListener("click", (event) => { if (event.target.closest("[data-mvp-copy]")) return; event.stopPropagation(); open(); });
@@ -1157,7 +1210,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const values = state[scope];
     const services = [...new Set(items.map((item) => item.service).filter(Boolean))].sort();
     const people = assignmentFilterOptions();
-    const controls = [`<label class="mvp-search"><span aria-hidden="true">?</span><input type="search" data-mvp-filter="${scope}:search" value="${html(values.search)}" placeholder="Search code, customer, product..." /></label>`];
+    const controls = [`<label class="mvp-search"><span aria-hidden="true">⌕</span><input type="search" data-mvp-filter="${scope}:search" value="${html(values.search)}" placeholder="Search code, customer, product..." /><kbd>⌘ K</kbd></label>`];
     if (fields.includes("owner")) controls.push(select(scope, "owner", "All Owners", people, values.owner, true));
     if (fields.includes("staff")) controls.push(select(scope, "staff", "All Staff", people, values.staff, true));
     if (fields.includes("method")) controls.push(select(scope, "method", "All Methods", productionMethods(items), values.method));
@@ -1169,6 +1222,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (fields.includes("fulfillment")) controls.push(select(scope, "fulfillment", "All Fulfillment", [["pickup", "Pickup"], ["delivery", "Delivery"]], values.fulfillment));
     if (fields.includes("blocker")) controls.push(select(scope, "blocker", "All Blockers", [["blocked", "Blocked"], ["clear", "Not blocked"]], values.blocker));
     if (fields.includes("due")) controls.push(select(scope, "due", scope === "inquiry" ? "All Follow-up" : "All Dates", [["overdue", "Overdue"], ["today", "Due today"], ["week", "This week"]], values.due));
+    if (scope === "inquiry") controls.push(`<button class="mvp-reset-filters" type="button" data-mvp-reset-filters="inquiry"><span aria-hidden="true">↺</span> Reset Filters</button>`);
     return `<section class="mvp-filter-bar">${controls.join("")}</section>`;
   }
 
@@ -1178,8 +1232,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<select data-mvp-filter="${scope}:${name}"><option value="all">${allLabel}</option>${rows.map(([keyValue, label]) => `<option value="${html(keyValue)}" ${value === keyValue ? "selected" : ""}>${html(label)}</option>`).join("")}</select>`;
   }
 
-  function table(type, headers, rows, emptyLabel) {
-    return `<section class="mvp-table-wrap"><div class="mvp-table ${type}" role="table"><div class="mvp-table-head" role="row">${headers.map((header) => `<span role="columnheader">${header}</span>`).join("")}</div><div role="rowgroup">${rows.length ? rows.join("") : empty(emptyLabel)}</div></div></section>`;
+  function table(type, headers, rows, emptyLabel, footer = "") {
+    return `<section class="mvp-table-wrap"><div class="mvp-table ${type}" role="table"><div class="mvp-table-head" role="row">${headers.map((header) => `<span role="columnheader">${html(header)}${type === "inquiry" && header !== "Action" ? `<i aria-hidden="true">&#8597;</i>` : ""}</span>`).join("")}</div><div role="rowgroup">${rows.length ? rows.join("") : empty(emptyLabel)}</div></div>${footer}</section>`;
   }
 
   function row(type, id, cells) {
@@ -1242,6 +1296,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const source = itemSourceLabel(item);
     return `<span class="mvp-item-cell" title="${html(itemDisplay(item))}"><strong>${html(itemDisplay(item))}</strong>${source === "Customer-owned item" ? "<small>OWN ITEM</small>" : ""}</span>`;
   }
+  function customerCell(item) {
+    const phone = String(item.contact || "").trim();
+    return `<span class="mvp-customer-cell" title="${html(item.customer || "Unnamed customer")}"><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(phone || "No contact")}</small></span>`;
+  }
   function cleanCustomerSuppliedLabel(value) {
     return String(value || "Not set").replace(/^customer-supplied\s*/i, "").trim() || "Other";
   }
@@ -1275,7 +1333,28 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
   function requestCell(item) {
     const summary = `${fulfillment(item).toUpperCase()} ${String.fromCharCode(183)} ${artworkState(item)}`;
-    return `<span class="mvp-request-cell" title="${html(summary)} / ${html(quoteAmount(item))}"><strong>${html(summary)}</strong><small>${html(quoteAmount(item))}</small></span>`;
+    return `<span class="mvp-request-cell" title="${html(summary)} / ${html(customerNotes(item) || "No notes")}"><strong>${html(summary)}</strong><small>${html(customerNotes(item) || "No notes")}</small></span>`;
+  }
+  function quantityCell(item) {
+    const qty = String(item.qty || "").trim() || displayDash();
+    const secondary = String(item.sizeBreakdown || "").trim();
+    return `<span class="mvp-qty-cell" title="${html([qty, secondary].filter(Boolean).join(" / "))}"><strong>${html(qty)}</strong>${secondary ? `<small>${html(secondary)}</small>` : ""}</span>`;
+  }
+  function inquiryActionCell(item) {
+    return `<span class="mvp-inquiry-action-cell"><button type="button" data-mvp-open="inquiry" data-mvp-id="${html(item.id)}">Open <i aria-hidden="true">&rsaquo;</i></button></span>`;
+  }
+  function inquiryPagination(total, currentPage, pageCount, pageSize) {
+    if (!total) return `<footer class="mvp-inquiry-pagination"><span>Showing 0 inquiries</span></footer>`;
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(total, currentPage * pageSize);
+    const pages = Array.from({ length: pageCount }, (_, index) => index + 1).slice(0, 5);
+    return `<footer class="mvp-inquiry-pagination"><span>Showing ${start} to ${end} of ${total} ${total === 1 ? "inquiry" : "inquiries"}</span><nav aria-label="Inquiry pagination"><button type="button" data-mvp-page="${Math.max(1, currentPage - 1)}" ${currentPage === 1 ? "disabled" : ""}>‹</button>${pages.map((page) => `<button type="button" data-mvp-page="${page}" class="${page === currentPage ? "active" : ""}" aria-current="${page === currentPage ? "page" : "false"}">${page}</button>`).join("")}<button type="button" data-mvp-page="${Math.min(pageCount, currentPage + 1)}" ${currentPage === pageCount ? "disabled" : ""}>›</button><small>${pageSize} / page</small></nav></footer>`;
+  }
+  function toTitleCase(value) {
+    return String(value || "").toLowerCase().replace(/\b\w/g, (letter) => letter.toUpperCase());
+  }
+  function inquiryKpiLabel(value) {
+    return toTitleCase(value).replace("Follow-Up", "Follow-up");
   }
   function artworkState(item) {
     const status = key(item.artworkStatus);
