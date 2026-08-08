@@ -121,6 +121,22 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   };
 
   const product = (item) => item.productDesc || messageValue(item.message, ["Product", "Garment", "Item", "Inquiry / Product"]) || item.service || "Not set";
+  const hasProductAndQuantity = (item) => Boolean(product(item) && product(item) !== "Not set" && serviceDisplay(item) !== "-" && item.qty);
+  const hasQuoteApproval = (item) => key(item.quoteStatus) === "approved" && amount(item.quotedAmount || item.amountDue) > 0 && Boolean(item.quoteApprovedAt || key(item.status) === "approved");
+  const hasArtworkApproval = (item) => key(item.artworkStatus) === "approved";
+  const hasAgreedDueDate = (item) => Boolean(item.dueDate);
+  const hasActiveInquiryBlocker = (item) => key(item.artworkStatus) === "revision_requested" || Boolean(item.blockedReason);
+  const inquiryReadinessRows = (item) => [
+    { key: "product", label: "Product and quantity", ok: hasProductAndQuantity(item), detail: "Product/service and quantity captured" },
+    { key: "quote", label: "Quotation approved", ok: hasQuoteApproval(item), detail: "Customer approval recorded" },
+    { key: "artwork", label: "Artwork approved", ok: hasArtworkApproval(item), detail: "Canonical artwork_status is approved" },
+    { key: "due_date", label: "Agreed due date", ok: hasAgreedDueDate(item), detail: "Operator-set agreed due date" },
+    { key: "blocker", label: "No revision or explicit blocker", ok: !hasActiveInquiryBlocker(item), detail: "No active revision/blocker" },
+  ];
+  const inquiryOrderReadiness = (item) => {
+    const rows = inquiryReadinessRows(item);
+    return { rows, ready: rows.every((rowItem) => rowItem.ok), missing: rows.filter((rowItem) => !rowItem.ok).map((rowItem) => rowItem.label) };
+  };
   const assignmentContext = () => {
     const context = getAssignmentContext() || {};
     const users = Array.isArray(context.users) ? context.users : [];
@@ -438,7 +454,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryRequestTab(item) {
-    return `<div class="mvp-inquiry-core-content"><h3>CUSTOMER REQUEST</h3><div class="mvp-inquiry-detail-list">${detailLine("Product", itemDisplay(item))}${detailLine("Print Method", serviceDisplay(item))}${detailLine("Quantity", item.sizeBreakdown || item.qty || "Not specified")}${detailLine("Fulfillment", fulfillment(item))}${detailLine("Requested date", requestDateLabel(item))}</div><section class="mvp-inquiry-note-card"><span>CUSTOMER NOTES</span><p>${html(customerNotes(item) || "No customer notes.")}</p></section>${detailLine("Reference Files", referenceFilesLabel(item))}</div>`;
+    return `<div class="mvp-inquiry-core-content"><h3>CUSTOMER REQUEST</h3><div class="mvp-inquiry-detail-list">${detailLine("Product", itemDisplay(item))}${detailLine("Print Method", serviceDisplay(item))}${detailLine("Quantity", item.sizeBreakdown || item.qty || "Not specified")}${detailLine("Fulfillment", fulfillment(item))}${detailLine("Customer requested date", requestDateLabel(item))}${detailLine("Agreed due date", item.dueDate ? shortDate(item.dueDate) : "Not set")}</div><section class="mvp-inquiry-note-card"><span>CUSTOMER NOTES</span><p>${html(customerNotes(item) || "No customer notes.")}</p></section>${detailLine("Reference Files", referenceFilesLabel(item))}</div>`;
   }
 
   function inquiryArtworkTab(item, renderArtwork) {
@@ -464,7 +480,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ? `<div class="mvp-quotation-table" role="table" aria-label="Quotation details"><div class="mvp-quotation-head" role="row"><span>Item</span><span>Qty</span><span>Unit</span><span>Amount</span></div>${rows.map((row) => `<div class="mvp-quotation-row" role="row"><div><b>${html(row.item)}</b>${row.note ? `<small>${html(row.note)}</small>` : ""}</div><span>${html(row.qty)}</span><span>${html(row.unit)}</span><span>${html(row.amount)}</span></div>`).join("")}<div class="mvp-quotation-total"><span>Subtotal</span><b>${money(subtotal || quoted || total)}</b><strong>Quoted Amount</strong><strong>${money(total || quoted || subtotal)}</strong></div></div>`
       : `<p class="mvp-quotation-legacy">This record is marked ${html(quote.title)} but its quotation amount was not captured in the stored fields. No price has been invented.</p>`;
     const orderState = item.orderCreationError ? `<p class="mvp-inline-error">${html(item.orderCreationError)}</p>` : "";
-    return `<article class="mvp-quotation-panel"><header><div><span>Quotation</span><h3>${html(item.quoteCode || item.quoteReference || `QT-${item.id}`)}</h3>${meta ? `<p>${html(meta)}</p>` : ""}</div><mark>${html(quote.sub || quote.title)}</mark></header>${body}<div class="mvp-quotation-foot"><div><span>Customer approval</span><p>${html(quoteApprovalLabel(item))}</p></div><div><span>Order conversion</span><p>${html(inquiryOrderConversionLabel(item))}</p></div></div>${item.quoteNotes ? `<p class="mvp-quotation-note">${html(item.quoteNotes)}</p>` : ""}${orderState}</article>`;
+    return `<article class="mvp-quotation-panel"><header><div><span>Quotation</span><h3>${html(item.quoteCode || item.quoteReference || `QT-${item.id}`)}</h3>${meta ? `<p>${html(meta)}</p>` : ""}</div><mark>${html(quote.sub || quote.title)}</mark></header>${body}<div class="mvp-quotation-foot"><div><span>Customer approval</span><p>${html(quoteApprovalLabel(item))}</p></div><div><span>Order conversion</span><p>${html(inquiryOrderConversionLabel(item))}</p></div></div>${inquiryPreOrderChecklist(item)}${item.quoteNotes ? `<p class="mvp-quotation-note">${html(item.quoteNotes)}</p>` : ""}${orderState}</article>`;
+  }
+
+  function inquiryPreOrderChecklist(item) {
+    const readiness = inquiryOrderReadiness(item);
+    return `<section class="mvp-inquiry-preorder-checklist" aria-label="Pre-order requirements"><h4>Pre-order requirements</h4>${readiness.rows.map((rowItem) => `<div class="${rowItem.ok ? "pass" : "fail"}"><span>${rowItem.ok ? "READY" : "BLOCKED"}</span><strong>${html(rowItem.label)}</strong><small>${html(rowItem.detail)}</small></div>`).join("")}</section>`;
   }
 
   function inquiryQuotationEmptyState() {
@@ -542,6 +563,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) {
     if (action.kind === "quote" && typeof renderQuote === "function") return `<section class="mvp-workflow-panel">${renderQuote(item).replace(/<details class="ops-quote-editor"(?! open)/, '<details class="ops-quote-editor" open')}</section>`;
+    if (action.kind === "due_date") return `<section class="mvp-workflow-panel ops-stage-section" data-mvp-agreed-due-date="${html(item.id)}"><article class="mvp-quotation-create-card"><h3>SET AGREED DUE DATE</h3><p class="mvp-inline-note">Customer requested dates and notes are not enough for Order conversion. Save the agreed operational due date.</p><label><span>Agreed due date</span><input data-ops-customer-field="dueDate" type="date" value="${html(item.dueDate || "")}" /></label><div class="mvp-quotation-create-actions"><button class="mvp-action-primary" data-ops-customer-action="set_due_date" data-ops-customer-id="${html(item.id)}" type="button"><span>Save Due Date</span></button><button class="mvp-action-secondary" data-mvp-primary-action="${html(item.id)}" data-mvp-primary-kind="due_date" type="button">Cancel</button></div></article></section>`;
+    if (action.kind === "artwork") return `<section class="mvp-workflow-panel"><p>${html(action.hint)}</p><button class="mvp-primary-action" type="button" data-mvp-inquiry-tab="artwork">Open Artwork</button></section>`;
     if (action.kind === "so" && typeof renderOdoo === "function") return `<section class="mvp-workflow-panel">${renderOdoo(item)}</section>`;
     if (action.route) return `<section class="mvp-workflow-panel"><button class="mvp-primary-action" type="button" data-mvp-route="${html(action.route)}">${html(action.label)}</button></section>`;
     return `<section class="mvp-workflow-panel"><p>${html(action.hint)}</p></section>`;
@@ -549,10 +572,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function inquiryPrimaryAction(item, stage) {
     const nativeRef = nativeOrderReference(item) || item.nativeOrderId;
+    const readiness = inquiryOrderReadiness(item);
     if (nativeRef) return { kind: "order", label: "View Order", hint: "Native TRRY Order", route: `/orders?order=${encodeURIComponent(nativeRef)}` };
     if ((confirmed(item) || hasExistingOrder(item)) && productionStage(item) === "completed") return { kind: "production", label: "View Production", hint: "Read only", route: `/production?order=${encodeURIComponent(item.id)}` };
     if (confirmed(item) || hasExistingOrder(item)) return { kind: "order", label: "View Order", hint: "Historical order", route: `/orders?order=${encodeURIComponent(orderReference(item) || item.id)}` };
     if (stage === "sent") return { kind: "wait", label: "Waiting for Approval", hint: "Quote sent", disabled: true };
+    if (stage === "approved" && !hasArtworkApproval(item)) return { kind: "artwork", label: "Complete Artwork", hint: "Approve artwork before Order" };
+    if (stage === "approved" && !hasAgreedDueDate(item)) return { kind: "due_date", label: "Set Due Date", hint: "Save agreed due date before Order" };
+    if (stage === "approved" && !readiness.ready) return { kind: "blocked", label: "Create Order Blocked", hint: readiness.missing.join(", "), disabled: true };
     if (stage === "approved") return { kind: "create_order", label: item.orderCreationState === "loading" ? "Creating Order" : "Create Order", hint: "Native TRRY Order", disabled: item.orderCreationState === "loading" };
     if (isQuoteDraft(item)) return { kind: "quote", label: "Edit Quotation", hint: "Send quote when ready" };
     if (stage === "new") return { kind: "quote", label: "Create Quotation", hint: "Next step" };
@@ -575,7 +602,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryOrderConversionLabel(item) {
     if (nativeOrderReference(item)) return `Native Order ${nativeOrderReference(item)}`;
     if (hasExistingOrder(item)) return `Historical Order ${orderReference(item)}`;
-    if (quoteStage(item) === "approved") return "Ready to create native TRRY Order";
+    if (quoteStage(item) === "approved") {
+      const readiness = inquiryOrderReadiness(item);
+      return readiness.ready ? "Ready to create native TRRY Order" : `Blocked: ${readiness.missing.join(", ")}`;
+    }
     return "Not yet available until approval";
   }
 
@@ -1080,8 +1110,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderRequirementRows(item, gate) {
     return [
       { key: "product", label: "Product and quantity", ok: Boolean(product(item) && product(item) !== "Not set" && item.service && item.qty), mapsTo: "product/service/qty" },
-      { key: "due_date", label: "Due date", ok: Boolean(item.dueDate), mapsTo: "dueDate", action: "SET DUE DATE" },
-      { key: "artwork", label: "Artwork approved", ok: orderArtworkKey(item) === "approved", mapsTo: "artworkStatus", action: "REVIEW ARTWORK" },
+      { key: "due_date", label: "Agreed due date inherited", ok: Boolean(item.dueDate), mapsTo: "dueDate" },
+      { key: "artwork", label: "Artwork approval inherited", ok: orderArtworkKey(item) === "approved", mapsTo: "artworkStatus" },
       { key: "staff", label: "Assigned production staff", ok: hasAssignedStaff(item), mapsTo: "assignedUserId/assignedStaff", action: "ASSIGN STAFF" },
       { label: "Payment requirement", ok: paymentSatisfiesProductionGate(item), mapsTo: "paymentStatus + verified/confirmed amount" },
       { label: "No revision or explicit blocker", ok: key(item.artworkStatus) !== "revision_requested" && !productionBlocker(item), mapsTo: "artworkStatus + blockedReason" },
@@ -1098,14 +1128,6 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderReadinessPanel(item) {
     if (!state.orderReadinessAction || state.orderReadinessAction.id !== item.id) return "";
     const mode = state.orderReadinessAction.mode;
-    if (mode === "due_date") {
-      return `<article class="mvp-order-readiness-editor" data-mvp-readiness-editor="${html(item.id)}"><h4>SET DUE DATE</h4><label><span>Due date</span><input type="date" data-mvp-readiness-field="dueDate" value="${html(item.dueDate || "")}" /></label><div><button type="button" class="mvp-primary-action" data-mvp-save-readiness="${html(item.id)}" data-mvp-readiness-save-mode="due_date">SAVE DUE DATE</button><button type="button" class="mvp-secondary-action" data-mvp-cancel-readiness="${html(item.id)}">CANCEL</button></div></article>`;
-    }
-    if (mode === "artwork") {
-      const artworkLink = item.artworkUrl ? `<a href="${html(item.artworkUrl)}" target="_blank" rel="noopener noreferrer">Open artwork</a>` : "<span>No artwork link stored.</span>";
-      const canApprove = key(item.artworkStatus) !== "approved" && key(item.artworkStatus) !== "revision_requested";
-      return `<article class="mvp-order-readiness-editor" data-mvp-readiness-editor="${html(item.id)}"><h4>REVIEW ARTWORK</h4><div class="mvp-order-readiness-summary"><span>Status</span><strong>${html(artworkApprovalLabel(item))}</strong></div><div class="mvp-order-readiness-summary"><span>Artwork</span>${artworkLink}</div><div><button type="button" class="mvp-primary-action" data-mvp-approve-order-artwork="${html(item.id)}" ${canApprove ? "" : "disabled"}>APPROVE ARTWORK</button><button type="button" class="mvp-secondary-action" data-mvp-cancel-readiness="${html(item.id)}">CANCEL</button></div>${key(item.artworkStatus) === "revision_requested" ? `<p class="mvp-inline-note">Revision is already requested. Resolve using the existing artwork workflow.</p>` : ""}</article>`;
-    }
     if (mode === "staff") {
       const disabled = assignmentControlsDisabled();
       return `<article class="mvp-order-readiness-editor" data-mvp-readiness-editor="${html(item.id)}"><h4>ASSIGN STAFF</h4><label><span>Production staff</span><select data-mvp-readiness-field="assignedUserId" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select></label>${assignmentNotice()}<div><button type="button" class="mvp-primary-action" data-mvp-save-readiness="${html(item.id)}" data-mvp-readiness-save-mode="staff" ${disabled ? "disabled" : ""}>SAVE ASSIGNMENT</button><button type="button" class="mvp-secondary-action" data-mvp-cancel-readiness="${html(item.id)}">CANCEL</button></div></article>`;

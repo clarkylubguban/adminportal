@@ -122,7 +122,7 @@ function qaHtml() {
     import { createMvpDashboard } from "/src/mvpDashboard.js";
     const app = document.getElementById("app");
     const dashboard = createMvpDashboard({ navigate: (route) => { window.__route = route; }, getAssignmentContext: () => ({ users: [], loadState: "success", error: "" }) });
-    const inquiry = { id: "TRY-CUTOVER-001", customer: "Cutover Customer", contact: "0917-123-4567", source: "Website", service: "DTF Print", productDesc: "Logo shirt", qty: "10 pcs", status: "sent", quoteStatus: "approved", quotedAmount: 850, amountDue: 850, quoteBreakdown: "Logo shirt | 10 pcs | PHP 850", quoteNotes: "Approved customer quote.", quoteValidUntil: "2026-08-31", quoteApprovedAt: "2026-08-08T02:00:00.000Z", artworkStatus: "approved" };
+    const inquiry = { id: "TRY-CUTOVER-001", customer: "Cutover Customer", contact: "0917-123-4567", source: "Website", service: "DTF Print", productDesc: "Logo shirt", qty: "10 pcs", dueDate: "2026-08-20", status: "sent", quoteStatus: "approved", quotedAmount: 850, amountDue: 850, quoteBreakdown: "Logo shirt | 10 pcs | PHP 850", quoteNotes: "Approved customer quote.", quoteValidUntil: "2026-08-31", quoteApprovedAt: "2026-08-08T02:00:00.000Z", artworkStatus: "approved" };
     dashboard.state.inquiryId = inquiry.id;
     function render() {
       app.innerHTML = dashboard.renderInquiries({ items: [inquiry] });

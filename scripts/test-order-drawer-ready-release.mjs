@@ -66,9 +66,11 @@ assert.ok(html.includes('data-mvp-next="embroidery"'), "release action uses the 
 assert.ok(!html.includes('data-mvp-route="/production?order=TRY-READY-BASE" type="button">Release to Production'), "ready footer no longer fakes release through route navigation");
 
 html = renderSelected(base, "requirements");
-for (const label of ["Product and quantity", "Due date", "Artwork approved", "Assigned production staff", "Payment requirement", "No revision or explicit blocker"]) {
+for (const label of ["Product and quantity", "Agreed due date inherited", "Artwork approval inherited", "Assigned production staff", "Payment requirement", "No revision or explicit blocker"]) {
   assert.ok(html.includes(label), `ready requirement maps real rule: ${label}`);
 }
+assert.ok(!html.includes('data-mvp-readiness-action="due_date"'), "ready Order drawer does not expose Due Date as an operational action");
+assert.ok(!html.includes('data-mvp-readiness-action="artwork"'), "ready Order drawer does not expose Artwork as an operational action");
 
 html = renderSelected(base, "payment", () => "<section>Payment contract placeholder</section>");
 assert.ok(html.includes("PAYMENT SUMMARY"), "ready payment tab renders supported summary");

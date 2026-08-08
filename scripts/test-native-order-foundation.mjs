@@ -27,6 +27,9 @@ const APPROVED_INQUIRY = {
   quote_notes: "Approved quote note",
   quote_valid_until: "2026-08-31",
   quote_approved_at: "2026-08-08T03:00:00.000Z",
+  artwork_status: "approved",
+  artwork_revision_request: null,
+  blocked_reason: null,
   odoo_so: "",
 };
 
@@ -82,6 +85,36 @@ await assertRejectsNativeOrder(
   convertInquiryToNativeOrder(fakeSupabase({ inquiries: [{ ...APPROVED_INQUIRY, id: "TRY-ORDER-002", quote_status: "ready" }] }), "TRY-ORDER-002"),
   400,
   "QUOTE_NOT_APPROVED"
+);
+
+await assertRejectsNativeOrder(
+  convertInquiryToNativeOrder(fakeSupabase({ inquiries: [{ ...APPROVED_INQUIRY, id: "TRY-NO-PRODUCT", product: "", product_desc: "" }] }), "TRY-NO-PRODUCT"),
+  400,
+  "PRODUCT_REQUIRED"
+);
+
+await assertRejectsNativeOrder(
+  convertInquiryToNativeOrder(fakeSupabase({ inquiries: [{ ...APPROVED_INQUIRY, id: "TRY-NO-QTY", quantity: "" }] }), "TRY-NO-QTY"),
+  400,
+  "QUANTITY_REQUIRED"
+);
+
+await assertRejectsNativeOrder(
+  convertInquiryToNativeOrder(fakeSupabase({ inquiries: [{ ...APPROVED_INQUIRY, id: "TRY-NO-ART", artwork_status: "submitted" }] }), "TRY-NO-ART"),
+  400,
+  "ARTWORK_NOT_APPROVED"
+);
+
+await assertRejectsNativeOrder(
+  convertInquiryToNativeOrder(fakeSupabase({ inquiries: [{ ...APPROVED_INQUIRY, id: "TRY-NO-DUE", due_date: null }] }), "TRY-NO-DUE"),
+  400,
+  "DUE_DATE_REQUIRED"
+);
+
+await assertRejectsNativeOrder(
+  convertInquiryToNativeOrder(fakeSupabase({ inquiries: [{ ...APPROVED_INQUIRY, id: "TRY-BLOCKED", blocked_reason: "Revision unresolved" }] }), "TRY-BLOCKED"),
+  400,
+  "INQUIRY_BLOCKED"
 );
 
 await assertRejectsNativeOrder(

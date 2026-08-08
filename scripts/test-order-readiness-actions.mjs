@@ -75,18 +75,23 @@ function workflowInquiry(overrides = {}) {
 }
 
 let html = renderOrder(base);
-assert.ok(html.includes('data-mvp-readiness-action="due_date"'), "TEST 1 due-date action visible");
-assert.ok(html.includes('data-mvp-readiness-action="artwork"'), "TEST 1 artwork review action visible");
-assert.ok(html.includes('data-mvp-readiness-action="staff"'), "TEST 1 staff assignment action visible");
+assert.ok(!html.includes('data-mvp-readiness-action="due_date"'), "TEST 1 due-date action is not available in Orders");
+assert.ok(!html.includes('data-mvp-readiness-action="artwork"'), "TEST 1 artwork review action is not available in Orders");
+assert.ok(html.includes('data-mvp-readiness-action="staff"'), "TEST 1 staff assignment action remains available in Orders");
+assert.ok(html.includes("Agreed due date inherited"), "TEST 1 due-date requirement is shown as inherited fact");
+assert.ok(html.includes("Artwork approval inherited"), "TEST 1 artwork requirement is shown as inherited fact");
 assert.ok(!html.includes('data-mvp-release-order="TRY-READINESS-ACTIONS"'), "TEST 1 release remains blocked");
 
-const dueDateSave = buildOpsWorkflowUpdates("save_production", { dueDate: "2026-08-20" }, workflowInquiry(), "2026-08-08T10:00:00.000Z");
-assert.equal(dueDateSave.ok, true, "TEST 2 due-date save accepted");
-assert.equal(dueDateSave.updates.due_date, "2026-08-20", "TEST 2 due date persists canonical due_date");
-assert.equal(dueDateSave.updates.production_note, undefined, "TEST 2 due-date save does not clear production note");
+const dueDateSave = buildCustomerActionUpdates("set_due_date", { dueDate: "2026-08-20" }, {
+  id: base.id,
+  quote_status: "approved",
+  artwork_status: "approved",
+  production_stage: "queued",
+}, "2026-08-08T10:00:00.000Z", { role: "admin", user_id: ACTOR_ID });
+assert.equal(dueDateSave.due_date, "2026-08-20", "TEST 2 Inquiry due-date save persists canonical due_date");
 html = renderOrder({ ...base, dueDate: "2026-08-20" });
 assert.ok(!html.includes('data-mvp-readiness-action="due_date"'), "TEST 2 due-date requirement turns green");
-assert.ok(html.includes('data-mvp-readiness-action="artwork"') && html.includes('data-mvp-readiness-action="staff"'), "TEST 2 other blockers remain");
+assert.ok(!html.includes('data-mvp-readiness-action="artwork"') && html.includes('data-mvp-readiness-action="staff"'), "TEST 2 only staff action remains");
 
 const artworkApproval = buildCustomerActionUpdates("approve_artwork", {}, {
   id: base.id,

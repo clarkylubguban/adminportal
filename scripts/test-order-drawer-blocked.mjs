@@ -80,9 +80,11 @@ assert.ok(html.includes("Black"), "overview shows real color when present");
 
 html = renderSelected(unpaid, "requirements");
 assert.ok(html.includes("PRODUCTION REQUIREMENTS"), "requirements tab renders");
-for (const label of ["Product and quantity", "Due date", "Artwork approved", "Assigned production staff", "Payment requirement", "No revision or explicit blocker"]) {
+for (const label of ["Product and quantity", "Agreed due date inherited", "Artwork approval inherited", "Assigned production staff", "Payment requirement", "No revision or explicit blocker"]) {
   assert.ok(html.includes(label), `requirement renders: ${label}`);
 }
+assert.ok(!html.includes('data-mvp-readiness-action="due_date"'), "Order drawer does not expose Due Date as an operational action");
+assert.ok(!html.includes('data-mvp-readiness-action="artwork"'), "Order drawer does not expose Artwork as an operational action");
 assert.ok(html.includes("paymentStatus + verified/confirmed amount"), "payment requirement exposes current rule mapping");
 
 html = renderSelected(unpaid, "payment");

@@ -41,6 +41,9 @@ export const ORDER_SOURCE_INQUIRY_SELECT = [
   "quote_notes",
   "quote_valid_until",
   "quote_approved_at",
+  "artwork_status",
+  "artwork_revision_request",
+  "blocked_reason",
 ].join(",");
 
 const REFERENCE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
@@ -178,11 +181,16 @@ async function readSingleOrder(builder) {
 }
 
 function assertInquiryCanConvert(inquiry) {
-  if (key(inquiry.quote_status) !== "approved") {
-    throw new NativeOrderError(400, "QUOTE_NOT_APPROVED", "approved quote required");
-  }
+  if (!cleanText(inquiry.product_desc || inquiry.product, 500)) throw new NativeOrderError(400, "PRODUCT_REQUIRED", "product or service required");
+  if (!cleanText(inquiry.quantity, 120)) throw new NativeOrderError(400, "QUANTITY_REQUIRED", "quantity required");
+  if (key(inquiry.quote_status) !== "approved" || !timestampOrNull(inquiry.quote_approved_at)) throw new NativeOrderError(400, "QUOTE_NOT_APPROVED", "approved quote required");
   if (!(numberOrNull(inquiry.quoted_amount) > 0)) {
     throw new NativeOrderError(400, "QUOTE_AMOUNT_REQUIRED", "approved quote amount required");
+  }
+  if (key(inquiry.artwork_status) !== "approved") throw new NativeOrderError(400, "ARTWORK_NOT_APPROVED", "artwork approval required");
+  if (!dateOrNull(inquiry.due_date)) throw new NativeOrderError(400, "DUE_DATE_REQUIRED", "agreed due date required");
+  if (key(inquiry.artwork_status) === "revision_requested" || cleanText(inquiry.artwork_revision_request, 1000) || cleanText(inquiry.blocked_reason, 500)) {
+    throw new NativeOrderError(400, "INQUIRY_BLOCKED", "active revision or blocker must be resolved");
   }
 }
 

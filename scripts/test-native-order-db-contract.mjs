@@ -176,10 +176,10 @@ async function verifyRls() {
 
 async function verifyConversionApi() {
   await execSql(`
-    insert into public.ops_inquiries (id, customer_name, contact, product, product_desc, quantity, fulfillment_method, due_date, quote_status, quoted_amount, amount_due, quote_breakdown, quote_notes, quote_valid_until, quote_approved_at, odoo_so)
+    insert into public.ops_inquiries (id, customer_name, contact, product, product_desc, quantity, fulfillment_method, due_date, quote_status, quoted_amount, amount_due, quote_breakdown, quote_notes, quote_valid_until, quote_approved_at, artwork_status, artwork_revision_request, blocked_reason, odoo_so)
     values
-      ('TRY-API-001', 'API Customer', '0917-222-2222', 'Embroidery', 'API product desc', '32 pcs', 'delivery', '2026-09-01', 'approved', 3200, 3200, '32 pcs | PHP 100', 'API quote note', '2026-09-15', '2026-08-08T04:00:00Z', null),
-      ('TRY-API-BAD', 'Bad Customer', '0917-333-3333', 'Screen Print', 'Bad product', '10 pcs', 'pickup', '2026-09-02', 'ready', 1000, 1000, 'bad', 'bad', '2026-09-15', null, null);
+      ('TRY-API-001', 'API Customer', '0917-222-2222', 'Embroidery', 'API product desc', '32 pcs', 'delivery', '2026-09-01', 'approved', 3200, 3200, '32 pcs | PHP 100', 'API quote note', '2026-09-15', '2026-08-08T04:00:00Z', 'approved', null, null, null),
+      ('TRY-API-BAD', 'Bad Customer', '0917-333-3333', 'Screen Print', 'Bad product', '10 pcs', 'pickup', '2026-09-02', 'ready', 1000, 1000, 'bad', 'bad', '2026-09-15', null, 'approved', null, null, null);
   `);
 
   const supabase = databaseBackedSupabase();
@@ -418,6 +418,9 @@ function bootstrapSql() {
       quote_notes text,
       quote_valid_until date,
       quote_approved_at timestamptz,
+      artwork_status text,
+      artwork_revision_request text,
+      blocked_reason text,
       odoo_so text,
       created_at timestamptz not null default now(),
       updated_at timestamptz not null default now()

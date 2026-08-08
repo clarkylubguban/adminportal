@@ -40,40 +40,10 @@ try {
   assert.equal(state.hasRelease, false, "TEST 11 no automatic Release to Production");
   assert.equal(state.paymentStatus, "paid", "TEST 12 payment remains confirmed");
   assert.equal(state.hasInquiryDrawer, false, "TEST 13 Inquiry workflow is not restored");
-
-  await click(cdp, '[data-mvp-readiness-action="due_date"]');
-  state = await readState(cdp);
-  assert.equal(state.activeTab, "requirements", "TEST 1 SET DUE DATE keeps Requirements active");
-  assert.equal(state.editorTitle, "SET DUE DATE", "TEST 1 due-date editor opens");
-  assert.equal(state.orderStillOpen, true, "TEST 1 drawer remains open");
-
-  await click(cdp, "[data-mvp-cancel-readiness]");
-  state = await readState(cdp);
-  assert.equal(state.editorTitle, "", "TEST 2 CANCEL closes editor only");
-  assert.equal(state.activeTab, "requirements", "TEST 2 CANCEL keeps Requirements active");
-  assert.equal(state.saveCalls.length, 0, "TEST 2 CANCEL does not persist");
-
-  await click(cdp, '[data-mvp-readiness-action="due_date"]');
-  await setValue(cdp, '[data-mvp-readiness-field="dueDate"]', "2026-08-22");
-  await click(cdp, '[data-mvp-readiness-save-mode="due_date"]');
-  await waitFor(cdp, `window.__rows[0].dueDate === "2026-08-22"`);
-  state = await readState(cdp);
-  assert.equal(state.dueReady, true, "TEST 3 saved due date makes requirement READY");
-  assert.equal(state.activeTab, "requirements", "TEST 10 Requirements stays active after due-date save");
-  assert.deepEqual(state.saveCalls.at(-1), { id: "TRY-READINESS-UI", changes: { dueDate: "2026-08-22" } }, "TEST 3 due date persists through saveProduction");
-
-  await click(cdp, '[data-mvp-readiness-action="artwork"]');
-  state = await readState(cdp);
-  assert.equal(state.editorTitle, "REVIEW ARTWORK", "TEST 4 REVIEW ARTWORK opens review UI");
-  assert.equal(state.activeTab, "requirements", "TEST 4 artwork review keeps Requirements active");
-  assert.equal(state.hasArtworkLink, true, "TEST 4 artwork link is shown when available");
-
-  await click(cdp, "[data-mvp-approve-order-artwork]");
-  await waitFor(cdp, `window.__rows[0].artworkStatus === "approved"`);
-  state = await readState(cdp);
-  assert.equal(state.artworkReady, true, "TEST 5 artwork approval makes requirement READY");
-  assert.equal(state.activeTab, "requirements", "TEST 10 Requirements stays active after artwork save");
-  assert.equal(state.artworkApprovals, 1, "TEST 5 approval uses canonical action callback once");
+  assert.equal(state.hasDueDateAction, false, "TEST 1 SET DUE DATE is not reachable in Orders");
+  assert.equal(state.hasArtworkAction, false, "TEST 2 REVIEW ARTWORK is not reachable in Orders");
+  assert.equal(state.dueReady, true, "TEST 3 inherited agreed due date is READY");
+  assert.equal(state.artworkReady, true, "TEST 4 inherited artwork approval is READY");
 
   await click(cdp, '[data-mvp-readiness-action="staff"]');
   state = await readState(cdp);
@@ -158,7 +128,8 @@ function qaHtml() {
       service: "DTF",
       qty: "12 pcs",
       fulfillmentMethod: "pickup",
-      artworkStatus: "submitted",
+      dueDate: "2026-08-22",
+      artworkStatus: "approved",
       artworkUrl: "TRY-READINESS-UI/proofs/artwork.png",
       assignedUserId: "96000000-0000-4000-8000-000000000999",
       assignedStaff: "Former Staff",
@@ -171,7 +142,6 @@ function qaHtml() {
       productionStage: "queued"
     }];
     window.__saveCalls = [];
-    window.__artworkApprovals = 0;
     window.__releaseCalls = 0;
     const dashboard = createMvpDashboard({ getAssignmentContext: () => ({ users: team, loadState: "ready", error: "" }) });
     dashboard.state.orderId = "TRRY-ORD-READINESS-UI";
@@ -196,16 +166,9 @@ function qaHtml() {
               window.__releaseCalls += 1;
               return { ...item, productionStage: changes.productionStage };
             }
-            if (Object.prototype.hasOwnProperty.call(changes, "dueDate")) return { ...item, dueDate: changes.dueDate };
             if (Object.prototype.hasOwnProperty.call(changes, "assignedUserId")) return { ...item, assignedUserId: changes.assignedUserId, assignedStaff: "Juvy - staff" };
             return item;
           });
-          return { ok: true };
-        },
-        approveOrderArtwork: async (id) => {
-          window.__artworkApprovals += 1;
-          await new Promise((resolve) => setTimeout(resolve, 30));
-          window.__rows = window.__rows.map((item) => item.id === id ? { ...item, artworkStatus: "approved", artworkApprovedAt: "2026-08-08T10:00:00.000Z" } : item);
           return { ok: true };
         }
       });
@@ -225,17 +188,17 @@ async function readState(cdp) {
       activeTab: active,
       editorTitle: editor?.querySelector('h4')?.textContent.trim() || "",
       orderStillOpen: Boolean(document.querySelector('.mvp-drawer.order')),
-      dueReady: rowTexts.some((row) => row.includes('Due date') && row.includes('Ready / dueDate')),
-      artworkReady: rowTexts.some((row) => row.includes('Artwork approved') && row.includes('Ready / artworkStatus')),
+      dueReady: rowTexts.some((row) => row.includes('Agreed due date inherited') && row.includes('Ready / dueDate')),
+      artworkReady: rowTexts.some((row) => row.includes('Artwork approval inherited') && row.includes('Ready / artworkStatus')),
       staffReady: rowTexts.some((row) => row.includes('Assigned production staff') && row.includes('Ready / assignedUserId/assignedStaff')),
-      hasArtworkLink: Boolean(editor?.querySelector('a[href]')),
+      hasDueDateAction: Boolean(document.querySelector('[data-mvp-readiness-action="due_date"]')),
+      hasArtworkAction: Boolean(document.querySelector('[data-mvp-readiness-action="artwork"]')),
       staffOptions: staffSelect ? [...staffSelect.options].map((option) => option.textContent.trim()) : [],
       hasRelease: text.includes('RELEASE TO PRODUCTION'),
       paymentText: text.match(/Payment requirement[\\s\\S]{0,120}/)?.[0] || "",
       paymentStatus: window.__rows[0].paymentStatus,
       hasInquiryDrawer: Boolean(document.querySelector('.mvp-drawer.inquiry')),
       saveCalls: window.__saveCalls,
-      artworkApprovals: window.__artworkApprovals,
       releaseCalls: window.__releaseCalls
     };
   })()`);

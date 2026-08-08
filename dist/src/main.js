@@ -3600,6 +3600,7 @@ function getOpsCustomerActionFormPayload(action, sourceElement) {
     quoteBreakdown: fieldValue("quoteBreakdown"),
     quoteNotes: fieldValue("quoteNotes"),
     quoteValidUntil: fieldValue("quoteValidUntil"),
+    dueDate: fieldValue("dueDate"),
     paymentLabel: quoteAction ? "" : fieldValue("paymentLabel"),
     paymentInstructions: quoteAction ? "" : fieldValue("paymentInstructions"),
     confirmedAmount: fieldValue("confirmedAmount"),
@@ -3614,13 +3615,18 @@ function parseOpsQuoteMoney(value) {
 }
 
 function getOpsQuoteValidationMessage(action, body) {
-  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "require_payment", "request_new_payment_proof"].includes(action)) return "";
+  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "set_due_date", "require_payment", "request_new_payment_proof"].includes(action)) return "";
 
   const quotedAmountText = String(body.quotedAmount ?? "").trim();
   const amountDueText = String(body.amountDue ?? "").trim();
   const quotedAmount = parseOpsQuoteMoney(quotedAmountText);
   const amountDue = amountDueText ? parseOpsQuoteMoney(amountDueText) : quotedAmount;
   const validUntil = String(body.quoteValidUntil || "").trim();
+  const dueDate = String(body.dueDate || "").trim();
+
+  if (action === "set_due_date" && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    return "ENTER AN AGREED DUE DATE\nChoose the due date agreed with the customer before creating an Order.";
+  }
 
   if (action === "publish_quote" && (!Number.isFinite(quotedAmount) || quotedAmount <= 0)) {
     return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than 0 before sending the quote.";
@@ -3691,6 +3697,7 @@ function setOpsCustomerActionInlineMessage(sourceElement, message, status = "err
 
 function getOpsActionLoadingLabel(action) {
   if (action === "publish_quote") return "SENDING...";
+  if (action === "set_due_date") return "SAVING...";
   if (action === "require_payment") return "REQUESTING...";
   if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING...";
   if (action === "request_new_payment_proof") return "REQUESTING...";
@@ -3699,6 +3706,7 @@ function getOpsActionLoadingLabel(action) {
 
 function getOpsActionSavingMessage(action) {
   if (action === "publish_quote") return "SENDING QUOTE...";
+  if (action === "set_due_date") return "SAVING AGREED DUE DATE...";
   if (action === "require_payment") return "REQUESTING PAYMENT...";
   if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING PAYMENT...";
   if (action === "request_new_payment_proof") return "REQUESTING NEW RECEIPT...";
@@ -3708,6 +3716,7 @@ function getOpsActionSavingMessage(action) {
 function getOpsActionSuccessMessage(action) {
   if (action === "save_quote_draft") return "QUOTE DRAFT SAVED.";
   if (action === "publish_quote") return "QUOTE PUBLISHED FOR CUSTOMER.";
+  if (action === "set_due_date") return "AGREED DUE DATE SAVED.";
   if (action === "require_payment") return "PAYMENT REQUESTED.";
   if (action === "confirm_payment" || action === "confirm_cash_payment") return "PAYMENT CONFIRMED.";
   if (action === "request_new_payment_proof") return "NEW RECEIPT NEEDED.";

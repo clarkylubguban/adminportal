@@ -22,6 +22,7 @@ const CUSTOMER_ACTION_SELECT = [
   "quote_breakdown",
   "quote_notes",
   "quote_valid_until",
+  "due_date",
   "quote_sent_at",
   "next_action",
   "updated_at",
@@ -222,6 +223,7 @@ export function buildUpdates(action, body, inquiry, now, adminUser = null) {
   const proofPath = cleanText(body.proofPath, 500);
   const confirmedAmount = getMoney(body.confirmedAmount);
   const paymentReviewNote = cleanText(body.paymentReviewNote, 1000);
+  const dueDate = cleanDate(body.dueDate);
 
   if (action === "mark_artwork_under_review") {
     if (!["submitted", "under_review", "revision_requested"].includes(String(inquiry.artwork_status || ""))) return null;
@@ -257,6 +259,11 @@ export function buildUpdates(action, body, inquiry, now, adminUser = null) {
       artwork_approved_at: inquiry.artwork_approved_at || now,
       artwork_revision_request: null,
     };
+  }
+
+  if (action === "set_due_date") {
+    if (!dueDate) return { error: "enter an agreed due date" };
+    return { due_date: dueDate };
   }
 
   if (["save_quote_draft", "revise_quote", "mark_quote_pending", "publish_quote"].includes(action)) {
@@ -508,6 +515,7 @@ function getSafeInquiry(row) {
     quoteBreakdown: cleanText(row.quote_breakdown, 5000),
     quoteNotes: cleanText(row.quote_notes, 2000),
     quoteValidUntil: cleanText(row.quote_valid_until, 40),
+    dueDate: cleanText(row.due_date, 40),
     quoteSentAt: cleanText(row.quote_sent_at, 80),
     status: cleanText(row.status, 80),
     next: cleanText(row.next_action, 500),

@@ -28,6 +28,7 @@ const approvedInquiry = {
   quoteValidUntil: "2026-08-31",
   quoteApprovedAt: "2026-08-08T02:00:00.000Z",
   artworkStatus: "approved",
+  dueDate: "2026-08-20",
 };
 
 const dashboard = createMvpDashboard({
@@ -40,6 +41,7 @@ let rendered = dashboard.renderInquiries({ items: [approvedInquiry] });
 assert.ok(rendered.includes('data-mvp-inquiry-panel="quotation"'), "approved Inquiry keeps the Quotation tab available");
 assert.ok(rendered.includes("Create Order"), "approved Inquiry without native Order shows Create Order");
 assert.ok(rendered.includes('data-mvp-create-order="TRY-CUTOVER-001"'), "Create Order uses native conversion action hook");
+assert.ok(rendered.includes("Pre-order requirements"), "approved Inquiry shows canonical pre-order readiness");
 assert.ok(rendered.includes("QT-TRY-CUTOVER-001"), "approved quote reference is shown");
 assert.ok(rendered.includes("Approved"), "approved quote state is shown");
 assert.ok(rendered.includes("Customer approval"), "customer approval state is shown");
@@ -51,6 +53,24 @@ assert.ok(!rendered.includes("Payment Method"), "payment method belongs to Order
 assert.ok(!rendered.includes("Payment Status"), "payment status belongs to Order");
 assert.ok(!rendered.includes("Add Odoo SO"), "legacy Odoo creation UI must not be active in Inquiry drawer");
 assert.ok(!rendered.includes("CONFIRM &amp; CREATE ORDER"), "legacy confirm Odoo SO control must not render");
+
+for (const [name, inquiry, expectedLabel] of [
+  ["artwork pending", { ...approvedInquiry, id: "TRY-ART-PENDING", artworkStatus: "submitted" }, "Complete Artwork"],
+  ["due date missing", { ...approvedInquiry, id: "TRY-DUE-MISSING", dueDate: "" }, "Set Due Date"],
+  ["product missing", { ...approvedInquiry, id: "TRY-PRODUCT-MISSING", productDesc: "", service: "", qty: "" }, "Create Order Blocked"],
+  ["revision active", { ...approvedInquiry, id: "TRY-REVISION", artworkStatus: "revision_requested", blockedReason: "Customer requested artwork revision" }, "Complete Artwork"],
+]) {
+  dashboard.state.inquiryId = inquiry.id;
+  dashboard.state.inquiryActionId = null;
+  rendered = dashboard.renderInquiries({ items: [inquiry] });
+  assert.ok(rendered.includes(expectedLabel), `pre-order gate surfaces ${expectedLabel} for ${name}`);
+  assert.ok(!rendered.includes(`data-mvp-create-order="${inquiry.id}"`), `pre-order gate blocks Create Order for ${name}`);
+}
+
+dashboard.state.inquiryId = "TRY-DUE-MISSING";
+dashboard.state.inquiryActionId = "TRY-DUE-MISSING";
+rendered = dashboard.renderInquiries({ items: [{ ...approvedInquiry, id: "TRY-DUE-MISSING", dueDate: "" }] });
+assert.ok(rendered.includes('data-ops-customer-action="set_due_date"'), "Set Due Date editor saves through Inquiry customer-action contract");
 
 const existingNative = {
   ...approvedInquiry,
