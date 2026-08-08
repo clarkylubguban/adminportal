@@ -10,6 +10,7 @@
     "test:native-orders-db": "node scripts/test-native-order-db-contract.mjs",
     "test:inquiry-order-cutover": "node scripts/test-inquiry-order-cutover.mjs",
     "test:inquiry-order-cutover-browser": "node scripts/test-inquiry-order-cutover-browser.mjs",
+    "test:inquiry-drawer-cleanup-browser": "node scripts/test-inquiry-drawer-cleanup-browser.mjs",
     "test:orders-dual-read": "node scripts/test-orders-dual-read.mjs",
     "test:orders-dashboard": "node scripts/test-orders-dashboard.mjs",
     "test:orders-dashboard-browser": "node scripts/test-orders-dashboard-browser.mjs",
