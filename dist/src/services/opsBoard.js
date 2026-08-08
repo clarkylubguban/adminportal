@@ -266,6 +266,16 @@ export function mapOpsRowToInquiry(row) {
       getFirstValue(row, ["production_started_at", "productionStartedAt"]),
     productionStartedBy:
       getFirstValue(row, ["production_started_by", "productionStartedBy"]),
+    qcStartedAt:
+      getFirstValue(row, ["qc_started_at", "qcStartedAt"]),
+    qcStartedBy:
+      getFirstValue(row, ["qc_started_by", "qcStartedBy"]),
+    qcNote:
+      getFirstValue(row, ["qc_note", "qcNote"]),
+    qcCompletedAt:
+      getFirstValue(row, ["qc_completed_at", "qcCompletedAt"]),
+    qcCompletedBy:
+      getFirstValue(row, ["qc_completed_by", "qcCompletedBy"]),
     quotedAmount: getNullableNumber(row, ["quoted_amount", "quotedAmount"]),
     amountDue: getNullableNumber(row, ["amount_due", "amountDue"]),
     quoteStatus: getFirstValue(row, ["quote_status", "quoteStatus"]),
@@ -304,7 +314,7 @@ export function mapOpsRowToInquiry(row) {
     paymentReviewNote: getFirstValue(row, ["payment_review_note", "paymentReviewNote"]),
     paymentRejectedAt: getFirstValue(row, ["payment_rejected_at", "paymentRejectedAt"]),
     productionFieldsReady:
-      ["assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "production_started_at", "production_started_by"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
+      ["assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "production_started_at", "production_started_by", "qc_started_at", "qc_started_by", "qc_note", "qc_completed_at", "qc_completed_by"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
   };
 }
 
@@ -350,6 +360,11 @@ export function mapInquiryToOpsRow(inquiry) {
     production_updated_at: inquiry.productionUpdatedAt,
     production_started_at: inquiry.productionStartedAt,
     production_started_by: inquiry.productionStartedBy,
+    qc_started_at: inquiry.qcStartedAt,
+    qc_started_by: inquiry.qcStartedBy,
+    qc_note: inquiry.qcNote,
+    qc_completed_at: inquiry.qcCompletedAt,
+    qc_completed_by: inquiry.qcCompletedBy,
   });
 }
 
@@ -401,6 +416,11 @@ function mapInquiryUpdatesToOpsRow(updates) {
     production_updated_at: updates.productionUpdatedAt,
     production_started_at: updates.productionStartedAt,
     production_started_by: updates.productionStartedBy,
+    qc_started_at: updates.qcStartedAt,
+    qc_started_by: updates.qcStartedBy,
+    qc_note: updates.qcNote,
+    qc_completed_at: updates.qcCompletedAt,
+    qc_completed_by: updates.qcCompletedBy,
   });
 }
 

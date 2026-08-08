@@ -13,20 +13,29 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
     return success({ status: "won", odoo_so: odooSO || inquiry.odoo_so || null, next_action: odooSO ? "Odoo Sales Order recorded" : "TRRY order confirmed" });
   }
 
-  if (!["save_production", "start_production", "advance_production"].includes(action)) {
+  if (!["save_production", "save_qc_note", "start_production", "advance_production"].includes(action)) {
     return failure("invalid workflow action");
   }
   if (!isConfirmedOrder(inquiry)) return failure("a confirmed TRRY order is required");
 
   const currentStage = canonicalStage(inquiry.production_stage);
   const alreadyStarted = Boolean(inquiry.production_started_at);
+  const actorUserId = cleanUuid(body.actorUserId || body.productionStartedBy || body.qcStartedBy || body.qcCompletedBy);
   if (action === "start_production") {
     if (alreadyStarted) return { ok: true, updates: {}, noop: true };
     if (!ACTIVE_STAGES.has(currentStage)) return failure("production must be released before it can start");
     if (cleanText(inquiry.blocked_reason, 500)) return failure("blocked production cannot start");
     return success({
       production_started_at: now,
-      production_started_by: cleanUuid(body.productionStartedBy || body.actorUserId) || null,
+      production_started_by: actorUserId || null,
+      production_updated_at: now,
+    });
+  }
+
+  if (action === "save_qc_note") {
+    if (currentStage !== "qc") return failure("QC note can only be saved during quality check");
+    return success({
+      qc_note: cleanText(body.qcNote, 500) || null,
       production_updated_at: now,
     });
   }
@@ -39,6 +48,9 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
   if (action === "save_production") return success(updates);
 
   const requestedStage = canonicalStage(body.productionStage);
+  if (currentStage === "ready" && requestedStage === "ready" && inquiry.qc_completed_at) {
+    return { ok: true, updates: {}, noop: true };
+  }
   const expectedStage = nextStage(currentStage, inquiry);
   if (!expectedStage || requestedStage !== expectedStage) return failure("invalid production stage transition");
 
@@ -50,9 +62,27 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
     return failure("production must be started before quality check");
   }
 
+  const lifecycleUpdates = {};
+  if (requestedStage === "qc" && !inquiry.qc_started_at) {
+    lifecycleUpdates.qc_started_at = now;
+    lifecycleUpdates.qc_started_by = actorUserId || null;
+  }
+  if (currentStage === "qc" && requestedStage === "ready") {
+    if (cleanText(inquiry.blocked_reason, 500)) return failure("blocked production cannot complete quality check");
+    if (!inquiry.qc_started_at) {
+      lifecycleUpdates.qc_started_at = now;
+      lifecycleUpdates.qc_started_by = actorUserId || null;
+    }
+    if (!inquiry.qc_completed_at) {
+      lifecycleUpdates.qc_completed_at = now;
+      lifecycleUpdates.qc_completed_by = actorUserId || null;
+    }
+  }
+
   return success({
     ...updates,
     production_stage: requestedStage,
+    ...lifecycleUpdates,
     ...(currentStage === "queued" ? { production_started_at: null, production_started_by: null } : {}),
   });
 }
