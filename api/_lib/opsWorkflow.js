@@ -13,12 +13,24 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
     return success({ status: "won", odoo_so: odooSO || inquiry.odoo_so || null, next_action: odooSO ? "Odoo Sales Order recorded" : "TRRY order confirmed" });
   }
 
-  if (!["save_production", "advance_production"].includes(action)) {
+  if (!["save_production", "start_production", "advance_production"].includes(action)) {
     return failure("invalid workflow action");
   }
   if (!isConfirmedOrder(inquiry)) return failure("a confirmed TRRY order is required");
 
   const currentStage = canonicalStage(inquiry.production_stage);
+  const alreadyStarted = Boolean(inquiry.production_started_at);
+  if (action === "start_production") {
+    if (alreadyStarted) return { ok: true, updates: {}, noop: true };
+    if (!ACTIVE_STAGES.has(currentStage)) return failure("production must be released before it can start");
+    if (cleanText(inquiry.blocked_reason, 500)) return failure("blocked production cannot start");
+    return success({
+      production_started_at: now,
+      production_started_by: cleanUuid(body.productionStartedBy || body.actorUserId) || null,
+      production_updated_at: now,
+    });
+  }
+
   if (["ready", "completed"].includes(currentStage) && action === "save_production") {
     return failure("ready and completed production details are locked");
   }
@@ -34,9 +46,15 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
   if (currentStage === "queued") {
     const missing = productionGate(candidate);
     if (missing.length) return failure(`production requirements missing: ${missing.join(", ")}`);
+  } else if (ACTIVE_STAGES.has(currentStage) && requestedStage === "qc" && !alreadyStarted) {
+    return failure("production must be started before quality check");
   }
 
-  return success({ ...updates, production_stage: requestedStage });
+  return success({
+    ...updates,
+    production_stage: requestedStage,
+    ...(currentStage === "queued" ? { production_started_at: null, production_started_by: null } : {}),
+  });
 }
 
 export function canonicalStage(value) {
@@ -99,6 +117,13 @@ function stationFor(inquiry) {
 
 function cleanText(value, maxLength) {
   return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function cleanUuid(value) {
+  const text = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+    ? text.toLowerCase()
+    : "";
 }
 
 function key(value) {

@@ -133,7 +133,7 @@ assert.ok(html.includes("Balance due"), "awaiting payment is payment-owned dashb
 assert.ok(html.includes("NOT READY"), "awaiting payment remains production-not-ready, not an explicit blocker");
 assert.ok(html.includes("For verification"), "submitted proof maps to Payment Review");
 assert.ok(html.includes("READY"), "paid and gate-clear order maps to Ready");
-assert.ok(html.includes("IN PRODUCTION"), "released production state appears in dashboard");
+assert.ok(html.includes("QUEUED FOR PRODUCTION"), "released-but-not-started production state appears as queued");
 assert.ok(html.includes("RESOLVE BLOCKER"), "explicit blockers remain visible");
 assert.ok(html.includes("data-mvp-open=\"order\""), "rows/actions open the existing order drawer");
 

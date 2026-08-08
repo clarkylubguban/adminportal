@@ -24,6 +24,7 @@ const PRODUCTION_STAGES = [
 ];
 
 const ACTIVE_STAGES = ["printing", "embroidery", "screen_printing", "qc"];
+const FIRST_PRODUCTION_STATIONS = ["printing", "embroidery", "screen_printing"];
 
 export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], loadState: "idle", error: "" }) } = {}) {
   const state = {
@@ -1115,6 +1116,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (Array.isArray(item.paymentHistory)) item.paymentHistory.forEach((entry) => rows.push({ title: `Payment confirmed${entry.amount ? ` ${money(entry.amount)}` : ""}`, when: dateTime(entry.confirmedAt), source: "Persisted payment_history" }));
     if (item.paymentConfirmedAt || item.paymentVerifiedAt) rows.push({ title: "Payment confirmed", when: dateTime(item.paymentConfirmedAt || item.paymentVerifiedAt), source: "Derived from payment fields" });
     if (item.productionUpdatedAt && productionStage(item) !== "queued") rows.push({ title: "Released to production", when: dateTime(item.productionUpdatedAt), source: "Derived from production fields" });
+    if (item.productionStartedAt) rows.push({ title: "Production started", when: dateTime(item.productionStartedAt), source: "Persisted production start fields" });
     if (item.quoteApprovedAt) rows.push({ title: "Quotation approved", when: dateTime(item.quoteApprovedAt), source: "Derived from quote approval" });
     if (item.orderCreatedAt || item.createdAt || item.updatedAt) rows.push({ title: "Order created", when: dateTime(item.orderCreatedAt || item.createdAt || item.updatedAt), source: sourceInquiryReference(item) !== "Not linked" ? `Derived from source inquiry ${sourceInquiryReference(item)}` : "Derived from order data" });
     if (!rows.length) rows.push({ title: "No history events available", when: "Not set", source: "No persisted event rows found" });
@@ -1289,6 +1291,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (stage === "qc") return { key: stage, label: "QC", tone: stage };
     if (stage === "ready") return { key: stage, label: fulfillment(item) === "Delivery" ? "READY FOR DELIVERY" : "READY FOR PICKUP", tone: "ready" };
     if (stage === "completed") return { key: stage, label: "COMPLETED", tone: "completed" };
+    if (FIRST_PRODUCTION_STATIONS.includes(stage) && !productionStarted(item)) return { key: "queued", label: "QUEUED FOR PRODUCTION", tone: "queued" };
     return { key: stage, label: stage === "screen_printing" ? "SCREEN PRINTING" : stage === "embroidery" ? "EMBROIDERY" : "IN PRODUCTION", tone: stage };
   }
 
@@ -1341,6 +1344,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function productionFooterAction(item, next, fieldsReady, gate) {
     const stage = productionStage(item);
+    if (FIRST_PRODUCTION_STATIONS.includes(stage) && !productionStarted(item)) {
+      const disabled = !fieldsReady || gate.length;
+      return `<section class="mvp-production-action"><span>NOW: Queued for Production</span><strong>NEXT: In Production</strong><button type="button" data-mvp-start-production="${html(item.id)}" ${disabled ? "disabled" : ""}>START PRODUCTION</button>${gate.length ? `<small>Resolve before starting: ${html(gate.join(", "))}</small>` : ""}</section>`;
+    }
     const disabled = !fieldsReady || gate.length || !next;
     const label = !next ? "Completed" : stage === "qc" ? "MARK READY" : stage === "ready" ? "MARK COMPLETED" : `MOVE TO ${stageLabel(next).toUpperCase()}`;
     return `<section class="mvp-production-action"><span>NOW: ${html(stageLabel(stage))}</span><strong>${next ? `NEXT: ${html(stageLabel(next))}` : "PRODUCTION COMPLETE"}</strong>${next ? `<button type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="${next}" ${disabled ? "disabled" : ""}>${label}</button>` : `<button type="button" disabled>Completed</button>`}${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}</section>`;
@@ -1501,14 +1508,17 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function productionWorkflowState(item) {
     const stage = productionStage(item);
-    const raw = key(item.productionStatus || item.productionWorkflowStatus || item.productionState);
     if (productionBlocker(item)) return { key: "blocked", label: "BLOCKED", tone: "overdue" };
     if (stage === "completed") return { key: "completed", label: "COMPLETED", tone: "completed" };
     if (stage === "ready") return { key: "ready", label: "READY FOR FULFILLMENT", tone: "ready" };
     if (stage === "qc") return { key: "qc", label: "QUALITY CHECK", tone: "qc" };
-    if (raw === "in_production" || raw === "active") return { key: "in_production", label: "IN PRODUCTION", tone: "active" };
-    if (ACTIVE_STAGES.includes(stage)) return { key: "queued", label: "QUEUED", tone: "queued" };
+    if (FIRST_PRODUCTION_STATIONS.includes(stage) && productionStarted(item)) return { key: "in_production", label: "IN PRODUCTION", tone: "active" };
+    if (FIRST_PRODUCTION_STATIONS.includes(stage)) return { key: "queued", label: "QUEUED", tone: "queued" };
     return { key: "queued", label: "QUEUED", tone: "queued" };
+  }
+
+  function productionStarted(item) {
+    return Boolean(String(item.productionStartedAt || item.production_started_at || "").trim());
   }
 
   function productionStatusMatches(item, statusValue) {
@@ -1556,6 +1566,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (!item) return "";
     const released = isReleasedToProduction(item);
     const stage = productionStage(item);
+    const stateInfo = productionWorkflowState(item);
     const next = released ? nextStage(item) : "";
     const gate = released ? productionAdvanceGate(item) : [];
     const fieldsReady = !item.requiresProductionMigration;
@@ -1565,8 +1576,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const assignmentDisabled = assignmentControlsDisabled();
     const blocker = productionBlocker(item);
     const footer = released ? productionFooterAction(item, next, fieldsReady, gate) : `<section class="mvp-production-action"><span>Not released to Production</span><strong>Return to Orders</strong><button class="mvp-secondary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(item.id)}">Open Order</button></section>`;
-    return drawer("production", item, released ? stageLabel(stage) : "Not released", `
-      ${detailSection("Job", [["Job Reference", jobReference(item)], ["Item", itemDisplay(item)], ["Method", productionMethod(item)], ["Quantity", quantityDisplay(item)], ["Due Date", dueShortLabel(due(item), item)], ["Order Reference", orderReference(item) === jobReference(item) ? "Same as job" : orderReference(item)], ["Current Production Status", released ? stageLabel(stage) : "Not released"]])}
+    return drawer("production", item, released ? stateInfo.label : "Not released", `
+      ${detailSection("Job", [["Job Reference", jobReference(item)], ["Item", itemDisplay(item)], ["Method", productionMethod(item)], ["Quantity", quantityDisplay(item)], ["Due Date", dueShortLabel(due(item), item)], ["Order Reference", orderReference(item) === jobReference(item) ? "Same as job" : orderReference(item)], ["Current Production Status", released ? stateInfo.label : "Not released"], ["Production Started", item.productionStartedAt ? dateTime(item.productionStartedAt) : "Not started"]])}
       <section class="mvp-drawer-section"><h3>Production</h3>${released ? "" : `<p class="mvp-inline-note">This confirmed order has not passed the current release requirements and is read-only here.</p>`}${fieldsReady ? "" : `<p class="mvp-inline-error">DATABASE FIELDS NOT READY. Apply the pending migration before saving.</p>`}${editorLocked && released ? `<p class="mvp-inline-note">${stage === "ready" ? "READY IS OPEN FOR FULFILLMENT. PRODUCTION DETAILS ARE LOCKED." : stage === "completed" ? "COMPLETED PRODUCTION DETAILS ARE LOCKED." : "PRODUCTION DETAILS ARE READ ONLY."}</p>` : ""}<div class="mvp-production-editor">
         <label><span>Assigned Staff</span><select data-mvp-production-staff="${html(item.id)}" ${editorEnabled && !assignmentDisabled ? "" : "disabled"}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select>${assignmentHelp}</label>
         <label><span>Current Stage</span><strong>${stageLabel(stage)}</strong></label>
@@ -1580,7 +1591,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function nextStage(item) {
     const stage = productionStage(item);
     if (stage === "queued") return stationFor(item);
-    if (["printing", "embroidery", "screen_printing"].includes(stage)) return "qc";
+    if (FIRST_PRODUCTION_STATIONS.includes(stage) && productionStarted(item)) return "qc";
     if (stage === "qc") return "ready";
     if (stage === "ready") return "completed";
     return "";
@@ -1777,6 +1788,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       } finally {
         state.orderReleaseId = null;
       }
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-start-production]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpStartProduction;
+      button.disabled = true;
+      button.textContent = "Starting...";
+      await saveProduction(id, { startProduction: true });
       rerender();
     }));
     root.querySelectorAll("[data-mvp-advance]").forEach((button) => button.addEventListener("click", async () => {

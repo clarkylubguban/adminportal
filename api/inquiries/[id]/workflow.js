@@ -7,7 +7,8 @@ const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
 const WORKFLOW_SELECT = [
   "id", "status", "next_action", "odoo_so", "product", "product_desc", "quantity", "due_date",
   "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status",
-  "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "blocked_reason",
+  "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at",
+  "production_started_at", "production_started_by", "blocked_reason",
 ].join(",");
 
 export default async function handler(request, response) {
@@ -44,10 +45,11 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
     const assignmentPatch = await buildAssignmentPatch(supabase, body, inquiry, adminUser);
     if (!assignmentPatch.ok) return sendJson(response, 400, { ok: false, error: assignmentPatch.error });
 
-    const workflowBody = { ...body, assignedStaff: assignmentPatch.assignedStaff };
+    const workflowBody = { ...body, assignedStaff: assignmentPatch.assignedStaff, productionStartedBy: adminUser.userId };
     const result = buildOpsWorkflowUpdates(String(body.action || ""), workflowBody, inquiry, now);
     if (!result.ok) return sendJson(response, 400, { ok: false, error: result.error });
     if (assignmentPatch.hasAssignment) Object.assign(result.updates, assignmentPatch.updates);
+    if (result.noop) return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(inquiry) });
 
     const { data: updated, error: updateError } = await supabase
       .from("ops_inquiries")
@@ -63,7 +65,7 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
       return sendJson(response, error.status, { ok: false, error: error.message, code: error.code });
     }
     console.error("Admin workflow update failed.", { message: error?.message, code: error?.code });
-    const schemaMissing = /orders|production_stage|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
+    const schemaMissing = /orders|production_stage|production_started_at|production_started_by|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
     const missingMessage = nativeOrderRequest ? "native orders table is not ready" : "workflow fields are not ready";
     sendJson(response, schemaMissing ? 503 : 500, { ok: false, error: schemaMissing ? missingMessage : "workflow update failed" });
   }
@@ -114,6 +116,8 @@ function toClientInquiry(row) {
     productionStage: row.production_stage,
     productionNote: row.production_note,
     productionUpdatedAt: row.production_updated_at,
+    productionStartedAt: row.production_started_at,
+    productionStartedBy: row.production_started_by,
     blockedReason: row.blocked_reason,
   };
 }

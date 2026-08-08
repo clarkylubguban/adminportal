@@ -122,6 +122,8 @@ const workflowResult = buildOpsWorkflowUpdates("advance_production", {
 }, "2026-08-01T05:00:00.000Z");
 assert.equal(workflowResult.ok, true, "release workflow accepts a gate-clear queued order");
 assert.equal(workflowResult.updates.production_stage, "embroidery", "release persists the first production stage");
+assert.equal(workflowResult.updates.production_started_at, null, "release leaves production start timestamp null");
+assert.equal(workflowResult.updates.production_started_by, null, "release leaves production start actor null");
 
 const duplicateResult = buildOpsWorkflowUpdates("advance_production", {
   productionStage: "embroidery",

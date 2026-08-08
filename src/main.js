@@ -7225,12 +7225,13 @@ async function saveMvpProductionFields(id, changes) {
     ...changes,
     productionUpdatedAt: new Date().toISOString(),
   };
+  if (changes.startProduction) updates.productionStartedAt = updates.productionUpdatedAt;
   let savedInquiry = null;
 
   if (shouldLoadSupabaseOps) {
     try {
       const payload = await requestOpsWorkflowAction(id, {
-        action: changes.productionStage ? "advance_production" : "save_production",
+        action: changes.startProduction ? "start_production" : changes.productionStage ? "advance_production" : "save_production",
         productionStage: changes.productionStage,
         assignedUserId: changes.assignedUserId,
         productionNote: changes.productionNote,

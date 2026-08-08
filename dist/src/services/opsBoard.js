@@ -262,6 +262,10 @@ export function mapOpsRowToInquiry(row) {
       getFirstValue(row, ["production_note", "productionNote"]),
     productionUpdatedAt:
       getFirstValue(row, ["production_updated_at", "productionUpdatedAt"]),
+    productionStartedAt:
+      getFirstValue(row, ["production_started_at", "productionStartedAt"]),
+    productionStartedBy:
+      getFirstValue(row, ["production_started_by", "productionStartedBy"]),
     quotedAmount: getNullableNumber(row, ["quoted_amount", "quotedAmount"]),
     amountDue: getNullableNumber(row, ["amount_due", "amountDue"]),
     quoteStatus: getFirstValue(row, ["quote_status", "quoteStatus"]),
@@ -300,7 +304,7 @@ export function mapOpsRowToInquiry(row) {
     paymentReviewNote: getFirstValue(row, ["payment_review_note", "paymentReviewNote"]),
     paymentRejectedAt: getFirstValue(row, ["payment_rejected_at", "paymentRejectedAt"]),
     productionFieldsReady:
-      ["assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
+      ["assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "production_started_at", "production_started_by"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
   };
 }
 
@@ -344,6 +348,8 @@ export function mapInquiryToOpsRow(inquiry) {
     production_stage: inquiry.productionStage,
     production_note: inquiry.productionNote,
     production_updated_at: inquiry.productionUpdatedAt,
+    production_started_at: inquiry.productionStartedAt,
+    production_started_by: inquiry.productionStartedBy,
   });
 }
 
@@ -393,6 +399,8 @@ function mapInquiryUpdatesToOpsRow(updates) {
     production_stage: updates.productionStage,
     production_note: updates.productionNote,
     production_updated_at: updates.productionUpdatedAt,
+    production_started_at: updates.productionStartedAt,
+    production_started_by: updates.productionStartedBy,
   });
 }
 

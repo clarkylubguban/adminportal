@@ -29,6 +29,11 @@ import {
   updateOpsInquiryFields,
   updateOpsInquiryStatus,
 } from "./services/opsBoard.js";
+import {
+  buildDualReadOrders,
+  normalizeNativeOrderResponseToRow,
+  getNativeOrderRows,
+} from "./services/orderCompatibility.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
   getAdminAssignmentUsers,
@@ -278,6 +283,10 @@ let opsInquiries = shouldLoadSupabaseOps ? [] : [...localOpsInquiries];
 let opsLoadState = shouldLoadSupabaseOps ? "loading" : "local";
 let opsLoadError = "";
 let hasLoadedOpsInquiries = false;
+let nativeOrderRows = [];
+let nativeOrdersLoadState = shouldLoadSupabaseOps ? "loading" : "local";
+let nativeOrdersLoadError = "";
+let nativeOrderConversionRequests = {};
 
 const opsProduction = [
   { name: "DTF", jobs: 0, note: "Production tracking not connected yet." },
@@ -503,22 +512,17 @@ let calendarSelectedTask = null;
 const routes = {
   "/": "Overview",
   "/inquiries": "Inquiries",
-  "/order-dashboard": "Orders",
   "/orders": "Orders",
   "/production": "Production",
   "/my-tasks": "My Tasks",
   "/calendar": "Calendar",
   "/workboard": "Workboard",
-  "/reorders": "Reorders",
   "/overview": "Overview",
-  "/clients": "Clients",
-  "/products": "Products",
-  "/catalog": "Catalog",
-  "/staff": "Staff",
-  "/settings": "Settings",
 };
 
 const defaultRoutePath = "/";
+const legacyOrderDashboardPath = "/order-dashboard";
+const activeOrdersPath = "/orders";
 const ADMIN_ACCESS_SESSION_KEY = "trry_admin_access_unlocked";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "trry_admin_sidebar_collapsed_v3";
 
@@ -548,6 +552,10 @@ let isSidebarCollapsed = getStoredSidebarCollapsed();
 let isMobileSidebarOpen = false;
 
 function render() {
+  if (normalizeLegacyOrderDashboardRoute()) {
+    return;
+  }
+
   if (isPasswordSetupRoute()) {
     renderPasswordSetupScreen("invite");
     return;
@@ -572,7 +580,7 @@ function render() {
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
+  const isAdminSaasRoute = false;
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
@@ -587,9 +595,7 @@ function render() {
         ${
           currentRoute === "Orders"
             ? renderMvpOrdersPage()
-            : currentRoute === "Reorders"
-              ? renderOrdersPage(selectedOrder, filteredOrders)
-              : currentRoute === "Inquiries"
+            : currentRoute === "Inquiries"
                 ? renderMvpInquiriesPage()
                 : currentRoute === "Production"
                   ? renderMvpProductionPage()
@@ -599,19 +605,7 @@ function render() {
                       ? renderCalendarPage()
                       : currentRoute === "Workboard"
                         ? renderWorkboardPage()
-                  : currentRoute === "Overview"
-                ? renderOverviewPage()
-                : currentRoute === "Clients"
-                  ? renderClientsPage()
-                  : currentRoute === "Products"
-                    ? renderProductsPage(selectedProduct)
-                    : currentRoute === "Catalog"
-                      ? renderCatalogPage()
-                      : currentRoute === "Staff"
-                        ? renderStaffAccessPage()
-                        : currentRoute === "Settings"
-                        ? renderSettingsPage()
-                        : renderOverviewPage()
+                  : renderOverviewPage()
         }
         ${renderFooter()}
       </section>
@@ -1299,12 +1293,26 @@ async function loadOpsBoardInquiries() {
   if (hasLoadedOpsInquiries) return;
   hasLoadedOpsInquiries = true;
 
-  const result = await getOpsBoardInquiries(localOpsInquiries, adminAuthSession);
+  const [result, nativeResult] = await Promise.all([
+    getOpsBoardInquiries(localOpsInquiries, adminAuthSession),
+    getNativeOrderRows(adminAuthSession),
+  ]);
   opsInquiries = result.inquiries;
   opsLoadState = result.status;
   opsLoadError = result.error?.message ?? "";
+  nativeOrderRows = nativeResult.rows;
+  nativeOrdersLoadState = nativeResult.status;
+  nativeOrdersLoadError = nativeResult.error?.message ?? "";
 
   render();
+}
+
+async function loadNativeOrderRows() {
+  const result = await getNativeOrderRows(adminAuthSession);
+  nativeOrderRows = result.rows;
+  nativeOrdersLoadState = result.status;
+  nativeOrdersLoadError = result.error?.message ?? "";
+  return result;
 }
 function isLocalTaskQaMode() {
   const value = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_MODE ?? "false").trim().toLowerCase();
@@ -2856,8 +2864,35 @@ function shortTaskTitle(title) {
 function getMvpDashboardItems() {
   return opsInquiries.map((item) => ({
     ...item,
+    ...getNativeOrderIdentityForInquiry(item.id),
+    orderCreationState: nativeOrderConversionRequests[item.id]?.status || "",
+    orderCreationError: nativeOrderConversionRequests[item.id]?.message || "",
     requiresProductionMigration: shouldLoadSupabaseOps && !item.productionFieldsReady,
   }));
+}
+
+function getMvpOrderItems() {
+  const inquiries = getMvpDashboardItems();
+  return buildDualReadOrders({
+    inquiries,
+    nativeRows: nativeOrderRows,
+  });
+}
+
+function getNativeOrderIdentityForInquiry(inquiryId) {
+  const row = findNativeOrderRowBySourceInquiryId(inquiryId);
+  if (!row) return {};
+  return {
+    nativeOrderId: row.id || "",
+    nativeOrderReference: row.order_reference || row.orderReference || "",
+    nativeOrderStatus: row.status || "",
+  };
+}
+
+function findNativeOrderRowBySourceInquiryId(inquiryId) {
+  const target = String(inquiryId || "").trim().toLowerCase();
+  if (!target) return null;
+  return nativeOrderRows.find((row) => String(row?.source_inquiry_id || row?.sourceInquiryId || "").trim().toLowerCase() === target) || null;
 }
 
 function renderOverviewPage() {
@@ -2872,15 +2907,14 @@ function renderMvpInquiriesPage() {
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
     renderQuote: renderOpsQuoteStage,
-    renderOdoo: renderOpsOdooAction,
     renderArtwork: renderMvpArtworkAction,
   });
 }
 
 function renderMvpOrdersPage() {
   return mvpDashboard.renderOrders({
-    items: getMvpDashboardItems(),
-    notices: renderOpsPersistenceNotice(),
+    items: getMvpOrderItems(),
+    notices: `${renderOpsPersistenceNotice()}${renderNativeOrdersPersistenceNotice()}`,
     schemaNotice: renderOrderDashboardSchemaNotice(),
     renderPayment: renderMvpPaymentConfirmation,
     renderTracking: renderOpsCustomerTracking,
@@ -2889,8 +2923,8 @@ function renderMvpOrdersPage() {
 
 function renderMvpProductionPage() {
   return mvpDashboard.renderProduction({
-    items: getMvpDashboardItems(),
-    notices: renderOpsPersistenceNotice(),
+    items: getMvpOrderItems(),
+    notices: `${renderOpsPersistenceNotice()}${renderNativeOrdersPersistenceNotice()}`,
     schemaNotice: renderOrderDashboardSchemaNotice(),
   });
 }
@@ -2915,6 +2949,21 @@ function renderOpsPersistenceNotice() {
     return `<section class="ops-persistence-card error"><strong>${title}</strong><span>${escapeHtml(opsLoadError || "Unable to load inquiries. Check the Supabase connection and admin access.")}</span></section>`;
   }
 
+  return "";
+}
+
+function renderNativeOrdersPersistenceNotice() {
+  if (!shouldLoadSupabaseOps) return "";
+  if (nativeOrdersLoadState === "success" || nativeOrdersLoadState === "empty") return "";
+  if (nativeOrdersLoadState === "loading") {
+    return `<section class="ops-persistence-card"><strong>Loading native Orders</strong><span>Reading TRRY Orders alongside legacy inquiry orders...</span></section>`;
+  }
+  if (nativeOrdersLoadState === "missing-table") {
+    return `<section class="ops-persistence-card"><strong>Native Orders table is not exposed yet</strong><span>Showing legacy inquiry-derived orders only.</span></section>`;
+  }
+  if (nativeOrdersLoadState === "error") {
+    return `<section class="ops-persistence-card error"><strong>Unable to load native Orders</strong><span>${escapeHtml(nativeOrdersLoadError || "Showing legacy inquiry-derived orders only.")}</span></section>`;
+  }
   return "";
 }
 function getOpsCounts() {
@@ -4151,6 +4200,71 @@ async function requestOpsWorkflowAction(inquiryId, body) {
   return payload;
 }
 
+async function requestNativeOrderConversion(inquiryId) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/orders`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify({}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok || !payload?.order) {
+    const message = payload?.error || "Native Order creation failed.";
+    const code = payload?.code ? ` (${payload.code})` : "";
+    throw new Error(`${message}${code}`);
+  }
+  return payload;
+}
+
+async function createNativeOrderFromInquiry(inquiryId) {
+  const id = String(inquiryId || "").trim();
+  if (!id || nativeOrderConversionRequests[id]?.status === "loading") return;
+  const existing = findNativeOrderRowBySourceInquiryId(id);
+  if (existing) {
+    navigateTo(`/orders?order=${encodeURIComponent(existing.order_reference || existing.orderReference || existing.id)}`);
+    render();
+    return;
+  }
+
+  nativeOrderConversionRequests = {
+    ...nativeOrderConversionRequests,
+    [id]: { status: "loading", message: "" },
+  };
+  render();
+
+  try {
+    const payload = await requestNativeOrderConversion(id);
+    const row = normalizeNativeOrderResponseToRow(payload.order);
+    let optimisticNativeRows = nativeOrderRows;
+    if (row) {
+      optimisticNativeRows = [
+        row,
+        ...nativeOrderRows.filter((item) => String(item?.source_inquiry_id || item?.sourceInquiryId || "").trim().toLowerCase() !== id.toLowerCase()),
+      ];
+      nativeOrderRows = optimisticNativeRows;
+    }
+    const refresh = await loadNativeOrderRows().catch(() => null);
+    if (!refresh || ["error", "missing-table"].includes(refresh.status)) nativeOrderRows = optimisticNativeRows;
+    nativeOrderConversionRequests = {
+      ...nativeOrderConversionRequests,
+      [id]: { status: "success", message: payload.created ? "Native Order created." : "Native Order already exists." },
+    };
+    const order = payload.order;
+    const routeIdentity = order.orderReference || order.id || id;
+    navigateTo(`/orders?order=${encodeURIComponent(routeIdentity)}`);
+  } catch (error) {
+    console.error("Unable to create native TRRY Order.", error);
+    nativeOrderConversionRequests = {
+      ...nativeOrderConversionRequests,
+      [id]: { status: "error", message: error.message || "Native Order creation failed." },
+    };
+  } finally {
+    render();
+  }
+}
+
 async function requestMvpPaymentConfirmation(inquiryId, body) {
   const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/payment-confirmations`, {
     method: "POST",
@@ -5048,7 +5162,7 @@ function renderCatalogDrawer(selectedProduct) {
                 ${renderCatalogDetailRow("Internal code", sourceProduct.code, true)}
                 ${renderCatalogDetailRow("Availability", sourceProduct.status || "Available")}
               </div>
-              <button class="note-button catalog-secondary-action" data-route-target="/products" type="button">Open Products record</button>`
+              <button class="note-button catalog-secondary-action" type="button" disabled>Products record parked</button>`
             : `<div class="catalog-source-empty"><strong>No source Product linked</strong><span>This Catalog item can still be edited, but staff should confirm the matching internal Product record before publishing.</span></div>`}
         </section>
 
@@ -5887,7 +6001,7 @@ function renderClientPanel() {
         <a class="primary-drawer-action" href="https://${clientProgram.domain}" target="_blank" rel="noreferrer">Open Portal</a>
         <details class="drawer-more-actions"><summary>More Actions</summary><div>
           <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
-          <button data-route-target="/products" type="button">View Products</button>
+          <button disabled type="button">Products module parked</button>
           <button data-route-target="/orders" type="button">View Orders</button>
           <button disabled title="Editing requires a connected client management backend." type="button">Edit Client</button>
         </div></details>
@@ -6023,15 +6137,10 @@ function renderSidebar(currentRoute) {
     { label: "Overview", path: "/overview" },
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
-    { label: "Clients", path: "/clients" },
-    { label: "Products", path: "/products" },
     { label: "Production", path: "/production", icon: "factory" },
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
-    { label: "Catalog", path: "/catalog" },
-    ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
-    { label: "Settings", path: "/settings" },
   ];
 
   return `
@@ -6039,8 +6148,7 @@ function renderSidebar(currentRoute) {
       <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
-        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>`).join("")}
-        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
+        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label}</span></a>`).join("")}
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -6072,10 +6180,6 @@ function renderAccountMenu(surface = "desktop") {
   const menuClass = isMobile ? "mobile-account-popover" : "admin-account-popover";
   const avatarClass = isMobile ? "mobile-avatar" : "avatar";
   const accountLabel = isMobile ? `<span class="mobile-account-label">ACCOUNT</span>` : "";
-  const manageStaff = canManageStaffAccounts()
-    ? `<button type="button" data-admin-account-action="staff">MANAGE STAFF</button>`
-    : "";
-
   return `<div class="admin-account-menu ${isMobile ? "mobile" : "desktop"} ${isAccountMenuOpen ? "open" : ""}" data-admin-account-menu>
     <button class="${triggerClass}" type="button" data-admin-account-toggle aria-haspopup="menu" aria-expanded="${isAccountMenuOpen ? "true" : "false"}">
       <span class="${avatarClass}">${getAdminInitials()}</span>${accountLabel}
@@ -6086,7 +6190,6 @@ function renderAccountMenu(surface = "desktop") {
       <strong>${escapeHtml(getAdminDisplayName())}</strong>
       <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
       <i aria-hidden="true"></i>
-      ${manageStaff}
       <button type="button" data-admin-logout>LOG OUT</button>
     </div>
   </div>`;
@@ -6103,7 +6206,7 @@ function renderTopHeader() {
       </div>
       <div class="global-search-wrap">
         <label class="global-search">
-          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders, clients, products..." type="search" />
+          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders..." type="search" />
           ${renderIcon("search", "search-icon")}
         </label>
         ${renderGlobalSearchHint()}
@@ -6144,18 +6247,6 @@ function renderMobileBottomNav(currentRoute) {
 function renderGlobalSearchHint() {
   const normalized = globalSearchQuery.trim().toLowerCase();
   if (!normalized) return "";
-
-  if ("urban coffee".includes(normalized)) {
-    return `<button class="search-suggestion" data-route-target="/clients" type="button">Open Clients</button>`;
-  }
-
-  if (
-    "admin polo uniform".includes(normalized) ||
-    "embroidered staff cap".includes(normalized) ||
-    normalized.includes("cap")
-  ) {
-    return `<button class="search-suggestion" data-route-target="/products" type="button">Open Products</button>`;
-  }
 
   if ("orders".includes(normalized) || "reorder".includes(normalized) || normalized.includes("trry-uc")) {
     return `<button class="search-suggestion" data-route-target="/orders" type="button">Open Orders</button>`;
@@ -6685,14 +6776,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-admin-account-action='staff']").forEach((button) => {
-    button.addEventListener("click", () => {
-      isAccountMenuOpen = false;
-      navigateTo("/staff");
-      render();
-    });
-  });
-
   document.removeEventListener("click", handleAccountOutsideClick);
   document.addEventListener("click", handleAccountOutsideClick);
   document.removeEventListener("keydown", handleAccountEscape);
@@ -6782,6 +6865,7 @@ function bindEvents() {
     rerender: render,
     navigate: navigateTo,
     copy: copyToClipboard,
+    createOrder: createNativeOrderFromInquiry,
     saveProduction: saveMvpProductionFields,
     confirmPayment: confirmMvpOrderPayment,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,
@@ -7134,19 +7218,20 @@ async function saveMvpProductionFields(id, changes) {
   if (!current || !isConfirmedOpsOrder(current)) return;
   if (shouldLoadSupabaseOps && !current.productionFieldsReady) {
     orderDashboardSaveError = "Production fields are not ready. Apply the pending migration before saving.";
-    return;
+    return { ok: false, error: orderDashboardSaveError };
   }
 
   const updates = {
     ...changes,
     productionUpdatedAt: new Date().toISOString(),
   };
+  if (changes.startProduction) updates.productionStartedAt = updates.productionUpdatedAt;
   let savedInquiry = null;
 
   if (shouldLoadSupabaseOps) {
     try {
       const payload = await requestOpsWorkflowAction(id, {
-        action: changes.productionStage ? "advance_production" : "save_production",
+        action: changes.startProduction ? "start_production" : changes.productionStage ? "advance_production" : "save_production",
         productionStage: changes.productionStage,
         assignedUserId: changes.assignedUserId,
         productionNote: changes.productionNote,
@@ -7158,11 +7243,12 @@ async function saveMvpProductionFields(id, changes) {
     } catch (error) {
       console.error("Unable to save MVP production fields.", error);
       orderDashboardSaveError = error.message || "Unable to save production fields.";
-      return;
+      return { ok: false, error: orderDashboardSaveError };
     }
   }
 
   opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...(savedInquiry || updates) } : item);
+  return savedInquiry || updates;
 }
 
 function bindOrderDashboardEvents() {
@@ -7452,18 +7538,6 @@ function getSearchRoute(value) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return null;
 
-  if ("urban coffee".includes(normalized)) {
-    return { path: "/clients", clientQuery: "Urban Coffee" };
-  }
-
-  if ("admin polo uniform".includes(normalized)) {
-    return { path: "/products", productQuery: "Admin Polo" };
-  }
-
-  if ("embroidered staff cap".includes(normalized) || normalized.includes("cap")) {
-    return { path: "/products", productQuery: "Cap" };
-  }
-
   if (normalized.includes("trry-uc") || "orders".includes(normalized) || "reorder".includes(normalized)) {
     return { path: "/orders", orderQuery: value.trim() };
   }
@@ -7655,8 +7729,10 @@ function getCurrentRoute() {
 
 function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path === legacyOrderDashboardPath) return activeOrdersPath;
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
+  if (path === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
   return routes[path] ? path : defaultRoutePath;
 }
 
@@ -7668,12 +7744,22 @@ function navigateTo(path) {
 function normalizeRoutePath(path) {
   const url = new URL(String(path || defaultRoutePath), window.location.origin);
   const routePath = url.pathname.replace(/\/+$/, "") || "/";
+  if (routePath === legacyOrderDashboardPath) return `${activeOrdersPath}${url.search}`;
   if (["/forgot-password", "/reset-password", "/set-password"].includes(routePath)) {
     return `${routePath}${url.search}${url.hash}`;
   }
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
+  if (routePath === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
+}
+
+function normalizeLegacyOrderDashboardRoute() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path !== legacyOrderDashboardPath) return false;
+  window.history.replaceState({}, "", `${activeOrdersPath}${window.location.search}`);
+  render();
+  return true;
 }
 
 function escapeHtml(value) {
