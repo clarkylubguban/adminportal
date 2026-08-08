@@ -48,7 +48,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const status = key(item.status);
     const quote = key(item.quoteStatus);
     if (["lost", "cancelled", "canceled"].includes(status)) return "lost";
-    if (status === "won" || quote === "approved") return "approved";
+    if (inquiryQuoteApproved(item) || quote === "approved") return "approved";
     if (item.quotePublishedAt || status === "sent" || status === "followup" || quote === "ready") return "sent";
     return "new";
   };
@@ -80,7 +80,16 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return "queued";
   };
 
+  const hasNativeOrderAuthority = (item) => item?.sourceType === "native" && Boolean(item.nativeOrderId || item.orderReference || item.sourceInquiryId);
+  const isInactiveInquiryStatus = (item) => ["lost", "cancelled", "canceled"].includes(key(item.status));
+  const hasLegacyOrderCompatibility = (item) => item?.sourceType === "legacy" && key(item.status) === "won" && key(item.quoteStatus) === "approved" && hasExistingOrder(item);
   const confirmed = (item) => {
+    if (isInactiveInquiryStatus(item)) return false;
+    if (hasNativeOrderAuthority(item)) return true;
+    return hasLegacyOrderCompatibility(item);
+  };
+
+  const inquiryQuoteApproved = (item) => {
     const status = key(item.status);
     if (["lost", "cancelled", "canceled"].includes(status)) return false;
     return status === "won" && key(item.quoteStatus) === "approved";
@@ -95,8 +104,6 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (Number(item.quotedAmount || item.amountDue) > 0 && !paymentSatisfiesProductionGate(item)) return "Payment requirement not completed";
     return "";
   };
-
-  const hasNativeOrderAuthority = (item) => item?.sourceType === "native" && Boolean(item.nativeOrderId || item.orderReference || item.sourceInquiryId);
 
   const due = (item) => {
     if (productionStage(item) === "completed") return { key: "completed", label: "Completed" };
@@ -1083,7 +1090,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function orderDrawerPayment(item, renderPayment) {
-    const paymentForm = typeof renderPayment === "function" ? renderPayment(item) : "";
+    const paymentForm = hasNativeOrderAuthority(item) && typeof renderPayment === "function" ? renderPayment(item) : "";
     return `<section class="mvp-order-panel"><h3>PAYMENT SUMMARY</h3><div class="mvp-order-detail-list">
       ${detailLine("Payment State", orderPaymentDashboardLabel(item))}
       ${detailLine("Payment Method", paymentMethodLabel(item.paymentMethod))}
@@ -1098,7 +1105,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function orderDrawerFulfillment(item, renderTracking) {
-    const trackingForm = typeof renderTracking === "function" ? renderTracking(item) : "";
+    const trackingForm = hasNativeOrderAuthority(item) && typeof renderTracking === "function" ? renderTracking(item) : "";
     return `<section class="mvp-order-panel"><h3>FULFILLMENT</h3><div class="mvp-order-detail-list">
       ${detailLine("Method", fulfillment(item))}
       ${detailLine("Customer Tracking", tracking(item))}
@@ -1127,6 +1134,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function orderDrawerFooter(item, gate, activeTab) {
+    if (!hasNativeOrderAuthority(item)) return `<button class="mvp-secondary-action" type="button" disabled title="Historical Order compatibility records are read only.">Historical Read Only</button>`;
     const statusState = orderOperationalState(item);
     if (["awaiting_payment", "payment_review"].includes(statusState.key)) return `<button class="mvp-primary-action" type="button" data-mvp-order-tab="payment">${statusState.key === "payment_review" ? "Review Payment" : "Confirm Payment"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>`;
     if (statusState.key === "blocked") return `<button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Review Blocker</button><button class="mvp-secondary-action" type="button" disabled title="${html(productionBlocker(item) || gate.join(", "))}">Resolve Blocker</button>`;

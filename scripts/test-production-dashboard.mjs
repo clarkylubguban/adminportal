@@ -11,7 +11,7 @@ const team = [
 ];
 
 const base = {
-  status: "won",
+  status: "approved",
   quoteStatus: "approved",
   artworkStatus: "approved",
   fulfillmentMethod: "pickup",
@@ -36,8 +36,9 @@ const qc = { ...base, id: "TRY-QC", sourceType: "native", nativeOrderId: "960000
 const ready = { ...base, id: "TRY-FULFILL", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000704", sourceInquiryId: "TRY-FULFILL", orderReference: "TRRY-ORD-FULFILL01", customer: "Fulfillment Customer", productionStage: "ready", fulfillmentMethod: "delivery" };
 const blocked = { ...base, id: "TRY-BLOCK", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000706", sourceInquiryId: "TRY-BLOCK", orderReference: "TRRY-ORD-BLOCK01", customer: "Blocked Customer", service: "Embroidery", productionStage: "embroidery", blockedReason: "Thread color missing" };
 const legacy = { ...base, id: "TRY-LEGACY", sourceType: "legacy", orderReference: "TRRY-LEGACY-PROD01", odooSO: "SO-LEGACY-PROD01", customer: "Legacy Customer", service: "Screen Print", productionStage: "screen_printing" };
+const odooOnlyWon = { ...base, id: "TRY-ODOO-ONLY", status: "won", sourceType: "", orderReference: "", odooSO: "SO-R4-ODOO-ONLY", customer: "Odoo Only Negative", service: "Screen Print", productionStage: "screen_printing" };
 
-const rows = [unreleased, queued, inProduction, compatibilityOnly, qc, ready, blocked, legacy];
+const rows = [unreleased, queued, inProduction, compatibilityOnly, qc, ready, blocked, legacy, odooOnlyWon];
 const dashboard = createMvpDashboard({
   getAssignmentContext: () => ({ users: team, loadState: "success", error: "" }),
 });
@@ -52,7 +53,9 @@ assert.ok(html.includes("Active Jobs"), "active job count summary renders");
 assert.ok(!html.includes("TRRY-ORD-READY01"), "unreleased READY TO RELEASE order is not visible in Production");
 assert.ok(!html.includes("READY TO RELEASE"), "Production dashboard never shows Order-side READY TO RELEASE");
 assert.ok(html.includes("TRRY-ORD-QUEUED01"), "released native Order reference is primary job identity");
+assert.ok(html.includes("TRRY-ORD-QUEUED01"), "released native Order remains visible when source Inquiry status=approved");
 assert.ok(!html.includes("TRRY-LEGACY-PROD01"), "legacy Odoo-only work is read-only and not visible as active Production");
+assert.ok(!html.includes("SO-R4-ODOO-ONLY"), "Odoo-only status=won row does not become active Production");
 assert.ok(html.includes("FROM ORDER"), "job identity shows order linkage as secondary metadata");
 assert.ok(!html.includes("PRD-1048"), "dashboard does not invent PRD job references");
 

@@ -26,6 +26,7 @@ const rows = [
   {
     ...base,
     id: "TRY-AWAIT-001",
+    status: "approved",
     sourceType: "native",
     nativeOrderId: "96000000-0000-4000-8000-000000000001",
     sourceInquiryId: "TRY-AWAIT-001",
@@ -40,6 +41,7 @@ const rows = [
   {
     ...base,
     id: "TRY-REVIEW-001",
+    status: "approved",
     sourceType: "native",
     nativeOrderId: "96000000-0000-4000-8000-000000000002",
     sourceInquiryId: "TRY-REVIEW-001",
@@ -53,6 +55,7 @@ const rows = [
   {
     ...base,
     id: "TRY-READY-001",
+    status: "approved",
     sourceType: "native",
     nativeOrderId: "96000000-0000-4000-8000-000000000003",
     sourceInquiryId: "TRY-READY-001",
@@ -93,6 +96,7 @@ const rows = [
   {
     ...base,
     id: "TRY-ONLINE-001",
+    status: "approved",
     sourceType: "native",
     nativeOrderId: "96000000-0000-4000-8000-000000000006",
     orderReference: "TRRY-ORD-ONLINE01",
@@ -103,11 +107,41 @@ const rows = [
     paymentStatus: "awaiting_payment",
     productionStage: "queued",
   },
+  {
+    ...base,
+    id: "TRY-R4-STAGING",
+    status: "approved",
+    sourceType: "native",
+    nativeOrderId: "96000000-0000-4000-8000-000000000013",
+    sourceInquiryId: "TRY-R4-STAGING",
+    orderReference: "TRRY-ORD-STG13A01",
+    customer: "Phase 13 Staging Synthetic",
+    contact: "0917-000-0013",
+    productDesc: "Native staging fixture",
+    paymentStatus: "paid",
+    paymentVerifiedAmount: 3200,
+    productionStage: "queued",
+  },
+  {
+    ...base,
+    id: "TRY-ODOO-ONLY",
+    status: "won",
+    sourceType: "",
+    orderReference: "",
+    odooSO: "SO-R4-ODOO-ONLY",
+    customer: "Odoo Only Negative",
+    contact: "0917-000-0014",
+    productDesc: "Historical only",
+    paymentStatus: "paid",
+    paymentVerifiedAmount: 3200,
+    productionStage: "printing",
+  },
 ];
 
 const dashboard = createMvpDashboard({
   getAssignmentContext: () => ({ users: team, loadState: "success", error: "" }),
 });
+dashboard.state.order.pageSize = 10;
 
 let html = dashboard.renderOrders({ items: rows });
 
@@ -127,7 +161,9 @@ assert.ok(html.indexOf("DUE") < html.indexOf("OWNER"), "DUE precedes OWNER");
 assert.ok(html.indexOf("OWNER") < html.indexOf("NEXT ACTION"), "OWNER precedes NEXT ACTION");
 assert.ok(html.indexOf("NEXT ACTION") < html.indexOf("ACTION"), "NEXT ACTION precedes ACTION");
 assert.ok(html.includes("TRRY-ORD-AWAIT01"), "native orders display orders.order_reference");
+assert.ok(html.includes("TRRY-ORD-STG13A01"), "native Order with source Inquiry status=approved is visible in Orders");
 assert.ok(!html.includes("SO-SHOULD-NOT-SHOW"), "native identity does not fall back to Odoo");
+assert.ok(!html.includes("SO-R4-ODOO-ONLY"), "Odoo-only won Inquiry does not become an active Order row");
 assert.ok(html.includes("FROM INQUIRY"), "source inquiry bridge is shown as secondary metadata");
 assert.ok(html.includes("Balance due"), "awaiting payment is payment-owned dashboard state");
 assert.ok(html.includes("NOT READY"), "awaiting payment remains production-not-ready, not an explicit blocker");
@@ -163,10 +199,16 @@ html = dashboard.renderOrders({ items: rows });
 assert.ok(html.includes("TRRY-ORD-READY01"), "URL order reference resolves selected drawer");
 assert.ok(html.includes("ORDER SUMMARY"), "existing order drawer renders after URL resolution");
 
+global.window.location.search = "?order=SO-LEGACY-PROD01";
+html = dashboard.renderOrders({ items: rows, renderPayment: () => `<button data-mvp-confirm-payment>Confirm Payment</button>`, renderTracking: () => `<button>Save Tracking</button>` });
+assert.ok(html.includes("Historical Read Only"), "legacy compatibility drawer is read-only");
+assert.ok(!html.includes("data-mvp-confirm-payment"), "legacy compatibility drawer does not render active payment controls");
+
 const source = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(source.includes("data-mvp-open-messenger"), "Messenger contract remains in source");
 assert.ok(source.includes("ordersDashboardTable"), "Phase 4B dashboard table is the active Orders renderer");
 assert.ok(source.includes("findOrderByIdentity(orders, state.orderId || orderQuery)"), "native/legacy URL identity resolution remains intact");
 assert.ok(source.includes("orderReference(item)"), "dashboard uses order reference identity");
+assert.ok(source.includes("hasNativeOrderAuthority(item)"), "active Order workflow controls require native Order authority");
 
 console.log("PASS Orders dashboard rendering, native identity, filters, payment boundary, and drawer reachability");

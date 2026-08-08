@@ -31,7 +31,7 @@ const nativeSourceInquiry = {
   contact: "0917-000-0002",
   service: "Embroidery",
   qty: "12 pcs",
-  status: "won",
+  status: "approved",
   quoteStatus: "approved",
   orderReference: "TRRY-LEGACY-SHOULD-NOT-WIN",
   odooSO: "SO-SHOULD-NOT-SHOW",
@@ -73,7 +73,7 @@ assert.equal(nativeOnly[0].id, "TRY-NATIVE-SOURCE", "native row uses source inqu
 assert.equal(nativeOnly[0].nativeOrderId, nativeRow.id);
 assert.equal(nativeOnly[0].orderReference, "TRRY-ORD-NATIVE01");
 assert.equal(nativeOnly[0].odooSO, "", "native display identity must not fall back to Odoo");
-assert.equal(nativeOnly[0].status, "won");
+assert.equal(nativeOnly[0].status, "", "native-only row must not synthesize Inquiry status=won");
 assert.equal(nativeOnly[0].quoteStatus, "approved");
 
 const mixed = buildDualReadOrders({ inquiries: [legacyInquiry, nativeSourceInquiry], nativeRows: [nativeRow] });
@@ -85,6 +85,7 @@ const nativeOrder = mixed[0];
 assert.equal(nativeOrder.id, "TRY-NATIVE-SOURCE", "payment confirmation bridge remains Inquiry-ID keyed");
 assert.equal(nativeOrder.sourceInquiryId, "TRY-NATIVE-SOURCE", "production save bridge remains Inquiry-ID keyed");
 assert.equal(nativeOrder.orderReference, "TRRY-ORD-NATIVE01", "native order reference wins display identity");
+assert.equal(nativeOrder.status, "approved", "native row preserves source Inquiry metadata instead of requiring status=won");
 assert.equal(nativeOrder.paymentStatus, "for_verification", "current payment state is bridged from source inquiry");
 assert.equal(nativeOrder.productionStage, "queued", "current production state is bridged from source inquiry");
 
