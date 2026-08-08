@@ -81,6 +81,42 @@ try {
   assert.equal(drawer.hasDrawer, true, "existing Production drawer opens from new dashboard row");
   assert.ok(drawer.text.includes("TRRY-ORD-QUEUED77"), "drawer preserves linked Order identity");
 
+  for (const viewport of [
+    { width: 1600, height: 1000 },
+    { width: 1024, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await cdp.send("Emulation.setDeviceMetricsOverride", { ...viewport, deviceScaleFactor: 1, mobile: viewport.width < 600 });
+    await navigate(cdp, `http://127.0.0.1:${port}/qa-production-dashboard.html?order=TRRY-ORD-START77`);
+    await waitForText(cdp, "IN PRODUCTION");
+    await delay(300);
+    const startedDrawer = await evaluate(cdp, `(() => {
+      const drawer = document.querySelector(".mvp-production-drawer.in-progress");
+      const rect = drawer?.getBoundingClientRect();
+      const tabs = [...document.querySelectorAll("[data-mvp-production-tab]")].map((button) => button.textContent.trim()).join("|");
+      return {
+        hasDrawer: Boolean(drawer),
+        width: Math.round(rect?.width || 0),
+        rightOverflow: rect ? Math.ceil(rect.right - window.innerWidth) : 0,
+        tabs,
+        text: drawer?.innerText || "",
+        hasQcAction: Boolean(drawer?.querySelector('[data-mvp-advance][data-mvp-next="qc"]')),
+        hasPaymentAction: /Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(drawer?.innerText || "")
+      };
+    })()`);
+    assert.equal(startedDrawer.hasDrawer, true, `IN PRODUCTION drawer renders at ${viewport.width}`);
+    assert.ok(startedDrawer.width <= Math.min(390, viewport.width), `drawer width is viewport-safe at ${viewport.width}`);
+    assert.ok(startedDrawer.rightOverflow <= 1, `drawer avoids horizontal overflow at ${viewport.width}`);
+    assert.equal(startedDrawer.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `tab order matches Figma at ${viewport.width}`);
+    assert.equal(startedDrawer.hasQcAction, true, `started drawer exposes QC action at ${viewport.width}`);
+    assert.equal(startedDrawer.hasPaymentAction, false, `started drawer has no payment/Messenger action at ${viewport.width}`);
+
+    await evaluate(cdp, `document.querySelector('[data-mvp-production-tab="workflow"]').click()`);
+    await waitForText(cdp, "Released to Production");
+    const workflowText = await evaluate(cdp, `document.querySelector(".mvp-production-drawer.in-progress")?.innerText || ""`);
+    assert.ok(workflowText.includes("Production started") || workflowText.includes("Current Stage"), `workflow tab distinguishes release/start at ${viewport.width}`);
+  }
+
   await evaluate(cdp, `document.querySelector('[data-mvp-production-status="blocked"]').click()`);
   await waitForText(cdp, "TRRY-LEGACY-BLOCK77");
   const blockedFilter = await evaluate(cdp, `[...document.querySelectorAll(".mvp-production-table-row, .mvp-production-mobile-card")].map((node) => node.innerText).join("\\n")`);
@@ -150,6 +186,7 @@ function qaHtml() {
     const rows = [
       { ...base, id: "TRY-READY-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000770", sourceInquiryId: "TRY-READY-077", orderReference: "TRRY-ORD-READY77", customer: "Order Ready", productionStage: "queued" },
       { ...base, id: "TRY-QUEUED-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000771", sourceInquiryId: "TRY-QUEUED-077", sourceInquiryReference: "TRY-QUEUED-077", orderReference: "TRRY-ORD-QUEUED77", customer: "Queued Customer", productionStage: "embroidery" },
+      { ...base, id: "TRY-START-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000773", sourceInquiryId: "TRY-START-077", sourceInquiryReference: "TRY-START-077", orderReference: "TRRY-ORD-START77", customer: "Started Customer", productionStage: "screen_printing", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", assignedUserId: "staff-rachelle" },
       { ...base, id: "TRY-QC-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000772", sourceInquiryId: "TRY-QC-077", orderReference: "TRRY-ORD-QC77", customer: "QC Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-rachelle" },
       { ...base, id: "TRY-BLOCK-077", sourceType: "legacy", orderReference: "TRRY-LEGACY-BLOCK77", customer: "Blocked Customer", productionStage: "embroidery", blockedReason: "Thread color missing" }
     ];
