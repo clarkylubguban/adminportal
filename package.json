@@ -28,6 +28,7 @@
     "test:final-ui-consistency-browser": "node scripts/test-final-ui-consistency-browser.mjs",
     "test:native-order-guard-db": "node scripts/test-native-order-guard-db.mjs",
     "test:native-order-authority-db": "node scripts/test-native-order-authority-db.mjs",
+    "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
   "dependencies": {
