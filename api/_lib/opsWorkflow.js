@@ -145,12 +145,20 @@ function paymentSatisfiesProductionGate(inquiry) {
   return false;
 }
 function productionFields(body, now) {
-  return {
-    assigned_staff: cleanText(body.assignedStaff, 120) || null,
-    production_note: cleanText(body.productionNote, 2000) || null,
-    blocked_reason: cleanText(body.blockedReason, 500) || null,
-    production_updated_at: now,
-  };
+  const updates = { production_updated_at: now };
+  if (Object.prototype.hasOwnProperty.call(body, "assignedStaff")) {
+    updates.assigned_staff = cleanText(body.assignedStaff, 120) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "productionNote")) {
+    updates.production_note = cleanText(body.productionNote, 2000) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "blockedReason")) {
+    updates.blocked_reason = cleanText(body.blockedReason, 500) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "dueDate")) {
+    updates.due_date = cleanDate(body.dueDate);
+  }
+  return updates;
 }
 
 function stationFor(inquiry) {
@@ -169,6 +177,11 @@ function cleanUuid(value) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
     ? text.toLowerCase()
     : "";
+}
+
+function cleanDate(value) {
+  const text = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
 function key(value) {

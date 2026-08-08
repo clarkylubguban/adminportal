@@ -6,6 +6,7 @@ const MAX_PROOF_SIZE = 10 * 1024 * 1024;
 const PROOF_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
 const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
 const READ_ROLES = new Set(["owner", "admin", "staff"]);
+const ARTWORK_APPROVAL_ROLES = new Set(["owner", "admin"]);
 const CUSTOMER_ACTION_SELECT = [
   "id",
   "contact",
@@ -244,6 +245,18 @@ export function buildUpdates(action, body, inquiry, now, adminUser = null) {
   if (action === "publish_artwork") {
     if (inquiry.quote_status !== "approved" || !isValidProofPath(String(inquiry.artwork_url || ""), inquiry.id)) return null;
     return { artwork_status: "approval_required", artwork_revision_request: null };
+  }
+
+  if (action === "approve_artwork") {
+    if (!ARTWORK_APPROVAL_ROLES.has(String(adminUser?.role || "").trim().toLowerCase())) {
+      return { error: "owner or admin access required" };
+    }
+    if (inquiry.quote_status !== "approved" || String(inquiry.artwork_status || "") === "revision_requested") return null;
+    return {
+      artwork_status: "approved",
+      artwork_approved_at: inquiry.artwork_approved_at || now,
+      artwork_revision_request: null,
+    };
   }
 
   if (["save_quote_draft", "revise_quote", "mark_quote_pending", "publish_quote"].includes(action)) {

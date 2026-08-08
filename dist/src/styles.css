@@ -23925,15 +23925,30 @@ body,
   border-radius: 8px;
   display: grid;
   gap: 2px 10px;
-  grid-template-columns: 22px 1fr;
+  grid-template-columns: 58px 1fr auto;
   min-height: 48px;
   padding: 9px 10px;
 }
 
 .mvp-order-requirements span {
-  font-size: 15px;
+  font-size: 10px;
   font-weight: 900;
   grid-row: span 2;
+}
+
+.mvp-order-requirements button {
+  align-self: center;
+  background: #171b22;
+  border: 0;
+  border-radius: 6px;
+  color: #fff;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 850;
+  grid-row: span 2;
+  min-height: 30px;
+  padding: 0 10px;
+  text-transform: uppercase;
 }
 
 .mvp-order-requirements .pass span {
@@ -23960,6 +23975,61 @@ body,
   color: #777e8b;
   font-size: 10px;
   font-weight: 650;
+}
+
+.mvp-order-readiness-editor {
+  background: #f8f7f2;
+  border: 1px solid #dedbd2;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding: 12px;
+}
+
+.mvp-order-readiness-editor h4 {
+  color: #171b22;
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0;
+  margin: 0;
+}
+
+.mvp-order-readiness-editor label,
+.mvp-order-readiness-summary {
+  display: grid;
+  gap: 5px;
+}
+
+.mvp-order-readiness-editor label span,
+.mvp-order-readiness-summary span {
+  color: #6c7280;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.mvp-order-readiness-editor input,
+.mvp-order-readiness-editor select {
+  background: #fff;
+  border: 1px solid #d8d4ca;
+  border-radius: 6px;
+  color: #171b22;
+  font: inherit;
+  min-height: 34px;
+  padding: 0 10px;
+}
+
+.mvp-order-readiness-editor > div:last-of-type {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.mvp-order-readiness-editor a,
+.mvp-order-readiness-summary strong {
+  color: #171b22;
+  font-size: 13px;
+  font-weight: 800;
 }
 
 .mvp-order-history {

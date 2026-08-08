@@ -38,6 +38,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     orderTab: "overview",
     orderReleaseId: null,
     orderReleaseError: "",
+    orderReadinessAction: null,
+    orderReadinessError: "",
     productionTab: "overview",
     inquiryTab: "details",
     inquiryActionId: null,
@@ -1069,22 +1071,45 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function orderDrawerRequirements(item, gate) {
-    return `<section class="mvp-order-panel"><h3>PRODUCTION REQUIREMENTS</h3><div class="mvp-order-requirements">${orderRequirementRows(item, gate).map(requirementRow).join("")}</div><p class="mvp-inline-note">Derived from existing Order readiness rules. No persisted checklist is created.</p></section>`;
+    const rows = orderRequirementRows(item, gate);
+    const error = state.orderReadinessError ? `<p class="mvp-inline-error">${html(state.orderReadinessError)}</p>` : "";
+    return `<section class="mvp-order-panel"><h3>PRODUCTION REQUIREMENTS</h3><div class="mvp-order-requirements">${rows.map((row) => requirementRow(row, item)).join("")}</div>${orderReadinessPanel(item)}${error}<p class="mvp-inline-note">Derived from existing Order readiness rules. No persisted checklist is created.</p></section>`;
   }
 
   function orderRequirementRows(item, gate) {
     return [
-      { label: "Product and quantity", ok: Boolean(product(item) && product(item) !== "Not set" && item.service && item.qty), mapsTo: "product/service/qty" },
-      { label: "Due date", ok: Boolean(item.dueDate), mapsTo: "dueDate" },
-      { label: "Artwork approved", ok: orderArtworkKey(item) === "approved", mapsTo: "artworkStatus" },
-      { label: "Assigned production staff", ok: hasAssignedStaff(item), mapsTo: "assignedUserId/assignedStaff" },
+      { key: "product", label: "Product and quantity", ok: Boolean(product(item) && product(item) !== "Not set" && item.service && item.qty), mapsTo: "product/service/qty" },
+      { key: "due_date", label: "Due date", ok: Boolean(item.dueDate), mapsTo: "dueDate", action: "SET DUE DATE" },
+      { key: "artwork", label: "Artwork approved", ok: orderArtworkKey(item) === "approved", mapsTo: "artworkStatus", action: "REVIEW ARTWORK" },
+      { key: "staff", label: "Assigned production staff", ok: hasAssignedStaff(item), mapsTo: "assignedUserId/assignedStaff", action: "ASSIGN STAFF" },
       { label: "Payment requirement", ok: paymentSatisfiesProductionGate(item), mapsTo: "paymentStatus + verified/confirmed amount" },
       { label: "No revision or explicit blocker", ok: key(item.artworkStatus) !== "revision_requested" && !productionBlocker(item), mapsTo: "artworkStatus + blockedReason" },
     ].map((row) => ({ ...row, blocking: gate.some((entry) => row.mapsTo.toLowerCase().includes(String(entry).split(" ")[0])) || (!row.ok && row.label === "Payment requirement") || (!row.ok && productionBlocker(item)) }));
   }
 
-  function requirementRow(row) {
-    return `<div class="${row.ok ? "pass" : "fail"}"><span aria-hidden="true">${row.ok ? "✓" : "×"}</span><strong>${html(row.label)}</strong><small>${html(row.ok ? "Ready" : "Needs attention")} / ${html(row.mapsTo)}</small></div>`;
+  function requirementRow(row, item) {
+    const action = !row.ok && row.action && hasNativeOrderAuthority(item)
+      ? `<button type="button" data-mvp-readiness-action="${html(row.key)}" data-mvp-readiness-id="${html(item.id)}">${html(row.action)}</button>`
+      : "";
+    return `<div class="${row.ok ? "pass" : "fail"}"><span aria-hidden="true">${row.ok ? "READY" : "BLOCKED"}</span><strong>${html(row.label)}</strong><small>${html(row.ok ? "Ready" : "Needs attention")} / ${html(row.mapsTo)}</small>${action}</div>`;
+  }
+
+  function orderReadinessPanel(item) {
+    if (!state.orderReadinessAction || state.orderReadinessAction.id !== item.id) return "";
+    const mode = state.orderReadinessAction.mode;
+    if (mode === "due_date") {
+      return `<article class="mvp-order-readiness-editor" data-mvp-readiness-editor="${html(item.id)}"><h4>SET DUE DATE</h4><label><span>Due date</span><input type="date" data-mvp-readiness-field="dueDate" value="${html(item.dueDate || "")}" /></label><div><button type="button" class="mvp-primary-action" data-mvp-save-readiness="${html(item.id)}" data-mvp-readiness-save-mode="due_date">SAVE DUE DATE</button><button type="button" class="mvp-secondary-action" data-mvp-cancel-readiness="${html(item.id)}">CANCEL</button></div></article>`;
+    }
+    if (mode === "artwork") {
+      const artworkLink = item.artworkUrl ? `<a href="${html(item.artworkUrl)}" target="_blank" rel="noopener noreferrer">Open artwork</a>` : "<span>No artwork link stored.</span>";
+      const canApprove = key(item.artworkStatus) !== "approved" && key(item.artworkStatus) !== "revision_requested";
+      return `<article class="mvp-order-readiness-editor" data-mvp-readiness-editor="${html(item.id)}"><h4>REVIEW ARTWORK</h4><div class="mvp-order-readiness-summary"><span>Status</span><strong>${html(artworkApprovalLabel(item))}</strong></div><div class="mvp-order-readiness-summary"><span>Artwork</span>${artworkLink}</div><div><button type="button" class="mvp-primary-action" data-mvp-approve-order-artwork="${html(item.id)}" ${canApprove ? "" : "disabled"}>APPROVE ARTWORK</button><button type="button" class="mvp-secondary-action" data-mvp-cancel-readiness="${html(item.id)}">CANCEL</button></div>${key(item.artworkStatus) === "revision_requested" ? `<p class="mvp-inline-note">Revision is already requested. Resolve using the existing artwork workflow.</p>` : ""}</article>`;
+    }
+    if (mode === "staff") {
+      const disabled = assignmentControlsDisabled();
+      return `<article class="mvp-order-readiness-editor" data-mvp-readiness-editor="${html(item.id)}"><h4>ASSIGN STAFF</h4><label><span>Production staff</span><select data-mvp-readiness-field="assignedUserId" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select></label>${assignmentNotice()}<div><button type="button" class="mvp-primary-action" data-mvp-save-readiness="${html(item.id)}" data-mvp-readiness-save-mode="staff" ${disabled ? "disabled" : ""}>SAVE ASSIGNMENT</button><button type="button" class="mvp-secondary-action" data-mvp-cancel-readiness="${html(item.id)}">CANCEL</button></div></article>`;
+    }
+    return "";
   }
 
   function orderDrawerPayment(item, renderPayment) {
@@ -2062,7 +2087,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, confirmPayment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
+  function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, approveOrderArtwork, confirmPayment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
     bindInquiryMoreDismiss(root);
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { closeInquiryMoreMenus(root); navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
@@ -2125,11 +2150,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       rerender();
     }));
     root.querySelectorAll("[data-mvp-open]").forEach((element) => {
-      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "order") state.orderTab = "overview"; if (element.dataset.mvpOpen === "production") state.productionTab = "overview"; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = null; state.inquiryActionId = null; state.inquiryMoreOpen = false; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
+      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "order") { state.orderTab = "overview"; state.orderReadinessAction = null; state.orderReadinessError = ""; } if (element.dataset.mvpOpen === "production") state.productionTab = "overview"; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = null; state.inquiryActionId = null; state.inquiryMoreOpen = false; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
       element.addEventListener("click", (event) => { if (event.target.closest("[data-mvp-copy]")) return; event.stopPropagation(); open(); });
       element.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); open(); } });
     });
-    root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => { const restore = state.returnFocus; state.inquiryId = null; state.orderId = null; state.productionId = null; state.returnFocus = null; clearQuery(); rerender(); requestAnimationFrame(() => { if (restore) root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]`)?.focus(); }); }));
+    root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => { const restore = state.returnFocus; state.inquiryId = null; state.orderId = null; state.productionId = null; state.returnFocus = null; state.orderReadinessAction = null; state.orderReadinessError = ""; clearQuery(); rerender(); requestAnimationFrame(() => { if (restore) root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]`)?.focus(); }); }));
     root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); closeInquiryMoreMenus(root); button.dataset.copied = "true"; const label = button.querySelector("small"); if (label) label.textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const nextLabel = button.querySelector("small"); if (nextLabel) nextLabel.textContent = "Copy"; }, 1300); }));
     root.querySelectorAll("[data-mvp-create-order]").forEach((button) => button.addEventListener("click", async (event) => {
       event.stopPropagation();
@@ -2213,6 +2238,58 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       if (blockedControl) changes.blockedReason = blockedControl.value || null;
       button.disabled = true; button.textContent = "Saving...";
       await saveProduction(id, changes);
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-readiness-action]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.orderTab = "requirements";
+      state.orderReadinessError = "";
+      state.orderReadinessAction = { id: button.dataset.mvpReadinessId, mode: button.dataset.mvpReadinessAction };
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-cancel-readiness]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      state.orderReadinessAction = null;
+      state.orderReadinessError = "";
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-save-readiness]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpSaveReadiness;
+      const mode = button.dataset.mvpReadinessSaveMode;
+      const panel = button.closest("[data-mvp-readiness-editor]");
+      const changes = {};
+      if (mode === "due_date") changes.dueDate = panel?.querySelector('[data-mvp-readiness-field="dueDate"]')?.value || null;
+      if (mode === "staff") {
+        const staffValue = panel?.querySelector('[data-mvp-readiness-field="assignedUserId"]')?.value || "";
+        changes.assignedUserId = staffValue === "__legacy__" ? null : staffValue || null;
+      }
+      button.disabled = true;
+      button.textContent = mode === "due_date" ? "SAVING DATE..." : "SAVING ASSIGNMENT...";
+      const result = await saveProduction?.(id, changes);
+      if (result && result.ok === false) {
+        state.orderReadinessError = result.error || "Readiness update failed.";
+      } else {
+        state.orderReadinessAction = null;
+        state.orderReadinessError = "";
+      }
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-approve-order-artwork]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpApproveOrderArtwork;
+      button.disabled = true;
+      button.textContent = "APPROVING...";
+      try {
+        const result = await approveOrderArtwork?.(id);
+        if (result && result.ok === false) throw new Error(result.error || "Artwork approval failed.");
+        state.orderReadinessAction = null;
+        state.orderReadinessError = "";
+      } catch (error) {
+        state.orderReadinessError = error?.message || "Artwork approval failed.";
+      }
       rerender();
     }));
     root.querySelectorAll("[data-mvp-save-qc-note]").forEach((button) => button.addEventListener("click", async () => {
