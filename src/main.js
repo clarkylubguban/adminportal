@@ -503,7 +503,6 @@ let calendarSelectedTask = null;
 const routes = {
   "/": "Overview",
   "/inquiries": "Inquiries",
-  "/order-dashboard": "Orders",
   "/orders": "Orders",
   "/production": "Production",
   "/my-tasks": "My Tasks",
@@ -513,6 +512,8 @@ const routes = {
 };
 
 const defaultRoutePath = "/";
+const legacyOrderDashboardPath = "/order-dashboard";
+const activeOrdersPath = "/orders";
 const ADMIN_ACCESS_SESSION_KEY = "trry_admin_access_unlocked";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "trry_admin_sidebar_collapsed_v3";
 
@@ -542,6 +543,10 @@ let isSidebarCollapsed = getStoredSidebarCollapsed();
 let isMobileSidebarOpen = false;
 
 function render() {
+  if (normalizeLegacyOrderDashboardRoute()) {
+    return;
+  }
+
   if (isPasswordSetupRoute()) {
     renderPasswordSetupScreen("invite");
     return;
@@ -7592,6 +7597,7 @@ function getCurrentRoute() {
 
 function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path === legacyOrderDashboardPath) return activeOrdersPath;
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (path === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
@@ -7606,6 +7612,7 @@ function navigateTo(path) {
 function normalizeRoutePath(path) {
   const url = new URL(String(path || defaultRoutePath), window.location.origin);
   const routePath = url.pathname.replace(/\/+$/, "") || "/";
+  if (routePath === legacyOrderDashboardPath) return `${activeOrdersPath}${url.search}`;
   if (["/forgot-password", "/reset-password", "/set-password"].includes(routePath)) {
     return `${routePath}${url.search}${url.hash}`;
   }
@@ -7613,6 +7620,14 @@ function normalizeRoutePath(path) {
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (routePath === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
+}
+
+function normalizeLegacyOrderDashboardRoute() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path !== legacyOrderDashboardPath) return false;
+  window.history.replaceState({}, "", `${activeOrdersPath}${window.location.search}`);
+  render();
+  return true;
 }
 
 function escapeHtml(value) {
