@@ -22084,6 +22084,576 @@ body,
   }
 }
 
+/* TRRY Phase 4B Orders dashboard from locked Figma. */
+.mvp-orders-dashboard-page {
+  background: #f7f6f1;
+  color: #171b22;
+  gap: 16px;
+  padding: 24px 28px;
+}
+
+.mvp-orders-dashboard-page .mvp-rule,
+.mvp-orders-dashboard-page > .mvp-page-title,
+.mvp-orders-dashboard-page > .mvp-metrics.orders,
+.mvp-orders-dashboard-page > .mvp-filter-bar {
+  display: none;
+}
+
+.mvp-orders-dashboard-header {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  min-height: 82px;
+  width: 100%;
+}
+
+.mvp-orders-dashboard-header > div {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.mvp-orders-dashboard-header nav {
+  align-items: center;
+  color: #6c7280;
+  display: flex;
+  font-size: 12px;
+  font-weight: 650;
+  gap: 8px;
+  line-height: 1;
+}
+
+.mvp-orders-dashboard-header nav strong {
+  color: #171b22;
+  font-weight: 750;
+}
+
+.mvp-orders-dashboard-header h1 {
+  color: #111318;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1.1;
+  margin: 0;
+}
+
+.mvp-orders-dashboard-header p {
+  color: #6d7280;
+  font-size: 13px;
+  line-height: 1.35;
+  margin: 0;
+}
+
+.mvp-orders-dashboard-header aside {
+  display: grid;
+  justify-items: end;
+  min-width: 180px;
+}
+
+.mvp-orders-dashboard-header aside strong {
+  color: #111318;
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.mvp-orders-dashboard-header aside span {
+  color: #111318;
+  font-size: 12px;
+  font-weight: 750;
+  margin-top: 4px;
+}
+
+.mvp-orders-dashboard-header aside small {
+  color: #79808c;
+  font-size: 11px;
+  font-weight: 550;
+  margin-top: 2px;
+}
+
+.mvp-orders-kpis {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  min-height: 120px;
+}
+
+.mvp-orders-kpis article {
+  background: #ffffff;
+  border: 1px solid #e2e0d9;
+  border-radius: 8px;
+  box-shadow: 0 1px 1px rgba(20, 24, 31, 0.03);
+  display: grid;
+  gap: 8px;
+  min-height: 120px;
+  padding: 18px;
+  position: relative;
+}
+
+.mvp-orders-kpis article::before {
+  background: #dad7ce;
+  border-radius: 999px;
+  content: "";
+  height: 8px;
+  position: absolute;
+  right: 18px;
+  top: 18px;
+  width: 8px;
+}
+
+.mvp-orders-kpis article.warning::before,
+.mvp-orders-kpis article.payment::before {
+  background: #f0a027;
+}
+
+.mvp-orders-kpis article.ready::before {
+  background: #84b60b;
+}
+
+.mvp-orders-kpis article.active::before {
+  background: #4b67d8;
+}
+
+.mvp-orders-kpis article.danger::before {
+  background: #d84b4b;
+}
+
+.mvp-orders-kpis span,
+.mvp-orders-kpis small {
+  color: #6c7280;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.mvp-orders-kpis strong {
+  color: #111318;
+  font-size: 25px;
+  font-weight: 800;
+  letter-spacing: 0;
+  line-height: 1;
+  margin-top: 16px;
+}
+
+.mvp-orders-status-tabs {
+  align-items: center;
+  background: #e9e7df;
+  border: 1px solid #dedbd2;
+  border-radius: 8px;
+  display: flex;
+  gap: 6px;
+  min-height: 44px;
+  overflow-x: auto;
+  padding: 5px 6px;
+}
+
+.mvp-orders-status-tabs button {
+  align-items: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  color: #565d69;
+  display: inline-flex;
+  flex: 0 0 auto;
+  font-size: 12px;
+  font-weight: 700;
+  gap: 6px;
+  min-height: 32px;
+  padding: 0 12px;
+}
+
+.mvp-orders-status-tabs button.active {
+  background: #ffffff;
+  border-color: #dedbd2;
+  color: #111318;
+  box-shadow: 0 1px 2px rgba(20, 24, 31, 0.06);
+}
+
+.mvp-orders-status-tabs span {
+  color: inherit;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.mvp-orders-filter-bar {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #e2e0d9;
+  border-radius: 8px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 340px 235px 190px 190px auto;
+  min-height: 62px;
+  padding: 12px;
+}
+
+.mvp-orders-filter-bar .mvp-search,
+.mvp-orders-filter-bar select {
+  align-items: center;
+  background: #f8f7f2;
+  border: 1px solid #dedbd2;
+  border-radius: 8px;
+  color: #171b22;
+  display: flex;
+  font-size: 13px;
+  font-weight: 600;
+  height: 38px;
+  min-width: 0;
+}
+
+.mvp-orders-filter-bar .mvp-search {
+  gap: 8px;
+  padding: 0 10px;
+}
+
+.mvp-orders-filter-bar .mvp-search input {
+  background: transparent;
+  border: 0;
+  color: #171b22;
+  flex: 1;
+  min-width: 0;
+  outline: 0;
+}
+
+.mvp-orders-filter-bar .mvp-search span,
+.mvp-orders-filter-bar .mvp-search kbd {
+  color: #8b9099;
+  font-size: 11px;
+  font-weight: 750;
+}
+
+.mvp-orders-filter-bar .mvp-search kbd {
+  background: #ffffff;
+  border: 1px solid #dedbd2;
+  border-radius: 5px;
+  padding: 3px 5px;
+}
+
+.mvp-orders-filter-bar select {
+  appearance: none;
+  padding: 0 12px;
+}
+
+.mvp-orders-filter-bar .mvp-reset-filters {
+  background: #ffffff;
+  border: 1px solid #dedbd2;
+  border-radius: 8px;
+  color: #333945;
+  font-size: 12px;
+  font-weight: 750;
+  height: 36px;
+  justify-self: end;
+  padding: 0 12px;
+}
+
+.mvp-orders-table-wrap {
+  background: #ffffff;
+  border: 1px solid #e2e0d9;
+  border-radius: 8px;
+  box-shadow: 0 1px 2px rgba(20, 24, 31, 0.04);
+  overflow-x: auto;
+}
+
+.mvp-orders-table {
+  min-width: 1360px;
+  width: 100%;
+}
+
+.mvp-orders-table-head,
+.mvp-orders-table-row {
+  display: grid;
+  grid-template-columns: 120px 180px 175px 95px 125px 125px 80px 120px 170px 102px;
+  column-gap: 4px;
+  padding: 0 16px;
+}
+
+.mvp-orders-table-head {
+  align-items: center;
+  background: #faf9f5;
+  border-bottom: 1px solid #e7e5dc;
+  min-height: 44px;
+}
+
+.mvp-orders-table-head span {
+  color: #7b818d;
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.mvp-orders-table-row {
+  align-items: center;
+  border-bottom: 1px solid #ece9e1;
+  cursor: pointer;
+  min-height: 70px;
+}
+
+.mvp-orders-table-row:last-child {
+  border-bottom: 0;
+}
+
+.mvp-orders-table-row:hover,
+.mvp-orders-table-row:focus-visible {
+  background: #fbfaf6;
+  outline: 0;
+}
+
+.mvp-orders-table-row > * {
+  min-width: 0;
+}
+
+.mvp-orders-table-row .mvp-two-line,
+.mvp-orders-table-row .order-identity {
+  display: grid;
+  gap: 4px;
+}
+
+.mvp-orders-table-row .mvp-two-line strong,
+.mvp-orders-table-row .amount,
+.mvp-orders-table-row .owner {
+  color: #171b22;
+  font-size: 13px;
+  font-weight: 750;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mvp-orders-table-row .mvp-two-line small,
+.mvp-orders-table-row .order-identity small {
+  color: #7c8390;
+  font-size: 10px;
+  font-weight: 650;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.mvp-orders-table-row .mvp-copy {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #171b22;
+  display: grid;
+  gap: 3px;
+  justify-items: start;
+  max-width: 100%;
+  min-height: 28px;
+  padding: 0;
+}
+
+.mvp-orders-table-row .mvp-copy span {
+  color: #171b22;
+  font-size: 13px;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.mvp-orders-table-row .mvp-copy small {
+  display: none;
+}
+
+.mvp-orders-table-row .mvp-status {
+  align-items: center;
+  border: 1px solid #dedbd2;
+  border-radius: 6px;
+  display: inline-flex !important;
+  font-size: 10px;
+  font-weight: 800;
+  justify-content: center;
+  line-height: 1;
+  min-height: 26px;
+  padding: 0 8px;
+  text-transform: uppercase;
+  white-space: normal;
+}
+
+.mvp-orders-table-row .mvp-status.payment {
+  background: #fff4df;
+  border-color: #f4d394;
+  color: #9a650e;
+}
+
+.mvp-orders-table-row .mvp-status.overdue {
+  background: #fff0ec;
+  border-color: #f0b9aa;
+  color: #ac3d27;
+}
+
+.mvp-orders-table-row .mvp-status.completed {
+  background: #eef9ed;
+  border-color: #b8ddb3;
+  color: #337a35;
+}
+
+.mvp-orders-table-row .mvp-status.ready,
+.mvp-orders-table-row .mvp-status.qc {
+  background: #f1ffd9;
+  border-color: #c5ed73;
+  color: #4e7b00;
+}
+
+.mvp-orders-table-row .mvp-status.queued {
+  background: #f3f2ec;
+  color: #6d7280;
+}
+
+.mvp-orders-row-action {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.mvp-orders-row-action button {
+  align-items: center;
+  background: #171b22;
+  border: 1px solid #171b22;
+  border-radius: 7px;
+  color: #ffffff;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 750;
+  height: 32px;
+  justify-content: center;
+  min-width: 64px;
+  padding: 0 10px;
+}
+
+.mvp-orders-row-action button:last-child {
+  background: #ffffff;
+  border-color: #dedbd2;
+  color: #555d68;
+  min-width: 32px;
+  padding: 0;
+}
+
+.mvp-orders-pagination {
+  align-items: center;
+  border-top: 1px solid #ece9e1;
+  color: #777e8b;
+  display: flex;
+  font-size: 12px;
+  font-weight: 650;
+  justify-content: space-between;
+  min-height: 54px;
+  padding: 0 16px;
+}
+
+.mvp-orders-pagination nav {
+  align-items: center;
+  display: flex;
+  gap: 6px;
+}
+
+.mvp-orders-pagination button {
+  background: #ffffff;
+  border: 1px solid #dedbd2;
+  border-radius: 6px;
+  color: #303743;
+  font-size: 12px;
+  font-weight: 750;
+  height: 30px;
+  min-width: 30px;
+}
+
+.mvp-orders-pagination button.active {
+  background: #171b22;
+  border-color: #171b22;
+  color: #ffffff;
+}
+
+.mvp-orders-pagination button:disabled {
+  color: #b8bcc3;
+}
+
+.mvp-orders-pagination small {
+  color: #777e8b;
+  font-size: 11px;
+  font-weight: 750;
+  margin-left: 4px;
+}
+
+.mvp-orders-dashboard-page > .mvp-order-card-list {
+  display: none;
+}
+
+@media (max-width: 1220px) {
+  .mvp-orders-dashboard-page {
+    padding: 22px 20px;
+  }
+
+  .mvp-orders-kpis {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .mvp-orders-filter-bar {
+    grid-template-columns: minmax(280px, 1fr) repeat(3, minmax(160px, 1fr));
+  }
+
+  .mvp-orders-filter-bar .mvp-reset-filters {
+    justify-self: stretch;
+  }
+}
+
+@media (max-width: 860px) {
+  .mvp-orders-dashboard-header {
+    align-items: start;
+    gap: 14px;
+  }
+
+  .mvp-orders-kpis {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .mvp-orders-filter-bar {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .mvp-orders-filter-bar .mvp-search {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 768px) {
+  .mvp-orders-dashboard-page {
+    padding: 18px 14px;
+  }
+
+  .mvp-orders-dashboard-header {
+    display: grid;
+  }
+
+  .mvp-orders-dashboard-header aside {
+    justify-items: start;
+  }
+
+  .mvp-orders-kpis,
+  .mvp-orders-filter-bar {
+    grid-template-columns: 1fr;
+  }
+
+  .mvp-orders-kpis article {
+    min-height: 104px;
+  }
+
+  .mvp-orders-table-wrap {
+    display: none;
+  }
+
+  .mvp-orders-dashboard-page > .mvp-order-card-list {
+    display: grid;
+    gap: 12px;
+    padding-bottom: calc(var(--mobile-bottom-nav-height, 76px) + 32px + env(safe-area-inset-bottom));
+  }
+}
+
 /* TRRY Phase 6 Production operational list refinement. */
 .mvp-production-page {
   gap: var(--trry-space-4);

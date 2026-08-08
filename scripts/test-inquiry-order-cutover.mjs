@@ -86,7 +86,7 @@ assert.ok(main.includes("nativeOrderConversionRequests[id]?.status === \"loading
 assert.ok(main.includes("navigateTo(`/orders?order=${encodeURIComponent(routeIdentity)}`)"), "success navigates to returned native identity");
 assert.ok(main.includes("loadNativeOrderRows()"), "success reconciles native Orders data");
 
-const createOrderFunction = main.match(/async function createNativeOrderFromInquiry[\s\S]*?\n}\n\nasync function requestMvpPaymentConfirmation/)?.[0] || "";
+const createOrderFunction = main.match(/async function createNativeOrderFromInquiry[\s\S]*?\r?\n}\r?\n\r?\nasync function requestMvpPaymentConfirmation/)?.[0] || "";
 assert.ok(createOrderFunction, "native Create Order handler exists");
 assert.ok(!createOrderFunction.includes("confirm_order"), "native Create Order handler must not call legacy confirm_order");
 assert.ok(!createOrderFunction.includes("odooSO"), "native Create Order handler must not write Odoo SO");

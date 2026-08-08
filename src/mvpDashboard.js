@@ -32,7 +32,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     productionId: null,
     returnFocus: null,
     inquiry: { search: "", stage: "all", owner: "all", service: "all", due: "all", page: 1 },
-    order: { search: "", payment: "all", artwork: "all", due: "all", production: "all", owner: "all" },
+    order: { search: "", status: "all", payment: "all", artwork: "all", due: "all", production: "all", owner: "all", page: 1, pageSize: 5 },
     production: { search: "", staff: "all", method: "all", stage: "all", due: "all", blocker: "all" },
     inquiryTab: "details",
     inquiryActionId: null,
@@ -762,6 +762,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const orders = items.filter(confirmed);
     const stageQuery = query("stage");
     const paymentQuery = query("payment");
+    const statusQuery = query("status");
     const orderQuery = query("order");
     const search = state.order.search.toLowerCase();
     const rows = orders.filter((item) => {
@@ -771,7 +772,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       const dueState = due(item);
       if (stageQuery && stage !== stageQuery) return false;
       if (paymentQuery === "awaiting" && payment.key !== "awaiting") return false;
-      if (state.order.payment !== "all" && payment.label !== state.order.payment) return false;
+      const activeStatus = statusQuery || state.order.status;
+      if (activeStatus !== "all" && !orderStatusMatches(item, activeStatus)) return false;
+      if (state.order.payment !== "all" && payment.key !== state.order.payment && payment.label !== state.order.payment) return false;
       if (state.order.artwork !== "all" && readiness.artworkKey !== state.order.artwork) return false;
       if (state.order.due !== "all" && dueState.key !== state.order.due) return false;
       if (state.order.production !== "all" && stage !== state.order.production) return false;
@@ -779,13 +782,191 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return !search || [orderReference(item), sourceInquiryReference(item), item.id, item.nativeOrderId, item.customer, item.contact, item.service, product(item), item.odooSO, orderOwner(item)].join(" ").toLowerCase().includes(search);
     });
     const selected = findOrderByIdentity(orders, state.orderId || orderQuery);
-    return `<main class="mvp-page ops-board-page mvp-orders-page">${pageTitle("Orders", "Confirmed Orders", `${orders.length} orders`)}<p class="mvp-rule">NO CONFIRMED ORDER / DO NOT PRINT</p>${notices}${schemaNotice}
-      ${orderMetrics(orders)}${filterBar("order", items, ["payment", "artwork", "due", "production", "owner"])}${ordersTable(rows)}${orderCards(rows)}${orderDrawer(selected, renderPayment, renderTracking)}
+    const pageSize = Number(state.order.pageSize) || 5;
+    const pageCount = Math.max(1, Math.ceil(rows.length / pageSize));
+    const currentPage = Math.min(Math.max(1, Number(state.order.page) || 1), pageCount);
+    if (state.order.page !== currentPage) state.order.page = currentPage;
+    const visibleRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+    return `<main class="mvp-page ops-board-page mvp-orders-page mvp-orders-dashboard-page">
+      ${ordersDashboardHeader(orders)}
+      <p class="mvp-rule mvp-orders-safety-copy">NO CONFIRMED ORDER / DO NOT PRINT</p>
+      ${notices}${schemaNotice}
+      ${ordersDashboardMetrics(orders)}
+      ${ordersStatusTabs(orders, statusQuery || state.order.status)}
+      ${ordersDashboardFilterBar(orders)}
+      ${ordersDashboardTable(visibleRows, rows.length, currentPage, pageCount, pageSize)}
+      ${orderCards(visibleRows)}
+      ${orderDrawer(selected, renderPayment, renderTracking)}
     </main>`;
   }
 
   function orderMetrics(orders) {
     return `<div class="mvp-metrics orders">${metric("Active Orders", orders.filter((item) => !isOrderClosed(item)).length, "/orders", "Confirmed")}${metric("Action Required", orders.filter(orderActionRequired).length, "/orders?due=today", "Work queue", "warning")}${metric("Ready for Production", orders.filter(readyForProduction).length, "/orders?stage=queued", "Gate clear", "lime")}${metric("Overdue", orders.filter((item) => due(item).key === "overdue").length, "/orders?due=overdue", "Orders", "danger")}${metric("Completed", orders.filter((item) => productionStage(item) === "completed").length, "/orders?stage=completed", "Closed")}</div>`;
+  }
+
+  function ordersDashboardHeader(orders) {
+    return `<header class="mvp-orders-dashboard-header"><div><nav aria-label="Breadcrumb"><span>Home</span><i aria-hidden="true">&rsaquo;</i><strong>Orders</strong></nav><h1>Orders</h1><p>Track payment, release readiness, production progress, and fulfillment.</p></div><aside><strong>${orders.length}</strong><span>Total Orders</span><small>Created from approved inquiries</small></aside></header>`;
+  }
+
+  function ordersDashboardMetrics(orders) {
+    const rows = [
+      ["Awaiting Payment", orders.filter((item) => paymentState(item).key === "awaiting").length, `${orders.filter((item) => paymentState(item).key === "awaiting" && due(item).key === "overdue").length} overdue`, "warning"],
+      ["Payment Review", orders.filter((item) => paymentState(item).key === "verification").length, "Proofs submitted", "payment"],
+      ["Ready to Release", orders.filter(readyForProduction).length, "Paid and verified", "ready"],
+      ["In Production", orders.filter((item) => ACTIVE_STAGES.includes(productionStage(item)) || productionStage(item) === "qc").length, "Active jobs", "active"],
+      ["Blocked", orders.filter((item) => productionBlocker(item)).length, "Needs attention", "danger"],
+    ];
+    return `<section class="mvp-orders-kpis" aria-label="Orders summary">${rows.map(([label, value, hint, tone]) => `<article class="${html(tone)}"><span>${html(label)}</span><strong>${value}</strong><small>${html(hint)}</small></article>`).join("")}</section>`;
+  }
+
+  function ordersStatusTabs(orders, activeStatus) {
+    const tabs = [
+      ["all", "All Orders", orders.length],
+      ["needs_action", "Needs Action", orders.filter(orderActionRequired).length],
+      ["awaiting_payment", "Awaiting Payment", orders.filter((item) => orderStatusMatches(item, "awaiting_payment")).length],
+      ["payment_review", "Payment Review", orders.filter((item) => orderStatusMatches(item, "payment_review")).length],
+      ["ready_release", "Ready to Release", orders.filter((item) => orderStatusMatches(item, "ready_release")).length],
+      ["in_production", "In Production", orders.filter((item) => orderStatusMatches(item, "in_production")).length],
+      ["fulfillment", "Fulfillment", orders.filter((item) => orderStatusMatches(item, "fulfillment")).length],
+    ];
+    return `<nav class="mvp-orders-status-tabs" aria-label="Order status views">${tabs.map(([value, label, count]) => `<button type="button" data-mvp-order-status="${html(value)}" class="${activeStatus === value ? "active" : ""}" aria-current="${activeStatus === value ? "page" : "false"}">${html(label)} <span>${count}</span></button>`).join("")}</nav>`;
+  }
+
+  function ordersDashboardFilterBar(orders) {
+    const values = state.order;
+    return `<section class="mvp-orders-filter-bar" aria-label="Order filters">
+      <label class="mvp-search"><span aria-hidden="true">&#8981;</span><input type="search" data-mvp-filter="order:search" value="${html(values.search)}" placeholder="Search order, customer, item..." /><kbd>Ctrl K</kbd></label>
+      ${select("order", "payment", "All Payment States", [["awaiting", "Awaiting Payment"], ["verification", "Payment Review"], ["shop", "Pay at Shop"], ["partial", "Partially Paid"], ["paid", "Paid"], ["correction", "Correction Required"], ["not_set", "Not Set"]], values.payment)}
+      ${select("order", "owner", "All Owners", assignmentFilterOptions(), values.owner, true)}
+      ${select("order", "due", "All Due Dates", [["overdue", "Overdue"], ["today", "Due today"], ["week", "This week"], ["future", "Future"], ["none", "No date"]], values.due)}
+      <button class="mvp-reset-filters" type="button" data-mvp-reset-filters="order"><span aria-hidden="true">&#8634;</span> Reset Filters</button>
+    </section>`;
+  }
+
+  function ordersDashboardTable(items, total, currentPage, pageCount, pageSize) {
+    const headers = ["ORDER", "CUSTOMER", "SUMMARY", "AMOUNT", "PAYMENT", "PRODUCTION", "DUE", "OWNER", "NEXT ACTION", "ACTION"];
+    return `<section class="mvp-orders-table-wrap"><div class="mvp-orders-table" role="table" aria-label="Orders dashboard"><div class="mvp-orders-table-head" role="row">${headers.map((header) => `<span role="columnheader">${header}</span>`).join("")}</div><div role="rowgroup">${items.length ? items.map(orderDashboardRow).join("") : empty("NO ORDERS MATCH THIS FILTER")}</div></div>${ordersPagination(total, currentPage, pageCount, pageSize)}</section>`;
+  }
+
+  function orderDashboardRow(item) {
+    const dueState = due(item);
+    const payment = paymentState(item);
+    const production = productionDisplay(item);
+    const dueParts = dueCellParts(dueState, item);
+    const action = orderDashboardAction(item);
+    return `<div class="mvp-orders-table-row" data-mvp-open="order" data-mvp-id="${html(item.id)}" role="row" tabindex="0">
+      ${orderIdentityCell(item)}
+      ${twoLineCell(item.customer || "Unnamed customer", item.contact || "No contact", "customer")}
+      ${twoLineCell(orderSummaryPrimary(item), orderSummarySecondary(item), "summary")}
+      <span class="amount">${html(money(amount(item.quotedAmount || item.amountDue)))}</span>
+      ${status(orderPaymentDashboardLabel(item), payment.tone)}
+      ${status(orderProductionDashboardLabel(item), orderProductionDashboardTone(item, production))}
+      ${twoLineCell(dueParts.primary, dueParts.secondary, `due ${dueState.key}`)}
+      <span class="owner">${html(orderOwner(item))}</span>
+      ${status(orderNextAction(item), orderNextActionTone(item))}
+      <span class="mvp-orders-row-action"><button type="button" data-mvp-open="order" data-mvp-id="${html(item.id)}">${html(action)} <i aria-hidden="true">&rsaquo;</i></button><button type="button" data-mvp-open="order" data-mvp-id="${html(item.id)}" aria-label="More actions for ${html(orderReference(item))}">&ctdot;</button></span>
+    </div>`;
+  }
+
+  function orderIdentityCell(item) {
+    const source = item.sourceType === "native" || sourceInquiryReference(item) !== "Not linked" ? "FROM INQUIRY" : "LEGACY ORDER";
+    return `<span class="order-identity">${copyButton(orderReference(item), orderReference(item), "order reference")}<small>${html(source)}</small></span>`;
+  }
+
+  function twoLineCell(primary, secondary, className = "") {
+    return `<span class="mvp-two-line ${html(className)}"><strong>${html(primary || "-")}</strong><small>${html(secondary || "-")}</small></span>`;
+  }
+
+  function orderSummaryPrimary(item) {
+    const itemText = itemDisplay(item);
+    const qtyText = String(item.qty || "").trim();
+    if (!qtyText || itemText.toLowerCase().includes(qtyText.toLowerCase())) return itemText;
+    return `${itemText} x ${qtyText}`;
+  }
+
+  function orderSummarySecondary(item) {
+    return [serviceDisplay(item), fulfillment(item)].filter((value) => value && value !== "-" && value !== "Not set").join(" / ") || product(item);
+  }
+
+  function orderPaymentDashboardLabel(item) {
+    const payment = paymentState(item);
+    if (payment.key === "awaiting") return "Balance due";
+    if (payment.key === "verification") return "For verification";
+    if (payment.key === "paid") return "Verified";
+    if (payment.key === "partial") return `${money(Math.max(amount(item.amountDue || item.quotedAmount) - amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount), 0))} balance`;
+    if (payment.key === "shop") return "Pay at shop";
+    return toTitleCase(payment.label.replace(/_/g, " "));
+  }
+
+  function orderProductionDashboardLabel(item) {
+    const production = productionDisplay(item);
+    if (productionBlocker(item)) return "BLOCKED";
+    if (productionStage(item) === "queued") return readyForProduction(item) ? "READY" : "NOT READY";
+    if (["printing", "embroidery", "screen_printing"].includes(production.key)) return "IN PRODUCTION";
+    return production.label;
+  }
+
+  function orderProductionDashboardTone(item, production) {
+    if (productionBlocker(item)) return "overdue";
+    if (productionStage(item) === "queued") return readyForProduction(item) ? "ready" : "queued";
+    return production.tone;
+  }
+
+  function dueCellParts(dueState, item) {
+    if (!item.dueDate) return { primary: "No date", secondary: "-" };
+    const date = new Date(`${item.dueDate}T00:00:00`);
+    const primary = Number.isNaN(date.getTime()) ? "No date" : date.toLocaleDateString("en-US", { month: "short", day: "2-digit" });
+    const secondary = dueState.label.includes(" / ") ? dueState.label.split(" / ").pop() : dueState.key === "future" ? "Upcoming" : dueState.label;
+    return { primary, secondary };
+  }
+
+  function orderNextAction(item) {
+    const payment = paymentState(item);
+    if (productionBlocker(item)) return "RESOLVE BLOCKER";
+    if (payment.key === "verification") return "REVIEW PAYMENT";
+    if (payment.key !== "paid") return "AWAITING PAYMENT";
+    if (readyForProduction(item)) return "READY TO RELEASE";
+    if (ACTIVE_STAGES.includes(productionStage(item)) || productionStage(item) === "qc") return "UPDATE PRODUCTION";
+    if (["ready", "completed"].includes(productionStage(item))) return "FULFILLMENT";
+    return "REVIEW ORDER";
+  }
+
+  function orderNextActionTone(item) {
+    const action = orderNextAction(item);
+    if (action === "RESOLVE BLOCKER") return "overdue";
+    if (["AWAITING PAYMENT", "REVIEW PAYMENT"].includes(action)) return "payment";
+    if (action === "READY TO RELEASE") return "ready";
+    if (action === "FULFILLMENT") return "completed";
+    return "queued";
+  }
+
+  function orderDashboardAction(item) {
+    const action = orderNextAction(item);
+    if (action === "RESOLVE BLOCKER") return "Resolve";
+    if (action === "REVIEW PAYMENT") return "Review";
+    if (action === "READY TO RELEASE") return "Release";
+    if (action === "UPDATE PRODUCTION") return "Update";
+    if (action === "FULFILLMENT") return "Open";
+    return "Open";
+  }
+
+  function orderStatusMatches(item, statusValue) {
+    if (statusValue === "all") return true;
+    if (statusValue === "needs_action") return orderActionRequired(item);
+    if (statusValue === "awaiting_payment") return paymentState(item).key === "awaiting";
+    if (statusValue === "payment_review") return paymentState(item).key === "verification";
+    if (statusValue === "ready_release") return readyForProduction(item);
+    if (statusValue === "in_production") return ACTIVE_STAGES.includes(productionStage(item)) || productionStage(item) === "qc";
+    if (statusValue === "fulfillment") return ["ready", "completed"].includes(productionStage(item));
+    return true;
+  }
+
+  function ordersPagination(total, currentPage, pageCount, pageSize) {
+    if (!total) return `<footer class="mvp-orders-pagination"><span>Showing 0 orders</span></footer>`;
+    const start = (currentPage - 1) * pageSize + 1;
+    const end = Math.min(total, currentPage * pageSize);
+    const pages = Array.from({ length: pageCount }, (_, index) => index + 1).slice(0, 5);
+    return `<footer class="mvp-orders-pagination"><span>Showing ${start} to ${end} of ${total} ${total === 1 ? "order" : "orders"}</span><nav aria-label="Orders pagination"><button type="button" data-mvp-order-page="${Math.max(1, currentPage - 1)}" ${currentPage === 1 ? "disabled" : ""}>&lsaquo;</button>${pages.map((page) => `<button type="button" data-mvp-order-page="${page}" class="${page === currentPage ? "active" : ""}" aria-current="${page === currentPage ? "page" : "false"}">${page}</button>`).join("")}<button type="button" data-mvp-order-page="${Math.min(pageCount, currentPage + 1)}" ${currentPage === pageCount ? "disabled" : ""}>&rsaquo;</button><small>${pageSize} / page</small></nav></footer>`;
   }
 
   function ordersTable(items) {
@@ -1178,12 +1359,18 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-filter]").forEach((field) => {
       const [scope, name] = field.dataset.mvpFilter.split(":");
-      field.addEventListener(field.type === "search" ? "input" : "change", () => { state[scope][name] = field.value; if (scope === "inquiry") state.inquiry.page = 1; clearQuery(); rerender(); if (field.type === "search") focusAtEnd(field.dataset.mvpFilter); });
+      field.addEventListener(field.type === "search" ? "input" : "change", () => { state[scope][name] = field.value; if (state[scope]?.page !== undefined) state[scope].page = 1; clearQuery(); rerender(); if (field.type === "search") focusAtEnd(field.dataset.mvpFilter); });
     });
+    root.querySelectorAll("[data-mvp-order-status]").forEach((button) => button.addEventListener("click", () => {
+      state.order.status = button.dataset.mvpOrderStatus || "all";
+      state.order.page = 1;
+      clearQuery();
+      rerender();
+    }));
     root.querySelectorAll("[data-mvp-reset-filters]").forEach((button) => button.addEventListener("click", () => {
       const scope = button.dataset.mvpResetFilters;
       if (!state[scope]) return;
-      Object.keys(state[scope]).forEach((keyName) => { state[scope][keyName] = keyName === "page" ? 1 : "all"; });
+      Object.keys(state[scope]).forEach((keyName) => { state[scope][keyName] = keyName === "page" ? 1 : keyName === "pageSize" ? 5 : "all"; });
       if (state[scope].search !== undefined) state[scope].search = "";
       clearQuery();
       rerender();
@@ -1192,6 +1379,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       const page = Number(button.dataset.mvpPage);
       if (!Number.isFinite(page)) return;
       state.inquiry.page = page;
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-order-page]").forEach((button) => button.addEventListener("click", () => {
+      const page = Number(button.dataset.mvpOrderPage);
+      if (!Number.isFinite(page)) return;
+      state.order.page = page;
       rerender();
     }));
     root.querySelectorAll("[data-mvp-open]").forEach((element) => {
