@@ -16,6 +16,8 @@
     "test:order-drawer-blocked": "node scripts/test-order-drawer-blocked.mjs",
     "test:order-drawer-ready-release": "node scripts/test-order-drawer-ready-release.mjs",
     "test:order-drawer-ready-release-browser": "node scripts/test-order-drawer-ready-release-browser.mjs",
+    "test:production-dashboard": "node scripts/test-production-dashboard.mjs",
+    "test:production-dashboard-browser": "node scripts/test-production-dashboard-browser.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
   "dependencies": {
