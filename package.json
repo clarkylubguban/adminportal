@@ -13,6 +13,7 @@
     "test:orders-dual-read": "node scripts/test-orders-dual-read.mjs",
     "test:orders-dashboard": "node scripts/test-orders-dashboard.mjs",
     "test:orders-dashboard-browser": "node scripts/test-orders-dashboard-browser.mjs",
+    "test:order-drawer-blocked": "node scripts/test-order-drawer-blocked.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
   "dependencies": {

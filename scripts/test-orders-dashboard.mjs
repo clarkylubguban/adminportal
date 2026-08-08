@@ -161,7 +161,7 @@ global.window.location.search = "?order=TRRY-ORD-READY01";
 dashboard.state.order.payment = "all";
 html = dashboard.renderOrders({ items: rows });
 assert.ok(html.includes("TRRY-ORD-READY01"), "URL order reference resolves selected drawer");
-assert.ok(html.includes("Order Reference"), "existing order drawer renders after URL resolution");
+assert.ok(html.includes("ORDER SUMMARY"), "existing order drawer renders after URL resolution");
 
 const source = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(source.includes("data-mvp-open-messenger"), "Messenger contract remains in source");

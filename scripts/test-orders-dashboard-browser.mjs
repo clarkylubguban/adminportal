@@ -82,9 +82,27 @@ try {
   const afterClick = await evaluate(cdp, `({ orderId: window.__dashboard?.state?.orderId || "", hasDrawer: Boolean(document.querySelector(".mvp-drawer")), text: document.body.innerText.slice(0, 800) })`);
   assert.equal(afterClick.orderId, "TRY-AWAIT-001", `row click should set selected order state: ${JSON.stringify(afterClick)}`);
   assert.equal(afterClick.hasDrawer, true, `row click should render drawer: ${JSON.stringify(afterClick)}`);
-  const drawer = await evaluate(cdp, `({ open: Boolean(document.querySelector(".mvp-drawer.order")), text: document.querySelector(".mvp-drawer")?.innerText || "" })`);
+  const drawer = await evaluate(cdp, `(() => {
+    const drawer = document.querySelector(".mvp-drawer.order");
+    const rect = drawer?.getBoundingClientRect();
+    return {
+      open: Boolean(drawer),
+      text: drawer?.innerText || "",
+      width: Math.round(rect?.width || 0),
+      hasTabs: [...document.querySelectorAll("[data-mvp-order-tab]")].map((node) => node.textContent.trim()).join("|"),
+      hasCopy: Boolean(drawer?.querySelector("[data-mvp-copy]")),
+    };
+  })()`);
   assert.equal(drawer.open, true, "existing order drawer opens from dashboard row");
   assert.ok(drawer.text.includes("TRRY-ORD-AWAIT01"), "drawer uses native order reference");
+  assert.equal(drawer.width, 390, "desktop order drawer width is 390px");
+  assert.equal(drawer.hasTabs, "Overview|Requirements|Payment|Fulfillment|History|Confirm Payment|Requirements", "drawer tab order and footer tab actions render");
+  assert.equal(drawer.hasCopy, true, "drawer copy control renders");
+
+  await evaluate(cdp, `document.querySelector('[data-mvp-order-tab="requirements"]').click()`);
+  await waitForText(cdp, "PRODUCTION REQUIREMENTS");
+  await evaluate(cdp, `document.querySelector('[data-mvp-order-tab="payment"]').click()`);
+  await waitForText(cdp, "PAYMENT SUMMARY");
 
   await navigate(cdp, `http://127.0.0.1:${port}/order-dashboard?order=TRRY-1234`);
   await waitFor(cdp, `location.pathname === "/orders" && location.search === "?order=TRRY-1234"`);

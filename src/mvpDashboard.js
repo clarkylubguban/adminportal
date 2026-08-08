@@ -34,6 +34,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     inquiry: { search: "", stage: "all", owner: "all", service: "all", due: "all", page: 1 },
     order: { search: "", status: "all", payment: "all", artwork: "all", due: "all", production: "all", owner: "all", page: 1, pageSize: 5 },
     production: { search: "", staff: "all", method: "all", stage: "all", due: "all", blocker: "all" },
+    orderTab: "overview",
     inquiryTab: "details",
     inquiryActionId: null,
     inquiryMoreOpen: false,
@@ -1004,25 +1005,157 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function orderDrawer(item, renderPayment, renderTracking) {
     if (!item) return "";
-    const stage = productionStage(item);
-    const readiness = readinessState(item);
-    const payment = paymentState(item);
-    const production = productionDisplay(item);
-    const block = blockedReason(item);
     const gate = productionGate(item);
-    const canOpenProduction = true;
-    const action = orderFooterAction(item, gate);
-    return drawer("order", item, production.label, `
-      ${detailSection("Overview", [["Order Reference", orderReference(item)], ["Source Inquiry", sourceInquiryReference(item)], ["Odoo SO", item.odooSO || "Not set"], ["Customer", item.customer], ["Item", itemDisplay(item)], ["Quantity", item.sizeBreakdown || item.qty], ["Confirmed", dateTime(item.quoteApprovedAt || item.updatedAt)], ["Due Date", dueShortLabel(due(item), item)]])}
-      ${detailSection("Readiness", [["Production Readiness", readyForProduction(item) ? "READY" : "NOT READY FOR PRODUCTION"], ["Missing Requirements", gate.length ? gate.join(", ") : "None"], ["Artwork Status", readiness.artwork], ["Artwork Approval", item.artworkApprovedAt ? dateTime(item.artworkApprovedAt) : "Not approved"], ["Revision Requirement", key(item.artworkStatus) === "revision_requested" ? "Revision needed" : "None"], ["Payment Readiness", payment.label], ["Current Blocker", gate.length ? gate.join(", ") : "None"]])}
-      ${orderPaymentSummary(item)}
-      ${typeof renderPayment === "function" ? renderPayment(item) : ""}
-      ${detailSection("Fulfillment", [["Method", fulfillment(item)], ["Customer Tracking", tracking(item)], ["Contact", item.contact || "Not set"]])}
-      ${detailSection("Production Handoff", [["Release State", stage === "queued" ? (readyForProduction(item) ? "READY" : `BLOCKED: ${gate.join(", ") || "requirements incomplete"}`) : "Released to production"], ["Current Production", production.label], ["Assigned Production Staff", assigned(item)], ["Production Link", canOpenProduction ? "Available" : "Not available"], ["Current Blocker", gate.length ? gate.join(", ") : "None"]])}
-      ${detailSection("Internal", [["Order Owner", orderOwner(item)], ["Internal Note", item.productionNote || item.internalNote || "Not set"], ["Last Update", dateTime(item.updatedAt)]])}
-      ${typeof renderTracking === "function" ? renderTracking(item) : ""}
-    `, action);
-  }  function orderReference(item) {
+    const activeTab = orderDrawerTabs().some((tab) => tab.key === state.orderTab) ? state.orderTab : "overview";
+    const body = {
+      overview: orderDrawerOverview(item),
+      requirements: orderDrawerRequirements(item, gate),
+      payment: orderDrawerPayment(item, renderPayment),
+      fulfillment: orderDrawerFulfillment(item, renderTracking),
+      history: orderDrawerHistory(item),
+    }[activeTab];
+    return `<button class="mvp-drawer-backdrop" data-mvp-close type="button" aria-label="Close details"></button><aside class="mvp-drawer order mvp-order-drawer" aria-label="Order details">
+      ${orderDrawerHeader(item)}
+      ${orderDrawerTabRow(activeTab)}
+      <div class="mvp-drawer-body mvp-order-drawer-body">${body}</div>
+      <footer class="mvp-drawer-footer mvp-order-drawer-footer">${orderDrawerFooter(item, gate, activeTab)}</footer>
+    </aside>`;
+  }
+
+  function orderDrawerHeader(item) {
+    const statusState = orderOperationalState(item);
+    const reference = orderReference(item);
+    const meta = [item.contact, shortDate(item.quoteApprovedAt || item.updatedAt), item.source || "Source not set"].filter(Boolean).join(" / ");
+    return `<header class="mvp-order-drawer-header"><div class="mvp-order-header-top"><mark class="${html(statusState.tone)}">${html(statusState.label)}</mark><button type="button" data-mvp-close aria-label="Close details">X</button></div><div class="mvp-order-code-row"><code>${html(reference)}</code>${copyButton("COPY", reference, "order reference")}</div><h2>${html(item.customer || "Unnamed customer")}</h2><p>${html(meta || "No contact/date/source")}</p></header>`;
+  }
+
+  function orderDrawerTabs() {
+    return [
+      ["overview", "Overview"],
+      ["requirements", "Requirements"],
+      ["payment", "Payment"],
+      ["fulfillment", "Fulfillment"],
+      ["history", "History"],
+    ].map(([keyValue, label]) => ({ key: keyValue, label }));
+  }
+
+  function orderDrawerTabRow(activeTab) {
+    return `<nav class="mvp-order-drawer-tabs" aria-label="Order drawer tabs">${orderDrawerTabs().map((tab) => `<button type="button" data-mvp-order-tab="${tab.key}" class="${activeTab === tab.key ? "active" : ""}" aria-selected="${activeTab === tab.key ? "true" : "false"}">${html(tab.label)}</button>`).join("")}</nav>`;
+  }
+
+  function orderDrawerOverview(item) {
+    return `<section class="mvp-order-panel"><h3>ORDER SUMMARY</h3><div class="mvp-order-detail-list">
+      ${detailLine("Product", itemDisplay(item))}
+      ${detailLine("Quantity", item.sizeBreakdown || item.qty || "Not set")}
+      ${detailLine("Sizes", item.sizeBreakdown || "Not set")}
+      ${detailLine("Color", item.color || item.garmentColor || messageValue(item.message, ["Color", "Garment Color"]) || "Not set")}
+      ${detailLine("Due Date", dueShortLabel(due(item), item))}
+      ${detailLine("Assigned Staff", assigned(item))}
+      ${detailLine("Fulfillment", fulfillment(item))}
+      ${detailLine("Artwork", artworkLabel(item))}
+      ${detailLine("Payment", orderPaymentReadinessSummary(item))}
+    </div></section>`;
+  }
+
+  function orderDrawerRequirements(item, gate) {
+    return `<section class="mvp-order-panel"><h3>PRODUCTION REQUIREMENTS</h3><div class="mvp-order-requirements">${orderRequirementRows(item, gate).map(requirementRow).join("")}</div><p class="mvp-inline-note">Derived from existing Order readiness rules. No persisted checklist is created.</p></section>`;
+  }
+
+  function orderRequirementRows(item, gate) {
+    return [
+      { label: "Product and quantity", ok: Boolean(product(item) && product(item) !== "Not set" && item.service && item.qty), mapsTo: "product/service/qty" },
+      { label: "Due date", ok: Boolean(item.dueDate), mapsTo: "dueDate" },
+      { label: "Artwork approved", ok: orderArtworkKey(item) === "approved", mapsTo: "artworkStatus" },
+      { label: "Assigned production staff", ok: hasAssignedStaff(item), mapsTo: "assignedUserId/assignedStaff" },
+      { label: "Payment requirement", ok: paymentSatisfiesProductionGate(item), mapsTo: "paymentStatus + verified/confirmed amount" },
+      { label: "No revision or explicit blocker", ok: key(item.artworkStatus) !== "revision_requested" && !productionBlocker(item), mapsTo: "artworkStatus + blockedReason" },
+    ].map((row) => ({ ...row, blocking: gate.some((entry) => row.mapsTo.toLowerCase().includes(String(entry).split(" ")[0])) || (!row.ok && row.label === "Payment requirement") || (!row.ok && productionBlocker(item)) }));
+  }
+
+  function requirementRow(row) {
+    return `<div class="${row.ok ? "pass" : "fail"}"><span aria-hidden="true">${row.ok ? "✓" : "×"}</span><strong>${html(row.label)}</strong><small>${html(row.ok ? "Ready" : "Needs attention")} / ${html(row.mapsTo)}</small></div>`;
+  }
+
+  function orderDrawerPayment(item, renderPayment) {
+    const paymentForm = typeof renderPayment === "function" ? renderPayment(item) : "";
+    return `<section class="mvp-order-panel"><h3>PAYMENT SUMMARY</h3><div class="mvp-order-detail-list">
+      ${detailLine("Payment State", orderPaymentDashboardLabel(item))}
+      ${detailLine("Payment Method", paymentMethodLabel(item.paymentMethod))}
+      ${detailLine("Payment Type", paymentTypeLabel(item.paymentType))}
+      ${detailLine("Quote Total", money(amount(item.quotedAmount)))}
+      ${detailLine("Confirmed Amount", money(amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount)))}
+      ${detailLine("Amount Due", money(amount(item.amountDue || item.quotedAmount)))}
+      ${detailLine("Balance", money(orderPaymentBalance(item)))}
+      ${detailLine("Reference", item.paymentReference || "Not set")}
+      ${detailLine("Verified Date", dateTime(item.paymentVerifiedAt || item.paymentConfirmedAt))}
+    </div></section>${paymentForm}`;
+  }
+
+  function orderDrawerFulfillment(item, renderTracking) {
+    const trackingForm = typeof renderTracking === "function" ? renderTracking(item) : "";
+    return `<section class="mvp-order-panel"><h3>FULFILLMENT</h3><div class="mvp-order-detail-list">
+      ${detailLine("Method", fulfillment(item))}
+      ${detailLine("Customer Tracking", tracking(item))}
+      ${detailLine("Contact", item.contact || "Not set")}
+      ${detailLine("Address", item.deliveryAddress || item.address || messageValue(item.message, ["Delivery Address", "Address"]) || "Not set")}
+      ${detailLine("Sub-status", tracking(item))}
+      ${detailLine("Customer Note", item.trackingNote || customerNotes(item) || "Not set")}
+    </div><p class="mvp-inline-note">Order-owned customer fulfillment data only. Production packing/QC handoff remains in Production.</p></section>${trackingForm ? `<section class="mvp-order-panel readonly"><h3>TRACKING CONTRACT</h3><p class="mvp-inline-note">Customer tracking writes remain on the existing inquiry bridge outside this drawer phase.</p></section>` : ""}`;
+  }
+
+  function orderDrawerHistory(item) {
+    const rows = orderHistoryRows(item);
+    return `<section class="mvp-order-panel"><h3>HISTORY</h3><div class="mvp-order-history">${rows.map((row) => `<article><i aria-hidden="true"></i><strong>${html(row.title)}</strong><span>${html(row.when)}</span><small>${html(row.source)}</small></article>`).join("")}</div></section>`;
+  }
+
+  function orderHistoryRows(item) {
+    const rows = [];
+    if (Array.isArray(item.paymentHistory)) item.paymentHistory.forEach((entry) => rows.push({ title: `Payment confirmed${entry.amount ? ` ${money(entry.amount)}` : ""}`, when: dateTime(entry.confirmedAt), source: "Persisted payment_history" }));
+    if (item.paymentConfirmedAt || item.paymentVerifiedAt) rows.push({ title: "Payment confirmed", when: dateTime(item.paymentConfirmedAt || item.paymentVerifiedAt), source: "Derived from payment fields" });
+    if (item.productionUpdatedAt && productionStage(item) !== "queued") rows.push({ title: "Released to production", when: dateTime(item.productionUpdatedAt), source: "Derived from production fields" });
+    if (item.quoteApprovedAt) rows.push({ title: "Quotation approved", when: dateTime(item.quoteApprovedAt), source: "Derived from quote approval" });
+    if (item.orderCreatedAt || item.createdAt || item.updatedAt) rows.push({ title: "Order created", when: dateTime(item.orderCreatedAt || item.createdAt || item.updatedAt), source: sourceInquiryReference(item) !== "Not linked" ? `Derived from source inquiry ${sourceInquiryReference(item)}` : "Derived from order data" });
+    if (!rows.length) rows.push({ title: "No history events available", when: "Not set", source: "No persisted event rows found" });
+    return rows;
+  }
+
+  function orderDrawerFooter(item, gate, activeTab) {
+    const statusState = orderOperationalState(item);
+    if (["awaiting_payment", "payment_review"].includes(statusState.key)) return `<button class="mvp-primary-action" type="button" data-mvp-order-tab="payment">${statusState.key === "payment_review" ? "Review Payment" : "Confirm Payment"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>`;
+    if (statusState.key === "blocked") return `<button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Review Blocker</button><button class="mvp-secondary-action" type="button" disabled title="${html(productionBlocker(item) || gate.join(", "))}">Resolve Blocker</button>`;
+    if (statusState.key === "ready_to_release") return orderFooterAction(item, gate);
+    if (statusState.key === "released") return orderFooterAction(item, gate);
+    return `<button class="mvp-secondary-action" type="button" data-mvp-order-tab="${activeTab === "requirements" ? "overview" : "requirements"}">${activeTab === "requirements" ? "View Overview" : "View Requirements"}</button>`;
+  }
+
+  function orderOperationalState(item) {
+    const payment = paymentState(item);
+    const stage = productionStage(item);
+    if (productionBlocker(item)) return { key: "blocked", label: "BLOCKED", tone: "overdue" };
+    if (payment.key === "verification") return { key: "payment_review", label: "PAYMENT REVIEW", tone: "payment" };
+    if (payment.key !== "paid") return { key: "awaiting_payment", label: "AWAITING PAYMENT", tone: "payment" };
+    if (stage === "queued" && readyForProduction(item)) return { key: "ready_to_release", label: "READY TO RELEASE", tone: "ready" };
+    if (stage === "queued") return { key: "not_ready", label: "NOT READY", tone: "queued" };
+    if (["ready", "completed"].includes(stage)) return { key: "released", label: productionDisplay(item).label, tone: "completed" };
+    return { key: "released", label: "QUEUED FOR PRODUCTION", tone: "ready" };
+  }
+
+  function orderPaymentBalance(item) {
+    return Math.max(amount(item.quotedAmount || item.amountDue) - amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount), 0);
+  }
+
+  function orderPaymentReadinessSummary(item) {
+    const payment = paymentState(item);
+    if (payment.key === "paid") return `Confirmed / ${money(amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount))}`;
+    if (payment.key === "verification") return "Payment proof requires admin review";
+    return `${orderPaymentDashboardLabel(item)} / ${money(orderPaymentBalance(item))} due`;
+  }
+
+  function detailLine(label, value) {
+    return `<div><span>${html(label)}</span><strong>${html(value || "Not set")}</strong></div>`;
+  }
+
+  function orderReference(item) {
     return String(item.orderCode || item.orderReference || item.reference || item.code || item.odooSO || humanReadableId(item.id) || "Local order").trim();
   }
 
@@ -1367,6 +1500,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       clearQuery();
       rerender();
     }));
+    root.querySelectorAll("[data-mvp-order-tab]").forEach((button) => button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const tab = button.dataset.mvpOrderTab;
+      if (!orderDrawerTabs().some((item) => item.key === tab)) return;
+      state.orderTab = tab;
+      rerender();
+    }));
     root.querySelectorAll("[data-mvp-reset-filters]").forEach((button) => button.addEventListener("click", () => {
       const scope = button.dataset.mvpResetFilters;
       if (!state[scope]) return;
@@ -1388,7 +1529,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       rerender();
     }));
     root.querySelectorAll("[data-mvp-open]").forEach((element) => {
-      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = null; state.inquiryActionId = null; state.inquiryMoreOpen = false; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
+      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "order") state.orderTab = "overview"; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = null; state.inquiryActionId = null; state.inquiryMoreOpen = false; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
       element.addEventListener("click", (event) => { if (event.target.closest("[data-mvp-copy]")) return; event.stopPropagation(); open(); });
       element.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); open(); } });
     });
