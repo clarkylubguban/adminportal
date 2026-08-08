@@ -59,15 +59,19 @@ async function verifyWorkflowApiContract() {
   const updates = [];
   const supabase = {
     from(table) {
-      assert.equal(table, "ops_inquiries");
       let selectedId = "";
       let patch = null;
       const builder = {
         select() { return builder; },
-        eq(key, value) { if (key === "id") selectedId = value; return builder; },
+        eq(key, value) { if (key === "id" || key === "source_inquiry_id") selectedId = value; return builder; },
         update(value) { patch = value; return builder; },
-        async maybeSingle() { return { data: rows.get(selectedId) || null, error: null }; },
+        async maybeSingle() {
+          if (table === "orders") return { data: rows.has(selectedId) ? { id: `native-${selectedId}`, order_reference: `TRRY-ORD-${selectedId.slice(-8).padStart(8, "0")}`, source_inquiry_id: selectedId } : null, error: null };
+          assert.equal(table, "ops_inquiries");
+          return { data: rows.get(selectedId) || null, error: null };
+        },
         async single() {
+          assert.equal(table, "ops_inquiries");
           const current = rows.get(selectedId);
           const next = { ...current, ...patch };
           rows.set(selectedId, next);
@@ -181,7 +185,9 @@ async function verifyDisposableDatabaseContract() {
 function gateClearInquiry(overrides = {}) {
   return {
     id: "TRY-START",
-    status: "won",
+    status: "approved",
+    nativeOrderAuthority: true,
+    nativeOrderId: "96000000-0000-4000-8000-000000000888",
     quote_status: "approved",
     quoted_amount: 850,
     amount_due: 850,

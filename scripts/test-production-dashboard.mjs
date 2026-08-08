@@ -34,7 +34,7 @@ const inProduction = { ...base, id: "TRY-INPROD", sourceType: "native", nativeOr
 const compatibilityOnly = { ...base, id: "TRY-COMPAT-RAW", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000705", sourceInquiryId: "TRY-COMPAT-RAW", orderReference: "TRRY-ORD-COMPAT01", customer: "Compatibility Only", service: "DTF", productionStage: "printing", productionWorkflowStatus: "in_production" };
 const qc = { ...base, id: "TRY-QC", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000703", sourceInquiryId: "TRY-QC", orderReference: "TRRY-ORD-QC01", customer: "QC Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-juvy", dueDate: "2026-08-08" };
 const ready = { ...base, id: "TRY-FULFILL", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000704", sourceInquiryId: "TRY-FULFILL", orderReference: "TRRY-ORD-FULFILL01", customer: "Fulfillment Customer", productionStage: "ready", fulfillmentMethod: "delivery" };
-const blocked = { ...base, id: "TRY-BLOCK", sourceType: "legacy", orderReference: "TRRY-LEGACY-BLOCK01", customer: "Blocked Customer", service: "Embroidery", productionStage: "embroidery", blockedReason: "Thread color missing" };
+const blocked = { ...base, id: "TRY-BLOCK", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000706", sourceInquiryId: "TRY-BLOCK", orderReference: "TRRY-ORD-BLOCK01", customer: "Blocked Customer", service: "Embroidery", productionStage: "embroidery", blockedReason: "Thread color missing" };
 const legacy = { ...base, id: "TRY-LEGACY", sourceType: "legacy", orderReference: "TRRY-LEGACY-PROD01", odooSO: "SO-LEGACY-PROD01", customer: "Legacy Customer", service: "Screen Print", productionStage: "screen_printing" };
 
 const rows = [unreleased, queued, inProduction, compatibilityOnly, qc, ready, blocked, legacy];
@@ -52,7 +52,7 @@ assert.ok(html.includes("Active Jobs"), "active job count summary renders");
 assert.ok(!html.includes("TRRY-ORD-READY01"), "unreleased READY TO RELEASE order is not visible in Production");
 assert.ok(!html.includes("READY TO RELEASE"), "Production dashboard never shows Order-side READY TO RELEASE");
 assert.ok(html.includes("TRRY-ORD-QUEUED01"), "released native Order reference is primary job identity");
-assert.ok(html.includes("TRRY-LEGACY-PROD01"), "legacy compatibility reference remains visible");
+assert.ok(!html.includes("TRRY-LEGACY-PROD01"), "legacy Odoo-only work is read-only and not visible as active Production");
 assert.ok(html.includes("FROM ORDER"), "job identity shows order linkage as secondary metadata");
 assert.ok(!html.includes("PRD-1048"), "dashboard does not invent PRD job references");
 
@@ -80,7 +80,7 @@ assert.ok(!/Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(html), "Prod
 
 dashboard.state.production.status = "blocked";
 html = dashboard.renderProduction({ items: rows });
-assert.ok(html.includes("TRRY-LEGACY-BLOCK01"), "blocked tab includes explicit blockers");
+assert.ok(html.includes("TRRY-ORD-BLOCK01"), "blocked tab includes explicit native blockers");
 assert.ok(!html.includes("TRRY-ORD-QUEUED01"), "blocked tab excludes non-blocked queued jobs");
 
 dashboard.state.production.status = "all";

@@ -113,8 +113,7 @@ assert.match(html, /data-mvp-next="ready" disabled/, "blocked QC cannot complete
 global.window.location.search = "?order=TRRY-LEGACY-QC22";
 dashboard.state.productionTab = "overview";
 html = dashboard.renderProduction({ items: [queued, inProgress, qc, blockedQc, legacyQc] });
-assert.ok(html.includes("TRRY-LEGACY-QC22"), "legacy QC compatibility reference remains usable");
-assert.ok(html.includes("QC started metadata is required"), "legacy QC row without QC metadata does not crash and explains completion gate");
+assert.ok(!html.includes("TRRY-LEGACY-QC22"), "legacy Odoo-only QC row is not active Production");
 assert.ok(!html.includes("PRD-"), "QC drawer does not invent Production job IDs");
 
 global.window.location.search = "?order=TRRY-ORD-QUEUEDQC";
@@ -178,7 +177,9 @@ console.log("PASS Quality Check drawer, QC note contract, completion action, blo
 function workflowInquiry(overrides = {}) {
   return {
     id: "TRY-QC-DRAWER",
-    status: "won",
+    status: "approved",
+    nativeOrderAuthority: true,
+    nativeOrderId: "96000000-0000-4000-8000-000000000882",
     quote_status: "approved",
     quoted_amount: 850,
     amount_due: 850,

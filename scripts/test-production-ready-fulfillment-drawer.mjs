@@ -87,8 +87,7 @@ assert.match(html, /data-mvp-next="completed" disabled/, "blocked Ready job cann
 
 global.window.location.search = "?order=TRRY-LEGACY-READY10";
 html = dashboard.renderProduction({ items: [ready, completed, legacyReady, blockedReady] });
-assert.ok(html.includes("TRRY-LEGACY-READY10"), "legacy Ready compatibility reference remains usable");
-assert.ok(html.includes("QC completion metadata is required"), "legacy Ready row without QC metadata remains readable and gated");
+assert.ok(!html.includes("TRRY-LEGACY-READY10"), "legacy Odoo-only Ready row is not active Production");
 
 global.window.location.search = "?order=TRRY-ORD-COMPLETE10";
 html = dashboard.renderProduction({ items: [ready, completed, legacyReady, blockedReady] });
@@ -180,7 +179,9 @@ function readyItem(overrides = {}) {
 function workflowInquiry(overrides = {}) {
   return {
     id: "TRY-READY-DRAWER",
-    status: "won",
+    status: "approved",
+    nativeOrderAuthority: true,
+    nativeOrderId: "96000000-0000-4000-8000-000000001010",
     quote_status: "approved",
     quoted_amount: 850,
     amount_due: 850,

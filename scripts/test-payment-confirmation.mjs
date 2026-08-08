@@ -83,8 +83,8 @@ test("full payment but staff unassigned remains blocked", () => {
   assert.match(result.error, /assigned staff/);
 });
 
-test("every requirement complete is ready without Odoo SO", () => {
-  const result = advanceProduction(paidOrder({ odoo_so: "" }));
+test("every requirement complete is ready with native Order authority and without Odoo SO", () => {
+  const result = advanceProduction(paidOrder({ status: "approved", odoo_so: "" }));
   assert.equal(result.ok, true);
   assert.equal(result.updates.production_stage, "printing");
 });
@@ -113,7 +113,9 @@ function paidOrder(overrides = {}) {
 function order(overrides = {}) {
   return {
     id: "TRRY-TEST",
-    status: "won",
+    status: "approved",
+    nativeOrderAuthority: true,
+    nativeOrderId: "96000000-0000-4000-8000-000000000777",
     quote_status: "approved",
     quoted_amount: 1050,
     amount_due: 1050,

@@ -123,16 +123,7 @@ export async function saveOpsInquiryOdooSO(
   odooSO,
   authSession
 ) {
-  const rows = await updateSupabaseRowsWithAuth(
-    OPS_INQUIRIES_TABLE,
-    { id: `eq.${id}` },
-    mapInquiryUpdatesToOpsRow({ odooSO }),
-    getAccessToken(authSession)
-  );
-
-  return rows?.[0]
-    ? mapOpsRowToInquiry(rows[0])
-    : null;
+  throw new Error("Legacy Odoo SO writes are disabled. Native public.orders is the active Order authority.");
 }
 
 export async function confirmOpsInquiryOdooSO(
@@ -140,20 +131,7 @@ export async function confirmOpsInquiryOdooSO(
   odooSO,
   authSession
 ) {
-  const rows = await updateSupabaseRowsWithAuth(
-    OPS_INQUIRIES_TABLE,
-    { id: `eq.${id}` },
-    mapInquiryUpdatesToOpsRow({
-      status: "won",
-      odooSO,
-      next: "Odoo Sales Order recorded",
-    }),
-    getAccessToken(authSession)
-  );
-
-  return rows?.[0]
-    ? mapOpsRowToInquiry(rows[0])
-    : null;
+  throw new Error("Legacy Odoo SO confirmation is disabled. Native public.orders is the active Order authority.");
 }
 
 export const updateOpsInquiryOdooSO =
@@ -355,7 +333,6 @@ export function mapInquiryToOpsRow(inquiry) {
     follow_up_date: normalizeDate(
       inquiry.followUpDate
     ),
-    odoo_so: inquiry.odooSO,
     estimated_value: inquiry.estimatedValue,
     assigned_staff: inquiry.assignedStaff,
     assigned_user_id: inquiry.assignedUserId,
@@ -413,7 +390,6 @@ function mapInquiryUpdatesToOpsRow(updates) {
       updates.followUpDate === undefined
         ? undefined
         : normalizeDate(updates.followUpDate),
-    odoo_so: updates.odooSO,
     estimated_value: updates.estimatedValue,
     assigned_staff: updates.assignedStaff,
     assigned_user_id: updates.assignedUserId,

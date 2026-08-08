@@ -194,9 +194,9 @@ try {
   assert.equal(blockedQc, true, "blocked QC completion is disabled in browser");
 
   await evaluate(cdp, `document.querySelector('[data-mvp-production-status="blocked"]').click()`);
-  await waitForText(cdp, "TRRY-LEGACY-BLOCK77");
+  await waitForText(cdp, "TRRY-ORD-BLOCK77");
   const blockedFilter = await evaluate(cdp, `[...document.querySelectorAll(".mvp-production-table-row, .mvp-production-mobile-card")].map((node) => node.innerText).join("\\n")`);
-  assert.ok(blockedFilter.includes("TRRY-LEGACY-BLOCK77"), "blocked tab filters explicit blocker");
+  assert.ok(blockedFilter.includes("TRRY-ORD-BLOCK77"), "blocked tab filters explicit native blocker");
   assert.ok(!blockedFilter.includes("TRRY-ORD-QUEUED77"), "blocked tab excludes clear queued job");
 
   await navigate(cdp, `http://127.0.0.1:${port}/qa-production-dashboard.html`);
@@ -266,7 +266,8 @@ function qaHtml() {
       { ...base, id: "TRY-QC-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000772", sourceInquiryId: "TRY-QC-077", orderReference: "TRRY-ORD-QC77", customer: "QC Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-rachelle", productionNote: "Production note stays.", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", qcStartedAt: "2026-08-08T09:00:00.000Z", qcStartedBy: "staff-rachelle", qcNote: "Initial QC note." },
       { ...base, id: "TRY-QC-FAIL", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000774", sourceInquiryId: "TRY-QC-FAIL", orderReference: "TRRY-ORD-QCFAIL", customer: "QC Fail Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-rachelle", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", qcStartedAt: "2026-08-08T09:00:00.000Z", qcStartedBy: "staff-rachelle" },
       { ...base, id: "TRY-QC-BLOCK", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000775", sourceInquiryId: "TRY-QC-BLOCK", orderReference: "TRRY-ORD-QCBLOCK", customer: "QC Block Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-rachelle", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", qcStartedAt: "2026-08-08T09:00:00.000Z", qcStartedBy: "staff-rachelle", blockedReason: "Print defect requires owner review" },
-      { ...base, id: "TRY-BLOCK-077", sourceType: "legacy", orderReference: "TRRY-LEGACY-BLOCK77", customer: "Blocked Customer", productionStage: "embroidery", blockedReason: "Thread color missing" }
+      { ...base, id: "TRY-BLOCK-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000776", sourceInquiryId: "TRY-BLOCK-077", orderReference: "TRRY-ORD-BLOCK77", customer: "Blocked Customer", productionStage: "embroidery", blockedReason: "Thread color missing" },
+      { ...base, id: "TRY-LEGACY-077", sourceType: "legacy", orderReference: "TRRY-LEGACY-BLOCK77", odooSO: "SO-BLOCK77", customer: "Legacy Read Only", productionStage: "embroidery", blockedReason: "Historical only" }
     ];
     const dashboard = createMvpDashboard({ getAssignmentContext: () => ({ users: team, loadState: "success", error: "" }) });
     window.__dashboard = dashboard;

@@ -105,12 +105,14 @@ assert.ok(!html.includes("Note updated"), "History does not fabricate note event
 global.window.location.search = "?order=TRRY-LEGACY-INPROD01";
 dashboard.state.productionTab = "overview";
 html = dashboard.renderProduction({ items: rows });
-assert.ok(html.includes("TRRY-LEGACY-INPROD01"), "legacy compatibility reference remains supported");
+assert.ok(!html.includes("TRRY-LEGACY-INPROD01"), "legacy Odoo-only reference is not active Production");
 assert.ok(!html.includes("PRD-"), "drawer does not invent native Production job references");
 
 const qcResult = buildOpsWorkflowUpdates("advance_production", { productionStage: "qc", assignedStaff: "Louvelyngel" }, {
   id: "TRY-INPROD",
-  status: "won",
+  status: "approved",
+  nativeOrderAuthority: true,
+  nativeOrderId: "96000000-0000-4000-8000-000000000702",
   quote_status: "approved",
   quoted_amount: 850,
   amount_due: 850,
@@ -131,7 +133,9 @@ assert.equal(qcResult.updates.production_stage, "qc", "QC transition persists pr
 
 const invalidQc = buildOpsWorkflowUpdates("advance_production", { productionStage: "qc", assignedStaff: "Louvelyngel" }, {
   ...qcResult.updates,
-  status: "won",
+  status: "approved",
+  nativeOrderAuthority: true,
+  nativeOrderId: "96000000-0000-4000-8000-000000000702",
   quote_status: "approved",
   production_stage: "printing",
   production_started_at: null,

@@ -102,8 +102,9 @@ assert.ok(!html.includes("Production conduction"), "history does not copy Figma 
 global.window.location.search = "?order=TRRY-LEGACY-COMPLETE11";
 dashboard.state.productionTab = "overview";
 html = dashboard.renderProduction({ items: [completed, legacyCompleted, fulfilledOrder] });
-assert.ok(html.includes("TRRY-LEGACY-COMPLETE11"), "legacy completed reference remains usable");
-assert.ok(html.includes("Completion metadata unavailable"), "legacy completed row without metadata remains readable");
+assert.ok(!html.includes("TRRY-LEGACY-COMPLETE11"), "legacy Odoo-only completed records are not active Production drawer records");
+assert.ok(!html.includes("Completion metadata unavailable"), "legacy Odoo-only completed records cannot open active workflow drawers");
+assert.ok(!html.includes("mvp-production-drawer"), "no active Production drawer renders for legacy Odoo-only completed records");
 assert.ok(!html.includes("PRD-"), "completed drawer does not invent Production job IDs");
 
 global.window.location.search = "?order=TRRY-ORD-FULFILLED11";

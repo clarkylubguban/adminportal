@@ -1,5 +1,5 @@
 import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
-import { convertInquiryToNativeOrder, NativeOrderError } from "../../_lib/nativeOrders.js";
+import { convertInquiryToNativeOrder, NativeOrderError, readNativeOrderBySourceInquiryId } from "../../_lib/nativeOrders.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
@@ -42,13 +42,17 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
     const { data: inquiry, error: lookupError } = await supabase.from("ops_inquiries").select(WORKFLOW_SELECT).eq("id", inquiryReference).maybeSingle();
     if (lookupError) throw lookupError;
     if (!inquiry) return sendJson(response, 404, { ok: false, error: "inquiry not found" });
+    const nativeOrder = await readNativeOrderBySourceInquiryId(supabase, inquiryReference);
+    const workflowInquiry = nativeOrder
+      ? { ...inquiry, nativeOrderAuthority: true, nativeOrderId: nativeOrder.id, nativeOrderReference: nativeOrder.orderReference }
+      : inquiry;
 
     const now = new Date().toISOString();
-    const assignmentPatch = await buildAssignmentPatch(supabase, body, inquiry, adminUser);
+    const assignmentPatch = await buildAssignmentPatch(supabase, body, workflowInquiry, adminUser);
     if (!assignmentPatch.ok) return sendJson(response, 400, { ok: false, error: assignmentPatch.error });
 
     const workflowBody = { ...body, assignedStaff: assignmentPatch.assignedStaff, actorUserId: adminUser.userId, productionStartedBy: adminUser.userId };
-    const result = buildOpsWorkflowUpdates(String(body.action || ""), workflowBody, inquiry, now);
+    const result = buildOpsWorkflowUpdates(String(body.action || ""), workflowBody, workflowInquiry, now);
     if (!result.ok) return sendJson(response, 400, { ok: false, error: result.error });
     if (assignmentPatch.hasAssignment) Object.assign(result.updates, assignmentPatch.updates);
     if (result.noop) return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(inquiry) });

@@ -93,7 +93,7 @@ html = renderSelected(released, "history");
 assert.ok(html.includes("Released to production"), "released history is derived only after persisted production fields exist");
 
 html = renderSelected(legacy);
-assert.ok(html.includes('data-mvp-release-order="TRY-READY-LEGACY"'), "legacy confirmed ready orders keep the existing release bridge");
+assert.ok(!html.includes('data-mvp-release-order="TRY-READY-LEGACY"'), "legacy Odoo-only orders are read-only and cannot release");
 
 global.window.location.search = "";
 html = dashboard.renderProduction({ items: [base] });
@@ -106,7 +106,8 @@ const workflowResult = buildOpsWorkflowUpdates("advance_production", {
   assignedStaff: "James - owner",
 }, {
   id: "TRY-READY-BASE",
-  status: "won",
+  status: "approved",
+  nativeOrderAuthority: true,
   quote_status: "approved",
   product: "Embroidery",
   product_desc: "Premium Tshirt",
@@ -130,7 +131,8 @@ const duplicateResult = buildOpsWorkflowUpdates("advance_production", {
   assignedStaff: "James - owner",
 }, {
   id: "TRY-READY-BASE",
-  status: "won",
+  status: "approved",
+  nativeOrderAuthority: true,
   quote_status: "approved",
   product: "Embroidery",
   product_desc: "Premium Tshirt",

@@ -305,8 +305,6 @@ const opsPriorities = [
 let opsRawMessage = "";
 let opsExtractFields = null;
 let opsSavedNotice = false;
-let opsSoDraft = null;
-let opsSoSavingId = null;
 let opsArtworkRequests = {};
 let opsCustomerActionRequests = {};
 let mvpPaymentConfirmationRequests = {};
@@ -4006,7 +4004,6 @@ async function moveOpsInquiry(id, targetStatus) {
       console.error("Unable to update Ops Board inquiry status.", error);
       opsLoadState = "error";
       opsLoadError = error.message;
-      opsSoSavingId = null;
       return;
     }
   }
@@ -4020,19 +4017,13 @@ async function moveOpsInquiry(id, targetStatus) {
       : item
   );
 
-  if (opsSoDraft?.id === id && targetStatus !== "sent") {
-    opsSoDraft = null;
-  }
 }
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
 function renderOpsOdooAction(item) {
-  if (opsSoDraft?.id === item.id) {
-    const isSaving = opsSoSavingId === item.id;
-    return `<div class="ops-so-editor ops-order-confirm-card"><strong>CREATE CONFIRMED ORDER?</strong><p>This approved inquiry will be added to Orders.</p><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>${isSaving ? "CREATING..." : "CONFIRM &amp; CREATE ORDER"}</button><button class="ops-light-button mini" data-ops-cancel-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>CANCEL</button></div></div>`;
-  }
-  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">CREATE ORDER</button>`;
+  const orderText = item.orderReference || item.orderCode || item.reference || "";
+  return `<div class="ops-so-editor ops-order-confirm-card"><strong>NATIVE ORDER REQUIRED</strong><p>${orderText ? `Linked native order: ${escapeHtml(orderText)}` : "Create native TRRY Orders from the Inquiry drawer."}</p></div>`;
 }
 
 function createConfirmedOrderReference(item) {
@@ -4104,7 +4095,6 @@ async function saveOpsInquiry() {
       console.error("Unable to save Ops Board inquiry.", error);
       opsLoadState = "error";
       opsLoadError = error.message;
-      opsSoSavingId = null;
       return;
     }
   } else {
@@ -4154,37 +4144,6 @@ function normalizeOpsDate(value) {
   return Number.isNaN(parsed) ? null : new Date(parsed).toISOString().slice(0, 10);
 }
 
-async function confirmOpsSO(id) {
-  if (opsSoSavingId) return;
-  const current = opsInquiries.find((item) => item.id === id);
-  const so = current ? createConfirmedOrderReference(current) : "";
-  if (!so || !current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
-  opsSoSavingId = id;
-
-  if (shouldLoadSupabaseOps) {
-    try {
-      const payload = await requestOpsWorkflowAction(id, { action: "confirm_order", odooSO: so });
-      const savedInquiry = payload.inquiry;
-      if (!savedInquiry) throw new Error("Order conversion returned no saved inquiry.");
-      opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...savedInquiry } : item);
-      opsLoadState = opsLoadState === "empty" ? "success" : opsLoadState;
-      opsLoadError = "";
-    } catch (error) {
-      console.error("Unable to save Ops Board Odoo SO.", error);
-      opsLoadState = "error";
-      opsLoadError = error.message;
-      opsSoSavingId = null;
-      return;
-    }
-  }
-
-  if (!shouldLoadSupabaseOps) {
-    opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", odooSO: so, next: "Odoo Sales Order recorded" } : item);
-  }
-  opsSoDraft = null;
-  opsSoSavingId = null;
-  navigateTo(`/orders?order=${encodeURIComponent(id)}`);
-}
 
 async function requestOpsWorkflowAction(inquiryId, body) {
   const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/workflow`, {
@@ -7440,35 +7399,8 @@ function bindOpsBoardEvents() {
   document.querySelectorAll("[data-ops-close-details]").forEach((button) => {
     button.addEventListener("click", () => {
       expandedOpsInquiryId = null;
-      opsSoDraft = null;
       opsArtworkRequests = {};
       opsCustomerActionRequests = {};
-      render();
-    });
-  });
-  document.querySelectorAll("[data-ops-add-so]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (button.disabled || opsSoSavingId) return;
-      opsSoDraft = { id: button.dataset.opsAddSo };
-      render();
-      document.querySelector(`[data-ops-confirm-so="${button.dataset.opsAddSo}"]`)?.focus();
-    });
-  });
-
-  document.querySelectorAll("[data-ops-confirm-so]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (button.disabled || opsSoSavingId) return;
-      button.disabled = true;
-      button.textContent = "Saving...";
-      await confirmOpsSO(button.dataset.opsConfirmSo);
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-ops-cancel-so]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (opsSoSavingId) return;
-      opsSoDraft = null;
       render();
     });
   });

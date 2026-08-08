@@ -239,14 +239,18 @@ async function verifyConversionApi() {
 
 async function verifyLegacySafety() {
   const workflow = await readFile("api/_lib/opsWorkflow.js", "utf8");
-  assert.ok(workflow.includes("confirm_order"));
-  assert.ok(workflow.includes("odoo_so"));
+  assert.ok(!workflow.includes("confirm_order"), "legacy confirm_order is not an active workflow action");
+  assert.ok(!workflow.includes("odoo_so"), "workflow authority does not write Odoo SO");
   assert.ok(workflow.includes("advance_production"));
   const payment = await readFile("api/_lib/paymentConfirmation.js", "utf8");
   assert.ok(payment.includes("payment_history"));
   const main = await readFile("src/main.js", "utf8");
-  assert.ok(main.includes("confirmOpsSO"));
+  assert.ok(!main.includes("confirmOpsSO"), "legacy Odoo confirmation UI handler is removed");
   assert.ok(main.includes("Review the Messenger receipt"));
+  const opsBoard = await readFile("src/services/opsBoard.js", "utf8");
+  assert.ok(opsBoard.includes("Legacy Odoo SO writes are disabled"), "legacy Odoo service writes are disabled");
+  assert.ok(!opsBoard.includes("odoo_so: updates.odooSO"), "generic inquiry updates do not write Odoo SO");
+  assert.ok(!opsBoard.includes("odoo_so: inquiry.odooSO"), "new inquiry mapping does not write Odoo SO");
   const dashboard = await readFile("src/mvpDashboard.js", "utf8");
   assert.ok(dashboard.includes("data-mvp-open-messenger"));
 }

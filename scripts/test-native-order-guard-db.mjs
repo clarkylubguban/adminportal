@@ -52,15 +52,20 @@ async function verifyNoOrderNoOdooGuard() {
   await insertInquiry("TRY-R1-NOORDER", { odoo_so: null });
   await assertSqlFails(
     `update public.ops_inquiries set status = 'won' where id = 'TRY-R1-NOORDER';`,
-    /confirmed native or legacy order|confirmed order/i
+    /native TRRY Order|confirmed order/i
   );
 }
 
 async function verifyLegacyOdooCompatibility() {
   await insertInquiry("TRY-R1-LEGACY", { odoo_so: "SO-R1-LEGACY" });
-  await execSql(`update public.ops_inquiries set status = 'won' where id = 'TRY-R1-LEGACY';`);
-  await execSql(`update public.ops_inquiries set production_stage = 'printing' where id = 'TRY-R1-LEGACY';`);
-  await assertStage("TRY-R1-LEGACY", "printing");
+  await assertSqlFails(
+    `update public.ops_inquiries set status = 'won' where id = 'TRY-R1-LEGACY';`,
+    /native TRRY Order|confirmed native|confirmed order/i
+  );
+  await assertSqlFails(
+    `update public.ops_inquiries set production_stage = 'printing' where id = 'TRY-R1-LEGACY';`,
+    /native TRRY Order|confirmed native|confirmed order/i
+  );
 }
 
 async function verifyQuoteApprovalGuard() {
@@ -68,7 +73,7 @@ async function verifyQuoteApprovalGuard() {
   await insertNativeOrder("TRY-R1-UNAPPROVED", "TRRY-ORD-R1UNAPP1");
   await assertSqlFails(
     `update public.ops_inquiries set status = 'won' where id = 'TRY-R1-UNAPPROVED';`,
-    /quote approval|confirmed native or legacy order/i
+    /quote approval|native TRRY Order/i
   );
 }
 
@@ -77,7 +82,7 @@ async function verifyPositiveQuoteGuard() {
   await insertNativeOrder("TRY-R1-ZERO", "TRRY-ORD-R1ZERO12");
   await assertSqlFails(
     `update public.ops_inquiries set status = 'won' where id = 'TRY-R1-ZERO';`,
-    /positive quote|confirmed native or legacy order/i
+    /positive quote|native TRRY Order/i
   );
 }
 

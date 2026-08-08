@@ -96,6 +96,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return "";
   };
 
+  const hasNativeOrderAuthority = (item) => item?.sourceType === "native" && Boolean(item.nativeOrderId || item.orderReference || item.sourceInquiryId);
+
   const due = (item) => {
     if (productionStage(item) === "completed") return { key: "completed", label: "Completed" };
     if (!item.dueDate) return { key: "none", label: "No date" };
@@ -1227,7 +1229,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return false;
   }
   function isReleasedToProduction(item) {
-    if (!confirmed(item)) return false;
+    if (!confirmed(item) || !hasNativeOrderAuthority(item)) return false;
     const status = key(item.status);
     if (["lost", "cancelled", "canceled"].includes(status)) return false;
     const stage = productionStage(item);
@@ -1312,7 +1314,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function readyForProduction(item) {
-    return Boolean(productionStage(item) === "queued" && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && hasAssignedStaff(item) && paymentSatisfiesProductionGate(item) && !blockedReason(item));
+    return Boolean(hasNativeOrderAuthority(item) && productionStage(item) === "queued" && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && hasAssignedStaff(item) && paymentSatisfiesProductionGate(item) && !blockedReason(item));
   }
 
   function readinessCell(readiness) {

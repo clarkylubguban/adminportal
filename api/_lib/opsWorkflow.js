@@ -6,13 +6,6 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
     return failure("lost or cancelled inquiries cannot enter the order workflow");
   }
 
-  if (action === "confirm_order") {
-    const odooSO = cleanText(body.odooSO, 120);
-    if (key(inquiry.quote_status) !== "approved") return failure("quote approval is required");
-    if (!(Number(inquiry.quoted_amount) > 0)) return failure("a valid quoted amount is required");
-    return success({ status: "won", odoo_so: odooSO || inquiry.odoo_so || null, next_action: odooSO ? "Odoo Sales Order recorded" : "TRRY order confirmed" });
-  }
-
   if (!["save_production", "save_qc_note", "start_production", "advance_production"].includes(action)) {
     return failure("invalid workflow action");
   }
@@ -109,8 +102,17 @@ export function canonicalStage(value) {
 }
 
 export function isConfirmedOrder(inquiry) {
-  return key(inquiry.status) === "won"
+  return hasNativeOrderAuthority(inquiry)
     && key(inquiry.quote_status) === "approved";
+}
+
+export function hasNativeOrderAuthority(inquiry) {
+  return Boolean(
+    inquiry?.nativeOrderAuthority === true
+    || inquiry?._nativeOrderAuthority === true
+    || cleanText(inquiry?.nativeOrderId, 80)
+    || cleanText(inquiry?.native_order_id, 80)
+  );
 }
 
 function nextStage(stage, inquiry) {

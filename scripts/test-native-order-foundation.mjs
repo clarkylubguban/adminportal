@@ -115,7 +115,8 @@ const legacy = buildOpsWorkflowUpdates("confirm_order", { odooSO: "SO-KEEP" }, {
   quote_status: "approved",
   quoted_amount: 1000,
 });
-assert.deepEqual(legacy.updates, { status: "won", odoo_so: "SO-KEEP", next_action: "Odoo Sales Order recorded" });
+assert.equal(legacy.ok, false, "legacy confirm_order is not an active workflow action");
+assert.equal(legacy.error, "invalid workflow action");
 
 const paymentSource = await readFileText("api/_lib/paymentConfirmation.js");
 assert.ok(paymentSource.includes("payment_history"), "payment confirmation contract should remain present");
