@@ -7218,7 +7218,7 @@ async function saveMvpProductionFields(id, changes) {
   if (!current || !isConfirmedOpsOrder(current)) return;
   if (shouldLoadSupabaseOps && !current.productionFieldsReady) {
     orderDashboardSaveError = "Production fields are not ready. Apply the pending migration before saving.";
-    return;
+    return { ok: false, error: orderDashboardSaveError };
   }
 
   const updates = {
@@ -7242,11 +7242,12 @@ async function saveMvpProductionFields(id, changes) {
     } catch (error) {
       console.error("Unable to save MVP production fields.", error);
       orderDashboardSaveError = error.message || "Unable to save production fields.";
-      return;
+      return { ok: false, error: orderDashboardSaveError };
     }
   }
 
   opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...(savedInquiry || updates) } : item);
+  return savedInquiry || updates;
 }
 
 function bindOrderDashboardEvents() {

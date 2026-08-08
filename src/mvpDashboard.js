@@ -35,6 +35,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     order: { search: "", status: "all", payment: "all", artwork: "all", due: "all", production: "all", owner: "all", page: 1, pageSize: 5 },
     production: { search: "", staff: "all", method: "all", stage: "all", due: "all", blocker: "all" },
     orderTab: "overview",
+    orderReleaseId: null,
+    orderReleaseError: "",
     inquiryTab: "details",
     inquiryActionId: null,
     inquiryMoreOpen: false,
@@ -1123,9 +1125,16 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const statusState = orderOperationalState(item);
     if (["awaiting_payment", "payment_review"].includes(statusState.key)) return `<button class="mvp-primary-action" type="button" data-mvp-order-tab="payment">${statusState.key === "payment_review" ? "Review Payment" : "Confirm Payment"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>`;
     if (statusState.key === "blocked") return `<button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Review Blocker</button><button class="mvp-secondary-action" type="button" disabled title="${html(productionBlocker(item) || gate.join(", "))}">Resolve Blocker</button>`;
-    if (statusState.key === "ready_to_release") return orderFooterAction(item, gate);
+    if (statusState.key === "ready_to_release") return orderReleaseFooter(item, gate);
     if (statusState.key === "released") return orderFooterAction(item, gate);
     return `<button class="mvp-secondary-action" type="button" data-mvp-order-tab="${activeTab === "requirements" ? "overview" : "requirements"}">${activeTab === "requirements" ? "View Overview" : "View Requirements"}</button>`;
+  }
+
+  function orderReleaseFooter(item, gate) {
+    const next = nextStage(item);
+    const disabled = state.orderReleaseId === item.id || gate.length || !next;
+    const error = state.orderReleaseError ? `<small class="mvp-inline-error">${html(state.orderReleaseError)}</small>` : "";
+    return `<button class="mvp-primary-action" type="button" data-mvp-release-order="${html(item.id)}" data-mvp-next="${html(next)}" ${disabled ? "disabled" : ""}>${state.orderReleaseId === item.id ? "RELEASING..." : "RELEASE TO PRODUCTION"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>${gate.length ? `<small title="${html(gate.join(", "))}">Resolve before release: ${html(gate.join(", "))}</small>` : ""}${error}`;
   }
 
   function orderOperationalState(item) {
@@ -1220,8 +1229,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (["lost", "cancelled", "canceled"].includes(status)) return false;
     const stage = productionStage(item);
     if ([...ACTIVE_STAGES, "qc", "ready", "completed"].includes(stage)) return true;
-    if (stage !== "queued") return false;
-    return readyForProduction(item);
+    return false;
   }
   function orderFooterAction(item, gate) {
     const stage = productionStage(item);
@@ -1628,6 +1636,25 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       button.disabled = true;
       button.textContent = "Confirming...";
       await confirmPayment?.(id, { amountReceived, paymentSource, referenceNumber, internalNote });
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-release-order]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpReleaseOrder;
+      const next = button.dataset.mvpNext;
+      if (!id || !next) return;
+      state.orderReleaseId = id;
+      state.orderReleaseError = "";
+      button.disabled = true;
+      button.textContent = "RELEASING...";
+      try {
+        const result = await saveProduction?.(id, { productionStage: next });
+        if (result && result.ok === false) throw new Error(result.error || "Release failed.");
+      } catch (error) {
+        state.orderReleaseError = error?.message || "Release failed.";
+      } finally {
+        state.orderReleaseId = null;
+      }
       rerender();
     }));
     root.querySelectorAll("[data-mvp-advance]").forEach((button) => button.addEventListener("click", async () => {

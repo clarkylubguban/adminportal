@@ -105,7 +105,7 @@ assert.ok(html.includes("Resolve Blocker") && html.includes("disabled"), "resolv
 
 html = renderSelected(ready);
 assert.ok(html.includes("READY TO RELEASE"), "gate-clear queued order is Ready to Release");
-assert.ok(html.includes("Release to Production"), "existing release behavior is preserved");
+assert.ok(html.includes("RELEASE TO PRODUCTION"), "existing release behavior is preserved");
 
 html = renderSelected(legacy);
 assert.ok(html.includes("TRRY-LEGACY-DRAWER"), "legacy compatibility identity still opens in drawer");
