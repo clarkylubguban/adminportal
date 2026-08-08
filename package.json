@@ -7,6 +7,7 @@
     "dev": "node scripts/local-dev.mjs",
     "build": "node scripts/build.mjs",
     "test:native-orders": "node scripts/test-native-order-foundation.mjs",
+    "test:native-orders-db": "node scripts/test-native-order-db-contract.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
   "dependencies": {
