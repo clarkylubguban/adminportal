@@ -8,6 +8,8 @@
     "build": "node scripts/build.mjs",
     "test:native-orders": "node scripts/test-native-order-foundation.mjs",
     "test:native-orders-db": "node scripts/test-native-order-db-contract.mjs",
+    "test:inquiry-order-cutover": "node scripts/test-inquiry-order-cutover.mjs",
+    "test:inquiry-order-cutover-browser": "node scripts/test-inquiry-order-cutover-browser.mjs",
     "test:orders-dual-read": "node scripts/test-orders-dual-read.mjs",
     "preview": "node scripts/local-dev.mjs"
   },

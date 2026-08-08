@@ -31,6 +31,7 @@ import {
 } from "./services/opsBoard.js";
 import {
   buildDualReadOrders,
+  normalizeNativeOrderResponseToRow,
   getNativeOrderRows,
 } from "./services/orderCompatibility.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
@@ -285,6 +286,7 @@ let hasLoadedOpsInquiries = false;
 let nativeOrderRows = [];
 let nativeOrdersLoadState = shouldLoadSupabaseOps ? "loading" : "local";
 let nativeOrdersLoadError = "";
+let nativeOrderConversionRequests = {};
 
 const opsProduction = [
   { name: "DTF", jobs: 0, note: "Production tracking not connected yet." },
@@ -1303,6 +1305,14 @@ async function loadOpsBoardInquiries() {
   nativeOrdersLoadError = nativeResult.error?.message ?? "";
 
   render();
+}
+
+async function loadNativeOrderRows() {
+  const result = await getNativeOrderRows(adminAuthSession);
+  nativeOrderRows = result.rows;
+  nativeOrdersLoadState = result.status;
+  nativeOrdersLoadError = result.error?.message ?? "";
+  return result;
 }
 function isLocalTaskQaMode() {
   const value = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_MODE ?? "false").trim().toLowerCase();
@@ -2854,6 +2864,9 @@ function shortTaskTitle(title) {
 function getMvpDashboardItems() {
   return opsInquiries.map((item) => ({
     ...item,
+    ...getNativeOrderIdentityForInquiry(item.id),
+    orderCreationState: nativeOrderConversionRequests[item.id]?.status || "",
+    orderCreationError: nativeOrderConversionRequests[item.id]?.message || "",
     requiresProductionMigration: shouldLoadSupabaseOps && !item.productionFieldsReady,
   }));
 }
@@ -2864,6 +2877,22 @@ function getMvpOrderItems() {
     inquiries,
     nativeRows: nativeOrderRows,
   });
+}
+
+function getNativeOrderIdentityForInquiry(inquiryId) {
+  const row = findNativeOrderRowBySourceInquiryId(inquiryId);
+  if (!row) return {};
+  return {
+    nativeOrderId: row.id || "",
+    nativeOrderReference: row.order_reference || row.orderReference || "",
+    nativeOrderStatus: row.status || "",
+  };
+}
+
+function findNativeOrderRowBySourceInquiryId(inquiryId) {
+  const target = String(inquiryId || "").trim().toLowerCase();
+  if (!target) return null;
+  return nativeOrderRows.find((row) => String(row?.source_inquiry_id || row?.sourceInquiryId || "").trim().toLowerCase() === target) || null;
 }
 
 function renderOverviewPage() {
@@ -2878,7 +2907,6 @@ function renderMvpInquiriesPage() {
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
     renderQuote: renderOpsQuoteStage,
-    renderOdoo: renderOpsOdooAction,
     renderArtwork: renderMvpArtworkAction,
   });
 }
@@ -4170,6 +4198,71 @@ async function requestOpsWorkflowAction(inquiryId, body) {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Workflow update failed.");
   return payload;
+}
+
+async function requestNativeOrderConversion(inquiryId) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/orders`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify({}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok || !payload?.order) {
+    const message = payload?.error || "Native Order creation failed.";
+    const code = payload?.code ? ` (${payload.code})` : "";
+    throw new Error(`${message}${code}`);
+  }
+  return payload;
+}
+
+async function createNativeOrderFromInquiry(inquiryId) {
+  const id = String(inquiryId || "").trim();
+  if (!id || nativeOrderConversionRequests[id]?.status === "loading") return;
+  const existing = findNativeOrderRowBySourceInquiryId(id);
+  if (existing) {
+    navigateTo(`/orders?order=${encodeURIComponent(existing.order_reference || existing.orderReference || existing.id)}`);
+    render();
+    return;
+  }
+
+  nativeOrderConversionRequests = {
+    ...nativeOrderConversionRequests,
+    [id]: { status: "loading", message: "" },
+  };
+  render();
+
+  try {
+    const payload = await requestNativeOrderConversion(id);
+    const row = normalizeNativeOrderResponseToRow(payload.order);
+    let optimisticNativeRows = nativeOrderRows;
+    if (row) {
+      optimisticNativeRows = [
+        row,
+        ...nativeOrderRows.filter((item) => String(item?.source_inquiry_id || item?.sourceInquiryId || "").trim().toLowerCase() !== id.toLowerCase()),
+      ];
+      nativeOrderRows = optimisticNativeRows;
+    }
+    const refresh = await loadNativeOrderRows().catch(() => null);
+    if (!refresh || ["error", "missing-table"].includes(refresh.status)) nativeOrderRows = optimisticNativeRows;
+    nativeOrderConversionRequests = {
+      ...nativeOrderConversionRequests,
+      [id]: { status: "success", message: payload.created ? "Native Order created." : "Native Order already exists." },
+    };
+    const order = payload.order;
+    const routeIdentity = order.orderReference || order.id || id;
+    navigateTo(`/orders?order=${encodeURIComponent(routeIdentity)}`);
+  } catch (error) {
+    console.error("Unable to create native TRRY Order.", error);
+    nativeOrderConversionRequests = {
+      ...nativeOrderConversionRequests,
+      [id]: { status: "error", message: error.message || "Native Order creation failed." },
+    };
+  } finally {
+    render();
+  }
 }
 
 async function requestMvpPaymentConfirmation(inquiryId, body) {
@@ -6772,6 +6865,7 @@ function bindEvents() {
     rerender: render,
     navigate: navigateTo,
     copy: copyToClipboard,
+    createOrder: createNativeOrderFromInquiry,
     saveProduction: saveMvpProductionFields,
     confirmPayment: confirmMvpOrderPayment,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,

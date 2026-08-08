@@ -365,9 +365,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryDrawer(item, renderQuote, renderOdoo, renderArtwork) {
     if (!item) return "";
     const stage = quoteStage(item);
-    const action = inquiryPrimaryAction(item, stage, renderOdoo);
-    const activeTab = ["details", "request", "quotation", "artwork", "history"].includes(state.inquiryTab) ? state.inquiryTab : "details";
-    const workflowPanel = state.inquiryActionId === item.id && action.kind !== "quote" ? inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) : "";
+    const action = inquiryPrimaryAction(item, stage);
+    const activeTab = ["details", "request", "quotation", "artwork", "history"].includes(state.inquiryTab) ? state.inquiryTab : stage === "approved" ? "quotation" : "details";
+    const workflowPanel = state.inquiryActionId === item.id && action.kind !== "quote" && action.kind !== "create_order" ? inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) : "";
     return drawer("inquiry locked", item, QUOTE_STAGES[stage], `
       <section class="mvp-inquiry-locked-shell">
         ${inquiryLockedHeader(item, stage)}
@@ -438,20 +438,20 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const rows = quotationRows(item);
     const subtotal = quotationSubtotal(rows);
     const quoted = amount(item.quotedAmount);
-    const total = amount(item.amountDue || item.quotedAmount);
-    const discount = quoted > total ? quoted - total : 0;
+    const total = amount(item.quotedAmount);
     const hasCapturedAmount = quoted > 0 || total > 0;
     const meta = [
       item.quotePublishedAt ? `Sent ${shortDate(item.quotePublishedAt)}` : "",
       item.quoteValidUntil ? `Valid until ${shortDate(item.quoteValidUntil)}` : "",
     ].filter(Boolean).join(" · ");
     const body = hasCapturedAmount
-      ? `<div class="mvp-quotation-table" role="table" aria-label="Quotation details"><div class="mvp-quotation-head" role="row"><span>Item</span><span>Qty</span><span>Unit</span><span>Amount</span></div>${rows.map((row) => `<div class="mvp-quotation-row" role="row"><div><b>${html(row.item)}</b>${row.note ? `<small>${html(row.note)}</small>` : ""}</div><span>${html(row.qty)}</span><span>${html(row.unit)}</span><span>${html(row.amount)}</span></div>`).join("")}<div class="mvp-quotation-total"><span>Subtotal</span><b>${money(subtotal || quoted || total)}</b>${discount ? `<span>Discount</span><b>- ${money(discount)}</b>` : ""}<strong>Total</strong><strong>${money(total || quoted || subtotal)}</strong></div></div>`
+      ? `<div class="mvp-quotation-table" role="table" aria-label="Quotation details"><div class="mvp-quotation-head" role="row"><span>Item</span><span>Qty</span><span>Unit</span><span>Amount</span></div>${rows.map((row) => `<div class="mvp-quotation-row" role="row"><div><b>${html(row.item)}</b>${row.note ? `<small>${html(row.note)}</small>` : ""}</div><span>${html(row.qty)}</span><span>${html(row.unit)}</span><span>${html(row.amount)}</span></div>`).join("")}<div class="mvp-quotation-total"><span>Subtotal</span><b>${money(subtotal || quoted || total)}</b><strong>Quoted Amount</strong><strong>${money(total || quoted || subtotal)}</strong></div></div>`
       : `<p class="mvp-quotation-legacy">This record is marked ${html(quote.title)} but its quotation amount was not captured in the stored fields. No price has been invented.</p>`;
-    const actions = typeof renderQuote === "function" && !hasExistingOrder(item)
+    const actions = typeof renderQuote === "function" && quoteStage(item) !== "approved" && !hasExistingOrder(item)
       ? `<details class="mvp-quotation-actions"><summary>Allowed quotation actions</summary>${renderQuote(item)}</details>`
       : "";
-    return `<article class="mvp-quotation-panel"><header><div><span>Quotation</span><h3>${html(item.quoteCode || item.quoteReference || `QT-${item.id}`)}</h3>${meta ? `<p>${html(meta)}</p>` : ""}</div><mark>${html(quote.sub || quote.title)}</mark></header>${body}<div class="mvp-quotation-foot"><div><span>Payment terms</span><p>${html(item.paymentInstructions || item.paymentLabel || "Not set")}</p></div><div><span>Customer approval</span><p>${html(quoteApprovalLabel(item))}</p></div></div>${item.quoteNotes ? `<p class="mvp-quotation-note">${html(item.quoteNotes)}</p>` : ""}${actions}</article>`;
+    const orderState = item.orderCreationError ? `<p class="mvp-inline-error">${html(item.orderCreationError)}</p>` : "";
+    return `<article class="mvp-quotation-panel"><header><div><span>Quotation</span><h3>${html(item.quoteCode || item.quoteReference || `QT-${item.id}`)}</h3>${meta ? `<p>${html(meta)}</p>` : ""}</div><mark>${html(quote.sub || quote.title)}</mark></header>${body}<div class="mvp-quotation-foot"><div><span>Customer approval</span><p>${html(quoteApprovalLabel(item))}</p></div><div><span>Order conversion</span><p>${html(nativeOrderReference(item) ? `Native Order ${nativeOrderReference(item)}` : hasExistingOrder(item) ? `Historical Order ${orderReference(item)}` : "Ready to create native TRRY Order")}</p></div></div>${item.quoteNotes ? `<p class="mvp-quotation-note">${html(item.quoteNotes)}</p>` : ""}${orderState}${actions}</article>`;
   }
 
   function inquiryQuotationEmptyState() {
@@ -520,7 +520,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryActionBar(item, action) {
-    const primaryHook = action.route ? `data-mvp-route="${html(action.route)}"` : `data-mvp-primary-action="${html(item.id)}"`;
+    const primaryHook = action.route
+      ? `data-mvp-route="${html(action.route)}"`
+      : action.kind === "create_order"
+        ? `data-mvp-create-order="${html(item.id)}"`
+        : `data-mvp-primary-action="${html(item.id)}"`;
     const secondaryActions = inquirySecondaryActions(item);
     const moreMenu = secondaryActions.length
       ? `<div class="mvp-more-wrap"><button type="button" class="mvp-action-secondary" data-mvp-more-toggle aria-expanded="false">More Actions</button><div class="mvp-more-menu" hidden>${secondaryActions.join("")}</div></div>`
@@ -535,11 +539,13 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<section class="mvp-workflow-panel"><p>${html(action.hint)}</p></section>`;
   }
 
-  function inquiryPrimaryAction(item, stage, renderOdoo) {
+  function inquiryPrimaryAction(item, stage) {
+    const nativeRef = nativeOrderReference(item) || item.nativeOrderId;
+    if (nativeRef) return { kind: "order", label: "View Order", hint: "Native TRRY Order", route: `/orders?order=${encodeURIComponent(nativeRef)}` };
     if ((confirmed(item) || hasExistingOrder(item)) && productionStage(item) === "completed") return { kind: "production", label: "View Production", hint: "Read only", route: `/production?order=${encodeURIComponent(item.id)}` };
-    if (confirmed(item) || hasExistingOrder(item)) return { kind: "order", label: "View Order", hint: "Open order workflow", route: `/orders?order=${encodeURIComponent(item.id)}` };
+    if (confirmed(item) || hasExistingOrder(item)) return { kind: "order", label: "View Order", hint: "Historical order", route: `/orders?order=${encodeURIComponent(orderReference(item) || item.id)}` };
     if (stage === "sent") return { kind: "wait", label: "Waiting for Approval", hint: "Quote sent", disabled: true };
-    if (stage === "approved" && !item.odooSO) return { kind: "so", label: "Create Order", hint: "Next step", disabled: typeof renderOdoo !== "function" };
+    if (stage === "approved") return { kind: "create_order", label: item.orderCreationState === "loading" ? "Creating Order" : "Create Order", hint: "Native TRRY Order", disabled: item.orderCreationState === "loading" };
     if (isQuoteDraft(item)) return { kind: "quote", label: "Edit Quotation", hint: "Send quote when ready" };
     if (stage === "new") return { kind: "quote", label: "Create Quotation", hint: "Next step" };
     return { kind: "quote", label: "Create Quotation", hint: "Next step" };
@@ -548,7 +554,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryActionReason(item, action) {
     if (action.disabled) return action.hint || "No action is currently available.";
     if (action.kind === "quote") return customerNotes(item) || item.next || "Prepare quote from the request details.";
-    if (action.kind === "so") return "Customer has approved the quote; create the confirmed order when ready.";
+    if (action.kind === "create_order") return "Customer has approved the quote; create the native TRRY Order when ready.";
     if (action.kind === "order") return "Order already exists; payment, readiness, and production release stay in the Orders workflow.";
     if (action.kind === "production") return "Converted inquiry is available in Production.";
     return item.next || action.hint || "Review the inquiry.";
@@ -669,7 +675,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function quotationRows(item) {
     const parsed = parseQuotationBreakdown(item.quoteBreakdown, item);
     if (parsed.length) return parsed;
-    const total = amount(item.amountDue || item.quotedAmount);
+    const total = amount(item.quotedAmount);
     if (!total) return [];
     return [{
       item: itemDisplay(item),
@@ -837,6 +843,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     `, action);
   }  function orderReference(item) {
     return String(item.orderCode || item.orderReference || item.reference || item.code || item.odooSO || humanReadableId(item.id) || "Local order").trim();
+  }
+
+  function nativeOrderReference(item) {
+    return String(item.nativeOrderReference || item.nativeOrder?.orderReference || "").trim();
   }
 
   function findOrderByIdentity(items, value) {
@@ -1162,7 +1172,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, saveProduction, confirmPayment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
+  function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, confirmPayment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
     bindInquiryMoreDismiss(root);
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { closeInquiryMoreMenus(root); navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
@@ -1185,12 +1195,21 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       rerender();
     }));
     root.querySelectorAll("[data-mvp-open]").forEach((element) => {
-      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = "details"; state.inquiryActionId = null; state.inquiryMoreOpen = false; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
+      const open = () => { state.returnFocus = { type: element.dataset.mvpOpen, id: element.dataset.mvpId }; state[`${element.dataset.mvpOpen}Id`] = element.dataset.mvpId; if (element.dataset.mvpOpen === "inquiry") { state.inquiryTab = null; state.inquiryActionId = null; state.inquiryMoreOpen = false; } rerender(); requestAnimationFrame(() => root.querySelector(".mvp-drawer [data-mvp-close]")?.focus()); };
       element.addEventListener("click", (event) => { if (event.target.closest("[data-mvp-copy]")) return; event.stopPropagation(); open(); });
       element.addEventListener("keydown", (event) => { if (["Enter", " "].includes(event.key)) { event.preventDefault(); open(); } });
     });
     root.querySelectorAll("[data-mvp-close]").forEach((button) => button.addEventListener("click", () => { const restore = state.returnFocus; state.inquiryId = null; state.orderId = null; state.productionId = null; state.returnFocus = null; clearQuery(); rerender(); requestAnimationFrame(() => { if (restore) root.querySelector(`[data-mvp-open="${restore.type}"][data-mvp-id="${CSS.escape(restore.id)}"]`)?.focus(); }); }));
     root.querySelectorAll("[data-mvp-copy]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); await copy(button.dataset.mvpCopy); closeInquiryMoreMenus(root); button.dataset.copied = "true"; const label = button.querySelector("small"); if (label) label.textContent = "Copied"; window.setTimeout(() => { button.dataset.copied = "false"; const nextLabel = button.querySelector("small"); if (nextLabel) nextLabel.textContent = "Copy"; }, 1300); }));
+    root.querySelectorAll("[data-mvp-create-order]").forEach((button) => button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      if (button.disabled) return;
+      state.inquiryTab = "quotation";
+      state.inquiryActionId = null;
+      button.disabled = true;
+      await createOrder?.(button.dataset.mvpCreateOrder);
+      rerender();
+    }));
     root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();

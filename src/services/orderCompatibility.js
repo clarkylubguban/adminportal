@@ -108,6 +108,31 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
   };
 }
 
+export function normalizeNativeOrderResponseToRow(order) {
+  if (!order) return null;
+  return {
+    id: order.id,
+    order_reference: order.orderReference,
+    source_inquiry_id: order.sourceInquiryId,
+    status: order.status,
+    quoted_amount: order.quotedAmount,
+    amount_due: order.amountDue,
+    quote_breakdown: order.quoteBreakdown,
+    quote_note: order.quoteNote,
+    quote_valid_until: order.quoteValidUntil,
+    quote_approved_at: order.quoteApprovedAt,
+    customer_name: order.customerName,
+    customer_contact: order.customerContact,
+    product: order.product,
+    product_desc: order.productDesc,
+    quantity: order.quantity,
+    fulfillment_method: order.fulfillmentMethod,
+    due_date: order.dueDate,
+    created_at: order.createdAt,
+    updated_at: order.updatedAt,
+  };
+}
+
 export function normalizeLegacyOrder(inquiry) {
   return {
     ...inquiry,
