@@ -1591,6 +1591,94 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     </aside>`;
   }
 
+  function productionQualityCheckDrawer(item, next, fieldsReady, gate) {
+    const tabs = ["overview", "workflow", "assignment", "fulfillment", "history"];
+    const activeTab = tabs.includes(state.productionTab) ? state.productionTab : "overview";
+    state.productionTab = activeTab;
+    const body = productionQualityCheckPanel(item, activeTab, fieldsReady);
+    return `<button class="mvp-drawer-backdrop" data-mvp-close type="button" aria-label="Close production details"></button><aside class="mvp-drawer production mvp-production-drawer in-progress quality-check" aria-label="Production details">
+      <header class="mvp-production-drawer-header">
+        <div class="mvp-production-header-top"><mark>QUALITY CHECK</mark><button type="button" data-mvp-close aria-label="Close details">X</button></div>
+        <div class="mvp-production-code-row">${copyButton(jobReference(item), jobReference(item), "job reference")}</div>
+        <h2>${html(item.customer || item.company || "Unnamed customer")}</h2>
+        <p>${html(productionMetaLine(item))}</p>
+      </header>
+      <nav class="mvp-production-drawer-tabs" aria-label="Production drawer tabs">${tabs.map((tab) => `<button type="button" data-mvp-production-tab="${tab}" class="${activeTab === tab ? "active" : ""}" aria-selected="${activeTab === tab ? "true" : "false"}">${html(tabLabel(tab))}</button>`).join("")}</nav>
+      <div class="mvp-drawer-body mvp-production-drawer-body">${body}</div>
+      <footer class="mvp-drawer-footer mvp-production-drawer-footer">${productionQualityCheckFooter(item, activeTab, next, fieldsReady, gate)}</footer>
+    </aside>`;
+  }
+
+  function productionQualityCheckPanel(item, activeTab, fieldsReady) {
+    if (activeTab === "workflow") return productionQualityCheckWorkflow(item);
+    if (activeTab === "assignment") return productionQualityCheckAssignment(item, fieldsReady);
+    if (activeTab === "fulfillment") return productionQualityCheckFulfillment(item);
+    if (activeTab === "history") return productionQualityCheckHistory(item);
+    return productionQualityCheckOverview(item);
+  }
+
+  function productionQualityCheckOverview(item) {
+    const blocker = productionBlocker(item);
+    return `<section class="mvp-production-panel"><h3>ORDER SUMMARY</h3><div class="mvp-production-detail-list">
+      ${productionDetailLine("Job reference", jobReference(item))}
+      ${productionDetailLine("Product", product(item))}
+      ${productionDetailLine("Method", productionMethod(item))}
+      ${productionDetailLine("Quantity", quantityDisplay(item))}
+      ${productionDetailLine("Sizes", item.sizeBreakdown || "Not set")}
+      ${productionDetailLine("Color", item.color || item.garmentColor || messageValue(item.message, ["Color", "Garment Color"]) || "Not set")}
+      ${productionDetailLine("Due Date", item.dueDate ? dateShort(item.dueDate) : "Not set")}
+      ${productionDetailLine("Current Stage", "Quality Check", "warning")}
+      ${productionDetailLine("Assigned Staff", assigned(item))}
+    </div><h4>Release &amp; Payment Summary</h4><div class="mvp-production-summary-rows">
+      ${productionSummaryRow("Artwork Status", productionArtworkLabel(item), item.artworkApprovedAt)}
+      ${productionSummaryRow("Payment Status", paymentState(item).label, item.paymentVerifiedAt || item.paymentConfirmedAt)}
+      ${productionDetailLine("Released To Production", item.productionUpdatedAt ? dateTime(item.productionUpdatedAt) : "Not set")}
+      ${productionSummaryRow("Production Started", dateTime(item.productionStartedAt), productionStartedByLabel(item))}
+      ${productionSummaryRow("QC Started", dateTime(item.qcStartedAt), qcActorLabel(item, "started"))}
+    </div><article class="mvp-production-info-card ${blocker ? "danger" : "ok"}"><strong>${html(blocker ? "Production blocker" : "No production blocker")}</strong><span>${html(blocker || "Every item is in quality check before moving to fulfillment readiness.")}</span></article></section>`;
+  }
+
+  function productionQualityCheckWorkflow(item) {
+    const rows = [
+      { title: "Released to Production", state: "completed", when: item.productionUpdatedAt, actor: "Derived from production release" },
+      { title: "In Production", state: "completed", when: item.productionStartedAt, actor: productionStartedByLabel(item) },
+      { title: "Quality Check", state: "current", when: item.qcStartedAt, actor: qcActorLabel(item, "started") },
+      { title: "Ready for Fulfillment", state: "pending" },
+      { title: "Completed", state: "pending" },
+    ];
+    return `<section class="mvp-production-panel"><h3>PRODUCTION REQUIREMENTS</h3><div class="mvp-production-timeline">${rows.map(productionTimelineEvent).join("")}</div><article class="mvp-production-info-card neutral"><strong>About this stage</strong><span>Every item is inspected for quality, quantity, artwork accuracy, and overall condition before moving to the next stage.</span></article></section>`;
+  }
+
+  function productionQualityCheckAssignment(item, fieldsReady) {
+    const disabled = !fieldsReady || assignmentControlsDisabled();
+    const help = assignmentNotice();
+    return `<section class="mvp-production-panel"><h3>ASSIGNMENT &amp; NOTES</h3><div class="mvp-production-assignment-field"><label><span>Assigned Production Staff</span><div class="mvp-production-assignment-row"><select data-mvp-production-staff="${html(item.id)}" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select><button type="button" data-mvp-save-production="${html(item.id)}" ${disabled ? "disabled" : ""}>Reassign</button></div></label>${help}</div><label class="mvp-production-note-field"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" maxlength="500" ${fieldsReady ? "" : "disabled"}>${html(item.productionNote || "")}</textarea><small>${html(String(item.productionNote || "").length)} / 500</small></label><label class="mvp-production-note-field"><span>Quality Check Note (Optional)</span><textarea data-mvp-qc-note="${html(item.id)}" maxlength="500" ${fieldsReady ? "" : "disabled"}>${html(item.qcNote || "")}</textarea><small>${html(String(item.qcNote || "").length)} / 500</small></label><article class="mvp-production-info-card ok"><strong>Last Updated</strong><span>${html(item.productionUpdatedAt ? `${dateTime(item.productionUpdatedAt)} by ${assigned(item)}` : "No production update recorded.")}</span></article></section>`;
+  }
+
+  function productionQualityCheckFulfillment(item) {
+    return `<section class="mvp-production-panel"><h3>FULFILLMENT</h3><div class="mvp-production-readonly-fields">
+      ${productionReadonlyField("Method", fulfillment(item))}
+      ${productionReadonlyField("Customer Tracking", tracking(item))}
+      ${productionReadonlyField("Customer Visible Status", "Not Ready", "warning")}
+      ${productionReadonlyField("Customer Contact", item.contact || "Not set")}
+      ${productionReadonlyField("Customer Note", item.trackingNote || customerNotes(item) || "Not set")}
+    </div><article class="mvp-production-info-card neutral"><strong>Status</strong><span>Status will change to Ready for Fulfillment when quality check is completed and items are approved.</span></article></section>`;
+  }
+
+  function productionQualityCheckHistory(item) {
+    const rows = productionHistoryRows(item);
+    return `<section class="mvp-production-panel"><h3>HISTORY</h3><div class="mvp-production-history">${rows.map(productionHistoryEvent).join("")}</div></section>`;
+  }
+
+  function productionQualityCheckFooter(item, activeTab, next, fieldsReady, gate) {
+    if (activeTab === "assignment") return `<button class="mvp-primary-action" type="button" data-mvp-save-qc-note="${html(item.id)}" ${!fieldsReady ? "disabled" : ""}>Save QC Note</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
+    if (activeTab === "fulfillment") return `<button class="mvp-secondary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">View Order Fulfillment</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
+    if (activeTab === "history") return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">View Order</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
+    const missingQcStart = !item.qcStartedAt;
+    const disabled = !fieldsReady || gate.length || next !== "ready" || missingQcStart;
+    return `<button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="ready" ${disabled ? "disabled" : ""}>Complete Quality Check</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before completing QC: ${html(gate.join(", "))}</small>` : missingQcStart ? `<small>QC started metadata is required before completion.</small>` : ""}`;
+  }
+
   function productionInProgressPanel(item, activeTab, fieldsReady) {
     if (activeTab === "workflow") return productionInProgressWorkflow(item);
     if (activeTab === "assignment") return productionInProgressAssignment(item, fieldsReady);
@@ -1666,6 +1754,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (item.artworkApprovedAt) rows.push({ title: "Artwork approved", when: item.artworkApprovedAt, source: "Derived from artwork approval" });
     if (item.productionUpdatedAt) rows.push({ title: "Released to production", when: item.productionUpdatedAt, source: "Derived from production fields" });
     if (item.productionStartedAt) rows.push({ title: "Production started", when: item.productionStartedAt, source: "Persisted production start fields", actor: productionStartedByLabel(item) });
+    if (item.qcStartedAt) rows.push({ title: "Quality check started", when: item.qcStartedAt, source: "Persisted QC start fields", actor: qcActorLabel(item, "started") });
+    if (item.qcCompletedAt) rows.push({ title: "Quality check completed", when: item.qcCompletedAt, source: "Persisted QC completion fields", actor: qcActorLabel(item, "completed") });
     return rows.sort((a, b) => new Date(b.when || 0) - new Date(a.when || 0));
   }
 
@@ -1687,6 +1777,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function productionReadonlyField(label, value, tone = "") {
     return `<div class="${tone ? `tone-${tone}` : ""}"><span>${html(label)}</span><strong>${html(value || "Not set")}</strong></div>`;
+  }
+
+  function qcActorLabel(item, kind = "started") {
+    const actorId = String(kind === "completed" ? item.qcCompletedBy || item.qc_completed_by || "" : item.qcStartedBy || item.qc_started_by || "").trim();
+    if (!actorId) return "Not recorded";
+    return assignmentName(findAssignmentUser(actorId)) || actorId;
   }
 
   function dateShort(value) {
@@ -1713,6 +1809,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const assignmentDisabled = assignmentControlsDisabled();
     const blocker = productionBlocker(item);
     if (released && stateInfo.key === "in_production") return productionInProgressDrawer(item, next, fieldsReady, gate);
+    if (released && stage === "qc") return productionQualityCheckDrawer(item, next, fieldsReady, gate);
     const footer = released ? productionFooterAction(item, next, fieldsReady, gate) : `<section class="mvp-production-action"><span>Not released to Production</span><strong>Return to Orders</strong><button class="mvp-secondary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(item.id)}">Open Order</button></section>`;
     return drawer("production", item, released ? stateInfo.label : "Not released", `
       ${detailSection("Job", [["Job Reference", jobReference(item)], ["Item", itemDisplay(item)], ["Method", productionMethod(item)], ["Quantity", quantityDisplay(item)], ["Due Date", dueShortLabel(due(item), item)], ["Order Reference", orderReference(item) === jobReference(item) ? "Same as job" : orderReference(item)], ["Current Production Status", released ? stateInfo.label : "Not released"], ["Production Started", item.productionStartedAt ? dateTime(item.productionStartedAt) : "Not started"]])}
@@ -1902,6 +1999,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       if (staffControl) changes.assignedUserId = staffControl.value === "__legacy__" ? null : staffControl.value || null;
       if (noteControl) changes.productionNote = noteControl.value.trim() || null;
       if (blockedControl) changes.blockedReason = blockedControl.value || null;
+      button.disabled = true; button.textContent = "Saving...";
+      await saveProduction(id, changes);
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-save-qc-note]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpSaveQcNote;
+      const noteControl = root.querySelector(`[data-mvp-qc-note="${CSS.escape(id)}"]`);
+      const changes = { qcNote: noteControl?.value?.trim() || null };
       button.disabled = true; button.textContent = "Saving...";
       await saveProduction(id, changes);
       rerender();

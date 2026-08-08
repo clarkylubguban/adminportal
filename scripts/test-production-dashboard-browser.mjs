@@ -117,6 +117,82 @@ try {
     assert.ok(workflowText.includes("Production started") || workflowText.includes("Current Stage"), `workflow tab distinguishes release/start at ${viewport.width}`);
   }
 
+  for (const viewport of [
+    { width: 1600, height: 1000 },
+    { width: 1024, height: 900 },
+    { width: 390, height: 844 },
+  ]) {
+    await cdp.send("Emulation.setDeviceMetricsOverride", { ...viewport, deviceScaleFactor: 1, mobile: viewport.width < 600 });
+    await navigate(cdp, `http://127.0.0.1:${port}/qa-production-dashboard.html?order=TRRY-ORD-QC77`);
+    await waitForText(cdp, "QUALITY CHECK");
+    await delay(300);
+    const qcDrawer = await evaluate(cdp, `(() => {
+      const drawer = document.querySelector(".mvp-production-drawer.quality-check");
+      const rect = drawer?.getBoundingClientRect();
+      const tabs = [...document.querySelectorAll("[data-mvp-production-tab]")].map((button) => button.textContent.trim()).join("|");
+      return {
+        hasDrawer: Boolean(drawer),
+        width: Math.round(rect?.width || 0),
+        rightOverflow: rect ? Math.ceil(rect.right - window.innerWidth) : 0,
+        tabs,
+        text: drawer?.innerText || "",
+        hasReadyAction: Boolean(drawer?.querySelector('[data-mvp-advance][data-mvp-next="ready"]')),
+        hasPaymentAction: /Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(drawer?.innerText || "")
+      };
+    })()`);
+    assert.equal(qcDrawer.hasDrawer, true, `QUALITY CHECK drawer renders at ${viewport.width}`);
+    assert.ok(qcDrawer.width <= Math.min(390, viewport.width), `QC drawer width is viewport-safe at ${viewport.width}`);
+    assert.ok(qcDrawer.rightOverflow <= 1, `QC drawer avoids horizontal overflow at ${viewport.width}`);
+    assert.equal(qcDrawer.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `QC tab order matches Figma at ${viewport.width}`);
+    assert.equal(qcDrawer.hasReadyAction, true, `QC drawer exposes Complete QC action at ${viewport.width}`);
+    assert.equal(qcDrawer.hasPaymentAction, false, `QC drawer has no payment/Messenger action at ${viewport.width}`);
+    assert.ok(qcDrawer.text.includes("QC Started") || qcDrawer.text.includes("Quality Check"), `QC drawer shows QC metadata at ${viewport.width}`);
+
+    await evaluate(cdp, `document.querySelector('[data-mvp-production-tab="assignment"]').dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))`);
+    await waitFor(cdp, `Boolean(document.querySelector('[data-mvp-qc-note="TRY-QC-077"]'))`);
+    await evaluate(cdp, `(() => {
+      const note = document.querySelector('[data-mvp-qc-note="TRY-QC-077"]');
+      note.value = "Browser QC note saved.";
+      document.querySelector('[data-mvp-save-qc-note="TRY-QC-077"]').click();
+    })()`);
+    await waitFor(cdp, `window.__rows.find((item) => item.id === "TRY-QC-077")?.qcNote === "Browser QC note saved."`);
+    const noteState = await evaluate(cdp, `(() => {
+      const row = window.__rows.find((item) => item.id === "TRY-QC-077");
+      return { qcNote: row.qcNote, productionNote: row.productionNote, stage: row.productionStage };
+    })()`);
+    assert.equal(noteState.qcNote, "Browser QC note saved.", `QC note persisted in local read model at ${viewport.width}`);
+    assert.equal(noteState.productionNote, "Production note stays.", `production_note unchanged by QC note at ${viewport.width}`);
+    assert.equal(noteState.stage, "qc", `QC note does not advance stage at ${viewport.width}`);
+
+    await evaluate(cdp, `document.querySelector('[data-mvp-production-tab="overview"]').dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))`);
+    await waitFor(cdp, `Boolean(document.querySelector('[data-mvp-advance][data-mvp-next="ready"]'))`);
+    await evaluate(cdp, `document.querySelector('[data-mvp-advance][data-mvp-next="ready"]').click()`);
+    await waitForText(cdp, "READY FOR FULFILLMENT");
+    const completeState = await evaluate(cdp, `(() => {
+      const row = window.__rows.find((item) => item.id === "TRY-QC-077");
+      return { stage: row.productionStage, completedAt: row.qcCompletedAt, completedBy: row.qcCompletedBy };
+    })()`);
+    assert.equal(completeState.stage, "ready", `Complete QC moves to ready at ${viewport.width}`);
+    assert.ok(completeState.completedAt, `Complete QC persists completion timestamp at ${viewport.width}`);
+    assert.equal(completeState.completedBy, "staff-rachelle", `Complete QC persists completion actor at ${viewport.width}`);
+  }
+
+  await navigate(cdp, `http://127.0.0.1:${port}/qa-production-dashboard.html?order=TRRY-ORD-QCFAIL`);
+  await waitForText(cdp, "QUALITY CHECK");
+  await evaluate(cdp, `document.querySelector('[data-mvp-advance][data-mvp-next="ready"]').click()`);
+  await delay(300);
+  const failedCompletion = await evaluate(cdp, `(() => {
+    const row = window.__rows.find((item) => item.id === "TRY-QC-FAIL");
+    return { stage: row.productionStage, completedAt: row.qcCompletedAt || "", text: document.querySelector(".mvp-production-drawer")?.innerText || "" };
+  })()`);
+  assert.equal(failedCompletion.stage, "qc", "failed QC completion leaves row in QC");
+  assert.equal(failedCompletion.completedAt, "", "failed QC completion does not fake completion metadata");
+
+  await navigate(cdp, `http://127.0.0.1:${port}/qa-production-dashboard.html?order=TRRY-ORD-QCBLOCK`);
+  await waitForText(cdp, "Print defect requires owner review");
+  const blockedQc = await evaluate(cdp, `Boolean(document.querySelector('[data-mvp-advance][data-mvp-next="ready"][disabled]'))`);
+  assert.equal(blockedQc, true, "blocked QC completion is disabled in browser");
+
   await evaluate(cdp, `document.querySelector('[data-mvp-production-status="blocked"]').click()`);
   await waitForText(cdp, "TRRY-LEGACY-BLOCK77");
   const blockedFilter = await evaluate(cdp, `[...document.querySelectorAll(".mvp-production-table-row, .mvp-production-mobile-card")].map((node) => node.innerText).join("\\n")`);
@@ -183,19 +259,52 @@ function qaHtml() {
       { userId: "staff-rachelle", displayName: "Rachelle", email: "rachelle@trry.test", role: "staff" }
     ];
     const base = { status: "won", quoteStatus: "approved", artworkStatus: "approved", fulfillmentMethod: "pickup", service: "Embroidery", qty: "12 pcs", dueDate: "2026-08-09", quotedAmount: 850, amountDue: 850, paymentStatus: "paid", paymentVerifiedAmount: 850, assignedUserId: "owner-james", productDesc: "Premium Tshirt", contact: "0917-000-0000", productionUpdatedAt: "2026-08-08T08:00:00.000Z" };
-    const rows = [
+    let rows = [
       { ...base, id: "TRY-READY-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000770", sourceInquiryId: "TRY-READY-077", orderReference: "TRRY-ORD-READY77", customer: "Order Ready", productionStage: "queued" },
       { ...base, id: "TRY-QUEUED-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000771", sourceInquiryId: "TRY-QUEUED-077", sourceInquiryReference: "TRY-QUEUED-077", orderReference: "TRRY-ORD-QUEUED77", customer: "Queued Customer", productionStage: "embroidery" },
       { ...base, id: "TRY-START-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000773", sourceInquiryId: "TRY-START-077", sourceInquiryReference: "TRY-START-077", orderReference: "TRRY-ORD-START77", customer: "Started Customer", productionStage: "screen_printing", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", assignedUserId: "staff-rachelle" },
-      { ...base, id: "TRY-QC-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000772", sourceInquiryId: "TRY-QC-077", orderReference: "TRRY-ORD-QC77", customer: "QC Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-rachelle" },
+      { ...base, id: "TRY-QC-077", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000772", sourceInquiryId: "TRY-QC-077", orderReference: "TRRY-ORD-QC77", customer: "QC Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-rachelle", productionNote: "Production note stays.", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", qcStartedAt: "2026-08-08T09:00:00.000Z", qcStartedBy: "staff-rachelle", qcNote: "Initial QC note." },
+      { ...base, id: "TRY-QC-FAIL", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000774", sourceInquiryId: "TRY-QC-FAIL", orderReference: "TRRY-ORD-QCFAIL", customer: "QC Fail Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-rachelle", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", qcStartedAt: "2026-08-08T09:00:00.000Z", qcStartedBy: "staff-rachelle" },
+      { ...base, id: "TRY-QC-BLOCK", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000775", sourceInquiryId: "TRY-QC-BLOCK", orderReference: "TRRY-ORD-QCBLOCK", customer: "QC Block Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-rachelle", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", qcStartedAt: "2026-08-08T09:00:00.000Z", qcStartedBy: "staff-rachelle", blockedReason: "Print defect requires owner review" },
       { ...base, id: "TRY-BLOCK-077", sourceType: "legacy", orderReference: "TRRY-LEGACY-BLOCK77", customer: "Blocked Customer", productionStage: "embroidery", blockedReason: "Thread color missing" }
     ];
     const dashboard = createMvpDashboard({ getAssignmentContext: () => ({ users: team, loadState: "success", error: "" }) });
     window.__dashboard = dashboard;
+    window.__rows = rows;
     function render() {
       app.innerHTML = dashboard.renderProduction({ items: rows });
       document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
-      dashboard.bind({ root: app, rerender: render, navigate: () => {}, copy: async () => {}, saveProduction: async () => {} });
+      dashboard.bind({ root: app, rerender: render, navigate: () => {}, copy: async () => {}, saveProduction: async (id, changes) => {
+        if (id === "TRY-QC-FAIL" && changes.productionStage === "ready") return { ok: false, error: "Synthetic failure" };
+        const now = "2026-08-08T09:45:00.000Z";
+        rows = rows.map((item) => {
+          if (item.id !== id) return item;
+          if (Object.prototype.hasOwnProperty.call(changes, "qcNote")) return { ...item, qcNote: changes.qcNote, productionUpdatedAt: now };
+          const next = { ...item };
+          if (changes.startProduction) {
+            next.productionStartedAt = next.productionStartedAt || now;
+            next.productionStartedBy = next.productionStartedBy || "staff-rachelle";
+          }
+          if (changes.productionStage) {
+            next.productionStage = changes.productionStage;
+            if (changes.productionStage === "qc") {
+              next.qcStartedAt = next.qcStartedAt || now;
+              next.qcStartedBy = next.qcStartedBy || "staff-rachelle";
+            }
+            if (changes.productionStage === "ready") {
+              next.qcCompletedAt = next.qcCompletedAt || now;
+              next.qcCompletedBy = next.qcCompletedBy || "staff-rachelle";
+            }
+          }
+          if (Object.prototype.hasOwnProperty.call(changes, "productionNote")) next.productionNote = changes.productionNote;
+          if (Object.prototype.hasOwnProperty.call(changes, "assignedUserId")) next.assignedUserId = changes.assignedUserId;
+          if (Object.prototype.hasOwnProperty.call(changes, "blockedReason")) next.blockedReason = changes.blockedReason;
+          next.productionUpdatedAt = now;
+          return next;
+        });
+        window.__rows = rows;
+        return rows.find((item) => item.id === id);
+      } });
     }
     render();
   </script></body></html>`;

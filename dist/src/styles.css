@@ -23289,6 +23289,12 @@ body,
   padding: 0 10px;
 }
 
+.mvp-production-drawer.quality-check .mvp-production-header-top mark {
+  background: #fff2dd;
+  border-color: #ffe1b8;
+  color: #ff8a00;
+}
+
 .mvp-production-header-top > button {
   background: transparent;
   border: 0;

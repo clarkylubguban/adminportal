@@ -17,6 +17,7 @@
     "test:order-drawer-ready-release": "node scripts/test-order-drawer-ready-release.mjs",
     "test:order-drawer-ready-release-browser": "node scripts/test-order-drawer-ready-release-browser.mjs",
     "test:production-in-progress-drawer": "node scripts/test-production-in-progress-drawer.mjs",
+    "test:production-qc-drawer": "node scripts/test-production-qc-drawer.mjs",
     "test:production-dashboard": "node scripts/test-production-dashboard.mjs",
     "test:production-start": "node scripts/test-production-start-persistence.mjs",
     "test:qc-persistence": "node scripts/test-qc-persistence.mjs",

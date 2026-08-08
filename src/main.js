@@ -7226,15 +7226,24 @@ async function saveMvpProductionFields(id, changes) {
     productionUpdatedAt: new Date().toISOString(),
   };
   if (changes.startProduction) updates.productionStartedAt = updates.productionUpdatedAt;
+  if (changes.productionStage === "qc" && !current.qcStartedAt) {
+    updates.qcStartedAt = updates.productionUpdatedAt;
+    updates.qcStartedBy = adminUser?.userId || null;
+  }
+  if (changes.productionStage === "ready" && String(current.productionStage || "").toLowerCase() === "qc" && !current.qcCompletedAt) {
+    updates.qcCompletedAt = updates.productionUpdatedAt;
+    updates.qcCompletedBy = adminUser?.userId || null;
+  }
   let savedInquiry = null;
 
   if (shouldLoadSupabaseOps) {
     try {
       const payload = await requestOpsWorkflowAction(id, {
-        action: changes.startProduction ? "start_production" : changes.productionStage ? "advance_production" : "save_production",
+        action: changes.startProduction ? "start_production" : changes.productionStage ? "advance_production" : Object.prototype.hasOwnProperty.call(changes, "qcNote") ? "save_qc_note" : "save_production",
         productionStage: changes.productionStage,
         assignedUserId: changes.assignedUserId,
         productionNote: changes.productionNote,
+        qcNote: changes.qcNote,
         blockedReason: changes.blockedReason,
       });
       savedInquiry = payload.inquiry;
