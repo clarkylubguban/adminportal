@@ -29,6 +29,10 @@ import {
   updateOpsInquiryFields,
   updateOpsInquiryStatus,
 } from "./services/opsBoard.js";
+import {
+  buildDualReadOrders,
+  getNativeOrderRows,
+} from "./services/orderCompatibility.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
   getAdminAssignmentUsers,
@@ -278,6 +282,9 @@ let opsInquiries = shouldLoadSupabaseOps ? [] : [...localOpsInquiries];
 let opsLoadState = shouldLoadSupabaseOps ? "loading" : "local";
 let opsLoadError = "";
 let hasLoadedOpsInquiries = false;
+let nativeOrderRows = [];
+let nativeOrdersLoadState = shouldLoadSupabaseOps ? "loading" : "local";
+let nativeOrdersLoadError = "";
 
 const opsProduction = [
   { name: "DTF", jobs: 0, note: "Production tracking not connected yet." },
@@ -1284,10 +1291,16 @@ async function loadOpsBoardInquiries() {
   if (hasLoadedOpsInquiries) return;
   hasLoadedOpsInquiries = true;
 
-  const result = await getOpsBoardInquiries(localOpsInquiries, adminAuthSession);
+  const [result, nativeResult] = await Promise.all([
+    getOpsBoardInquiries(localOpsInquiries, adminAuthSession),
+    getNativeOrderRows(adminAuthSession),
+  ]);
   opsInquiries = result.inquiries;
   opsLoadState = result.status;
   opsLoadError = result.error?.message ?? "";
+  nativeOrderRows = nativeResult.rows;
+  nativeOrdersLoadState = nativeResult.status;
+  nativeOrdersLoadError = nativeResult.error?.message ?? "";
 
   render();
 }
@@ -2845,6 +2858,14 @@ function getMvpDashboardItems() {
   }));
 }
 
+function getMvpOrderItems() {
+  const inquiries = getMvpDashboardItems();
+  return buildDualReadOrders({
+    inquiries,
+    nativeRows: nativeOrderRows,
+  });
+}
+
 function renderOverviewPage() {
   return mvpDashboard.renderOverview({
     items: getMvpDashboardItems(),
@@ -2864,8 +2885,8 @@ function renderMvpInquiriesPage() {
 
 function renderMvpOrdersPage() {
   return mvpDashboard.renderOrders({
-    items: getMvpDashboardItems(),
-    notices: renderOpsPersistenceNotice(),
+    items: getMvpOrderItems(),
+    notices: `${renderOpsPersistenceNotice()}${renderNativeOrdersPersistenceNotice()}`,
     schemaNotice: renderOrderDashboardSchemaNotice(),
     renderPayment: renderMvpPaymentConfirmation,
     renderTracking: renderOpsCustomerTracking,
@@ -2874,8 +2895,8 @@ function renderMvpOrdersPage() {
 
 function renderMvpProductionPage() {
   return mvpDashboard.renderProduction({
-    items: getMvpDashboardItems(),
-    notices: renderOpsPersistenceNotice(),
+    items: getMvpOrderItems(),
+    notices: `${renderOpsPersistenceNotice()}${renderNativeOrdersPersistenceNotice()}`,
     schemaNotice: renderOrderDashboardSchemaNotice(),
   });
 }
@@ -2900,6 +2921,21 @@ function renderOpsPersistenceNotice() {
     return `<section class="ops-persistence-card error"><strong>${title}</strong><span>${escapeHtml(opsLoadError || "Unable to load inquiries. Check the Supabase connection and admin access.")}</span></section>`;
   }
 
+  return "";
+}
+
+function renderNativeOrdersPersistenceNotice() {
+  if (!shouldLoadSupabaseOps) return "";
+  if (nativeOrdersLoadState === "success" || nativeOrdersLoadState === "empty") return "";
+  if (nativeOrdersLoadState === "loading") {
+    return `<section class="ops-persistence-card"><strong>Loading native Orders</strong><span>Reading TRRY Orders alongside legacy inquiry orders...</span></section>`;
+  }
+  if (nativeOrdersLoadState === "missing-table") {
+    return `<section class="ops-persistence-card"><strong>Native Orders table is not exposed yet</strong><span>Showing legacy inquiry-derived orders only.</span></section>`;
+  }
+  if (nativeOrdersLoadState === "error") {
+    return `<section class="ops-persistence-card error"><strong>Unable to load native Orders</strong><span>${escapeHtml(nativeOrdersLoadError || "Showing legacy inquiry-derived orders only.")}</span></section>`;
+  }
   return "";
 }
 function getOpsCounts() {

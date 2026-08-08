@@ -276,7 +276,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function moduleEntry(label, count, detail, route) {
     return `<button type="button" class="mvp-module-link" data-mvp-route="${html(route)}"><span><strong>${html(label)}</strong><small>${html(detail)}</small></span><b>${count}</b></button>`;
   }
-  return { state, renderOverview, renderInquiries, renderOrders, renderProduction, bind, helpers: { confirmed, productionStage, stageLabel } };
+  return { state, renderOverview, renderInquiries, renderOrders, renderProduction, bind, helpers: { confirmed, productionStage, stageLabel, findOrderByIdentity, matchesOrderIdentity } };
   function renderInquiries({ items, notices = "", renderQuote, renderOdoo, renderArtwork }) {
     const inquiries = items.filter((item) => !confirmed(item));
     const stageFilter = query("stage") || state.inquiry.stage;
@@ -770,9 +770,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       if (state.order.due !== "all" && dueState.key !== state.order.due) return false;
       if (state.order.production !== "all" && stage !== state.order.production) return false;
       if (state.order.owner !== "all" && (item.assignedUserId || "") !== state.order.owner) return false;
-      return !search || [orderReference(item), sourceInquiryReference(item), item.id, item.customer, item.contact, item.service, product(item), item.odooSO, orderOwner(item)].join(" ").toLowerCase().includes(search);
+      return !search || [orderReference(item), sourceInquiryReference(item), item.id, item.nativeOrderId, item.customer, item.contact, item.service, product(item), item.odooSO, orderOwner(item)].join(" ").toLowerCase().includes(search);
     });
-    const selected = orders.find((item) => item.id === (state.orderId || orderQuery));
+    const selected = findOrderByIdentity(orders, state.orderId || orderQuery);
     return `<main class="mvp-page ops-board-page mvp-orders-page">${pageTitle("Orders", "Confirmed Orders", `${orders.length} orders`)}<p class="mvp-rule">NO CONFIRMED ORDER / DO NOT PRINT</p>${notices}${schemaNotice}
       ${orderMetrics(orders)}${filterBar("order", items, ["payment", "artwork", "due", "production", "owner"])}${ordersTable(rows)}${orderCards(rows)}${orderDrawer(selected, renderPayment, renderTracking)}
     </main>`;
@@ -837,6 +837,32 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     `, action);
   }  function orderReference(item) {
     return String(item.orderCode || item.orderReference || item.reference || item.code || item.odooSO || humanReadableId(item.id) || "Local order").trim();
+  }
+
+  function findOrderByIdentity(items, value) {
+    const rows = Array.isArray(items) ? items : [];
+    const nativeMatch = rows.find((item) => item?.sourceType === "native" && matchesOrderIdentity(item, value));
+    return nativeMatch || rows.find((item) => matchesOrderIdentity(item, value)) || null;
+  }
+
+  function matchesOrderIdentity(item, value) {
+    const target = identity(value);
+    if (!target) return false;
+    return [
+      item?.nativeOrderId,
+      item?.orderReference,
+      item?.id,
+      item?.sourceInquiryId,
+      item?.sourceInquiryReference,
+      item?.orderCode,
+      item?.reference,
+      item?.code,
+      item?.odooSO,
+    ].some((candidate) => identity(candidate) === target);
+  }
+
+  function identity(value) {
+    return String(value || "").trim().toLowerCase();
   }
 
   function hasExistingOrder(item) {
@@ -1025,7 +1051,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return !search || [jobReference(item), orderReference(item), sourceInquiryReference(item), item.customer, method, itemDisplay(item), product(item), assigned(item)].join(" ").toLowerCase().includes(search);
     });
     const selectedId = state.productionId || query("order");
-    const selected = productionJobs.find((item) => item.id === selectedId) || orders.find((item) => item.id === selectedId);
+    const selected = findOrderByIdentity(productionJobs, selectedId) || findOrderByIdentity(orders, selectedId);
     const activeJobs = productionJobs.filter((item) => !isOrderClosed(item));
     const counts = {
       active: activeJobs.length,
