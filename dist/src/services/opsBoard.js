@@ -266,6 +266,10 @@ export function mapOpsRowToInquiry(row) {
       getFirstValue(row, ["production_started_at", "productionStartedAt"]),
     productionStartedBy:
       getFirstValue(row, ["production_started_by", "productionStartedBy"]),
+    productionCompletedAt:
+      getFirstValue(row, ["production_completed_at", "productionCompletedAt"]),
+    productionCompletedBy:
+      getFirstValue(row, ["production_completed_by", "productionCompletedBy"]),
     qcStartedAt:
       getFirstValue(row, ["qc_started_at", "qcStartedAt"]),
     qcStartedBy:
@@ -360,6 +364,8 @@ export function mapInquiryToOpsRow(inquiry) {
     production_updated_at: inquiry.productionUpdatedAt,
     production_started_at: inquiry.productionStartedAt,
     production_started_by: inquiry.productionStartedBy,
+    production_completed_at: inquiry.productionCompletedAt,
+    production_completed_by: inquiry.productionCompletedBy,
     qc_started_at: inquiry.qcStartedAt,
     qc_started_by: inquiry.qcStartedBy,
     qc_note: inquiry.qcNote,
@@ -416,6 +422,8 @@ function mapInquiryUpdatesToOpsRow(updates) {
     production_updated_at: updates.productionUpdatedAt,
     production_started_at: updates.productionStartedAt,
     production_started_by: updates.productionStartedBy,
+    production_completed_at: updates.productionCompletedAt,
+    production_completed_by: updates.productionCompletedBy,
     qc_started_at: updates.qcStartedAt,
     qc_started_by: updates.qcStartedBy,
     qc_note: updates.qcNote,

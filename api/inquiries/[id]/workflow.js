@@ -10,6 +10,7 @@ const WORKFLOW_SELECT = [
   "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at",
   "production_started_at", "production_started_by", "blocked_reason",
   "qc_started_at", "qc_started_by", "qc_note", "qc_completed_at", "qc_completed_by",
+  "production_completed_at", "production_completed_by",
 ].join(",");
 
 export default async function handler(request, response) {
@@ -66,7 +67,7 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
       return sendJson(response, error.status, { ok: false, error: error.message, code: error.code });
     }
     console.error("Admin workflow update failed.", { message: error?.message, code: error?.code });
-    const schemaMissing = /orders|production_stage|production_started_at|production_started_by|qc_started_at|qc_completed_at|qc_note|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
+    const schemaMissing = /orders|production_stage|production_started_at|production_started_by|production_completed_at|production_completed_by|qc_started_at|qc_completed_at|qc_note|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
     const missingMessage = nativeOrderRequest ? "native orders table is not ready" : "workflow fields are not ready";
     sendJson(response, schemaMissing ? 503 : 500, { ok: false, error: schemaMissing ? missingMessage : "workflow update failed" });
   }
@@ -119,6 +120,8 @@ function toClientInquiry(row) {
     productionUpdatedAt: row.production_updated_at,
     productionStartedAt: row.production_started_at,
     productionStartedBy: row.production_started_by,
+    productionCompletedAt: row.production_completed_at,
+    productionCompletedBy: row.production_completed_by,
     qcStartedAt: row.qc_started_at,
     qcStartedBy: row.qc_started_by,
     qcNote: row.qc_note,

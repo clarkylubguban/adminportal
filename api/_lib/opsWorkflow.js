@@ -20,7 +20,7 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
 
   const currentStage = canonicalStage(inquiry.production_stage);
   const alreadyStarted = Boolean(inquiry.production_started_at);
-  const actorUserId = cleanUuid(body.actorUserId || body.productionStartedBy || body.qcStartedBy || body.qcCompletedBy);
+  const actorUserId = cleanUuid(body.actorUserId || body.productionStartedBy || body.qcStartedBy || body.qcCompletedBy || body.productionCompletedBy);
   if (action === "start_production") {
     if (alreadyStarted) return { ok: true, updates: {}, noop: true };
     if (!ACTIVE_STAGES.has(currentStage)) return failure("production must be released before it can start");
@@ -43,16 +43,21 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
   if (["ready", "completed"].includes(currentStage) && action === "save_production") {
     return failure("ready and completed production details are locked");
   }
-
-  const updates = productionFields(body, now);
-  if (action === "save_production") return success(updates);
+  if (action === "save_production") return success(productionFields(body, now));
 
   const requestedStage = canonicalStage(body.productionStage);
+  if (currentStage === "completed" && requestedStage === "completed") {
+    return { ok: true, updates: {}, noop: true };
+  }
   if (currentStage === "ready" && requestedStage === "ready" && inquiry.qc_completed_at) {
     return { ok: true, updates: {}, noop: true };
   }
   const expectedStage = nextStage(currentStage, inquiry);
   if (!expectedStage || requestedStage !== expectedStage) return failure("invalid production stage transition");
+
+  const updates = currentStage === "ready" && requestedStage === "completed"
+    ? { production_updated_at: now }
+    : productionFields(body, now);
 
   const candidate = { ...inquiry, ...updates, production_stage: requestedStage };
   if (currentStage === "queued") {
@@ -76,6 +81,14 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
     if (!inquiry.qc_completed_at) {
       lifecycleUpdates.qc_completed_at = now;
       lifecycleUpdates.qc_completed_by = actorUserId || null;
+    }
+  }
+  if (currentStage === "ready" && requestedStage === "completed") {
+    if (cleanText(inquiry.blocked_reason, 500)) return failure("blocked production cannot be completed");
+    if (!inquiry.qc_completed_at) return failure("quality check completion is required before production completion");
+    if (!inquiry.production_completed_at) {
+      lifecycleUpdates.production_completed_at = now;
+      lifecycleUpdates.production_completed_by = actorUserId || null;
     }
   }
 
