@@ -22,6 +22,7 @@
     "test:production-start": "node scripts/test-production-start-persistence.mjs",
     "test:qc-persistence": "node scripts/test-qc-persistence.mjs",
     "test:production-completion": "node scripts/test-production-completion.mjs",
+    "test:production-ready-fulfillment-drawer": "node scripts/test-production-ready-fulfillment-drawer.mjs",
     "test:production-dashboard-browser": "node scripts/test-production-dashboard-browser.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
