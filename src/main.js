@@ -7174,8 +7174,9 @@ async function saveMvpInquiryFollowUp(id, updates) {
   }
 }
 async function saveMvpProductionFields(id, changes) {
-  const current = opsInquiries.find((item) => item.id === id);
-  if (!current || !isConfirmedOpsOrder(current)) return;
+  const inquiryId = resolveMvpOrderInquiryId(id);
+  const current = opsInquiries.find((item) => item.id === inquiryId);
+  if (!current || !isConfirmedOpsOrder(current)) return { ok: false, error: "Confirmed native Order required." };
   if (shouldLoadSupabaseOps && !current.productionFieldsReady) {
     orderDashboardSaveError = "Production fields are not ready. Apply the pending migration before saving.";
     return { ok: false, error: orderDashboardSaveError };
@@ -7198,7 +7199,7 @@ async function saveMvpProductionFields(id, changes) {
 
   if (shouldLoadSupabaseOps) {
     try {
-      const payload = await requestOpsWorkflowAction(id, {
+      const payload = await requestOpsWorkflowAction(inquiryId, {
         action: changes.startProduction ? "start_production" : changes.productionStage ? "advance_production" : Object.prototype.hasOwnProperty.call(changes, "qcNote") ? "save_qc_note" : "save_production",
         productionStage: changes.productionStage,
         assignedUserId: changes.assignedUserId,
@@ -7217,19 +7218,20 @@ async function saveMvpProductionFields(id, changes) {
     }
   }
 
-  opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...(savedInquiry || updates) } : item);
+  opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...(savedInquiry || updates) } : item);
   return savedInquiry || updates;
 }
 
 async function approveMvpOrderArtwork(id) {
-  const current = opsInquiries.find((item) => item.id === id);
+  const inquiryId = resolveMvpOrderInquiryId(id);
+  const current = opsInquiries.find((item) => item.id === inquiryId);
   if (!current || !isConfirmedOpsOrder(current)) return { ok: false, error: "Confirmed native Order required." };
 
   if (shouldLoadSupabaseOps) {
     try {
-      const payload = await requestOpsCustomerAction(id, { action: "approve_artwork" });
+      const payload = await requestOpsCustomerAction(inquiryId, { action: "approve_artwork" });
       if (!payload?.inquiry) throw new Error("Artwork approval returned no saved inquiry.");
-      opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...payload.inquiry } : item);
+      opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...payload.inquiry } : item);
       return { ok: true, inquiry: payload.inquiry };
     } catch (error) {
       console.error("Unable to approve Order artwork.", error);
@@ -7238,8 +7240,23 @@ async function approveMvpOrderArtwork(id) {
   }
 
   const updates = { artworkStatus: "approved", artworkApprovedAt: new Date().toISOString() };
-  opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...updates } : item);
+  opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...updates } : item);
   return { ok: true, inquiry: updates };
+}
+
+function resolveMvpOrderInquiryId(value) {
+  const target = String(value || "").trim().toLowerCase();
+  if (!target) return "";
+  const direct = opsInquiries.find((item) => String(item.id || "").trim().toLowerCase() === target);
+  if (direct) return direct.id;
+  const native = nativeOrderRows.find((row) => [
+    row?.id,
+    row?.order_reference,
+    row?.orderReference,
+    row?.source_inquiry_id,
+    row?.sourceInquiryId,
+  ].some((candidate) => String(candidate || "").trim().toLowerCase() === target));
+  return native?.source_inquiry_id || native?.sourceInquiryId || value;
 }
 
 function bindOrderDashboardEvents() {

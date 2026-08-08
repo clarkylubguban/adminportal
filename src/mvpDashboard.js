@@ -124,7 +124,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   const assignmentContext = () => {
     const context = getAssignmentContext() || {};
     const users = Array.isArray(context.users) ? context.users : [];
-    return { users, loadState: context.loadState || "idle", error: context.error || "" };
+    const loadState = context.loadState === "ready" ? "success" : context.loadState || "idle";
+    return { users, loadState, error: context.error || "" };
   };
   const assignmentUsers = () => assignmentContext().users;
   const findAssignmentUser = (userId) => assignmentUsers().find((user) => user.userId === userId);
@@ -2255,7 +2256,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       state.orderReadinessError = "";
       rerender();
     }));
-    root.querySelectorAll("[data-mvp-save-readiness]").forEach((button) => button.addEventListener("click", async () => {
+    root.querySelectorAll("[data-mvp-save-readiness]").forEach((button) => button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       if (button.disabled) return;
       const id = button.dataset.mvpSaveReadiness;
       const mode = button.dataset.mvpReadinessSaveMode;
@@ -2277,7 +2280,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       }
       rerender();
     }));
-    root.querySelectorAll("[data-mvp-approve-order-artwork]").forEach((button) => button.addEventListener("click", async () => {
+    root.querySelectorAll("[data-mvp-approve-order-artwork]").forEach((button) => button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       if (button.disabled) return;
       const id = button.dataset.mvpApproveOrderArtwork;
       button.disabled = true;
