@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "node scripts/local-dev.mjs",
     "build": "node scripts/build.mjs",
+    "test:native-orders": "node scripts/test-native-order-foundation.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
   "dependencies": {

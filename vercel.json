@@ -20,6 +20,10 @@
       "destination": "/api/task-automation"
     },
     {
+      "source": "/api/inquiries/:id/orders",
+      "destination": "/api/inquiries/:id/workflow?_nativeOrderAction=convert"
+    },
+    {
       "source": "/api/tasks/:id/history",
       "destination": "/api/tasks/:id?_taskAction=history"
     },

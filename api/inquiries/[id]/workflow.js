@@ -1,4 +1,5 @@
 import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
+import { convertInquiryToNativeOrder, NativeOrderError } from "../../_lib/nativeOrders.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
@@ -10,18 +11,29 @@ const WORKFLOW_SELECT = [
 ].join(",");
 
 export default async function handler(request, response) {
+  return handleWorkflowRequest(request, response);
+}
+
+export async function handleWorkflowRequest(request, response, dependencies = {}) {
   const inquiryReference = getInquiryReference(request);
   if (!/^[A-Z0-9][A-Z0-9_-]{2,79}$/.test(inquiryReference)) return sendJson(response, 400, { ok: false, error: "invalid inquiry reference" });
-  if (request.method !== "PATCH") return sendJson(response, 405, { ok: false, error: "method not allowed" });
+  const nativeOrderRequest = isNativeOrderRequest(request);
+  if (nativeOrderRequest && request.method !== "POST") return sendJson(response, 405, { ok: false, error: "method not allowed" });
+  if (!nativeOrderRequest && request.method !== "PATCH") return sendJson(response, 405, { ok: false, error: "method not allowed" });
 
   const token = getBearerToken(request);
   if (!token) return sendJson(response, 401, { ok: false, error: "admin session required" });
 
   try {
-    const supabase = createServerSupabaseClient();
-    const adminUser = await getAuthorizedAdmin(supabase, token);
+    const supabase = dependencies.supabase || createServerSupabaseClient();
+    const adminUser = dependencies.adminUser || await getAuthorizedAdmin(supabase, token);
     if (!adminUser) return sendJson(response, 401, { ok: false, error: "admin session required" });
     if (!WRITE_ROLES.has(adminUser.role)) return sendJson(response, 403, { ok: false, error: "write access required" });
+
+    if (nativeOrderRequest) {
+      const result = await convertInquiryToNativeOrder(supabase, inquiryReference);
+      return sendJson(response, result.created ? 201 : 200, { ok: true, created: result.created, order: result.order });
+    }
 
     const body = await readJsonBody(request);
     const { data: inquiry, error: lookupError } = await supabase.from("ops_inquiries").select(WORKFLOW_SELECT).eq("id", inquiryReference).maybeSingle();
@@ -47,9 +59,13 @@ export default async function handler(request, response) {
 
     sendJson(response, 200, { ok: true, inquiry: toClientInquiry(updated) });
   } catch (error) {
+    if (error instanceof NativeOrderError) {
+      return sendJson(response, error.status, { ok: false, error: error.message, code: error.code });
+    }
     console.error("Admin workflow update failed.", { message: error?.message, code: error?.code });
-    const schemaMissing = /production_stage|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
-    sendJson(response, schemaMissing ? 503 : 500, { ok: false, error: schemaMissing ? "workflow fields are not ready" : "workflow update failed" });
+    const schemaMissing = /orders|production_stage|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
+    const missingMessage = nativeOrderRequest ? "native orders table is not ready" : "workflow fields are not ready";
+    sendJson(response, schemaMissing ? 503 : 500, { ok: false, error: schemaMissing ? missingMessage : "workflow update failed" });
   }
 }
 
@@ -141,8 +157,14 @@ function getInquiryReference(request) {
   const queryId = Array.isArray(request.query?.id) ? request.query.id[0] : request.query?.id;
   if (queryId) return String(queryId).trim().toUpperCase();
   const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
-  const match = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/workflow\/?$/);
+  const match = url.pathname.match(/^\/api\/inquiries\/([^/]+)\/(?:workflow|orders)\/?$/);
   return match ? decodeURIComponent(match[1]).trim().toUpperCase() : "";
+}
+
+function isNativeOrderRequest(request) {
+  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  return url.pathname.match(/^\/api\/inquiries\/[^/]+\/orders\/?$/)
+    || url.searchParams.get("_nativeOrderAction") === "convert";
 }
 
 function getBearerToken(request) {
