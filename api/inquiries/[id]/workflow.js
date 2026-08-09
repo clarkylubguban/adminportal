@@ -93,11 +93,11 @@ async function readAdminUser(supabase, userId) {
     .eq("user_id", userId)
     .maybeSingle();
 
-  const { data, error } = await query("id,role,is_active");
+  const { data, error } = await query("id,user_id,role,is_active");
   if (!error) return data;
   if (!isMissingAdminProfileColumn(error)) throw error;
 
-  const fallback = await query("id,role");
+  const fallback = await query("id,user_id,role");
   if (fallback.error) throw fallback.error;
   return fallback.data;
 }
@@ -105,7 +105,7 @@ async function readAdminUser(supabase, userId) {
 function normalizeAdminUser(adminUser) {
   if (!adminUser || adminUser.is_active === false) return null;
   const role = String(adminUser.role || "").trim().toLowerCase();
-  return { ...adminUser, role };
+  return { ...adminUser, userId: adminUser.user_id, role };
 }
 
 function isMissingAdminProfileColumn(error) {

@@ -37,6 +37,11 @@ function verifyPureWorkflowContract() {
   assert.equal(retry.noop, true, "start retry is a no-op");
   assert.deepEqual(retry.updates, {}, "start retry does not rewrite authoritative timestamp");
 
+  const partialStartedRetry = buildOpsWorkflowUpdates("start_production", { productionStartedBy: ACTOR_ID }, gateClearInquiry({ production_stage: "printing", production_started_at: startAt, production_started_by: null }), "2026-08-08T08:25:00.000Z");
+  assert.equal(partialStartedRetry.ok, true, "actorless partial-start retry is accepted as already started");
+  assert.equal(partialStartedRetry.noop, true, "actorless partial-start retry does not patch missing actor metadata");
+  assert.deepEqual(partialStartedRetry.updates, {}, "partial-start retry cannot repair production_started_by");
+
   const notReleased = buildOpsWorkflowUpdates("start_production", { productionStartedBy: ACTOR_ID }, gateClearInquiry({ production_stage: "queued" }), startAt);
   assert.equal(notReleased.ok, false, "not-released job cannot start");
 
@@ -55,17 +60,34 @@ async function verifyWorkflowApiContract() {
   const rows = new Map([
     ["TRY-API-START", gateClearInquiry({ id: "TRY-API-START", production_stage: "printing" })],
     ["TRY-API-STARTED", gateClearInquiry({ id: "TRY-API-STARTED", production_stage: "printing", production_started_at: startedAt, production_started_by: ACTOR_ID })],
+    ["TRY-API-AUTH-START", gateClearInquiry({ id: "TRY-API-AUTH-START", production_stage: "printing" })],
   ]);
   const updates = [];
+  const adminUsers = new Map([
+    [ACTOR_ID, { id: "admin-profile-1", user_id: ACTOR_ID, role: "admin", is_active: true }],
+  ]);
   const supabase = {
+    auth: {
+      async getUser(token) {
+        return token === "synthetic"
+          ? { data: { user: { id: ACTOR_ID } }, error: null }
+          : { data: { user: null }, error: new Error("invalid token") };
+      },
+    },
     from(table) {
       let selectedId = "";
+      let selectedUserId = "";
       let patch = null;
       const builder = {
         select() { return builder; },
-        eq(key, value) { if (key === "id" || key === "source_inquiry_id") selectedId = value; return builder; },
+        eq(key, value) {
+          if (key === "id" || key === "source_inquiry_id") selectedId = value;
+          if (key === "user_id") selectedUserId = value;
+          return builder;
+        },
         update(value) { patch = value; return builder; },
         async maybeSingle() {
+          if (table === "admin_users") return { data: adminUsers.get(selectedUserId) || null, error: null };
           if (table === "orders") return { data: rows.has(selectedId) ? { id: `native-${selectedId}`, order_reference: `TRRY-ORD-${selectedId.slice(-8).padStart(8, "0")}`, source_inquiry_id: selectedId } : null, error: null };
           assert.equal(table, "ops_inquiries");
           return { data: rows.get(selectedId) || null, error: null };
@@ -90,10 +112,20 @@ async function verifyWorkflowApiContract() {
   assert.equal(first.body.inquiry.productionStartedBy, ACTOR_ID);
   assert.equal(updates.length, 1, "first start writes once");
 
+  const authStart = await invokeWorkflowApi(supabase, "TRY-API-AUTH-START", { action: "start_production" }, { injectAdminUser: false });
+  assert.equal(authStart.status, 200);
+  assert.equal(authStart.body.ok, true);
+  assert.ok(authStart.body.inquiry.productionStartedAt, "authenticated API start returns persisted start timestamp");
+  assert.equal(authStart.body.inquiry.productionStartedBy, ACTOR_ID, "authenticated API start stores admin_users.user_id as actor");
+  assert.equal(rows.get("TRY-API-AUTH-START").production_started_by, ACTOR_ID, "stored actor corresponds to authenticated Admin identity");
+
+  const anonymous = await invokeWorkflowApi(supabase, "TRY-API-AUTH-START", { action: "start_production" }, { injectAdminUser: false, authorization: "" });
+  assert.equal(anonymous.status, 401, "anonymous start is rejected");
+
   const retry = await invokeWorkflowApi(supabase, "TRY-API-STARTED", { action: "start_production" });
   assert.equal(retry.status, 200);
   assert.equal(retry.body.inquiry.productionStartedAt, startedAt);
-  assert.equal(updates.length, 1, "already-started retry does not update the row");
+  assert.equal(updates.filter((entry) => entry.id === "TRY-API-STARTED").length, 0, "already-started retry does not update the row");
 }
 
 async function verifyDisposableDatabaseContract() {
@@ -209,13 +241,17 @@ function gateClearInquiry(overrides = {}) {
   };
 }
 
-async function invokeWorkflowApi(supabase, inquiryId, body) {
+async function invokeWorkflowApi(supabase, inquiryId, body, options = {}) {
   const request = Readable.from([JSON.stringify(body)]);
   request.method = "PATCH";
   request.url = `/api/inquiries/${encodeURIComponent(inquiryId)}/workflow`;
-  request.headers = { host: "localhost", authorization: "Bearer synthetic" };
+  request.headers = { host: "localhost" };
+  if (options.authorization !== "") request.headers.authorization = options.authorization || "Bearer synthetic";
   const response = createResponse();
-  await handleWorkflowRequest(request, response, { supabase, adminUser: { role: "staff", userId: ACTOR_ID } });
+  const dependencies = options.injectAdminUser === false
+    ? { supabase }
+    : { supabase, adminUser: { role: "staff", userId: ACTOR_ID } };
+  await handleWorkflowRequest(request, response, dependencies);
   return response.result();
 }
 
