@@ -1854,7 +1854,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ${productionDetailLine("Sizes", item.sizeBreakdown || "Not set")}
       ${productionDetailLine("Color", item.color || item.garmentColor || messageValue(item.message, ["Color", "Garment Color"]) || "Not set")}
       ${productionDetailLine("Due Date", item.dueDate ? dateShort(item.dueDate) : "Not set")}
-      ${productionDetailLine("Current Stage", "READY FOR FULFILLMENT", "good")}
+      ${productionDetailLine("Current Stage", stageLabel("ready"), "good")}
       ${productionDetailLine("Assigned Staff", assigned(item))}
     </div><h4>Release &amp; Payment Summary</h4><div class="mvp-production-summary-rows">
       ${productionSummaryRow("Artwork Status", productionArtworkLabel(item), item.artworkApprovedAt)}
@@ -1908,7 +1908,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (activeTab === "history") return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">View Order</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
     const missingQcCompletion = !item.qcCompletedAt;
     const disabled = !fieldsReady || gate.length || next !== "completed" || missingQcCompletion;
-    return `<button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="completed" ${disabled ? "disabled" : ""}>MARK PRODUCTION COMPLETE</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before completing Production: ${html(gate.join(", "))}</small>` : missingQcCompletion ? `<small>QC completion metadata is required before Production completion.</small>` : ""}`;
+    return `<div class="mvp-production-footer-state"><span>NOW: ${html(stageActionLabel("ready"))}</span><strong>NEXT: PRODUCTION COMPLETE</strong></div><button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="completed" ${disabled ? "disabled" : ""}>MARK PRODUCTION COMPLETE</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before completing Production: ${html(gate.join(", "))}</small>` : missingQcCompletion ? `<small>QC completion metadata is required before Production completion.</small>` : ""}`;
   }
 
   function productionQualityCheckOverview(item) {

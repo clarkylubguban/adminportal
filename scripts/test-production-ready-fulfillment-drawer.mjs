@@ -32,9 +32,12 @@ let html = dashboard.renderProduction({ items: [ready, completed, legacyReady, b
 assert.ok(html.includes("mvp-production-drawer in-progress ready-fulfillment"), "READY job renders dedicated Ready for Fulfillment drawer shell");
 assert.ok(html.includes("READY FOR FULFILLMENT"), "header uses explicit ready-for-fulfillment state");
 assert.ok(html.includes("TRRY-ORD-READY10"), "native order reference remains job identity");
-assert.ok(html.includes("Current Stage") && html.includes("READY FOR FULFILLMENT"), "overview shows explicit current stage");
+assert.ok(html.includes("Current Stage") && html.includes("Ready"), "overview shows operational Ready current stage");
+assert.ok(!html.includes("Current Stage</span><strong>READY FOR FULFILLMENT"), "overview does not repeat coarse status as current stage");
 assert.ok(html.includes("QC Completed") && html.includes("Aug 1, 2026"), "overview displays persisted QC completion timestamp");
 assert.ok(html.includes("Production is ready for fulfillment."), "ready card uses production-owned copy");
+assert.ok(html.includes("NOW: READY"), "Ready footer NOW shows operational Ready stage");
+assert.ok(html.includes("NEXT: PRODUCTION COMPLETE"), "Ready footer NEXT shows Production Complete");
 assert.ok(html.includes("MARK PRODUCTION COMPLETE"), "primary action is production-specific");
 assert.ok(html.includes('data-mvp-next="completed"'), "completion action uses existing completed stage transition");
 assert.ok(!/Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(html), "Ready drawer exposes no payment or Messenger action");
