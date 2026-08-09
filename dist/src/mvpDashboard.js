@@ -454,7 +454,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryRequestTab(item) {
-    return `<div class="mvp-inquiry-core-content"><h3>CUSTOMER REQUEST</h3><div class="mvp-inquiry-detail-list">${detailLine("Product", itemDisplay(item))}${detailLine("Print Method", serviceDisplay(item))}${detailLine("Quantity", item.sizeBreakdown || item.qty || "Not specified")}${detailLine("Fulfillment", fulfillment(item))}${detailLine("Customer requested date", requestDateLabel(item))}${detailLine("Agreed due date", item.dueDate ? shortDate(item.dueDate) : "Not set")}</div><section class="mvp-inquiry-note-card"><span>CUSTOMER NOTES</span><p>${html(customerNotes(item) || "No customer notes.")}</p></section>${detailLine("Reference Files", referenceFilesLabel(item))}</div>`;
+    return `<div class="mvp-inquiry-core-content"><h3>CUSTOMER REQUEST</h3><div class="mvp-inquiry-detail-list">${inquiryDetailLine("Product", itemDisplay(item))}${inquiryDetailLine("Print Method", serviceDisplay(item))}${inquiryDetailLine("Quantity", item.sizeBreakdown || item.qty || "Not specified")}${inquiryDetailLine("Fulfillment", fulfillment(item))}${inquiryDetailLine("Customer requested date", requestDateLabel(item))}${inquiryDetailLine("Agreed due date", item.dueDate ? shortDate(item.dueDate) : "Not set")}</div><section class="mvp-inquiry-note-card"><span>CUSTOMER NOTES</span><p>${html(customerNotes(item) || "No customer notes.")}</p></section>${inquiryDetailLine("Reference Files", referenceFilesLabel(item))}</div>`;
   }
 
   function inquiryArtworkTab(item, renderArtwork) {
@@ -533,7 +533,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         <article><span>Quote</span><strong>${html(quote.title)}</strong><small>${html(quote.sub)}</small></article>
       </section>
       <h3>DETAILS</h3>
-      <div class="mvp-inquiry-detail-list">${detailLine("Assignee", owner(item))}${detailLine("Priority", priorityLabel(item))}${detailLine("Internal Note", item.internalNote || "Not set", true)}${detailLine("Last Update", lastUpdateLabel(item))}</div>
+      <div class="mvp-inquiry-detail-list">${inquiryDetailLine("Assignee", owner(item))}${inquiryDetailLine("Priority", priorityLabel(item))}${inquiryDetailLine("Internal Note", item.internalNote || "Not set", true)}${inquiryDetailLine("Last Update", lastUpdateLabel(item))}</div>
     </div>`;
   }
 
@@ -611,8 +611,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return "Not yet available until approval";
   }
 
-  function detailLine(label, value, multiline = false) {
-    return `<div class="mvp-inquiry-detail-line ${multiline ? "wide" : ""}"><span>${html(label)}</span><strong>${html(value || "Not set")}</strong></div>`;
+  function inquiryDetailLine(label, value, multiline = false) {
+    return `<div class="mvp-inquiry-detail-line${multiline ? " wide" : ""}"><span class="mvp-inquiry-detail-label">${html(label)}</span>
+<strong class="mvp-inquiry-detail-value">${html(value || "Not set")}</strong></div>`;
   }
 
   function artworkPreviewLine(item, renderArtwork) {

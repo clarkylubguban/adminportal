@@ -198,14 +198,20 @@ async function drawerState(cdp) {
     const detailRows = [...(drawer?.querySelectorAll('[data-mvp-inquiry-panel="details"] .mvp-inquiry-detail-line') || [])];
     const activeDetailRows = [...(panel?.querySelectorAll(".mvp-inquiry-detail-line") || [])];
     const rowsSeparated = (rows) => rows.every((row) => {
-      const label = row.querySelector("span")?.textContent.trim() || "";
-      const value = row.querySelector("strong")?.textContent.trim() || "";
-      const labelRect = row.querySelector("span")?.getBoundingClientRect();
-      const valueRect = row.querySelector("strong")?.getBoundingClientRect();
+      if (row.closest("[hidden]")) return true;
+      const labelNode = row.querySelector("span");
+      const valueNode = row.querySelector("strong");
+      const label = labelNode?.textContent.trim() || "";
+      const value = valueNode?.textContent.trim() || "";
+      const labelRect = labelNode?.getBoundingClientRect();
+      const valueRect = valueNode?.getBoundingClientRect();
       const horizontalGap = valueRect && labelRect ? valueRect.left - labelRect.right : 0;
       const stackedGap = valueRect && labelRect ? valueRect.top - labelRect.bottom : 0;
       const separated = horizontalGap >= 10 || stackedGap >= 4;
-      return label && value && label !== value && (!labelRect || !valueRect || separated);
+      const renderedText = String(row.innerText || row.textContent || "").replace(/\\r/g, "");
+      const hasTextBoundary = renderedText.replace(/\\s+/g, " ").includes(label + " " + value);
+      const hasNoConcatenatedText = !renderedText.includes(label + value);
+      return labelNode !== valueNode && label && value && label !== value && hasTextBoundary && hasNoConcatenatedText && (!labelRect || !valueRect || separated);
     });
     return {
       open: Boolean(drawer),
@@ -267,7 +273,7 @@ function qaHtml() {
   return `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1" /><link rel="stylesheet" href="/src/styles.css" /></head><body><main id="app"></main><script type="module">
     import { createMvpDashboard } from "/src/mvpDashboard.js";
     const app = document.getElementById("app");
-    const base = { customer: "Owner Smoke Synthetic", contact: "owner-smoke@trryapparel.com", source: "Website", service: "DTF", productDesc: "Owner smoke shirt", qty: "12 pcs", fulfillmentMethod: "pickup", priority: "normal", artworkStatus: "pending", createdAt: "2026-08-08T09:00:00.000Z", updatedAt: "2026-08-08T10:00:00.000Z", next: "Quote sent - wait for customer response", followUpDate: "2026-08-09" };
+    const base = { customer: "Owner Smoke Synthetic", contact: "owner-smoke@trryapparel.com", source: "Website", service: "DTF", productDesc: "Synthetic Shirt", qty: "12", fulfillmentMethod: "Pickup", priority: "normal", artworkStatus: "pending", createdAt: "2026-08-08T09:00:00.000Z", updatedAt: "2026-08-08T10:00:00.000Z", next: "Quote sent - wait for customer response", followUpDate: "2026-08-09" };
     const rows = [
       { ...base, id: "NEW-NOQUOTE", status: "new", quoteStatus: "new", quotedAmount: 0, amountDue: 0, quoteBreakdown: "", quoteNotes: "" },
       { ...base, id: "QUOTE-SENT", status: "quote_sent", quoteStatus: "sent", quotedAmount: 1616, amountDue: 1616, quotePublishedAt: "2026-08-08T10:10:00.000Z", quoteValidUntil: "2026-08-31", quoteBreakdown: "Owner smoke shirt | 12 pcs | PHP 134.67 | PHP 1616", quoteNotes: "Owner smoke quote note." },
@@ -361,7 +367,7 @@ async function waitFor(cdp, expression) {
 
 async function evaluate(cdp, expression) {
   const result = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
-  if (result.exceptionDetails) throw new Error(result.exceptionDetails.text || "Runtime evaluation failed");
+  if (result.exceptionDetails) throw new Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text || "Runtime evaluation failed");
   return result.result?.value;
 }
 
