@@ -3531,14 +3531,16 @@ function renderMvpPaymentConfirmation(item) {
     return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">PAYMENT CONFIRMED. ${escapeHtml(formatOpsValue(paid))} recorded${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}.</p></section>`;
   }
 
-  if (!isShop && !isOnline) {
-    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">Payment method has not been selected by the customer.</p></section>`;
+  if (balance <= 0) {
+    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">No outstanding balance is available for payment confirmation.</p></section>`;
   }
 
-  const title = isShop ? "CONFIRM PAYMENT RECEIVED" : "REVIEW & CONFIRM ONLINE PAYMENT";
+  const title = isOnline && !isShop ? "REVIEW & CONFIRM ONLINE PAYMENT" : "RECORD PAYMENT RECEIVED";
   const warning = isShop
     ? "Confirm only after staff receives payment at the shop."
-    : "Review the Messenger receipt before confirming. This does not use in-app receipt upload.";
+    : isOnline
+      ? "Review the Messenger receipt before confirming. This does not use in-app receipt upload."
+      : "Record only money actually received by TRRY.";
   const message = request.status === "error"
     ? `<p class="mvp-payment-message error" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation failed.")}</p>`
     : request.status === "success"

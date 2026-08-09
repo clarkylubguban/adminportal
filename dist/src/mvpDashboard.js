@@ -1214,7 +1214,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderDrawerFooter(item, gate, activeTab) {
     if (!hasNativeOrderAuthority(item)) return `<button class="mvp-secondary-action" type="button" disabled title="Historical Order compatibility records are read only.">Historical Read Only</button>`;
     const statusState = orderOperationalState(item);
-    if (["awaiting_payment", "payment_review"].includes(statusState.key)) return `<button class="mvp-primary-action" type="button" data-mvp-order-tab="payment">${statusState.key === "payment_review" ? "Review Payment" : "Confirm Payment"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>`;
+    if (["awaiting_payment", "payment_review"].includes(statusState.key)) return `<button class="mvp-primary-action" type="button" data-mvp-order-tab="payment">${statusState.key === "payment_review" ? "Review Payment" : "Record Payment"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>`;
     if (statusState.key === "blocked") return `<button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Review Blocker</button><button class="mvp-secondary-action" type="button" disabled title="${html(productionBlocker(item) || gate.join(", "))}">Resolve Blocker</button>`;
     if (statusState.key === "ready_to_release") return orderReleaseFooter(item, gate);
     if (statusState.key === "released") return orderFooterAction(item, gate);

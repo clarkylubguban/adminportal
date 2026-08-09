@@ -36,6 +36,7 @@ const base = {
 };
 
 const unpaid = { ...base, paymentStatus: "awaiting_payment", paymentMethod: "cash", paymentType: "shop" };
+const noMethod = { ...base, id: "TRY-DRAWER-NOMETHOD", orderReference: "TRRY-ORD-NOMETHOD02", paymentStatus: null, paymentMethod: null, paymentType: null };
 const review = { ...base, id: "TRY-DRAWER-REVIEW", orderReference: "TRRY-ORD-REVIEW02", paymentStatus: "proof_submitted", paymentMethod: "online" };
 const blocked = { ...base, id: "TRY-DRAWER-BLOCK", orderReference: "TRRY-ORD-BLOCK02", paymentStatus: "paid", paymentVerifiedAmount: 850, amountDue: 0, blockedReason: "Materials unavailable" };
 const ready = { ...base, id: "TRY-DRAWER-READY", orderReference: "TRRY-ORD-READY02", paymentStatus: "paid", paymentVerifiedAmount: 850, paymentConfirmedAmount: 850, amountDue: 0 };
@@ -58,7 +59,7 @@ const paymentForm = (item) => `<section class="mvp-drawer-section mvp-payment-co
 function renderSelected(item, tab = "overview") {
   global.window.location.search = `?order=${encodeURIComponent(item.orderReference)}`;
   dashboard.state.orderTab = tab;
-  return dashboard.renderOrders({ items: [unpaid, review, blocked, ready, legacy], renderPayment: paymentForm });
+  return dashboard.renderOrders({ items: [unpaid, noMethod, review, blocked, ready, legacy], renderPayment: paymentForm });
 }
 
 let html = renderSelected(unpaid);
@@ -77,6 +78,8 @@ assert.ok(tabNav.indexOf("Fulfillment") < tabNav.indexOf("History"), "Fulfillmen
 assert.ok(html.includes("Premium Tshirt"), "overview shows real product");
 assert.ok(html.includes("S-2 / M-4 / L-4 / XL-2"), "overview shows real size breakdown when present");
 assert.ok(html.includes("Black"), "overview shows real color when present");
+assert.ok(html.includes(">Record Payment</button>"), "awaiting payment footer is navigation labeled Record Payment");
+assert.ok(!html.includes(">Confirm Payment</button><button class=\"mvp-secondary-action\" type=\"button\" data-mvp-order-tab=\"requirements\""), "footer navigation is not labeled Confirm Payment");
 
 html = renderSelected(unpaid, "requirements");
 assert.ok(html.includes("PRODUCTION REQUIREMENTS"), "requirements tab renders");
@@ -94,6 +97,11 @@ assert.ok(html.includes('data-mvp-payment-field="paymentSource"'), "payment sour
 assert.ok(html.includes('data-mvp-payment-field="referenceNumber"'), "reference field is wired through existing contract");
 assert.ok(html.includes('data-mvp-payment-field="internalNote"'), "internal note field is wired through existing contract");
 assert.ok(html.includes('data-mvp-confirm-payment="TRY-DRAWER-BASE"'), "confirm payment uses sourceInquiryId bridge/current inquiry-keyed handler");
+
+html = renderSelected(noMethod, "payment");
+assert.ok(html.includes("PAYMENT SUMMARY"), "no-method payment tab still renders summary");
+assert.ok(html.includes('data-mvp-confirm-payment="TRY-DRAWER-NOMETHOD"'), "no-method outstanding balance still exposes the payment confirmation contract");
+assert.ok(!html.includes("Payment method has not been selected by the customer."), "no-method outstanding balance is not a dead end");
 
 html = renderSelected(review);
 assert.ok(html.includes("PAYMENT REVIEW"), "proof submitted order is Payment Review");
@@ -125,6 +133,12 @@ assert.ok(!html.includes("Payment method selected"), "Figma sample-only history 
 const dashboardSource = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(dashboardSource.includes("data-mvp-open-messenger"), "Messenger behavior remains present");
 assert.ok(dashboardSource.includes("payment.key !== \"paid\"") && dashboardSource.includes("AWAITING PAYMENT"), "awaiting payment state remains separate from Blocked");
+assert.ok(dashboardSource.includes("Record Payment"), "awaiting payment footer is navigation labeled Record Payment");
+
+const mainSource = await readFile("src/main.js", "utf8");
+assert.ok(mainSource.includes("RECORD PAYMENT RECEIVED"), "active payment tab exposes received-payment form for shop/no-method payments");
+assert.ok(!mainSource.includes("Payment method has not been selected by the customer."), "active payment tab no longer dead-ends when customer selected no method");
+assert.ok(mainSource.includes("Record only money actually received by TRRY."), "no-method payment confirmation uses explicit received-money warning");
 
 const paymentApi = await readFile("api/inquiries/[id]/payment-confirmations.js", "utf8");
 assert.ok(paymentApi.includes('new Set(["owner", "admin"])'), "payment confirmation role gate remains owner/admin");
