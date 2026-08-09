@@ -4,6 +4,10 @@ import {
   readSupabaseTableWithAuth,
   updateSupabaseRowsWithAuth,
 } from "../lib/supabaseClient.js";
+import {
+  reconcileNativeOrderStatusForInquiry,
+  shouldReconcileFulfillmentCompletion,
+} from "./nativeOrderStatus.js";
 
 export const OPS_INQUIRIES_TABLE = "ops_inquiries";
 
@@ -149,9 +153,13 @@ export async function updateOpsInquiryFields(
     getAccessToken(authSession)
   );
 
-  return rows?.[0]
+  const savedInquiry = rows?.[0]
     ? mapOpsRowToInquiry(rows[0])
     : null;
+  if (savedInquiry && shouldReconcileFulfillmentCompletion(updates, savedInquiry)) {
+    await reconcileNativeOrderStatusForInquiry(savedInquiry, authSession);
+  }
+  return savedInquiry;
 }
 
 export function mapOpsRowToInquiry(row) {

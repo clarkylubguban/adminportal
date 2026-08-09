@@ -4165,6 +4165,7 @@ async function requestOpsWorkflowAction(inquiryId, body) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Workflow update failed.");
+  mergeNativeOrderPayload(payload.order);
   return payload;
 }
 
@@ -4244,7 +4245,23 @@ async function requestMvpPaymentConfirmation(inquiryId, body) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Payment confirmation failed.");
+  mergeNativeOrderPayload(payload.order);
   return payload;
+}
+
+function mergeNativeOrderPayload(order) {
+  const row = normalizeNativeOrderResponseToRow(order);
+  if (!row) return;
+  const sourceId = String(row.source_inquiry_id || row.sourceInquiryId || "").trim().toLowerCase();
+  const orderId = String(row.id || "").trim().toLowerCase();
+  nativeOrderRows = [
+    row,
+    ...nativeOrderRows.filter((item) => {
+      const itemSourceId = String(item?.source_inquiry_id || item?.sourceInquiryId || "").trim().toLowerCase();
+      const itemOrderId = String(item?.id || "").trim().toLowerCase();
+      return itemSourceId !== sourceId && itemOrderId !== orderId;
+    }),
+  ];
 }
 
 async function confirmMvpOrderPayment(inquiryId, form) {

@@ -350,6 +350,10 @@ function fakeSupabase(rows, updates) {
           return { data: rows.get(selectedId) || null, error: null };
         },
         async single() {
+          if (table === "orders") {
+            const current = rows.has(selectedId) ? { id: `native-${selectedId}`, order_reference: `TRRY-ORD-${selectedId.slice(-8).padStart(8, "0")}`, source_inquiry_id: selectedId, status: "released" } : null;
+            return { data: current ? { ...current, ...patch } : null, error: null };
+          }
           assert.equal(table, "ops_inquiries");
           const current = rows.get(selectedId);
           const next = { ...current, ...patch };

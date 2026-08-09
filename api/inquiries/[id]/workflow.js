@@ -1,5 +1,6 @@
 import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
 import { convertInquiryToNativeOrder, NativeOrderError, readNativeOrderBySourceInquiryId } from "../../_lib/nativeOrders.js";
+import { reconcileNativeOrderStatusForInquiry } from "../../_lib/nativeOrderStatus.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
@@ -12,6 +13,7 @@ const WORKFLOW_SELECT = [
   "production_started_at", "production_started_by", "blocked_reason",
   "qc_started_at", "qc_started_by", "qc_note", "qc_completed_at", "qc_completed_by",
   "production_completed_at", "production_completed_by",
+  "tracking_substatus",
 ].join(",");
 
 export default async function handler(request, response) {
@@ -56,7 +58,7 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
     const result = buildOpsWorkflowUpdates(String(body.action || ""), workflowBody, workflowInquiry, now);
     if (!result.ok) return sendJson(response, 400, { ok: false, error: result.error });
     if (assignmentPatch.hasAssignment) Object.assign(result.updates, assignmentPatch.updates);
-    if (result.noop) return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(inquiry) });
+    if (result.noop) return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(inquiry), order: nativeOrder || null });
 
     const { data: updated, error: updateError } = await supabase
       .from("ops_inquiries")
@@ -66,7 +68,8 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
       .single();
     if (updateError) throw updateError;
 
-    sendJson(response, 200, { ok: true, inquiry: toClientInquiry(updated) });
+    const order = await reconcileNativeOrderStatusForInquiry(supabase, inquiryReference, updated, { order: nativeOrder, now });
+    sendJson(response, 200, { ok: true, inquiry: toClientInquiry(updated), order });
   } catch (error) {
     if (error instanceof NativeOrderError) {
       return sendJson(response, error.status, { ok: false, error: error.message, code: error.code });
@@ -133,6 +136,7 @@ function toClientInquiry(row) {
     productionStartedBy: row.production_started_by,
     productionCompletedAt: row.production_completed_at,
     productionCompletedBy: row.production_completed_by,
+    trackingSubstatus: row.tracking_substatus,
     qcStartedAt: row.qc_started_at,
     qcStartedBy: row.qc_started_by,
     qcNote: row.qc_note,

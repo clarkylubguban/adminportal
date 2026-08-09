@@ -1,4 +1,5 @@
 import { buildPaymentConfirmationUpdate } from "../../_lib/paymentConfirmation.js";
+import { reconcileNativeOrderStatusForInquiry } from "../../_lib/nativeOrderStatus.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
 const WRITE_ROLES = new Set(["owner", "admin"]);
@@ -7,6 +8,11 @@ const PAYMENT_CONFIRMATION_SELECT = [
   "quoted_amount",
   "amount_due",
   "quote_status",
+  "product",
+  "product_desc",
+  "quantity",
+  "due_date",
+  "artwork_status",
   "payment_status",
   "payment_method",
   "payment_type",
@@ -23,6 +29,10 @@ const PAYMENT_CONFIRMATION_SELECT = [
   "payment_review_note",
   "payment_rejected_at",
   "payment_history",
+  "assigned_staff",
+  "production_stage",
+  "tracking_substatus",
+  "blocked_reason",
 ].join(",");
 
 export default async function handler(request, response) {
@@ -51,7 +61,10 @@ export default async function handler(request, response) {
     const now = new Date().toISOString();
     const result = buildPaymentConfirmationUpdate({ inquiry, body, adminUser, now });
     if (!result.ok) return sendJson(response, 400, { ok: false, error: result.error });
-    if (result.idempotent) return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(inquiry), idempotent: true });
+    if (result.idempotent) {
+      const order = await reconcileNativeOrderStatusForInquiry(supabase, inquiryReference, inquiry, { now });
+      return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(inquiry), order, idempotent: true });
+    }
 
     const { data: updated, error: updateError } = await supabase
       .from("ops_inquiries")
@@ -61,7 +74,8 @@ export default async function handler(request, response) {
       .single();
     if (updateError) throw updateError;
 
-    return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(updated), idempotent: false });
+    const order = await reconcileNativeOrderStatusForInquiry(supabase, inquiryReference, updated, { now });
+    return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(updated), order, idempotent: false });
   } catch (error) {
     console.error("Admin payment confirmation failed.", { message: error?.message, code: error?.code });
     const schemaMissing = /payment_confirmed_by|payment_internal_note|payment_history|payment_confirmed_amount|payment_verified_amount|schema cache|could not find/i.test(String(error?.message || ""));
@@ -108,6 +122,10 @@ function toClientInquiry(row) {
     paymentReviewNote: cleanText(row.payment_review_note, 1000),
     paymentRejectedAt: cleanText(row.payment_rejected_at, 80),
     paymentHistory: Array.isArray(row.payment_history) ? row.payment_history : [],
+    assignedStaff: cleanText(row.assigned_staff, 120),
+    productionStage: cleanText(row.production_stage, 80),
+    trackingSubstatus: cleanText(row.tracking_substatus, 80),
+    blockedReason: cleanText(row.blocked_reason, 500),
   };
 }
 

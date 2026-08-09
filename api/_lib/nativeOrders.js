@@ -1,7 +1,8 @@
 import { randomBytes } from "node:crypto";
+import { NATIVE_ORDER_STATUS } from "../../src/shared/nativeOrderStatus.js";
 
 export const ORDERS_TABLE = "orders";
-export const ORDER_STATUS_AWAITING_PAYMENT = "awaiting_payment";
+export const ORDER_STATUS_AWAITING_PAYMENT = NATIVE_ORDER_STATUS.AWAITING_PAYMENT;
 
 export const ORDER_SELECT = [
   "id",
