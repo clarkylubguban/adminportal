@@ -72,6 +72,8 @@ assert.ok(html.includes("TRRY-ORD-QC22"), "native order reference remains job id
 assert.ok(html.includes("Current Stage") && html.includes("Quality Check"), "Overview shows QC current stage");
 assert.ok(html.includes("QC Started") && html.includes("Aug 1, 2026"), "Overview displays persisted QC started timestamp");
 assert.ok(html.includes("Louvelyngel - Staff"), "QC started actor resolves from admin_users identity");
+assert.ok(html.includes("NOW: QUALITY CHECK"), "QC footer NOW shows Quality Check");
+assert.ok(html.includes("NEXT: READY"), "QC footer NEXT shows Ready");
 assert.ok(html.includes("Complete Quality Check"), "QC footer exposes completion action");
 assert.ok(html.includes('data-mvp-next="ready"'), "completion action maps to ready transition");
 assert.ok(!/Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(html), "QC drawer exposes no payment or Messenger action");
@@ -119,10 +121,14 @@ assert.ok(!html.includes("PRD-"), "QC drawer does not invent Production job IDs"
 global.window.location.search = "?order=TRRY-ORD-QUEUEDQC";
 html = dashboard.renderProduction({ items: [queued, inProgress, qc, blockedQc, legacyQc] });
 assert.ok(html.includes("START PRODUCTION"), "queued regression still offers Start Production");
+assert.ok(html.includes("NOW: Queued for Production"), "queued regression keeps explicit NOW state");
+assert.ok(html.includes("NEXT: In Production"), "queued regression keeps explicit NEXT state");
 
 global.window.location.search = "?order=TRRY-ORD-INPRODQC";
 html = dashboard.renderProduction({ items: [queued, inProgress, qc, blockedQc, legacyQc] });
 assert.ok(html.includes("IN PRODUCTION"), "started regression still renders In Production");
+assert.ok(html.includes("NOW: PRINTING"), "In Production regression keeps active station in footer");
+assert.ok(html.includes("NEXT: QUALITY CHECK"), "In Production regression keeps next stage in footer");
 assert.ok(html.includes("MOVE TO QUALITY CHECK"), "In Production regression still moves to QC");
 
 const noteResult = buildOpsWorkflowUpdates("save_qc_note", { qcNote: "Final QC note.", actorUserId: ACTOR_ID }, {

@@ -1970,7 +1970,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (activeTab === "history") return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">View Order</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
     const missingQcStart = !item.qcStartedAt;
     const disabled = !fieldsReady || gate.length || next !== "ready" || missingQcStart;
-    return `<button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="ready" ${disabled ? "disabled" : ""}>Complete Quality Check</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before completing QC: ${html(gate.join(", "))}</small>` : missingQcStart ? `<small>QC started metadata is required before completion.</small>` : ""}`;
+    return `<div class="mvp-production-footer-state"><span>NOW: ${html(stageActionLabel("qc"))}</span><strong>NEXT: ${html(stageActionLabel("ready"))}</strong></div><button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="ready" ${disabled ? "disabled" : ""}>Complete Quality Check</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before completing QC: ${html(gate.join(", "))}</small>` : missingQcStart ? `<small>QC started metadata is required before completion.</small>` : ""}`;
   }
 
   function productionInProgressPanel(item, activeTab, fieldsReady) {
