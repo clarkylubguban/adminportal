@@ -7177,7 +7177,7 @@ async function saveMvpInquiryFollowUp(id, updates) {
     opsInquiries = opsInquiries.map((item) =>
       item.id === id ? { ...item, ...normalizedUpdates } : item
     );
-    return;
+    return { ok: true };
   }
 
   try {
@@ -7194,9 +7194,11 @@ async function saveMvpInquiryFollowUp(id, updates) {
     opsInquiries = opsInquiries.map((item) =>
       item.id === id ? { ...item, ...savedInquiry } : item
     );
+    return { ok: true, inquiry: savedInquiry };
   } catch (error) {
     console.error("Unable to save inquiry follow-up fields.", error);
     showFeedback(error.message || "Unable to save inquiry follow-up.");
+    return { ok: false, error: error.message || "Unable to save inquiry follow-up." };
   }
 }
 async function saveMvpProductionFields(id, changes) {

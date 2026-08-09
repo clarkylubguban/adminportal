@@ -44,6 +44,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     inquiryTab: "details",
     inquiryActionId: null,
     inquiryMoreOpen: false,
+    inquiryOwnerSaving: {},
+    inquiryOwnerErrors: {},
   };
 
   const quoteStage = (item) => {
@@ -185,6 +187,33 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function assignmentControlsDisabled() {
     const context = assignmentContext();
     return context.loadState === "loading" || context.loadState === "error" || !assignmentUsers().length;
+  }
+
+  function inquiryOwnerSelectCell(item) {
+    const id = item.id;
+    const context = assignmentContext();
+    const isSaving = Boolean(state.inquiryOwnerSaving[id]);
+    const disabled = assignmentControlsDisabled() || isSaving;
+    const error = state.inquiryOwnerErrors[id] || "";
+    const currentValue = assignmentSelectedValue(item.ownerUserId, item.owner || item.ownerId);
+    const help = isSaving
+      ? `<small class="mvp-owner-save-state">Saving...</small>`
+      : context.loadState === "loading"
+        ? `<small class="mvp-owner-save-state">Loading team members...</small>`
+        : context.loadState === "error"
+          ? `<small class="mvp-inline-error">Unable to load team members.</small>`
+          : error
+            ? `<small class="mvp-inline-error">${html(error)}</small>`
+            : "";
+    return `<span class="mvp-owner-select-cell" data-mvp-owner-cell="${html(id)}"><select aria-label="Inquiry owner for ${html(id)}" data-mvp-inline-inquiry-owner="${html(id)}" data-mvp-owner-current="${html(currentValue)}" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.ownerUserId, item.owner || item.ownerId, "Unassigned")}</select>${help}</span>`;
+  }
+
+  function assignmentSelectedValue(currentUserId, legacyValue) {
+    if (currentUserId) return findAssignmentUser(currentUserId) ? currentUserId : "__legacy__";
+    const legacyText = String(legacyValue || "").trim();
+    if (!legacyText) return "";
+    const legacyUser = activeLegacyMatch(legacyText);
+    return legacyUser?.userId || "__legacy__";
   }
 
   function assignmentFilterOptions() {
@@ -387,7 +416,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         quantityCell(item),
         status(QUOTE_STAGES[stage], stage),
         followUpCell(item),
-        cell(owner(item)),
+        inquiryOwnerSelectCell(item),
         inquiryActionCell(item),
       ]);
     });
@@ -2219,6 +2248,34 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       date.setDate(date.getDate() + (Number.isFinite(days) ? days : 0));
       if (input) input.value = date.toISOString().slice(0, 10);
     }));
+    root.querySelectorAll("[data-mvp-inline-inquiry-owner]").forEach((selectControl) => {
+      ["click", "pointerdown", "mousedown", "keydown"].forEach((eventName) => {
+        selectControl.addEventListener(eventName, (event) => event.stopPropagation());
+      });
+      selectControl.addEventListener("change", async (event) => {
+        event.stopPropagation();
+        const id = selectControl.dataset.mvpInlineInquiryOwner;
+        if (!id || selectControl.disabled || state.inquiryOwnerSaving[id]) return;
+        const previousValue = selectControl.dataset.mvpOwnerCurrent || "";
+        const selectedValue = selectControl.value;
+        state.inquiryOwnerSaving = { ...state.inquiryOwnerSaving, [id]: true };
+        state.inquiryOwnerErrors = { ...state.inquiryOwnerErrors, [id]: "" };
+        rerender();
+        try {
+          const result = await saveInquiryFollowUp?.(id, { ownerUserId: selectedValue === "__legacy__" ? undefined : selectedValue || null });
+          if (result && result.ok === false) throw new Error(result.error || "Owner update failed.");
+          state.inquiryOwnerErrors = { ...state.inquiryOwnerErrors, [id]: "" };
+        } catch (error) {
+          selectControl.value = previousValue;
+          state.inquiryOwnerErrors = { ...state.inquiryOwnerErrors, [id]: error?.message || "Owner update failed." };
+        } finally {
+          const nextSaving = { ...state.inquiryOwnerSaving };
+          delete nextSaving[id];
+          state.inquiryOwnerSaving = nextSaving;
+          rerender();
+        }
+      });
+    });
     root.querySelectorAll('[data-mvp-save-follow]').forEach((button) => button.addEventListener('click', async () => {
       if (button.disabled) return;
       const id = button.dataset.mvpSaveFollow;

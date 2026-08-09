@@ -16039,6 +16039,55 @@ body,
   text-overflow: clip;
 }
 
+.mvp-owner-select-cell {
+  align-content: center;
+  display: grid !important;
+  gap: 4px;
+  min-width: 0;
+  overflow: visible !important;
+}
+
+.mvp-owner-select-cell select {
+  background: #ffffff;
+  border: 1px solid #d5dae0;
+  border-radius: 6px;
+  color: #121417;
+  cursor: pointer;
+  font: 700 11px var(--trry-font-ui);
+  height: 34px;
+  max-width: 100%;
+  min-width: 0;
+  padding: 0 24px 0 10px;
+  text-overflow: ellipsis;
+  width: 100%;
+}
+
+.mvp-owner-select-cell select:disabled {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.mvp-owner-save-state,
+.mvp-owner-select-cell .mvp-inline-error {
+  display: block;
+  font-family: var(--trry-font-ui);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.2;
+  white-space: normal;
+}
+
+.mvp-owner-save-state {
+  color: #68707a;
+}
+
+.mvp-owner-select-cell .mvp-inline-error {
+  border: 0;
+  color: #b42318;
+  margin: 0;
+  padding: 0;
+}
+
 .mvp-table.inquiry .mvp-table-head > :nth-child(7),
 .mvp-table.inquiry .mvp-table-row > :nth-child(7) {
   overflow: visible;
