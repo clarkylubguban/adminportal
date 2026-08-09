@@ -18,7 +18,7 @@ const PRODUCTION_STAGES = [
   ["printing", "Printing"],
   ["embroidery", "Embroidery"],
   ["screen_printing", "Screen Printing"],
-  ["qc", "QC"],
+  ["qc", "Quality Check"],
   ["ready", "Ready"],
   ["completed", "Completed"],
 ];
@@ -162,6 +162,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     activeLegacyMatch(assignmentLegacyValue(item))
   );
   const stageLabel = (value) => PRODUCTION_STAGES.find(([stage]) => stage === value)?.[1] || "Queued";
+  const stageActionLabel = (value) => stageLabel(value).toUpperCase();
   const query = (name) => new URLSearchParams(window.location.search).get(name) || "";
 
   function assignmentDisplay({ userId, legacy, empty }) {
@@ -1463,8 +1464,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       return `<section class="mvp-production-action"><span>NOW: Queued for Production</span><strong>NEXT: In Production</strong><button type="button" data-mvp-start-production="${html(item.id)}" ${disabled ? "disabled" : ""}>START PRODUCTION</button>${gate.length ? `<small>Resolve before starting: ${html(gate.join(", "))}</small>` : ""}</section>`;
     }
     const disabled = !fieldsReady || gate.length || !next;
-    const label = !next ? "Completed" : stage === "qc" ? "MARK READY" : stage === "ready" ? "MARK COMPLETED" : `MOVE TO ${stageLabel(next).toUpperCase()}`;
-    return `<section class="mvp-production-action"><span>NOW: ${html(stageLabel(stage))}</span><strong>${next ? `NEXT: ${html(stageLabel(next))}` : "PRODUCTION COMPLETE"}</strong>${next ? `<button type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="${next}" ${disabled ? "disabled" : ""}>${label}</button>` : `<button type="button" disabled>Completed</button>`}${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}</section>`;
+    const label = !next ? "Completed" : stage === "qc" ? "MARK READY" : stage === "ready" ? "MARK COMPLETED" : `MOVE TO ${stageActionLabel(next)}`;
+    return `<section class="mvp-production-action"><span>NOW: ${html(stageActionLabel(stage))}</span><strong>${next ? `NEXT: ${html(stageActionLabel(next))}` : "PRODUCTION COMPLETE"}</strong>${next ? `<button type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="${next}" ${disabled ? "disabled" : ""}>${label}</button>` : `<button type="button" disabled>Completed</button>`}${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}</section>`;
   }
   function dueShortLabel(dueState, item) {
     if (dueState.key === "overdue") return "OVERDUE";
@@ -1989,7 +1990,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ${productionDetailLine("Sizes", item.sizeBreakdown || "Not set")}
       ${productionDetailLine("Color", item.color || item.garmentColor || messageValue(item.message, ["Color", "Garment Color"]) || "Not set")}
       ${productionDetailLine("Due Date", item.dueDate ? dateShort(item.dueDate) : "Not set")}
-      ${productionDetailLine("Current Stage", "In Production", "good")}
+      ${productionDetailLine("Current Stage", stageLabel(displayProductionStage(item)), "good")}
       ${productionDetailLine("Assigned Staff", assigned(item))}
     </div><h4>Release &amp; Payment Summary</h4><div class="mvp-production-summary-rows">
       ${productionSummaryRow("Artwork Status", productionArtworkLabel(item), item.artworkApprovedAt)}
@@ -2037,7 +2038,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (activeTab === "fulfillment") return `<button class="mvp-secondary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">View Order Fulfillment</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
     if (activeTab === "history") return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">View Order</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
     const disabled = !fieldsReady || gate.length || next !== "qc";
-    return `<button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="qc" ${disabled ? "disabled" : ""}>Move to Quality Check</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}`;
+    const stage = displayProductionStage(item);
+    return `<div class="mvp-production-footer-state"><span>NOW: ${html(stageActionLabel(stage))}</span><strong>NEXT: ${html(stageActionLabel("qc"))}</strong></div><button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="qc" ${disabled ? "disabled" : ""}>MOVE TO QUALITY CHECK</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}`;
   }
 
   function productionHistoryRows(item) {

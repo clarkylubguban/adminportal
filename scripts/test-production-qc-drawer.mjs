@@ -123,7 +123,7 @@ assert.ok(html.includes("START PRODUCTION"), "queued regression still offers Sta
 global.window.location.search = "?order=TRRY-ORD-INPRODQC";
 html = dashboard.renderProduction({ items: [queued, inProgress, qc, blockedQc, legacyQc] });
 assert.ok(html.includes("IN PRODUCTION"), "started regression still renders In Production");
-assert.ok(html.includes("Move to Quality Check"), "In Production regression still moves to QC");
+assert.ok(html.includes("MOVE TO QUALITY CHECK"), "In Production regression still moves to QC");
 
 const noteResult = buildOpsWorkflowUpdates("save_qc_note", { qcNote: "Final QC note.", actorUserId: ACTOR_ID }, {
   ...workflowInquiry(),

@@ -9963,6 +9963,27 @@ tbody tr.selected td:last-child {
   grid-template-columns: 1fr;
 }
 
+.mvp-production-footer-state {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.mvp-production-footer-state span {
+  color: var(--mvp-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  line-height: 1.25;
+}
+
+.mvp-production-footer-state strong {
+  color: var(--mvp-ink);
+  font-size: 12px;
+  font-weight: 800;
+  line-height: 1.25;
+}
+
 .mvp-drawer .ops-stage-actions > *,
 .mvp-drawer .ops-customer-action-form input,
 .mvp-drawer .ops-customer-action-form textarea,

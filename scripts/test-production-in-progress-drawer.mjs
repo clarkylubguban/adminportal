@@ -69,11 +69,21 @@ assert.ok(html.includes("mvp-production-drawer in-progress"), "started job rende
 assert.ok(html.includes("IN PRODUCTION"), "IN PRODUCTION status pill renders");
 assert.ok(html.includes("TRRY-ORD-INPROD01"), "native order reference is the job identity");
 assert.ok(html.includes("ORDER SUMMARY"), "Overview tab renders");
-assert.ok(html.includes("Current Stage") && html.includes("In Production"), "Overview derives stage from persisted start");
+assert.ok(html.includes("Current Stage") && html.includes("Printing"), "Overview shows the persisted operational station");
 assert.ok(html.includes("Artwork Status") && html.includes("Payment Status"), "prerequisite status is read-only context");
 assert.ok(html.includes("No production blocker"), "explicit empty blocker renders truthfully");
-assert.ok(html.includes("Move to Quality Check"), "started job exposes QC transition action");
+assert.ok(html.includes("NOW: PRINTING"), "Footer NOW shows the active operational station");
+assert.ok(html.includes("NEXT: QUALITY CHECK"), "Footer NEXT shows the next operational stage");
+assert.ok(html.includes("MOVE TO QUALITY CHECK"), "started job exposes QC transition action");
 assert.ok(!/Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(html), "Production drawer exposes no payment or Messenger action");
+
+assert.equal(dashboard.helpers.stageLabel("queued"), "Queued", "queued stage label remains operational");
+assert.equal(dashboard.helpers.stageLabel("printing"), "Printing", "printing stage label remains operational");
+assert.equal(dashboard.helpers.stageLabel("embroidery"), "Embroidery", "embroidery stage label remains operational");
+assert.equal(dashboard.helpers.stageLabel("screen_printing"), "Screen Printing", "screen_printing stage label remains operational");
+assert.equal(dashboard.helpers.stageLabel("qc"), "Quality Check", "qc stage label remains operational");
+assert.equal(dashboard.helpers.stageLabel("ready"), "Ready", "ready stage label remains operational");
+assert.equal(dashboard.helpers.stageLabel("completed"), "Completed", "completed stage label remains operational");
 
 dashboard.state.productionTab = "workflow";
 html = dashboard.renderProduction({ items: rows });
