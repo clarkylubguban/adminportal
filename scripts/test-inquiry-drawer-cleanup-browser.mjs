@@ -58,6 +58,12 @@ async function verifyNoQuoteYet(cdp, viewport) {
   assertBaseClean(result, viewport, "NEW No Quote Yet");
   assert.equal(result.tabs, "Details|Request|Quotation|Artwork|History", "approved five Inquiry tabs");
   assert.match(result.text, /create quotation/i, `NEW footer shows Create Quotation at ${viewport.name}`);
+  assert.equal(result.detailRowsOk, true, `NEW Details rows keep label/value separation at ${viewport.name}`);
+  await clickTab(cdp, "request");
+  const requestResult = await drawerState(cdp);
+  assertBaseClean(requestResult, viewport, "NEW No Quote Yet request tab");
+  assert.equal(requestResult.activeDetailRowsOk, true, `NEW Request rows keep label/value separation at ${viewport.name}`);
+  assert.equal(requestResult.activePanelText.includes("Reference Files"), true, `NEW Request includes Reference Files at ${viewport.name}`);
   await clickTab(cdp, "quotation");
   const quoteResult = await drawerState(cdp);
   assertBaseClean(quoteResult, viewport, "NEW No Quote Yet quotation tab");
@@ -163,7 +169,7 @@ function assertBaseClean(result, viewport, label) {
   ]) {
     assert.equal(result.text.includes(legacy), false, `${label} removes legacy ${legacy} at ${viewport.name}`);
   }
-  assert.equal(result.detailPairsOk, true, `${label} details labels and values are separated at ${viewport.name}`);
+  assert.equal(result.detailRowsOk, true, `${label} Details labels and values are separated at ${viewport.name}`);
   assert.equal(result.detailsHasFollowUp, false, `${label} Details tab hides follow-up at ${viewport.name}`);
 }
 
@@ -190,12 +196,16 @@ async function drawerState(cdp) {
     const panelRect = panel?.getBoundingClientRect();
     const scrollerRect = panelScroller?.getBoundingClientRect();
     const detailRows = [...(drawer?.querySelectorAll('[data-mvp-inquiry-panel="details"] .mvp-inquiry-detail-line') || [])];
-    const detailPairsOk = detailRows.every((row) => {
+    const activeDetailRows = [...(panel?.querySelectorAll(".mvp-inquiry-detail-line") || [])];
+    const rowsSeparated = (rows) => rows.every((row) => {
       const label = row.querySelector("span")?.textContent.trim() || "";
       const value = row.querySelector("strong")?.textContent.trim() || "";
       const labelRect = row.querySelector("span")?.getBoundingClientRect();
       const valueRect = row.querySelector("strong")?.getBoundingClientRect();
-      return label && value && label !== value && (!labelRect || !valueRect || labelRect.right <= valueRect.left || valueRect.top > labelRect.bottom - 1);
+      const horizontalGap = valueRect && labelRect ? valueRect.left - labelRect.right : 0;
+      const stackedGap = valueRect && labelRect ? valueRect.top - labelRect.bottom : 0;
+      const separated = horizontalGap >= 10 || stackedGap >= 4;
+      return label && value && label !== value && (!labelRect || !valueRect || separated);
     });
     return {
       open: Boolean(drawer),
@@ -211,7 +221,8 @@ async function drawerState(cdp) {
       hasFooter: Boolean(footer) && Math.round(footerRect?.bottom || 0) <= window.innerHeight + 1,
       footerOverlap: Boolean(footerRect && scrollerRect && scrollerRect.bottom > footerRect.top + 1),
       hasHorizontalOverflow: document.documentElement.scrollWidth > document.documentElement.clientWidth + 2,
-      detailPairsOk,
+      detailRowsOk: rowsSeparated(detailRows),
+      activeDetailRowsOk: rowsSeparated(activeDetailRows),
       detailsHasFollowUp: detailRows.some((row) => row.innerText.includes("Follow-up")),
       quotationPanels: drawer?.querySelectorAll(".mvp-quotation-panel").length || 0,
       preorderRows: preorderRows.length,
