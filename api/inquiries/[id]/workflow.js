@@ -7,6 +7,7 @@ const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
 const WORKFLOW_SELECT = [
   "id", "status", "next_action", "odoo_so", "product", "product_desc", "quantity", "due_date",
   "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status",
+  "payment_confirmed_amount", "payment_verified_amount",
   "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at",
   "production_started_at", "production_started_by", "blocked_reason",
   "qc_started_at", "qc_started_by", "qc_note", "qc_completed_at", "qc_completed_by",
@@ -121,6 +122,8 @@ function toClientInquiry(row) {
     quoteStatus: row.quote_status,
     artworkStatus: row.artwork_status,
     paymentStatus: row.payment_status,
+    paymentConfirmedAmount: numberOrNull(row.payment_confirmed_amount),
+    paymentVerifiedAmount: numberOrNull(row.payment_verified_amount),
     assignedStaff: row.assigned_staff,
     assignedUserId: row.assigned_user_id,
     productionStage: row.production_stage,
@@ -137,6 +140,11 @@ function toClientInquiry(row) {
     qcCompletedBy: row.qc_completed_by,
     blockedReason: row.blocked_reason,
   };
+}
+
+function numberOrNull(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
 }
 
 async function buildAssignmentPatch(supabase, body, inquiry, adminUser) {
