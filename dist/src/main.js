@@ -3615,7 +3615,7 @@ function parseOpsQuoteMoney(value) {
 }
 
 function getOpsQuoteValidationMessage(action, body) {
-  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "set_due_date", "require_payment", "request_new_payment_proof"].includes(action)) return "";
+  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "set_due_date", "approve_artwork", "require_payment", "request_new_payment_proof"].includes(action)) return "";
 
   const quotedAmountText = String(body.quotedAmount ?? "").trim();
   const amountDueText = String(body.amountDue ?? "").trim();

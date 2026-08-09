@@ -557,6 +557,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ? `data-mvp-route="${html(action.route)}"`
       : action.kind === "create_order"
         ? `data-mvp-create-order="${html(item.id)}"`
+        : action.kind === "artwork"
+          ? `data-ops-customer-action="approve_artwork" data-ops-customer-id="${html(item.id)}"`
         : `data-mvp-primary-action="${html(item.id)}"`;
     return `<div class="mvp-inquiry-action-bar"><button type="button" class="mvp-action-primary" ${primaryHook} data-mvp-primary-kind="${html(action.kind || "")}" ${action.disabled ? "disabled" : ""}><span>${html(action.label)}</span><small>${html(action.hint)}</small></button></div>`;
   }
@@ -564,7 +566,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryWorkflowPanel(item, action, renderQuote, renderOdoo) {
     if (action.kind === "quote" && typeof renderQuote === "function") return `<section class="mvp-workflow-panel">${renderQuote(item).replace(/<details class="ops-quote-editor"(?! open)/, '<details class="ops-quote-editor" open')}</section>`;
     if (action.kind === "due_date") return `<section class="mvp-workflow-panel ops-stage-section" data-mvp-agreed-due-date="${html(item.id)}"><article class="mvp-quotation-create-card"><h3>SET AGREED DUE DATE</h3><p class="mvp-inline-note">Customer requested dates and notes are not enough for Order conversion. Save the agreed operational due date.</p><label><span>Agreed due date</span><input data-ops-customer-field="dueDate" type="date" value="${html(item.dueDate || "")}" /></label><div class="mvp-quotation-create-actions"><button class="mvp-action-primary" data-ops-customer-action="set_due_date" data-ops-customer-id="${html(item.id)}" type="button"><span>Save Due Date</span></button><button class="mvp-action-secondary" data-mvp-primary-action="${html(item.id)}" data-mvp-primary-kind="due_date" type="button">Cancel</button></div></article></section>`;
-    if (action.kind === "artwork") return `<section class="mvp-workflow-panel"><p>${html(action.hint)}</p><button class="mvp-primary-action" type="button" data-mvp-inquiry-tab="artwork">Open Artwork</button></section>`;
+    if (action.kind === "artwork") return "";
     if (action.kind === "so" && typeof renderOdoo === "function") return `<section class="mvp-workflow-panel">${renderOdoo(item)}</section>`;
     if (action.route) return `<section class="mvp-workflow-panel"><button class="mvp-primary-action" type="button" data-mvp-route="${html(action.route)}">${html(action.label)}</button></section>`;
     return `<section class="mvp-workflow-panel"><p>${html(action.hint)}</p></section>`;

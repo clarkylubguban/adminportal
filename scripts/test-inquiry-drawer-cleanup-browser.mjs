@@ -42,6 +42,7 @@ try {
     await verifyCreateQuotation(cdp, viewport);
     await verifyQuoteSent(cdp, viewport);
     await verifyApproved(cdp, viewport);
+    await verifyArtworkPending(cdp, viewport);
     await verifyConverted(cdp, viewport);
   }
 
@@ -94,6 +95,38 @@ async function verifyApproved(cdp, viewport) {
   assert.equal(result.text.includes("Approved"), true, `Approved quote summary renders at ${viewport.name}`);
   assert.match(result.text, /create order/i, `Approved footer shows Create Order at ${viewport.name}`);
   assert.equal(/Pay Online|Pay at Shop|Confirm Payment|PAYMENT REQUIRED|Payment Option|Payment Method|Payment Status/i.test(result.text), false, `Approved Inquiry has no payment UI at ${viewport.name}`);
+}
+
+async function verifyArtworkPending(cdp, viewport) {
+  await openInquiry(cdp, "ARTWORK-PENDING");
+  await clickTab(cdp, "quotation");
+  let result = await drawerState(cdp);
+  assertBaseClean(result, viewport, "Artwork Pending");
+  assert.match(result.footerText, /complete artwork/i, `Artwork Pending footer shows the sole primary workflow action at ${viewport.name}`);
+  assert.equal(result.footerAction, "approve_artwork", `Complete Artwork uses approve_artwork at ${viewport.name}`);
+  assert.equal(result.primaryWorkflowActions, 1, `Artwork Pending has one visible primary workflow CTA at ${viewport.name}`);
+  assert.equal(result.bodyPrimaryWorkflowActions, 0, `Artwork Pending has no body primary workflow CTA at ${viewport.name}`);
+  assert.equal(result.text.includes("Open Artwork"), false, `Artwork Pending suppresses duplicate Open Artwork helper at ${viewport.name}`);
+  assert.equal(result.text.includes("Approve artwork before Order"), false, `Artwork Pending suppresses duplicate artwork helper copy at ${viewport.name}`);
+  assert.equal(result.preorderRows, 5, `Artwork Pending keeps five pre-order requirements at ${viewport.name}`);
+  assert.equal(result.preorderRowsStructured, true, `Artwork Pending pre-order rows visually separate status, title, and helper at ${viewport.name}`);
+
+  await clickTab(cdp, "request");
+  result = await drawerState(cdp);
+  assert.equal(result.activePanelText.includes("Reference Files"), true, `Request tab keeps Reference Files at ${viewport.name}`);
+  assert.equal(result.activePanelText.includes("Artwork file saved"), true, `Request tab keeps passive artwork file status at ${viewport.name}`);
+  assert.equal(/Open Artwork|Approve Artwork|Complete Artwork/i.test(result.activePanelText), false, `Request tab remains passive at ${viewport.name}`);
+
+  await clickTab(cdp, "artwork");
+  result = await drawerState(cdp);
+  assert.equal(result.activePanelText.includes("VIEW ARTWORK"), true, `Artwork tab keeps utility VIEW ARTWORK at ${viewport.name}`);
+  assert.equal(result.activePanelText.includes("Approval status"), true, `Artwork tab keeps approval status at ${viewport.name}`);
+  assert.equal(result.activePanelText.includes("Pending internal review"), true, `Artwork tab shows pending internal review at ${viewport.name}`);
+
+  await openInquiry(cdp, "ARTWORK-PENDING", "&action=primary");
+  result = await drawerState(cdp);
+  assert.equal(result.text.includes("Open Artwork"), false, `Clicking Complete Artwork does not open duplicate helper at ${viewport.name}`);
+  assert.equal(result.bodyPrimaryWorkflowActions, 0, `Clicked artwork footer still has no body primary workflow CTA at ${viewport.name}`);
 }
 
 async function verifyConverted(cdp, viewport) {
@@ -152,6 +185,7 @@ async function drawerState(cdp) {
     const footer = drawer?.querySelector(".mvp-drawer-footer");
     const panel = drawer?.querySelector(".mvp-inquiry-tab-panel:not([hidden])");
     const panelScroller = drawer?.querySelector(".mvp-inquiry-tab-panels");
+    const preorderRows = [...(drawer?.querySelectorAll(".mvp-inquiry-preorder-checklist > div") || [])];
     const footerRect = footer?.getBoundingClientRect();
     const panelRect = panel?.getBoundingClientRect();
     const scrollerRect = panelScroller?.getBoundingClientRect();
@@ -168,7 +202,11 @@ async function drawerState(cdp) {
       width: Math.round(rect?.width || 0),
       tabs: [...(drawer?.querySelectorAll(".mvp-inquiry-tabs [data-mvp-inquiry-tab]") || [])].map((node) => node.textContent.trim()).join("|"),
       text: drawer?.innerText || "",
+      activePanelText: panel?.innerText || "",
       footerText: footer?.innerText || "",
+      footerAction: footer?.querySelector("[data-ops-customer-action]")?.dataset.opsCustomerAction || "",
+      primaryWorkflowActions: drawer?.querySelectorAll(".mvp-inquiry-action-bar .mvp-action-primary:not([disabled])").length || 0,
+      bodyPrimaryWorkflowActions: drawer?.querySelectorAll(".mvp-workflow-panel .mvp-action-primary:not([disabled]), .mvp-workflow-panel .mvp-primary-action:not([disabled])").length || 0,
       formLabels: [...(drawer?.querySelectorAll(".mvp-quotation-create-form span, .mvp-quotation-create-actions button") || [])].map((node) => node.textContent.trim()),
       hasFooter: Boolean(footer) && Math.round(footerRect?.bottom || 0) <= window.innerHeight + 1,
       footerOverlap: Boolean(footerRect && scrollerRect && scrollerRect.bottom > footerRect.top + 1),
@@ -176,6 +214,13 @@ async function drawerState(cdp) {
       detailPairsOk,
       detailsHasFollowUp: detailRows.some((row) => row.innerText.includes("Follow-up")),
       quotationPanels: drawer?.querySelectorAll(".mvp-quotation-panel").length || 0,
+      preorderRows: preorderRows.length,
+      preorderRowsStructured: preorderRows.length === 0 || preorderRows.every((row) => {
+        const status = row.querySelector("span")?.getBoundingClientRect();
+        const title = row.querySelector("strong")?.getBoundingClientRect();
+        const helper = row.querySelector("small")?.getBoundingClientRect();
+        return status && title && helper && status.right <= title.left + 1 && helper.left >= title.left - 1 && helper.top >= title.bottom - 1;
+      }),
     };
   })()`);
 }
@@ -216,6 +261,7 @@ function qaHtml() {
       { ...base, id: "NEW-NOQUOTE", status: "new", quoteStatus: "new", quotedAmount: 0, amountDue: 0, quoteBreakdown: "", quoteNotes: "" },
       { ...base, id: "QUOTE-SENT", status: "quote_sent", quoteStatus: "sent", quotedAmount: 1616, amountDue: 1616, quotePublishedAt: "2026-08-08T10:10:00.000Z", quoteValidUntil: "2026-08-31", quoteBreakdown: "Owner smoke shirt | 12 pcs | PHP 134.67 | PHP 1616", quoteNotes: "Owner smoke quote note." },
       { ...base, id: "APPROVED-CREATE", status: "approved", quoteStatus: "approved", quotedAmount: 1616, amountDue: 1616, quotePublishedAt: "2026-08-08T10:10:00.000Z", quoteApprovedAt: "2026-08-08T10:30:00.000Z", quoteValidUntil: "2026-08-31", quoteBreakdown: "Owner smoke shirt | 12 pcs | PHP 134.67 | PHP 1616", quoteNotes: "Approved quote note.", artworkStatus: "approved", dueDate: "2026-08-20" },
+      { ...base, id: "ARTWORK-PENDING", status: "approved", quoteStatus: "approved", quotedAmount: 1616, amountDue: 1616, quotePublishedAt: "2026-08-08T10:10:00.000Z", quoteApprovedAt: "2026-08-08T10:30:00.000Z", quoteValidUntil: "2026-08-31", quoteBreakdown: "Owner smoke shirt | 12 pcs | PHP 134.67 | PHP 1616", quoteNotes: "Approved quote note.", artworkStatus: "submitted", artworkUrl: "artwork/ARTWORK-PENDING/mockup.png", dueDate: "2026-08-20" },
       { ...base, id: "CONVERTED-READONLY", status: "approved", quoteStatus: "approved", quotedAmount: 1616, amountDue: 1616, quotePublishedAt: "2026-08-08T10:10:00.000Z", quoteApprovedAt: "2026-08-08T10:30:00.000Z", quoteValidUntil: "2026-08-31", quoteBreakdown: "Owner smoke shirt | 12 pcs | PHP 134.67 | PHP 1616", quoteNotes: "Converted quote note.", nativeOrderReference: "TRRY-ORD-CONVERTED", nativeOrderId: "96000000-0000-4000-8000-00000000c001", orderReference: "TRRY-ORD-CONVERTED", artworkStatus: "approved", dueDate: "2026-08-20" }
     ];
     const dashboard = createMvpDashboard({ getAssignmentContext: () => ({ users: [], loadState: "success", error: "" }) });
@@ -226,9 +272,19 @@ function qaHtml() {
         dashboard.state.inquiryActionId = dashboard.state.inquiryId;
         dashboard.state.inquiryTab = "quotation";
       }
-      app.innerHTML = dashboard.renderInquiries({ items: rows });
+      if (params.get("action") === "primary") {
+        dashboard.state.inquiryActionId = dashboard.state.inquiryId;
+        dashboard.state.inquiryTab = "quotation";
+      }
+      app.innerHTML = dashboard.renderInquiries({ items: rows, renderArtwork });
       document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
       dashboard.bind({ root: app, rerender: render, navigate: (route) => { window.__route = route; }, copy: async () => {}, createOrder: async () => {} });
+    }
+    function renderArtwork(item) {
+      const hasArtwork = Boolean(item.artworkUrl);
+      return hasArtwork
+        ? '<section class="mvp-drawer-section mvp-artwork-access"><h3>Artwork</h3><strong>Artwork Usable</strong><button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="' + item.id + '" type="button">VIEW ARTWORK</button></section>'
+        : '<section class="mvp-drawer-section mvp-artwork-access"><h3>Artwork</h3><strong>NO ARTWORK</strong><span>No customer artwork file or supported URL is saved for this inquiry.</span></section>';
     }
     render();
   </script></body></html>`;

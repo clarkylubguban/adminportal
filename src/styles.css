@@ -18380,6 +18380,72 @@ body,
   margin-top: 10px;
 }
 
+.mvp-inquiry-preorder-checklist {
+  border-top: 1px solid #dfe3ea;
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+  padding-top: 14px;
+}
+
+.mvp-inquiry-preorder-checklist h4 {
+  color: #0e141e;
+  font-size: 13px;
+  font-weight: 600;
+  margin: 0;
+}
+
+.mvp-inquiry-preorder-checklist > div {
+  align-items: start;
+  display: grid;
+  gap: 3px 10px;
+  grid-template-columns: 78px minmax(0, 1fr);
+}
+
+.mvp-inquiry-preorder-checklist > div span {
+  align-self: start;
+  border: 1px solid #d8dee8;
+  border-radius: 999px;
+  color: #5f6875;
+  font-family: var(--trry-font-mono);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  padding: 5px 7px;
+  text-align: center;
+}
+
+.mvp-inquiry-preorder-checklist > div.pass span {
+  background: #ecfdf5;
+  border-color: #b7ebd2;
+  color: #16824d;
+}
+
+.mvp-inquiry-preorder-checklist > div.fail span {
+  background: #fff7ed;
+  border-color: #ffd8a8;
+  color: #b45309;
+}
+
+.mvp-inquiry-preorder-checklist > div strong {
+  color: #0b0c0f;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.mvp-inquiry-preorder-checklist > div small {
+  color: #616e80;
+  font-size: 12px;
+  grid-column: 2;
+  line-height: 1.35;
+}
+
+@media (max-width: 420px) {
+  .mvp-inquiry-preorder-checklist > div {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+}
+
 .mvp-customer-comm,
 .mvp-workflow-panel {
   border: 1px solid #dfe3ea;

@@ -67,6 +67,33 @@ for (const [name, inquiry, expectedLabel] of [
   assert.ok(!rendered.includes(`data-mvp-create-order="${inquiry.id}"`), `pre-order gate blocks Create Order for ${name}`);
 }
 
+for (const [name, inquiry] of [
+  ["NEW", { ...approvedInquiry, id: "TRY-ACTION-NEW", status: "new", quoteStatus: "new", quotedAmount: 0, amountDue: 0 }],
+  ["QUOTE SENT", { ...approvedInquiry, id: "TRY-ACTION-SENT", status: "quote_sent", quoteStatus: "sent" }],
+  ["QUOTE APPROVED / ARTWORK PENDING", { ...approvedInquiry, id: "TRY-ACTION-ART", artworkStatus: "submitted" }],
+  ["ARTWORK APPROVED / DUE DATE MISSING", { ...approvedInquiry, id: "TRY-ACTION-DUE", dueDate: "" }],
+  ["READY TO CREATE ORDER", { ...approvedInquiry, id: "TRY-ACTION-READY" }],
+  ["CONVERTED", { ...approvedInquiry, id: "TRY-ACTION-CONVERTED", nativeOrderReference: "TRRY-ORD-ACTION" }],
+]) {
+  dashboard.state.inquiryId = inquiry.id;
+  dashboard.state.inquiryActionId = null;
+  rendered = dashboard.renderInquiries({ items: [inquiry] });
+  assert.equal((rendered.match(/class="mvp-inquiry-action-bar"/g) || []).length, 1, `${name} has maximum one primary workflow footer`);
+}
+
+dashboard.state.inquiryId = "TRY-ART-PENDING";
+dashboard.state.inquiryActionId = null;
+rendered = dashboard.renderInquiries({ items: [{ ...approvedInquiry, id: "TRY-ART-PENDING", artworkStatus: "submitted", artworkUrl: "artwork/TRY-ART-PENDING/mockup.png" }] });
+assert.ok(rendered.includes('data-ops-customer-action="approve_artwork"'), "Complete Artwork footer uses existing canonical approve_artwork action");
+assert.ok(!rendered.includes("Open Artwork"), "artwork pending state does not render duplicate Open Artwork helper");
+assert.ok(!rendered.includes("Approve artwork before Order</p>"), "artwork pending state does not render duplicate approval helper panel");
+assert.equal((rendered.match(/class="mvp-inquiry-action-bar"/g) || []).length, 1, "artwork pending drawer renders exactly one primary workflow footer");
+
+dashboard.state.inquiryActionId = "TRY-ART-PENDING";
+rendered = dashboard.renderInquiries({ items: [{ ...approvedInquiry, id: "TRY-ART-PENDING", artworkStatus: "submitted", artworkUrl: "artwork/TRY-ART-PENDING/mockup.png" }] });
+assert.ok(!rendered.includes("Open Artwork"), "clicking Complete Artwork no longer opens duplicate artwork helper");
+assert.ok(!rendered.includes("mvp-workflow-panel\"><p>Approve artwork before Order"), "clicking Complete Artwork keeps body free of duplicate primary artwork CTA");
+
 dashboard.state.inquiryId = "TRY-DUE-MISSING";
 dashboard.state.inquiryActionId = "TRY-DUE-MISSING";
 rendered = dashboard.renderInquiries({ items: [{ ...approvedInquiry, id: "TRY-DUE-MISSING", dueDate: "" }] });
@@ -114,6 +141,8 @@ assert.ok(!createOrderFunction.includes("odooSO"), "native Create Order handler 
 const dashboardSource = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(dashboardSource.includes('action.kind === "create_order"'), "MVP drawer has a native Create Order action kind");
 assert.ok(dashboardSource.includes("data-mvp-create-order"), "Create Order is wired through a native action hook");
+assert.ok(dashboardSource.includes('data-ops-customer-action="approve_artwork"'), "Complete Artwork is wired to the existing artwork approval contract");
 assert.ok(dashboardSource.includes("data-mvp-open-messenger"), "Messenger behavior remains present");
+assert.ok(!dashboardSource.includes("Open Artwork</button></section>`;"), "duplicate artwork workflow helper remains removed");
 
 console.log("PASS Inquiry native Order cutover UI, Odoo deactivation, payment boundary, and duplicate-submit guardrails");
