@@ -150,10 +150,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   const assignmentName = (user) => user ? `${user.displayName || user.email} - ${roleLabel(user.role)}` : "";
   const activeLegacyMatch = (value) => assignmentUsers().find((user) => sameAssignmentLabel(value, user.displayName) || sameAssignmentLabel(value, user.email));
   const owner = (item) => assignmentDisplay({ userId: item.ownerUserId, legacy: item.owner || item.ownerId, empty: "Unassigned" });
-  const assigned = (item) => assignmentDisplay({ userId: item.assignedUserId, legacy: item.assignedStaff || item.assigned, empty: "Not Yet Assigned" });
+  const assigned = (item) => assignmentDisplay({ userId: item.assignedUserId, legacy: assignmentLegacyValue(item), empty: "Not Yet Assigned" });
   const hasAssignedStaff = (item) => Boolean(
     (item.assignedUserId && findAssignmentUser(item.assignedUserId)) ||
-    activeLegacyMatch(item.assignedStaff || item.assigned)
+    activeLegacyMatch(assignmentLegacyValue(item))
   );
   const stageLabel = (value) => PRODUCTION_STAGES.find(([stage]) => stage === value)?.[1] || "Queued";
   const query = (name) => new URLSearchParams(window.location.search).get(name) || "";
@@ -173,7 +173,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const legacyText = String(legacyValue || "").trim();
     if ((currentUserId || legacyText) && !currentUser) rows.push(["Inactive user (historical)", "__legacy__"]);
     assignmentUsers().forEach((user) => rows.push([assignmentName(user), user.userId]));
-    return rows.map(([label, value]) => `<option value="${html(value)}" ${currentUser?.userId === value || (!currentUser && value === "__legacy__") ? "selected" : ""}>${html(label)}</option>`).join("");
+    return rows.map(([label, value]) => `<option value="${html(value)}" ${currentUser?.userId === value || (!currentUser && !legacyText && value === "") || (!currentUser && legacyText && value === "__legacy__") ? "selected" : ""}>${html(label)}</option>`).join("");
+  }
+
+  function assignmentLegacyValue(item) {
+    const explicit = String(item?.assignedStaff || "").trim();
+    if (explicit) return explicit;
+    const fallback = String(item?.assigned || "").trim();
+    return ["unassigned", "not yet assigned", "not assigned"].includes(fallback.toLowerCase()) ? "" : fallback;
   }
 
   function assignmentNotice() {
@@ -1162,7 +1169,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const mode = state.orderReadinessAction.mode;
     if (mode === "staff") {
       const disabled = assignmentControlsDisabled();
-      return `<article class="mvp-order-readiness-editor" data-mvp-readiness-editor="${html(item.id)}"><h4>ASSIGN STAFF</h4><label><span>Production staff</span><select data-mvp-readiness-field="assignedUserId" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select></label>${assignmentNotice()}<div><button type="button" class="mvp-primary-action" data-mvp-save-readiness="${html(item.id)}" data-mvp-readiness-save-mode="staff" ${disabled ? "disabled" : ""}>SAVE ASSIGNMENT</button><button type="button" class="mvp-secondary-action" data-mvp-cancel-readiness="${html(item.id)}">CANCEL</button></div></article>`;
+      return `<article class="mvp-order-readiness-editor" data-mvp-readiness-editor="${html(item.id)}"><h4>ASSIGN STAFF</h4><label><span>Production staff</span><select data-mvp-readiness-field="assignedUserId" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, assignmentLegacyValue(item), "Unassigned")}</select></label>${assignmentNotice()}<div><button type="button" class="mvp-primary-action" data-mvp-save-readiness="${html(item.id)}" data-mvp-readiness-save-mode="staff" ${disabled ? "disabled" : ""}>SAVE ASSIGNMENT</button><button type="button" class="mvp-secondary-action" data-mvp-cancel-readiness="${html(item.id)}">CANCEL</button></div></article>`;
     }
     return "";
   }
@@ -1930,7 +1937,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function productionQualityCheckAssignment(item, fieldsReady) {
     const disabled = !fieldsReady || assignmentControlsDisabled();
     const help = assignmentNotice();
-    return `<section class="mvp-production-panel"><h3>ASSIGNMENT &amp; NOTES</h3><div class="mvp-production-assignment-field"><label><span>Assigned Production Staff</span><div class="mvp-production-assignment-row"><select data-mvp-production-staff="${html(item.id)}" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select><button type="button" data-mvp-save-production="${html(item.id)}" ${disabled ? "disabled" : ""}>Reassign</button></div></label>${help}</div><label class="mvp-production-note-field"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" maxlength="500" ${fieldsReady ? "" : "disabled"}>${html(item.productionNote || "")}</textarea><small>${html(String(item.productionNote || "").length)} / 500</small></label><label class="mvp-production-note-field"><span>Quality Check Note (Optional)</span><textarea data-mvp-qc-note="${html(item.id)}" maxlength="500" ${fieldsReady ? "" : "disabled"}>${html(item.qcNote || "")}</textarea><small>${html(String(item.qcNote || "").length)} / 500</small></label><article class="mvp-production-info-card ok"><strong>Last Updated</strong><span>${html(item.productionUpdatedAt ? `${dateTime(item.productionUpdatedAt)} by ${assigned(item)}` : "No production update recorded.")}</span></article></section>`;
+    return `<section class="mvp-production-panel"><h3>ASSIGNMENT &amp; NOTES</h3><div class="mvp-production-assignment-field"><label><span>Assigned Production Staff</span><div class="mvp-production-assignment-row"><select data-mvp-production-staff="${html(item.id)}" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, assignmentLegacyValue(item), "Unassigned")}</select><button type="button" data-mvp-save-production="${html(item.id)}" ${disabled ? "disabled" : ""}>Reassign</button></div></label>${help}</div><label class="mvp-production-note-field"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" maxlength="500" ${fieldsReady ? "" : "disabled"}>${html(item.productionNote || "")}</textarea><small>${html(String(item.productionNote || "").length)} / 500</small></label><label class="mvp-production-note-field"><span>Quality Check Note (Optional)</span><textarea data-mvp-qc-note="${html(item.id)}" maxlength="500" ${fieldsReady ? "" : "disabled"}>${html(item.qcNote || "")}</textarea><small>${html(String(item.qcNote || "").length)} / 500</small></label><article class="mvp-production-info-card ok"><strong>Last Updated</strong><span>${html(item.productionUpdatedAt ? `${dateTime(item.productionUpdatedAt)} by ${assigned(item)}` : "No production update recorded.")}</span></article></section>`;
   }
 
   function productionQualityCheckFulfillment(item) {
@@ -1999,7 +2006,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function productionInProgressAssignment(item, fieldsReady) {
     const disabled = !fieldsReady || assignmentControlsDisabled();
     const help = assignmentNotice();
-    return `<section class="mvp-production-panel"><h3>ASSIGNMENT &amp; NOTES</h3><div class="mvp-production-assignment-field"><label><span>Assigned Production Staff</span><div class="mvp-production-assignment-row"><select data-mvp-production-staff="${html(item.id)}" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select><button type="button" data-mvp-save-production="${html(item.id)}" ${disabled ? "disabled" : ""}>Reassign</button></div></label>${help}</div><label class="mvp-production-note-field"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" maxlength="500" ${fieldsReady ? "" : "disabled"}>${html(item.productionNote || "")}</textarea><small>${html(String(item.productionNote || "").length)} / 500</small></label><article class="mvp-production-info-card ok"><strong>Last Updated</strong><span>${html(item.productionUpdatedAt ? `${dateTime(item.productionUpdatedAt)} by ${assigned(item)}` : "No production update recorded.")}</span></article></section>`;
+    return `<section class="mvp-production-panel"><h3>ASSIGNMENT &amp; NOTES</h3><div class="mvp-production-assignment-field"><label><span>Assigned Production Staff</span><div class="mvp-production-assignment-row"><select data-mvp-production-staff="${html(item.id)}" ${disabled ? "disabled" : ""}>${assignmentSelectOptions(item.assignedUserId, assignmentLegacyValue(item), "Unassigned")}</select><button type="button" data-mvp-save-production="${html(item.id)}" ${disabled ? "disabled" : ""}>Reassign</button></div></label>${help}</div><label class="mvp-production-note-field"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" maxlength="500" ${fieldsReady ? "" : "disabled"}>${html(item.productionNote || "")}</textarea><small>${html(String(item.productionNote || "").length)} / 500</small></label><article class="mvp-production-info-card ok"><strong>Last Updated</strong><span>${html(item.productionUpdatedAt ? `${dateTime(item.productionUpdatedAt)} by ${assigned(item)}` : "No production update recorded.")}</span></article></section>`;
   }
 
   function productionInProgressFulfillment(item) {
@@ -2106,7 +2113,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return drawer("production", item, released ? stateInfo.label : "Not released", `
       ${detailSection("Job", [["Job Reference", jobReference(item)], ["Item", itemDisplay(item)], ["Method", productionMethod(item)], ["Quantity", quantityDisplay(item)], ["Due Date", dueShortLabel(due(item), item)], ["Order Reference", orderReference(item) === jobReference(item) ? "Same as job" : orderReference(item)], ["Current Production Status", released ? stateInfo.label : "Not released"], ["Production Started", item.productionStartedAt ? dateTime(item.productionStartedAt) : "Not started"]])}
       <section class="mvp-drawer-section"><h3>Production</h3>${released ? "" : `<p class="mvp-inline-note">This confirmed order has not passed the current release requirements and is read-only here.</p>`}${fieldsReady ? "" : `<p class="mvp-inline-error">DATABASE FIELDS NOT READY. Apply the pending migration before saving.</p>`}${editorLocked && released ? `<p class="mvp-inline-note">${stage === "ready" ? "READY IS OPEN FOR FULFILLMENT. PRODUCTION DETAILS ARE LOCKED." : stage === "completed" ? "COMPLETED PRODUCTION DETAILS ARE LOCKED." : "PRODUCTION DETAILS ARE READ ONLY."}</p>` : ""}<div class="mvp-production-editor">
-        <label><span>Assigned Staff</span><select data-mvp-production-staff="${html(item.id)}" ${editorEnabled && !assignmentDisabled ? "" : "disabled"}>${assignmentSelectOptions(item.assignedUserId, item.assignedStaff || item.assigned, "Unassigned")}</select>${assignmentHelp}</label>
+        <label><span>Assigned Staff</span><select data-mvp-production-staff="${html(item.id)}" ${editorEnabled && !assignmentDisabled ? "" : "disabled"}>${assignmentSelectOptions(item.assignedUserId, assignmentLegacyValue(item), "Unassigned")}</select>${assignmentHelp}</label>
         <label><span>Current Stage</span><strong>${stageLabel(stage)}</strong></label>
         <label><span>Next Stage</span><strong>${next ? stageLabel(next) : stage === "completed" ? "Completed" : released ? "None" : "Not available"}</strong></label>
         <label><span>Production Blocker</span><select data-mvp-production-blocked="${html(item.id)}" ${editorEnabled ? "" : "disabled"}><option value="">Not blocked</option>${["No artwork", "Awaiting customer artwork approval", "Payment requirement not completed", "Materials unavailable"].map((reason) => `<option ${item.blockedReason === reason ? "selected" : ""}>${reason}</option>`).join("")}</select></label><label class="wide"><span>Internal Production Note</span><textarea data-mvp-production-note="${html(item.id)}" ${editorEnabled ? "" : "disabled"}>${html(item.productionNote || "")}</textarea></label>

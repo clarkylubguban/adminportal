@@ -34,6 +34,10 @@ import {
   normalizeNativeOrderResponseToRow,
   getNativeOrderRows,
 } from "./services/orderCompatibility.js";
+import {
+  findNativeOrderBySourceInquiryId,
+  hasNativeOrderAuthority,
+} from "./services/nativeOrderAuthority.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
   getAdminAssignmentUsers,
@@ -2888,9 +2892,7 @@ function getNativeOrderIdentityForInquiry(inquiryId) {
 }
 
 function findNativeOrderRowBySourceInquiryId(inquiryId) {
-  const target = String(inquiryId || "").trim().toLowerCase();
-  if (!target) return null;
-  return nativeOrderRows.find((row) => String(row?.source_inquiry_id || row?.sourceInquiryId || "").trim().toLowerCase() === target) || null;
+  return findNativeOrderBySourceInquiryId(nativeOrderRows, inquiryId);
 }
 
 function renderOverviewPage() {
@@ -7206,7 +7208,7 @@ async function saveMvpInquiryFollowUp(id, updates) {
 async function saveMvpProductionFields(id, changes) {
   const inquiryId = resolveMvpOrderInquiryId(id);
   const current = opsInquiries.find((item) => item.id === inquiryId);
-  if (!current || !isConfirmedOpsOrder(current)) return { ok: false, error: "Confirmed native Order required." };
+  if (!current || !hasNativeOrderAuthority(nativeOrderRows, inquiryId)) return { ok: false, error: "Confirmed native Order required." };
   if (shouldLoadSupabaseOps && !current.productionFieldsReady) {
     orderDashboardSaveError = "Production fields are not ready. Apply the pending migration before saving.";
     return { ok: false, error: orderDashboardSaveError };

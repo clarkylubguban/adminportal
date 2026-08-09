@@ -2,6 +2,10 @@ import assert from "node:assert/strict";
 import { buildUpdates as buildCustomerActionUpdates } from "../api/inquiries/[id]/customer-actions.js";
 import { buildOpsWorkflowUpdates } from "../api/_lib/opsWorkflow.js";
 import { createMvpDashboard } from "../src/mvpDashboard.js";
+import {
+  hasNativeOrderAuthority,
+  findNativeOrderBySourceInquiryId,
+} from "../src/services/nativeOrderAuthority.js";
 
 global.window = { location: { search: "" }, history: { replaceState() {} }, setTimeout };
 
@@ -39,6 +43,7 @@ const base = {
   paymentConfirmedAt: "2026-08-08T09:00:00.000Z",
   productionStage: "queued",
 };
+const nativeRows = [{ id: base.nativeOrderId, order_reference: base.orderReference, source_inquiry_id: base.id }];
 
 const dashboard = createMvpDashboard({
   getAssignmentContext: () => ({ users: team, loadState: "success", error: "" }),
@@ -93,6 +98,12 @@ html = renderOrder({ ...base, dueDate: "2026-08-20" });
 assert.ok(!html.includes('data-mvp-readiness-action="due_date"'), "TEST 2 due-date requirement turns green");
 assert.ok(!html.includes('data-mvp-readiness-action="artwork"') && html.includes('data-mvp-readiness-action="staff"'), "TEST 2 only staff action remains");
 
+dashboard.state.orderReadinessAction = { id: base.id, mode: "staff" };
+html = renderOrder({ ...base, assigned: "Unassigned", assignedStaff: "", assignedUserId: "" });
+assert.match(html, /<option value="" selected>Unassigned<\/option>/, "TEST 2B unassigned staff dropdown starts at Unassigned");
+assert.ok(!html.includes("Inactive user (historical)"), "TEST 2B unassigned fallback text is not treated as historical assignment");
+dashboard.state.orderReadinessAction = null;
+
 const artworkApproval = buildCustomerActionUpdates("approve_artwork", {}, {
   id: base.id,
   quote_status: "approved",
@@ -108,8 +119,13 @@ assert.ok(!html.includes('data-mvp-readiness-action="artwork"'), "TEST 3 artwork
 const staffSave = buildOpsWorkflowUpdates("save_production", { assignedStaff: "Louvelyngel - admin" }, workflowInquiry({ due_date: "2026-08-20", artwork_status: "approved" }), "2026-08-08T10:10:00.000Z");
 assert.equal(staffSave.ok, true, "TEST 4 staff save accepted");
 assert.equal(staffSave.updates.assigned_staff, "Louvelyngel - admin", "TEST 4 staff persists canonical assigned_staff");
+assert.equal(hasNativeOrderAuthority(nativeRows, base.id), true, "TEST 4A native Order exists for source Inquiry, so Order staff assignment is authorized");
+assert.equal(findNativeOrderBySourceInquiryId(nativeRows, base.id)?.order_reference, base.orderReference, "TEST 4A native authority resolves the linked native Order row");
+assert.equal(hasNativeOrderAuthority([], base.id), false, "TEST 4B source Inquiry without native Order is rejected by the assignment guard");
 html = renderOrder({ ...base, dueDate: "2026-08-20", artworkStatus: "approved", assignedUserId: ACTOR_ID, assignedStaff: "Louvelyngel - admin" });
 assert.ok(!html.includes('data-mvp-readiness-action="staff"'), "TEST 4 staff requirement turns green");
+html = renderOrder({ ...base, dueDate: "2026-08-20", artworkStatus: "approved", assignedUserId: ACTOR_ID, assignedStaff: "Louvelyngel - admin" }, "overview");
+assert.ok(html.includes("Louvelyngel - Admin"), "TEST 4C assignment survives read-model rebuild in overview display");
 
 const ready = { ...base, dueDate: "2026-08-20", artworkStatus: "approved", assignedUserId: ACTOR_ID, assignedStaff: "Louvelyngel - admin" };
 html = renderOrder(ready, "overview");
