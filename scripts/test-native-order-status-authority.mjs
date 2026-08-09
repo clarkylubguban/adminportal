@@ -31,11 +31,11 @@ async function verifyStatusDerivation() {
   assert.equal(deriveNativeOrderStatusFromFacts(baseInquiry({ production_stage: "completed", production_completed_at: "2026-08-09T02:00:00Z" })), NATIVE_ORDER_STATUS.RELEASED);
   assert.equal(deriveNativeOrderStatusFromFacts(baseInquiry({ production_stage: "completed", tracking_substatus: "completed" })), NATIVE_ORDER_STATUS.COMPLETED);
 
-  const release = buildOpsWorkflowUpdates("advance_production", { productionStage: "printing", assignedStaff: "QA Staff" }, baseInquiry({ production_stage: "queued", nativeOrderAuthority: true }), "2026-08-09T01:00:00Z");
+  const release = buildOpsWorkflowUpdates("release_production", {}, baseInquiry({ production_stage: "queued", nativeOrderAuthority: true }), "2026-08-09T01:00:00Z");
   assert.equal(release.ok, true);
-  assert.equal(deriveNativeOrderStatusFromFacts({ ...baseInquiry(), ...release.updates }), NATIVE_ORDER_STATUS.RELEASED);
+  assert.equal(deriveNativeOrderStatusFromFacts({ ...baseInquiry(), ...release.updates }), NATIVE_ORDER_STATUS.READY_TO_RELEASE);
 
-  const start = buildOpsWorkflowUpdates("start_production", { actorUserId: ACTOR_ID }, baseInquiry({ production_stage: "printing", production_started_at: null, nativeOrderAuthority: true }), "2026-08-09T01:10:00Z");
+  const start = buildOpsWorkflowUpdates("start_production", { actorUserId: ACTOR_ID }, baseInquiry({ production_stage: "queued", production_started_at: null, nativeOrderAuthority: true, nativeOrderStatus: "released" }), "2026-08-09T01:10:00Z");
   assert.equal(start.ok, true);
   assert.equal(deriveNativeOrderStatusFromFacts({ ...baseInquiry({ production_stage: "printing" }), ...start.updates }), NATIVE_ORDER_STATUS.RELEASED);
 

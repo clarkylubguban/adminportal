@@ -11,7 +11,7 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
     return failure("lost or cancelled inquiries cannot enter the order workflow");
   }
 
-  if (!["save_production", "save_qc_note", "start_production", "advance_production"].includes(action)) {
+  if (!["save_production", "save_qc_note", "release_production", "start_production", "advance_production"].includes(action)) {
     return failure("invalid workflow action");
   }
   if (!isConfirmedOrder(inquiry)) return failure("a confirmed TRRY order is required");
@@ -19,11 +19,27 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
   const currentStage = canonicalStage(inquiry.production_stage);
   const alreadyStarted = Boolean(inquiry.production_started_at);
   const actorUserId = cleanUuid(body.actorUserId || body.productionStartedBy || body.qcStartedBy || body.qcCompletedBy || body.productionCompletedBy);
+  if (action === "release_production") {
+    if (currentStage !== "queued") return failure("production is already released");
+    const missing = productionGate(inquiry);
+    if (missing.length) return failure(`production requirements missing: ${missing.join(", ")}`);
+    return success({
+      production_stage: "queued",
+      production_started_at: null,
+      production_started_by: null,
+      production_updated_at: now,
+    });
+  }
+
   if (action === "start_production") {
     if (alreadyStarted) return { ok: true, updates: {}, noop: true };
-    if (!ACTIVE_STAGES.has(currentStage)) return failure("production must be released before it can start");
+    if (currentStage === "queued" && key(inquiry.nativeOrderStatus || inquiry.native_order_status) !== "released") {
+      return failure("production must be released before it can start");
+    }
+    if (currentStage !== "queued" && !ACTIVE_STAGES.has(currentStage)) return failure("production must be released before it can start");
     if (cleanText(inquiry.blocked_reason, 500)) return failure("blocked production cannot start");
     return success({
+      ...(currentStage === "queued" ? { production_stage: stationFor(inquiry) } : {}),
       production_started_at: now,
       production_started_by: actorUserId || null,
       production_updated_at: now,

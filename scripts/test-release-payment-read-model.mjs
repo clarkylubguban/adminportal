@@ -6,7 +6,7 @@ const workflowSource = await readFile("api/inquiries/[id]/workflow.js", "utf8");
 assert.ok(workflowSource.includes("payment_confirmed_amount"), "workflow read model includes confirmed payment amount");
 assert.ok(workflowSource.includes("payment_verified_amount"), "workflow read model includes verified payment amount");
 
-const releaseBody = { productionStage: "printing", assignedStaff: "QA Staff - Staging" };
+const releaseBody = {};
 
 function gateReadyInquiry(overrides = {}) {
   return {
@@ -33,23 +33,23 @@ function gateReadyInquiry(overrides = {}) {
   };
 }
 
-let result = buildOpsWorkflowUpdates("advance_production", releaseBody, gateReadyInquiry(), "2026-08-09T01:00:00.000Z");
+let result = buildOpsWorkflowUpdates("release_production", releaseBody, gateReadyInquiry(), "2026-08-09T01:00:00.000Z");
 assert.equal(result.ok, true, "native order with full confirmed payment passes release gate");
-assert.equal(result.updates.production_stage, "printing");
+assert.equal(result.updates.production_stage, "queued");
 
-result = buildOpsWorkflowUpdates("advance_production", releaseBody, gateReadyInquiry({
+result = buildOpsWorkflowUpdates("release_production", releaseBody, gateReadyInquiry({
   payment_verified_amount: null,
 }), "2026-08-09T01:05:00.000Z");
 assert.equal(result.ok, true, "paid status with canonical confirmed amount passes release gate");
 
-result = buildOpsWorkflowUpdates("advance_production", releaseBody, gateReadyInquiry({
+result = buildOpsWorkflowUpdates("release_production", releaseBody, gateReadyInquiry({
   payment_confirmed_amount: null,
   payment_verified_amount: null,
 }), "2026-08-09T01:10:00.000Z");
 assert.equal(result.ok, false, "paid status without confirmed amount remains blocked");
 assert.match(result.error, /confirmed payment/);
 
-result = buildOpsWorkflowUpdates("advance_production", releaseBody, gateReadyInquiry({
+result = buildOpsWorkflowUpdates("release_production", releaseBody, gateReadyInquiry({
   payment_confirmed_amount: 300,
   payment_verified_amount: 300,
 }), "2026-08-09T01:15:00.000Z");
@@ -62,7 +62,7 @@ for (const [label, body, overrides, expected] of [
   ["staff", { productionStage: "printing" }, { assigned_staff: "" }, /assigned staff/],
   ["blocker", releaseBody, { blocked_reason: "Waiting on replacement blank" }, /blocked reason/],
 ]) {
-  result = buildOpsWorkflowUpdates("advance_production", body, gateReadyInquiry(overrides), "2026-08-09T01:20:00.000Z");
+  result = buildOpsWorkflowUpdates("release_production", body, gateReadyInquiry(overrides), "2026-08-09T01:20:00.000Z");
   assert.equal(result.ok, false, `${label} guard remains enforced`);
   assert.match(result.error, expected);
 }

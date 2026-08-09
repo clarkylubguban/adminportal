@@ -7232,7 +7232,7 @@ async function saveMvpProductionFields(id, changes) {
   if (shouldLoadSupabaseOps) {
     try {
       const payload = await requestOpsWorkflowAction(inquiryId, {
-        action: changes.startProduction ? "start_production" : changes.productionStage ? "advance_production" : Object.prototype.hasOwnProperty.call(changes, "qcNote") ? "save_qc_note" : "save_production",
+        action: changes.releaseProduction ? "release_production" : changes.startProduction ? "start_production" : changes.productionStage ? "advance_production" : Object.prototype.hasOwnProperty.call(changes, "qcNote") ? "save_qc_note" : "save_production",
         productionStage: changes.productionStage,
         assignedUserId: changes.assignedUserId,
         dueDate: changes.dueDate,

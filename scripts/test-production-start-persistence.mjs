@@ -20,17 +20,17 @@ console.log("PASS Production start persistence contract, API idempotency, queued
 function verifyPureWorkflowContract() {
   const releasedAt = "2026-08-08T08:00:00.000Z";
   const startAt = "2026-08-08T08:15:00.000Z";
-  const release = buildOpsWorkflowUpdates("advance_production", { productionStage: "printing", assignedStaff: "Louvelyngel" }, gateClearInquiry({ production_stage: "queued" }), releasedAt);
+  const release = buildOpsWorkflowUpdates("release_production", {}, gateClearInquiry({ production_stage: "queued" }), releasedAt);
   assert.equal(release.ok, true, "release succeeds for gate-clear queued job");
-  assert.equal(release.updates.production_stage, "printing");
+  assert.equal(release.updates.production_stage, "queued");
   assert.equal(release.updates.production_started_at, null, "release does not mark production started");
   assert.equal(release.updates.production_started_by, null);
 
-  const start = buildOpsWorkflowUpdates("start_production", { productionStartedBy: ACTOR_ID }, gateClearInquiry({ production_stage: "printing" }), startAt);
+  const start = buildOpsWorkflowUpdates("start_production", { productionStartedBy: ACTOR_ID }, gateClearInquiry({ production_stage: "queued", nativeOrderStatus: "released" }), startAt);
   assert.equal(start.ok, true, "start succeeds after release");
+  assert.equal(start.updates.production_stage, "printing", "start chooses the first operational station");
   assert.equal(start.updates.production_started_at, startAt);
   assert.equal(start.updates.production_started_by, ACTOR_ID);
-  assert.equal(start.updates.production_stage, undefined, "start does not advance to QC");
 
   const retry = buildOpsWorkflowUpdates("start_production", { productionStartedBy: OTHER_ACTOR_ID }, gateClearInquiry({ production_stage: "printing", production_started_at: startAt, production_started_by: ACTOR_ID }), "2026-08-08T08:20:00.000Z");
   assert.equal(retry.ok, true, "start retry succeeds safely");
@@ -42,7 +42,7 @@ function verifyPureWorkflowContract() {
   assert.equal(partialStartedRetry.noop, true, "actorless partial-start retry does not patch missing actor metadata");
   assert.deepEqual(partialStartedRetry.updates, {}, "partial-start retry cannot repair production_started_by");
 
-  const notReleased = buildOpsWorkflowUpdates("start_production", { productionStartedBy: ACTOR_ID }, gateClearInquiry({ production_stage: "queued" }), startAt);
+  const notReleased = buildOpsWorkflowUpdates("start_production", { productionStartedBy: ACTOR_ID }, gateClearInquiry({ production_stage: "queued", nativeOrderStatus: "ready_to_release" }), startAt);
   assert.equal(notReleased.ok, false, "not-released job cannot start");
 
   const completed = buildOpsWorkflowUpdates("start_production", { productionStartedBy: ACTOR_ID }, gateClearInquiry({ production_stage: "completed" }), startAt);
@@ -58,9 +58,9 @@ function verifyPureWorkflowContract() {
 async function verifyWorkflowApiContract() {
   const startedAt = "2026-08-08T08:15:00.000Z";
   const rows = new Map([
-    ["TRY-API-START", gateClearInquiry({ id: "TRY-API-START", production_stage: "printing" })],
+    ["TRY-API-START", gateClearInquiry({ id: "TRY-API-START", production_stage: "queued" })],
     ["TRY-API-STARTED", gateClearInquiry({ id: "TRY-API-STARTED", production_stage: "printing", production_started_at: startedAt, production_started_by: ACTOR_ID })],
-    ["TRY-API-AUTH-START", gateClearInquiry({ id: "TRY-API-AUTH-START", production_stage: "printing" })],
+    ["TRY-API-AUTH-START", gateClearInquiry({ id: "TRY-API-AUTH-START", production_stage: "queued" })],
   ]);
   const updates = [];
   const adminUsers = new Map([
@@ -88,7 +88,7 @@ async function verifyWorkflowApiContract() {
         update(value) { patch = value; return builder; },
         async maybeSingle() {
           if (table === "admin_users") return { data: adminUsers.get(selectedUserId) || null, error: null };
-          if (table === "orders") return { data: rows.has(selectedId) ? { id: `native-${selectedId}`, order_reference: `TRRY-ORD-${selectedId.slice(-8).padStart(8, "0")}`, source_inquiry_id: selectedId } : null, error: null };
+          if (table === "orders") return { data: rows.has(selectedId) ? { id: `native-${selectedId}`, order_reference: `TRRY-ORD-${selectedId.slice(-8).padStart(8, "0")}`, source_inquiry_id: selectedId, status: "released" } : null, error: null };
           assert.equal(table, "ops_inquiries");
           return { data: rows.get(selectedId) || null, error: null };
         },
@@ -112,13 +112,15 @@ async function verifyWorkflowApiContract() {
   const first = await invokeWorkflowApi(supabase, "TRY-API-START", { action: "start_production" });
   assert.equal(first.status, 200);
   assert.equal(first.body.ok, true);
+  assert.equal(first.body.inquiry.productionStage, "printing", "API start persists the first station from queued");
   assert.ok(first.body.inquiry.productionStartedAt, "API returns persisted start timestamp");
   assert.equal(first.body.inquiry.productionStartedBy, ACTOR_ID);
-  assert.equal(updates.length, 1, "first start writes once");
+  assert.equal(updates.length, 2, "first start sequences release-compatible stage and start writes");
 
   const authStart = await invokeWorkflowApi(supabase, "TRY-API-AUTH-START", { action: "start_production" }, { injectAdminUser: false });
   assert.equal(authStart.status, 200);
   assert.equal(authStart.body.ok, true);
+  assert.equal(authStart.body.inquiry.productionStage, "printing", "authenticated API start persists first station from queued");
   assert.ok(authStart.body.inquiry.productionStartedAt, "authenticated API start returns persisted start timestamp");
   assert.equal(authStart.body.inquiry.productionStartedBy, ACTOR_ID, "authenticated API start stores admin_users.user_id as actor");
   assert.equal(rows.get("TRY-API-AUTH-START").production_started_by, ACTOR_ID, "stored actor corresponds to authenticated Admin identity");

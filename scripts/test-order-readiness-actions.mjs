@@ -133,29 +133,30 @@ assert.ok(html.includes("<mark class=\"ready\">READY TO RELEASE</mark>"), "TEST 
 assert.ok(html.includes('data-mvp-release-order="TRY-READINESS-ACTIONS"'), "TEST 5 release action is exposed when ready");
 assert.equal(ready.productionStage, "queued", "TEST 6 readiness does not auto-release");
 
-const release = buildOpsWorkflowUpdates("advance_production", { productionStage: "printing", assignedStaff: "Louvelyngel - admin" }, workflowInquiry({
+const release = buildOpsWorkflowUpdates("release_production", {}, workflowInquiry({
   due_date: "2026-08-20",
   artwork_status: "approved",
   assigned_staff: "Louvelyngel - admin",
 }), "2026-08-08T10:15:00.000Z");
 assert.equal(release.ok, true, "TEST 7 explicit release succeeds when all requirements are ready");
-assert.equal(release.updates.production_stage, "printing", "TEST 7 release persists production stage");
+assert.equal(release.updates.production_stage, "queued", "TEST 7 release preserves queued production stage before start");
+assert.equal(release.updates.production_started_at, null, "TEST 7 release does not start production");
 
-const pendingArtworkRelease = buildOpsWorkflowUpdates("advance_production", { productionStage: "printing", assignedStaff: "Louvelyngel - admin" }, workflowInquiry({
+const pendingArtworkRelease = buildOpsWorkflowUpdates("release_production", {}, workflowInquiry({
   due_date: "2026-08-20",
   assigned_staff: "Louvelyngel - admin",
 }), "2026-08-08T10:20:00.000Z");
 assert.equal(pendingArtworkRelease.ok, false, "TEST 8 artwork pending blocks release");
 assert.match(pendingArtworkRelease.error, /artwork approval/);
 
-const missingDateRelease = buildOpsWorkflowUpdates("advance_production", { productionStage: "printing", assignedStaff: "Louvelyngel - admin" }, workflowInquiry({
+const missingDateRelease = buildOpsWorkflowUpdates("release_production", {}, workflowInquiry({
   artwork_status: "approved",
   assigned_staff: "Louvelyngel - admin",
 }), "2026-08-08T10:25:00.000Z");
 assert.equal(missingDateRelease.ok, false, "TEST 9 missing due date blocks release");
 assert.match(missingDateRelease.error, /due date/);
 
-const missingStaffRelease = buildOpsWorkflowUpdates("advance_production", { productionStage: "printing" }, workflowInquiry({
+const missingStaffRelease = buildOpsWorkflowUpdates("release_production", {}, workflowInquiry({
   due_date: "2026-08-20",
   artwork_status: "approved",
 }), "2026-08-08T10:30:00.000Z");

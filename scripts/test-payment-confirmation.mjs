@@ -152,7 +152,7 @@ test("full payment but staff unassigned remains blocked", () => {
 test("every requirement complete is ready with native Order authority and without Odoo SO", () => {
   const result = advanceProduction(paidOrder({ status: "approved", odoo_so: "" }));
   assert.equal(result.ok, true);
-  assert.equal(result.updates.production_stage, "printing");
+  assert.equal(result.updates.production_stage, "queued");
 });
 
 function confirmPayment(inquiry, body) {
@@ -160,10 +160,7 @@ function confirmPayment(inquiry, body) {
 }
 
 function advanceProduction(inquiry) {
-  return buildOpsWorkflowUpdates("advance_production", {
-    productionStage: "printing",
-    assignedStaff: inquiry.assigned_staff,
-  }, inquiry, NOW);
+  return buildOpsWorkflowUpdates("release_production", {}, inquiry, NOW);
 }
 
 function paidOrder(overrides = {}) {

@@ -1,6 +1,6 @@
 import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
 import { convertInquiryToNativeOrder, NativeOrderError, readNativeOrderBySourceInquiryId } from "../../_lib/nativeOrders.js";
-import { reconcileNativeOrderStatusForInquiry } from "../../_lib/nativeOrderStatus.js";
+import { reconcileNativeOrderStatusForInquiry, transitionNativeOrderStatus } from "../../_lib/nativeOrderStatus.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
@@ -47,7 +47,7 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
     if (!inquiry) return sendJson(response, 404, { ok: false, error: "inquiry not found" });
     const nativeOrder = await readNativeOrderBySourceInquiryId(supabase, inquiryReference);
     const workflowInquiry = nativeOrder
-      ? { ...inquiry, nativeOrderAuthority: true, nativeOrderId: nativeOrder.id, nativeOrderReference: nativeOrder.orderReference }
+      ? { ...inquiry, nativeOrderAuthority: true, nativeOrderId: nativeOrder.id, nativeOrderReference: nativeOrder.orderReference, nativeOrderStatus: nativeOrder.status }
       : inquiry;
 
     const now = new Date().toISOString();
@@ -55,20 +55,17 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
     if (!assignmentPatch.ok) return sendJson(response, 400, { ok: false, error: assignmentPatch.error });
 
     const workflowBody = { ...body, assignedStaff: assignmentPatch.assignedStaff, actorUserId: adminUser.userId, productionStartedBy: adminUser.userId };
-    const result = buildOpsWorkflowUpdates(String(body.action || ""), workflowBody, workflowInquiry, now);
+    const action = String(body.action || "");
+    const result = buildOpsWorkflowUpdates(action, workflowBody, workflowInquiry, now);
     if (!result.ok) return sendJson(response, 400, { ok: false, error: result.error });
     if (assignmentPatch.hasAssignment) Object.assign(result.updates, assignmentPatch.updates);
     if (result.noop) return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(inquiry), order: nativeOrder || null });
 
-    const { data: updated, error: updateError } = await supabase
-      .from("ops_inquiries")
-      .update({ ...result.updates, updated_at: now })
-      .eq("id", inquiryReference)
-      .select(WORKFLOW_SELECT)
-      .single();
-    if (updateError) throw updateError;
+    const updated = await persistWorkflowUpdates(supabase, inquiryReference, inquiry, result.updates, action, now);
 
-    const order = await reconcileNativeOrderStatusForInquiry(supabase, inquiryReference, updated, { order: nativeOrder, now });
+    const order = action === "release_production"
+      ? await transitionNativeOrderStatus(supabase, inquiryReference, "released", { order: nativeOrder, now })
+      : await reconcileNativeOrderStatusForInquiry(supabase, inquiryReference, updated, { order: nativeOrder, now });
     sendJson(response, 200, { ok: true, inquiry: toClientInquiry(updated), order });
   } catch (error) {
     if (error instanceof NativeOrderError) {
@@ -103,6 +100,48 @@ async function readAdminUser(supabase, userId) {
   const fallback = await query("id,user_id,role");
   if (fallback.error) throw fallback.error;
   return fallback.data;
+}
+
+async function persistWorkflowUpdates(supabase, inquiryReference, inquiry, updates, action, now) {
+  const startsQueuedJob = action === "start_production"
+    && updates.production_stage
+    && updates.production_started_at
+    && canonicalStage(inquiry.production_stage) === "queued";
+
+  if (startsQueuedJob) {
+    const stagePatch = {
+      production_stage: updates.production_stage,
+      production_started_at: null,
+      production_started_by: null,
+      production_updated_at: now,
+      updated_at: now,
+    };
+    const { error: stageError } = await supabase
+      .from("ops_inquiries")
+      .update(stagePatch)
+      .eq("id", inquiryReference)
+      .select(WORKFLOW_SELECT)
+      .single();
+    if (stageError) throw stageError;
+  }
+
+  const patch = startsQueuedJob ? { ...updates } : updates;
+  const { data, error } = await supabase
+    .from("ops_inquiries")
+    .update({ ...patch, updated_at: now })
+    .eq("id", inquiryReference)
+    .select(WORKFLOW_SELECT)
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+function canonicalStage(value) {
+  const stage = String(value ?? "").trim().toLowerCase().replace(/[\s-]+/g, "_");
+  if (!stage) return "queued";
+  if (stage === "qc_finishing") return "qc";
+  if (stage === "ready_for_fulfillment") return "ready";
+  return stage;
 }
 
 function normalizeAdminUser(adminUser) {

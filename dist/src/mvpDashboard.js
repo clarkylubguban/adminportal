@@ -83,6 +83,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (value === "in_production") return stationFor(item);
     return "queued";
   };
+  const nativeOrderStatus = (item) => key(item.orderStatus || item.nativeOrderStatus);
+  const releasedNativeOrder = (item) => hasNativeOrderAuthority(item) && ["released", "completed"].includes(nativeOrderStatus(item));
+  const displayProductionStage = (item) => (
+    !productionStarted(item)
+    && !["qc", "ready", "completed"].includes(productionStage(item))
+  ) ? "queued" : productionStage(item);
 
   const hasNativeOrderAuthority = (item) => item?.sourceType === "native" && Boolean(item.nativeOrderId || item.orderReference || item.sourceInquiryId);
   const isInactiveInquiryStatus = (item) => ["lost", "cancelled", "canceled"].includes(key(item.status));
@@ -1210,7 +1216,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const rows = [];
     if (Array.isArray(item.paymentHistory)) item.paymentHistory.forEach((entry) => rows.push({ title: `Payment confirmed${entry.amount ? ` ${money(entry.amount)}` : ""}`, when: dateTime(entry.confirmedAt), source: "Persisted payment_history" }));
     if (item.paymentConfirmedAt || item.paymentVerifiedAt) rows.push({ title: "Payment confirmed", when: dateTime(item.paymentConfirmedAt || item.paymentVerifiedAt), source: "Derived from payment fields" });
-    if (item.productionUpdatedAt && productionStage(item) !== "queued") rows.push({ title: "Released to production", when: dateTime(item.productionUpdatedAt), source: "Derived from production fields" });
+    if (item.productionUpdatedAt && (releasedNativeOrder(item) || productionStage(item) !== "queued")) rows.push({ title: "Released to production", when: dateTime(item.productionUpdatedAt), source: "Derived from production fields" });
     if (item.productionStartedAt) rows.push({ title: "Production started", when: dateTime(item.productionStartedAt), source: "Persisted production start fields" });
     if (item.quoteApprovedAt) rows.push({ title: "Quotation approved", when: dateTime(item.quoteApprovedAt), source: "Derived from quote approval" });
     if (item.orderCreatedAt || item.createdAt || item.updatedAt) rows.push({ title: "Order created", when: dateTime(item.orderCreatedAt || item.createdAt || item.updatedAt), source: sourceInquiryReference(item) !== "Not linked" ? `Derived from source inquiry ${sourceInquiryReference(item)}` : "Derived from order data" });
@@ -1229,16 +1235,16 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function orderReleaseFooter(item, gate) {
-    const next = nextStage(item);
-    const disabled = state.orderReleaseId === item.id || gate.length || !next;
+    const disabled = state.orderReleaseId === item.id || gate.length;
     const error = state.orderReleaseError ? `<small class="mvp-inline-error">${html(state.orderReleaseError)}</small>` : "";
-    return `<button class="mvp-primary-action" type="button" data-mvp-release-order="${html(item.id)}" data-mvp-next="${html(next)}" ${disabled ? "disabled" : ""}>${state.orderReleaseId === item.id ? "RELEASING..." : "RELEASE TO PRODUCTION"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>${gate.length ? `<small title="${html(gate.join(", "))}">Resolve before release: ${html(gate.join(", "))}</small>` : ""}${error}`;
+    return `<button class="mvp-primary-action" type="button" data-mvp-release-order="${html(item.id)}" ${disabled ? "disabled" : ""}>${state.orderReleaseId === item.id ? "RELEASING..." : "RELEASE TO PRODUCTION"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>${gate.length ? `<small title="${html(gate.join(", "))}">Resolve before release: ${html(gate.join(", "))}</small>` : ""}${error}`;
   }
 
   function orderOperationalState(item) {
     const payment = paymentState(item);
-    const stage = productionStage(item);
+    const stage = displayProductionStage(item);
     if (productionBlocker(item)) return { key: "blocked", label: "BLOCKED", tone: "overdue" };
+    if (releasedNativeOrder(item) && stage === "queued") return { key: "released", label: "QUEUED FOR PRODUCTION", tone: "ready" };
     if (payment.key === "verification") return { key: "payment_review", label: "PAYMENT REVIEW", tone: "payment" };
     if (payment.key !== "paid") return { key: "awaiting_payment", label: "AWAITING PAYMENT", tone: "payment" };
     if (stage === "queued" && readyForProduction(item)) return { key: "ready_to_release", label: "READY TO RELEASE", tone: "ready" };
@@ -1325,13 +1331,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (!confirmed(item) || !hasNativeOrderAuthority(item)) return false;
     const status = key(item.status);
     if (["lost", "cancelled", "canceled"].includes(status)) return false;
+    if (releasedNativeOrder(item)) return true;
     const stage = productionStage(item);
     if ([...ACTIVE_STAGES, "qc", "ready", "completed"].includes(stage)) return true;
     return false;
   }
   function orderFooterAction(item, gate) {
-    const stage = productionStage(item);
+    const stage = displayProductionStage(item);
     if (stage === "completed") return `<button class="mvp-secondary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">View Details</button>`;
+    if (releasedNativeOrder(item) && stage === "queued") return `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Open Production &rarr;</button>`;
     if (stage !== "queued") return `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Open Production &rarr;</button>`;
     if (readyForProduction(item)) return `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Release to Production</button>`;
     return `<button class="mvp-secondary-action" type="button" disabled title="${html(gate.join(", ") || "Order requirements are incomplete")}">View Requirements</button>`;
@@ -1377,7 +1385,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return detailSection("Payment", [["Payment State", payment.label], ["Payment Method", paymentMethodLabel(item.paymentMethod)], ["Payment Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Quote Total", money(total)], ["Amount Due", money(dueAmount)], ["Amount Verified", money(paid)], ["Balance", money(balance)], ["Verified At", dateTime(item.paymentVerifiedAt || item.paymentConfirmedAt)]]);
   }
   function productionDisplay(item) {
-    const stage = productionStage(item);
+    const stage = displayProductionStage(item);
     const block = blockedReason(item);
     if (stage === "queued") {
       const gate = productionGate(item);
@@ -1407,7 +1415,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function readyForProduction(item) {
-    return Boolean(hasNativeOrderAuthority(item) && productionStage(item) === "queued" && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && hasAssignedStaff(item) && paymentSatisfiesProductionGate(item) && !blockedReason(item));
+    return Boolean(hasNativeOrderAuthority(item) && !releasedNativeOrder(item) && productionStage(item) === "queued" && product(item) && product(item) !== "Not set" && item.service && item.qty && item.dueDate && orderArtworkKey(item) === "approved" && hasAssignedStaff(item) && paymentSatisfiesProductionGate(item) && !blockedReason(item));
   }
 
   function readinessCell(readiness) {
@@ -1449,8 +1457,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function productionFooterAction(item, next, fieldsReady, gate) {
-    const stage = productionStage(item);
-    if (FIRST_PRODUCTION_STATIONS.includes(stage) && !productionStarted(item)) {
+    const stage = displayProductionStage(item);
+    if (stage === "queued") {
       const disabled = !fieldsReady || gate.length;
       return `<section class="mvp-production-action"><span>NOW: Queued for Production</span><strong>NEXT: In Production</strong><button type="button" data-mvp-start-production="${html(item.id)}" ${disabled ? "disabled" : ""}>START PRODUCTION</button>${gate.length ? `<small>Resolve before starting: ${html(gate.join(", "))}</small>` : ""}</section>`;
     }
@@ -1613,7 +1621,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function productionWorkflowState(item) {
-    const stage = productionStage(item);
+    const stage = displayProductionStage(item);
     if (productionBlocker(item)) return { key: "blocked", label: "BLOCKED", tone: "overdue" };
     if (stage === "completed") return { key: "completed", label: "COMPLETED", tone: "completed" };
     if (stage === "ready") return { key: "ready", label: "READY FOR FULFILLMENT", tone: "ready" };
@@ -2095,7 +2103,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function productionDrawer(item) {
     if (!item) return "";
     const released = isReleasedToProduction(item);
-    const stage = productionStage(item);
+    const stage = displayProductionStage(item);
     const stateInfo = productionWorkflowState(item);
     const next = released ? nextStage(item) : "";
     const gate = released ? productionAdvanceGate(item) : [];
@@ -2123,7 +2131,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     `, footer);
   }
   function nextStage(item) {
-    const stage = productionStage(item);
+    const stage = displayProductionStage(item);
     if (stage === "queued") return stationFor(item);
     if (FIRST_PRODUCTION_STATIONS.includes(stage) && productionStarted(item)) return "qc";
     if (stage === "qc") return "ready";
@@ -2413,14 +2421,13 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     root.querySelectorAll("[data-mvp-release-order]").forEach((button) => button.addEventListener("click", async () => {
       if (button.disabled) return;
       const id = button.dataset.mvpReleaseOrder;
-      const next = button.dataset.mvpNext;
-      if (!id || !next) return;
+      if (!id) return;
       state.orderReleaseId = id;
       state.orderReleaseError = "";
       button.disabled = true;
       button.textContent = "RELEASING...";
       try {
-        const result = await saveProduction?.(id, { productionStage: next });
+        const result = await saveProduction?.(id, { releaseProduction: true });
         if (result && result.ok === false) throw new Error(result.error || "Release failed.");
       } catch (error) {
         state.orderReleaseError = error?.message || "Release failed.";

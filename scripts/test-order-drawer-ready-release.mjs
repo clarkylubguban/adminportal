@@ -45,7 +45,7 @@ const base = {
 const unpaid = { ...base, id: "TRY-READY-UNPAID", orderReference: "TRRY-ORD-UNPAID99", paymentStatus: "awaiting_payment", paymentVerifiedAmount: 0, paymentConfirmedAmount: 0 };
 const review = { ...base, id: "TRY-READY-REVIEW", orderReference: "TRRY-ORD-REVIEW99", paymentStatus: "proof_submitted", paymentVerifiedAmount: 0, paymentConfirmedAmount: 0 };
 const blocked = { ...base, id: "TRY-READY-BLOCKED", orderReference: "TRRY-ORD-BLOCKED99", blockedReason: "Materials unavailable" };
-const released = { ...base, id: "TRY-READY-RELEASED", orderReference: "TRRY-ORD-RELEASED99", productionStage: "embroidery", productionUpdatedAt: "2026-08-01T05:00:00.000Z" };
+const released = { ...base, id: "TRY-READY-RELEASED", orderReference: "TRRY-ORD-RELEASED99", orderStatus: "released", productionStage: "queued", productionUpdatedAt: "2026-08-01T05:00:00.000Z" };
 const legacy = { ...base, id: "TRY-READY-LEGACY", sourceType: "legacy", nativeOrderId: "", sourceInquiryId: "", orderReference: "TRRY-LEGACY-READY99", odooSO: "SO-LEGACY-READY99" };
 const rows = [base, unpaid, review, blocked, released, legacy];
 
@@ -62,7 +62,7 @@ function renderSelected(item, tab = "overview", renderPayment = () => "") {
 let html = renderSelected(base);
 assert.ok(html.includes("<mark class=\"ready\">READY TO RELEASE</mark>"), "ready drawer uses the unambiguous READY TO RELEASE label");
 assert.ok(html.includes('data-mvp-release-order="TRY-READY-BASE"'), "ready footer exposes the release action");
-assert.ok(html.includes('data-mvp-next="embroidery"'), "release action uses the existing first production station rule");
+assert.ok(!html.includes('data-mvp-next="embroidery"'), "release action no longer carries a first production station");
 assert.ok(!html.includes('data-mvp-route="/production?order=TRY-READY-BASE" type="button">Release to Production'), "ready footer no longer fakes release through route navigation");
 
 html = renderSelected(base, "requirements");
@@ -103,10 +103,7 @@ assert.ok(!html.includes("TRRY-ORD-READY99"), "gate-clear queued order is not vi
 html = dashboard.renderProduction({ items: [released] });
 assert.ok(html.includes("TRRY-ORD-RELEASED99"), "persisted non-queued release is visible in Production");
 
-const workflowResult = buildOpsWorkflowUpdates("advance_production", {
-  productionStage: "embroidery",
-  assignedStaff: "James - owner",
-}, {
+const workflowResult = buildOpsWorkflowUpdates("release_production", {}, {
   id: "TRY-READY-BASE",
   status: "approved",
   nativeOrderAuthority: true,
@@ -124,14 +121,11 @@ const workflowResult = buildOpsWorkflowUpdates("advance_production", {
   production_stage: "queued",
 }, "2026-08-01T05:00:00.000Z");
 assert.equal(workflowResult.ok, true, "release workflow accepts a gate-clear queued order");
-assert.equal(workflowResult.updates.production_stage, "embroidery", "release persists the first production stage");
+assert.equal(workflowResult.updates.production_stage, "queued", "release preserves queued stage");
 assert.equal(workflowResult.updates.production_started_at, null, "release leaves production start timestamp null");
 assert.equal(workflowResult.updates.production_started_by, null, "release leaves production start actor null");
 
-const duplicateResult = buildOpsWorkflowUpdates("advance_production", {
-  productionStage: "embroidery",
-  assignedStaff: "James - owner",
-}, {
+const duplicateResult = buildOpsWorkflowUpdates("release_production", {}, {
   id: "TRY-READY-BASE",
   status: "approved",
   nativeOrderAuthority: true,
@@ -146,10 +140,10 @@ const duplicateResult = buildOpsWorkflowUpdates("advance_production", {
   payment_verified_amount: 850,
   quoted_amount: 850,
   amount_due: 850,
-  production_stage: "embroidery",
+  production_stage: "printing",
 }, "2026-08-01T05:00:00.000Z");
 assert.equal(duplicateResult.ok, false, "duplicate release payload is rejected after durable stage changes");
-assert.equal(duplicateResult.error, "invalid production stage transition");
+assert.equal(duplicateResult.error, "production is already released");
 
 const dashboardSource = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(dashboardSource.includes("data-mvp-open-messenger"), "Messenger behavior remains present");

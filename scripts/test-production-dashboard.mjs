@@ -29,7 +29,7 @@ const base = {
 };
 
 const unreleased = { ...base, id: "TRY-UNRELEASED", orderReference: "TRRY-ORD-READY01", customer: "Ready Only", productionStage: "queued" };
-const queued = { ...base, id: "TRY-QUEUED", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000701", sourceInquiryId: "TRY-QUEUED", sourceInquiryReference: "TRY-QUEUED", orderReference: "TRRY-ORD-QUEUED01", customer: "Queued Customer", service: "Embroidery", productionStage: "embroidery" };
+const queued = { ...base, id: "TRY-QUEUED", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000701", sourceInquiryId: "TRY-QUEUED", sourceInquiryReference: "TRY-QUEUED", orderReference: "TRRY-ORD-QUEUED01", orderStatus: "released", customer: "Queued Customer", service: "Embroidery", productionStage: "queued" };
 const inProduction = { ...base, id: "TRY-INPROD", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000702", sourceInquiryId: "TRY-INPROD", orderReference: "TRRY-ORD-INPROD01", customer: "Active Customer", service: "Screen Print", productionStage: "screen_printing", productionStartedAt: "2026-08-08T08:15:00.000Z", productionStartedBy: "staff-rachelle", assignedUserId: "staff-rachelle" };
 const compatibilityOnly = { ...base, id: "TRY-COMPAT-RAW", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000705", sourceInquiryId: "TRY-COMPAT-RAW", orderReference: "TRRY-ORD-COMPAT01", customer: "Compatibility Only", service: "DTF", productionStage: "printing", productionWorkflowStatus: "in_production" };
 const qc = { ...base, id: "TRY-QC", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000000703", sourceInquiryId: "TRY-QC", orderReference: "TRRY-ORD-QC01", customer: "QC Customer", service: "DTF", productionStage: "qc", assignedUserId: "staff-juvy", dueDate: "2026-08-08" };
@@ -72,7 +72,7 @@ for (const header of ["JOB", "CUSTOMER", "SUMMARY", "METHOD", "MATERIALS", "ARTW
 assert.ok(html.includes("Embroidery") && html.includes("Screen Print") && html.includes("DTF"), "method column/filter use production methods");
 assert.ok(html.includes("QUEUED"), "first station released work maps to queued production state");
 assert.ok(html.includes("IN PRODUCTION"), "persisted start timestamp maps to In Production");
-assert.ok(html.includes("TRRY-ORD-COMPAT01"), "compatibility raw-state row remains visible after release");
+assert.ok(html.includes("TRRY-ORD-COMPAT01"), "compatibility pre-start raw-state row remains visible after release");
 assert.ok(html.includes("QUALITY CHECK"), "qc stage maps to Quality Check");
 assert.ok(html.includes("READY FOR FULFILLMENT"), "ready stage maps truthfully to Ready for Fulfillment");
 assert.ok(html.includes("Thread color missing"), "explicit production blocker/material issue is visible");

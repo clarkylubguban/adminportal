@@ -72,7 +72,7 @@ try {
     productionText: window.__dashboard.renderProduction({ items: window.__rows }),
   }))()`);
   assert.equal(afterRelease.calls, 1, "double click sends only one release request while in flight");
-  assert.equal(afterRelease.productionStage, "embroidery", "successful release persists first production stage in local read model");
+  assert.equal(afterRelease.productionStage, "queued", "successful release preserves queued stage in local read model");
   assert.ok(!afterRelease.orderText.includes("READY TO RELEASE"), "released drawer no longer displays READY TO RELEASE");
   assert.ok(afterRelease.orderText.includes("QUEUED FOR PRODUCTION"), "released drawer displays post-release Orders status");
   assert.ok(afterRelease.productionText.includes("TRRY-ORD-READY77"), "Production resolves the released job after persisted readback");
@@ -180,8 +180,9 @@ function qaHtml(shouldFail) {
           window.__releaseCalls += 1;
           await new Promise((resolve) => setTimeout(resolve, 80));
           if (${JSON.stringify(shouldFail)}) throw new Error("Synthetic release failure");
-          window.__rows = window.__rows.map((item) => item.id === id ? { ...item, productionStage: changes.productionStage, productionUpdatedAt: "2026-08-01T05:00:00.000Z" } : item);
-          return { productionStage: changes.productionStage };
+          if (!changes.releaseProduction) throw new Error("Release must not send a production stage");
+          window.__rows = window.__rows.map((item) => item.id === id ? { ...item, orderStatus: "released", productionStage: "queued", productionUpdatedAt: "2026-08-01T05:00:00.000Z" } : item);
+          return { orderStatus: "released", productionStage: "queued" };
         }
       });
       window.__productionBefore = productionBefore;
