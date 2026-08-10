@@ -35,7 +35,9 @@ assert.ok(html.includes("TRRY-ORD-READY10"), "native order reference remains job
 assert.ok(html.includes("Current Stage") && html.includes("Ready"), "overview shows operational Ready current stage");
 assert.ok(!html.includes("Current Stage</span><strong>READY FOR FULFILLMENT"), "overview does not repeat coarse status as current stage");
 assert.ok(html.includes("QC Completed") && html.includes("Aug 1, 2026"), "overview displays persisted QC completion timestamp");
-assert.ok(html.includes("Production is ready for fulfillment."), "ready card uses production-owned copy");
+assert.ok(html.includes("Production is ready."), "ready card uses production-owned copy");
+assert.ok(html.includes("Mark Production Complete to hand fulfillment back to Orders."), "ready card explains the Orders fulfillment handoff");
+assert.ok(!html.includes("The order is ready for pickup/front counter or delivery handoff."), "ready card does not imply Production owns pickup or delivery");
 assert.ok(html.includes("NOW: READY"), "Ready footer NOW shows operational Ready stage");
 assert.ok(html.includes("NEXT: PRODUCTION COMPLETE"), "Ready footer NEXT shows Production Complete");
 assert.ok(html.includes("MARK PRODUCTION COMPLETE"), "primary action is production-specific");

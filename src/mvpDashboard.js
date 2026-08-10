@@ -1863,7 +1863,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ${productionSummaryRow("Production Started", dateTime(item.productionStartedAt), productionStartedByLabel(item))}
       ${productionSummaryRow("QC Started", dateTime(item.qcStartedAt), qcActorLabel(item, "started"))}
       ${productionSummaryRow("QC Completed", dateTime(item.qcCompletedAt), qcActorLabel(item, "completed"))}
-    </div><article class="mvp-production-info-card ${blocker ? "danger" : "ok"}"><strong>${html(blocker ? "Production blocker" : "Production is ready for fulfillment.")}</strong><span>${html(blocker || "Production and quality check are complete. The order is ready for pickup/front counter or delivery handoff.")}</span></article></section>`;
+    </div><article class="mvp-production-info-card ${blocker ? "danger" : "ok"}"><strong>${html(blocker ? "Production blocker" : "Production is ready.")}</strong><span>${html(blocker || "Mark Production Complete to hand fulfillment back to Orders.")}</span></article></section>`;
   }
 
   function productionReadyWorkflow(item) {
