@@ -6858,6 +6858,7 @@ function bindEvents() {
     saveProduction: saveMvpProductionFields,
     approveOrderArtwork: approveMvpOrderArtwork,
     confirmPayment: confirmMvpOrderPayment,
+    saveFulfillment: saveMvpFulfillmentFields,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,
     handleInquiryFollowUpOutcome: handleMvpInquiryFollowUpOutcome,
   });
@@ -7274,6 +7275,42 @@ async function approveMvpOrderArtwork(id) {
   const updates = { artworkStatus: "approved", artworkApprovedAt: new Date().toISOString() };
   opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...updates } : item);
   return { ok: true, inquiry: updates };
+}
+
+async function saveMvpFulfillmentFields(id, changes) {
+  const inquiryId = resolveMvpOrderInquiryId(id);
+  const current = opsInquiries.find((item) => item.id === inquiryId);
+  if (!current || !hasNativeOrderAuthority(nativeOrderRows, inquiryId)) return { ok: false, error: "Confirmed native Order required." };
+
+  const trackingSubstatus = String(changes?.trackingSubstatus || "").trim();
+  const method = String(current.fulfillmentMethod || "").trim().toLowerCase();
+  const allowed = {
+    pickup: new Set(["ready_for_pickup", "completed"]),
+    delivery: new Set(["out_for_delivery", "delivered", "completed"]),
+  }[method];
+  if (!allowed || !allowed.has(trackingSubstatus)) {
+    return { ok: false, error: "Fulfillment action is not valid for this Order." };
+  }
+
+  const updates = {
+    trackingSubstatus,
+    trackingNote: changes?.trackingNote === undefined ? current.trackingNote || null : changes.trackingNote || null,
+    trackingUpdatedAt: new Date().toISOString(),
+  };
+  let savedInquiry = null;
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      savedInquiry = await updateOpsInquiryFields(inquiryId, updates, adminAuthSession);
+      if (!savedInquiry) throw new Error("Fulfillment update returned no saved inquiry.");
+    } catch (error) {
+      console.error("Unable to save MVP fulfillment fields.", error);
+      return { ok: false, error: error.message || "Unable to save fulfillment fields." };
+    }
+  }
+
+  opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...(savedInquiry || updates) } : item);
+  return { ok: true, inquiry: savedInquiry || updates };
 }
 
 function resolveMvpOrderInquiryId(value) {

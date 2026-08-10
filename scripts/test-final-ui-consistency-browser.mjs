@@ -124,7 +124,12 @@ async function verifyOrderDrawer(cdp, viewport, order, expectedText) {
   assert.equal(result.width <= Math.min(390, viewport.width), true, `Order drawer width is viewport-safe at ${viewport.name}`);
   assert.equal(result.tabs, "Overview|Requirements|Payment|Fulfillment|History", `Order tab order at ${viewport.name}`);
   assert.equal(result.text.includes(order), true, `Order drawer uses order reference ${order} at ${viewport.name}`);
-  if (expectedText === "AWAITING PAYMENT") assert.equal(/Open Messenger|CONFIRM/i.test(result.text), true, `Order owns payment/Messenger/admin confirmation at ${viewport.name}`);
+  if (expectedText === "AWAITING PAYMENT") {
+    await evaluate(cdp, `document.querySelector('.mvp-order-drawer-tabs [data-mvp-order-tab="payment"]')?.click()`);
+    await waitForText(cdp, "PAYMENT ACTIONS");
+    const payment = await drawerSnapshot(cdp, ".mvp-drawer.order");
+    assert.equal(/Open Messenger|CONFIRM/i.test(payment.text), true, `Order owns payment/Messenger/admin confirmation at ${viewport.name}`);
+  }
   assert.equal(result.hasFooter, true, `Order footer is reachable at ${viewport.name}`);
 }
 
@@ -224,7 +229,7 @@ function qaHtml() {
       { ...base, id: "TRY-AWAIT12", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000001201", sourceInquiryId: "TRY-AWAIT12", sourceInquiryReference: "TRY-AWAIT12", orderReference: "TRRY-ORD-AWAIT12", customer: "Awaiting Payment", productDesc: "Polo", paymentStatus: "awaiting_payment", paymentVerifiedAmount: 0, paymentConfirmedAmount: 0, productionStage: "queued" },
       { ...base, id: "TRY-BLOCK12", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000001202", sourceInquiryId: "TRY-BLOCK12", orderReference: "TRRY-ORD-BLOCK12", customer: "Blocked Order", productDesc: "Uniform", blockedReason: "Materials unavailable", productionStage: "queued" },
       { ...base, id: "TRY-READY12", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000001203", sourceInquiryId: "TRY-READY12", orderReference: "TRRY-ORD-READY12", customer: "Ready Release", productDesc: "Hoodie", productionStage: "queued" },
-      { ...base, id: "TRY-POSTREL12", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000001204", sourceInquiryId: "TRY-POSTREL12", orderReference: "TRRY-ORD-POSTREL12", customer: "Post Release", productDesc: "Tote", productionStage: "printing" },
+      { ...base, id: "TRY-POSTREL12", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000001204", sourceInquiryId: "TRY-POSTREL12", orderReference: "TRRY-ORD-POSTREL12", customer: "Post Release", productDesc: "Tote", orderStatus: "released", productionStage: "printing" },
       { ...base, id: "TRY-LEGACY12", sourceType: "legacy", orderReference: "TRRY-LEGACY-12", odooSO: "SO-12", customer: "Legacy Customer", productDesc: "Legacy Item", productionStage: "qc", qcStartedAt: "2026-08-01T14:30:00.000Z", qcStartedBy: ACTOR },
       { ...base, id: "TRY-QUEUED12", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000001205", sourceInquiryId: "TRY-QUEUED12", orderReference: "TRRY-ORD-QUEUED12", customer: "Queued Production", productDesc: "Queued Item", productionStage: "printing", productionStartedAt: "", productionStartedBy: "" },
       { ...base, id: "TRY-INPROD12", sourceType: "native", nativeOrderId: "96000000-0000-4000-8000-000000001206", sourceInquiryId: "TRY-INPROD12", orderReference: "TRRY-ORD-INPROD12", customer: "In Production", productDesc: "Production Item", productionStage: "printing", productionStartedAt: "2026-08-01T10:00:00.000Z", productionStartedBy: ACTOR },

@@ -46,8 +46,10 @@ const unpaid = { ...base, id: "TRY-READY-UNPAID", orderReference: "TRRY-ORD-UNPA
 const review = { ...base, id: "TRY-READY-REVIEW", orderReference: "TRRY-ORD-REVIEW99", paymentStatus: "proof_submitted", paymentVerifiedAmount: 0, paymentConfirmedAmount: 0 };
 const blocked = { ...base, id: "TRY-READY-BLOCKED", orderReference: "TRRY-ORD-BLOCKED99", blockedReason: "Materials unavailable" };
 const released = { ...base, id: "TRY-READY-RELEASED", orderReference: "TRRY-ORD-RELEASED99", orderStatus: "released", productionStage: "queued", productionUpdatedAt: "2026-08-01T05:00:00.000Z" };
+const productionCompletedPickup = { ...base, id: "TRY-PICKUP-HANDOFF", orderReference: "TRRY-ORD-PICKUP99", orderStatus: "released", productionStage: "completed", productionCompletedAt: "2026-08-01T08:00:00.000Z", productionCompletedBy: "owner-james", productionUpdatedAt: "2026-08-01T08:00:00.000Z", trackingSubstatus: null };
+const readyForPickup = { ...productionCompletedPickup, id: "TRY-PICKUP-READY", orderReference: "TRRY-ORD-PICKUPREADY99", trackingSubstatus: "ready_for_pickup", trackingNote: "Ready for pickup." };
 const legacy = { ...base, id: "TRY-READY-LEGACY", sourceType: "legacy", nativeOrderId: "", sourceInquiryId: "", orderReference: "TRRY-LEGACY-READY99", odooSO: "SO-LEGACY-READY99" };
-const rows = [base, unpaid, review, blocked, released, legacy];
+const rows = [base, unpaid, review, blocked, released, productionCompletedPickup, readyForPickup, legacy];
 
 const dashboard = createMvpDashboard({
   getAssignmentContext: () => ({ users: team, loadState: "success", error: "" }),
@@ -93,6 +95,23 @@ assert.ok(html.includes("QUEUED FOR PRODUCTION"), "post-release order no longer 
 assert.ok(!html.includes('data-mvp-release-order="TRY-READY-RELEASED"'), "released order cannot be released again from Orders");
 html = renderSelected(released, "history");
 assert.ok(html.includes("Released to production"), "released history is derived only after persisted production fields exist");
+
+html = renderSelected(productionCompletedPickup);
+assert.ok(html.includes("<mark class=\"completed\">COMPLETED</mark>"), "production-completed pickup order remains production-completed in the drawer");
+assert.ok(html.includes('data-mvp-fulfillment-action="TRY-PICKUP-HANDOFF"'), "production-completed pickup order exposes a fulfillment action");
+assert.ok(html.includes('data-mvp-fulfillment-status="ready_for_pickup"'), "pickup handoff action uses the existing ready_for_pickup tracking status");
+assert.ok(html.includes(">MARK READY FOR PICKUP<"), "pickup handoff footer promotes Ready for Pickup as the primary action");
+assert.ok(html.includes(">View Details<"), "production details remain secondary");
+assert.ok(!html.includes(">COMPLETE ORDER<"), "generic completion is not exposed before customer pickup");
+assert.ok(!html.includes(">MARK PICKED UP<"), "picked-up completion is not available before ready-for-pickup");
+
+html = renderSelected(readyForPickup);
+assert.ok(html.includes('data-mvp-fulfillment-status="completed"'), "ready-for-pickup advances only to the existing completed tracking status");
+assert.ok(html.includes(">MARK PICKED UP<"), "after ready-for-pickup the next pickup action is mark picked up");
+assert.ok(!html.includes(">MARK READY FOR PICKUP<"), "ready-for-pickup action disappears after success");
+assert.ok(!html.includes(">COMPLETE ORDER<"), "generic completion remains absent");
+html = renderSelected(readyForPickup, "fulfillment");
+assert.ok(html.includes("Ready for Pickup"), "ready-for-pickup tracking state is visible on the fulfillment tab");
 
 html = renderSelected(legacy);
 assert.ok(!html.includes('data-mvp-release-order="TRY-READY-LEGACY"'), "legacy Odoo-only orders are read-only and cannot release");
@@ -148,6 +167,8 @@ assert.equal(duplicateResult.error, "production is already released");
 const dashboardSource = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(dashboardSource.includes("data-mvp-open-messenger"), "Messenger behavior remains present");
 assert.ok(dashboardSource.includes("data-mvp-release-order"), "release action has a dedicated handler");
+assert.ok(dashboardSource.includes("data-mvp-fulfillment-action"), "fulfillment handoff has a dedicated handler");
+assert.ok(dashboardSource.includes("ready_for_pickup"), "pickup handoff uses the existing ready_for_pickup tracking contract");
 assert.ok(dashboardSource.includes("orderReleaseId"), "release button has in-flight duplicate-click protection");
 const releaseHelper = dashboardSource.match(/function isReleasedToProduction\(item\) \{[\s\S]*?\n  \}/)?.[0] || "";
 assert.ok(!releaseHelper.includes("readyForProduction(item)"), "Production visibility is not derived from readiness alone");
@@ -155,4 +176,8 @@ assert.ok(!releaseHelper.includes("readyForProduction(item)"), "Production visib
 const workflowSource = await readFile("api/_lib/opsWorkflow.js", "utf8");
 assert.ok(workflowSource.includes("advance_production"), "existing release workflow contract remains in use");
 
-console.log("PASS Ready drawer release state, gates, persisted workflow contract, duplicate release rejection, and Production visibility boundary");
+const mainSource = await readFile("src/main.js", "utf8");
+assert.ok(mainSource.includes("saveMvpFulfillmentFields"), "Order drawer routes fulfillment actions through the MVP fulfillment bridge");
+assert.ok(mainSource.includes("updateOpsInquiryFields(inquiryId, updates, adminAuthSession)"), "fulfillment bridge reuses the existing authenticated tracking persistence contract");
+
+console.log("PASS Ready drawer release state, gates, pickup fulfillment handoff, persisted workflow contract, duplicate release rejection, and Production visibility boundary");

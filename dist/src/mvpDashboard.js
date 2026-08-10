@@ -40,6 +40,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     orderReleaseError: "",
     orderReadinessAction: null,
     orderReadinessError: "",
+    orderFulfillmentId: null,
+    orderFulfillmentError: "",
     productionTab: "overview",
     inquiryTab: "details",
     inquiryActionId: null,
@@ -1339,7 +1341,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
   function orderFooterAction(item, gate) {
     const stage = displayProductionStage(item);
-    if (stage === "completed") return `<button class="mvp-secondary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">View Details</button>`;
+    if (stage === "completed") return orderFulfillmentFooter(item);
     if (releasedNativeOrder(item) && stage === "queued") return `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Open Production &rarr;</button>`;
     if (stage !== "queued") return `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Open Production &rarr;</button>`;
     if (readyForProduction(item)) return `<button class="mvp-primary-action" data-mvp-route="/production?order=${encodeURIComponent(item.id)}" type="button">Release to Production</button>`;
@@ -1911,6 +1913,25 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<div class="mvp-production-footer-state"><span>NOW: ${html(stageActionLabel("ready"))}</span><strong>NEXT: PRODUCTION COMPLETE</strong></div><button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="completed" ${disabled ? "disabled" : ""}>MARK PRODUCTION COMPLETE</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before completing Production: ${html(gate.join(", "))}</small>` : missingQcCompletion ? `<small>QC completion metadata is required before Production completion.</small>` : ""}`;
   }
 
+  function orderFulfillmentFooter(item) {
+    const method = key(item.fulfillmentMethod);
+    const trackingKey = key(item.trackingSubstatus);
+    const productionRoute = `/production?order=${encodeURIComponent(item.id)}`;
+    const secondary = `<button class="mvp-secondary-action" data-mvp-route="${productionRoute}" type="button">View Details</button>`;
+    const error = state.orderFulfillmentError ? `<small class="mvp-inline-error">${html(state.orderFulfillmentError)}</small>` : "";
+    if (method === "pickup" && !trackingKey) {
+      const disabled = state.orderFulfillmentId === item.id;
+      return `<button class="mvp-primary-action" data-mvp-fulfillment-action="${html(item.id)}" data-mvp-fulfillment-status="ready_for_pickup" type="button" ${disabled ? "disabled" : ""}>${disabled ? "MARKING..." : "MARK READY FOR PICKUP"}</button>${secondary}${error}`;
+    }
+    if (method === "pickup" && trackingKey === "ready_for_pickup") {
+      return `<button class="mvp-primary-action" data-mvp-fulfillment-action="${html(item.id)}" data-mvp-fulfillment-status="completed" type="button">MARK PICKED UP</button>${secondary}${error}`;
+    }
+    if (method === "delivery" && !trackingKey) {
+      return `<button class="mvp-primary-action" data-mvp-fulfillment-action="${html(item.id)}" data-mvp-fulfillment-status="out_for_delivery" type="button">PREPARE DELIVERY</button>${secondary}${error}`;
+    }
+    return `${secondary}${error}`;
+  }
+
   function productionQualityCheckOverview(item) {
     const blocker = productionBlocker(item);
     return `<section class="mvp-production-panel"><h3>ORDER SUMMARY</h3><div class="mvp-production-detail-list">
@@ -2159,7 +2180,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, approveOrderArtwork, confirmPayment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
+  function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, approveOrderArtwork, confirmPayment, saveFulfillment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
     bindInquiryMoreDismiss(root);
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { closeInquiryMoreMenus(root); navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
@@ -2435,6 +2456,28 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         state.orderReleaseError = error?.message || "Release failed.";
       } finally {
         state.orderReleaseId = null;
+      }
+      rerender();
+    }));
+    root.querySelectorAll("[data-mvp-fulfillment-action]").forEach((button) => button.addEventListener("click", async () => {
+      if (button.disabled) return;
+      const id = button.dataset.mvpFulfillmentAction;
+      const trackingSubstatus = button.dataset.mvpFulfillmentStatus;
+      if (!id || !trackingSubstatus) return;
+      state.orderFulfillmentId = id;
+      state.orderFulfillmentError = "";
+      button.disabled = true;
+      button.textContent = trackingSubstatus === "ready_for_pickup" ? "MARKING..." : "SAVING...";
+      try {
+        const result = await saveFulfillment?.(id, {
+          trackingSubstatus,
+          trackingNote: trackingSubstatus === "ready_for_pickup" ? "Ready for pickup." : undefined,
+        });
+        if (result && result.ok === false) throw new Error(result.error || "Fulfillment update failed.");
+      } catch (error) {
+        state.orderFulfillmentError = error?.message || "Fulfillment update failed.";
+      } finally {
+        state.orderFulfillmentId = null;
       }
       rerender();
     }));
