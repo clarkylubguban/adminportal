@@ -107,7 +107,7 @@ try {
     assert.equal(startedDrawer.hasDrawer, true, `IN PRODUCTION drawer renders at ${viewport.width}`);
     assert.ok(startedDrawer.width <= Math.min(390, viewport.width), `drawer width is viewport-safe at ${viewport.width}`);
     assert.ok(startedDrawer.rightOverflow <= 1, `drawer avoids horizontal overflow at ${viewport.width}`);
-    assert.equal(startedDrawer.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `tab order matches Figma at ${viewport.width}`);
+    assert.equal(startedDrawer.tabs, "Overview|Workflow|Assignment|History", `tab order matches Figma at ${viewport.width}`);
     assert.equal(startedDrawer.hasQcAction, true, `started drawer exposes QC action at ${viewport.width}`);
     assert.equal(startedDrawer.hasPaymentAction, false, `started drawer has no payment/Messenger action at ${viewport.width}`);
 
@@ -143,7 +143,7 @@ try {
     assert.equal(qcDrawer.hasDrawer, true, `QUALITY CHECK drawer renders at ${viewport.width}`);
     assert.ok(qcDrawer.width <= Math.min(390, viewport.width), `QC drawer width is viewport-safe at ${viewport.width}`);
     assert.ok(qcDrawer.rightOverflow <= 1, `QC drawer avoids horizontal overflow at ${viewport.width}`);
-    assert.equal(qcDrawer.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `QC tab order matches Figma at ${viewport.width}`);
+    assert.equal(qcDrawer.tabs, "Overview|Workflow|Assignment|History", `QC tab order matches Figma at ${viewport.width}`);
     assert.equal(qcDrawer.hasReadyAction, true, `QC drawer exposes Complete QC action at ${viewport.width}`);
     assert.equal(qcDrawer.hasPaymentAction, false, `QC drawer has no payment/Messenger action at ${viewport.width}`);
     assert.ok(qcDrawer.text.includes("QC Started") || qcDrawer.text.includes("Quality Check"), `QC drawer shows QC metadata at ${viewport.width}`);

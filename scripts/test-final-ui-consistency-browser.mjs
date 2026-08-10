@@ -99,10 +99,10 @@ async function verifyDrawers(cdp, viewport) {
   await verifyOrderDrawer(cdp, viewport, "TRRY-ORD-READY12", "READY TO RELEASE");
   await verifyOrderDrawer(cdp, viewport, "TRRY-ORD-POSTREL12", "QUEUED FOR PRODUCTION");
   await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-QUEUED12", "QUEUED");
-  await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-INPROD12", "IN PRODUCTION", "Overview|Workflow|Assignment|Fulfillment|History");
-  await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-QC12", "QUALITY CHECK", "Overview|Workflow|Assignment|Fulfillment|History");
-  await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-FULFILL12", "READY FOR FULFILLMENT", "Overview|Workflow|Assignment|Fulfillment|History");
-  await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-COMPLETE12", "COMPLETED", "Overview|Workflow|Assignment|Fulfillment|History");
+  await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-INPROD12", "IN PRODUCTION", "Overview|Workflow|Assignment|History");
+  await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-QC12", "QUALITY CHECK", "Overview|Workflow|Assignment|History");
+  await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-FULFILL12", "READY FOR FULFILLMENT", "Overview|Workflow|Assignment|History");
+  await verifyProductionDrawer(cdp, viewport, "TRRY-ORD-COMPLETE12", "COMPLETED", "Overview|Workflow|Assignment|History");
 }
 
 async function verifyInquiryDrawer(cdp, viewport, inquiry, expectedText, expectedTabs, suffix = "") {
@@ -146,10 +146,9 @@ async function verifyProductionDrawer(cdp, viewport, order, expectedText, expect
   if (expectedTabs) assert.equal(result.tabs, expectedTabs, `Production tab order at ${viewport.name}`);
   if (expectedText === "COMPLETED") {
     assert.equal(result.text.includes("Production completed"), true, `Completed drawer says Production completed at ${viewport.name}`);
-    await evaluate(cdp, `document.querySelector('.mvp-production-drawer-tabs [data-mvp-production-tab="fulfillment"]')?.click()`);
-    await waitForText(cdp, "Customer Tracking");
-    const fulfillment = await drawerSnapshot(cdp, ".mvp-drawer.production");
-    assert.equal(fulfillment.text.includes("Ready for Pickup"), true, `Completed drawer keeps actual customer tracking at ${viewport.name}`);
+    assert.equal(result.tabs.includes("Fulfillment"), false, `Completed Production drawer has no Fulfillment tab at ${viewport.name}`);
+    assert.equal(result.text.includes("Customer Tracking"), false, `Completed Production drawer does not expose Order-owned tracking at ${viewport.name}`);
+    assert.equal(result.text.includes("VIEW ORDER"), true, `Completed Production drawer routes to Order at ${viewport.name}`);
   }
   assert.equal(result.hasFooter, true, `Production footer is reachable at ${viewport.name}`);
 }

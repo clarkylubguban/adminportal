@@ -100,9 +100,9 @@ assert.ok(html.includes("Save Note"), "Save Note is functional through save_prod
 
 dashboard.state.productionTab = "fulfillment";
 html = dashboard.renderProduction({ items: rows });
-assert.ok(html.includes("FULFILLMENT DETAILS"), "Fulfillment tab renders");
-assert.ok(html.includes("Method") && html.includes("Pickup"), "Order-owned fulfillment method is visible");
-assert.ok(html.includes("Customer Visible Status") && html.includes("Not Ready"), "customer-visible status is derived, not persisted");
+assert.ok(!html.includes('data-mvp-production-tab="fulfillment"'), "Production drawer does not render a Fulfillment tab");
+assert.ok(!html.includes("FULFILLMENT DETAILS"), "Production drawer has no fulfillment-owned body");
+assert.ok(html.includes("ORDER SUMMARY"), "stale fulfillment tab state normalizes back to Overview");
 assert.ok(!html.includes("Save Fulfillment"), "Production drawer does not expose fulfillment writes");
 
 dashboard.state.productionTab = "history";

@@ -48,7 +48,7 @@ let html = dashboard.renderProduction({ items: rows });
 
 assert.ok(html.includes("mvp-production-dashboard-page"), "Production dashboard shell renders");
 assert.ok(html.includes("Home") && html.includes("Production"), "breadcrumb/title render");
-assert.ok(html.includes("Track released jobs from queue through quality check and pickup or delivery."), "locked Figma subtitle renders");
+assert.ok(html.includes("Track released jobs from queue through production completion."), "locked Figma subtitle renders");
 assert.ok(html.includes("Active Jobs"), "active job count summary renders");
 assert.ok(!html.includes("TRRY-ORD-READY01"), "unreleased READY TO RELEASE order is not visible in Production");
 assert.ok(!html.includes("READY TO RELEASE"), "Production dashboard never shows Order-side READY TO RELEASE");
@@ -59,12 +59,13 @@ assert.ok(!html.includes("SO-R4-ODOO-ONLY"), "Odoo-only status=won row does not 
 assert.ok(html.includes("FROM ORDER"), "job identity shows order linkage as secondary metadata");
 assert.ok(!html.includes("PRD-1048"), "dashboard does not invent PRD job references");
 
-for (const label of ["Queued", "Ready", "In Production", "Quality Check", "Blocked"]) {
+for (const label of ["Queued", "Ready", "In Production", "Quality Check", "Completed", "Blocked"]) {
   assert.ok(html.includes(label), `KPI/status label renders: ${label}`);
 }
-for (const tab of ["All Jobs", "Queued", "Ready", "In Production", "Quality Check", "Pickup / Delivery", "Blocked"]) {
+for (const tab of ["All Jobs", "Queued", "Ready", "In Production", "Quality Check", "Completed", "Blocked"]) {
   assert.ok(html.includes(tab), `status tab renders: ${tab}`);
 }
+assert.ok(!html.includes("Pickup / Delivery"), "Production dashboard no longer exposes fulfillment-owned Pickup / Delivery tab");
 for (const header of ["JOB", "CUSTOMER", "SUMMARY", "METHOD", "MATERIALS", "ARTWORK", "DUE", "STAFF", "STAGE", "ACTION"]) {
   assert.ok(html.includes(header), `table header renders: ${header}`);
 }

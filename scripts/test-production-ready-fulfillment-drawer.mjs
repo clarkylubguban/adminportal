@@ -61,14 +61,10 @@ assert.ok(!html.includes("Save Note"), "Ready assignment does not expose unsuppo
 
 dashboard.state.productionTab = "fulfillment";
 html = dashboard.renderProduction({ items: [ready, completed, legacyReady, blockedReady] });
-assert.ok(html.includes("FULFILLMENT"), "fulfillment tab renders");
-assert.ok(html.includes("Method") && html.includes("Pickup"), "order-owned method is visible");
-assert.ok(html.includes("Customer Tracking") && html.includes("Ready for Pickup"), "order-owned tracking is visible read-only");
-assert.ok(html.includes("Customer Visible Status") && html.includes("Ready for Pickup"), "customer-visible status is read-only");
-assert.ok(html.includes("Address") && html.includes("Front counter"), "order-owned address is visible read-only");
-assert.ok(html.includes("Bring valid ID."), "customer note is visible read-only");
-assert.ok(html.includes("Order-owned fulfillment"), "ownership boundary copy is visible");
-assert.ok(!html.includes("Save Fulfillment"), "fulfillment tab remains read-only");
+assert.ok(!html.includes('data-mvp-production-tab="fulfillment"'), "Production drawer does not render a Fulfillment tab");
+assert.ok(!html.includes("Customer Visible Status"), "Ready Production drawer has no fulfillment-owned body");
+assert.ok(html.includes("ORDER SUMMARY"), "stale fulfillment tab state normalizes back to Overview");
+assert.ok(!html.includes("Save Fulfillment"), "Production drawer does not expose fulfillment writes");
 
 dashboard.state.productionTab = "history";
 html = dashboard.renderProduction({ items: [ready, completed, legacyReady, blockedReady] });
@@ -125,7 +121,7 @@ assert.equal(failed.ok, false, "backend failure keeps blocked Ready work from co
 const source = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(source.includes("productionReadyDrawer"), "Ready drawer uses dedicated shared Production drawer path");
 assert.ok(source.includes("MARK PRODUCTION COMPLETE"), "Ready completion action is explicit");
-assert.ok(source.includes("Order-owned fulfillment"), "Ready fulfillment ownership boundary is encoded");
+assert.ok(!source.includes("productionReadyFulfillment"), "Ready Production drawer has no fulfillment-owned panel");
 assert.ok(source.includes("data-mvp-open-messenger"), "Messenger behavior remains elsewhere and untouched");
 
 await verifyResponsiveReadyDrawer();
@@ -283,7 +279,7 @@ async function verifyResponsiveReadyDrawer() {
       assert.equal(result.hasDrawer, true, `READY drawer renders at ${viewport.width}`);
       assert.ok(result.width <= Math.min(390, viewport.width), `drawer width is viewport-safe at ${viewport.width}`);
       assert.ok(result.rightOverflow <= 16, `drawer avoids horizontal overflow beyond scrollbar gutter at ${viewport.width}: ${result.rightOverflow}`);
-      assert.equal(result.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `tab order matches Figma at ${viewport.width}`);
+      assert.equal(result.tabs, "Overview|Workflow|Assignment|History", `tab order matches Figma at ${viewport.width}`);
       assert.equal(result.hasComplete, true, `completion action is present at ${viewport.width}`);
       assert.equal(result.hasSaveFulfillment, false, `no Save Fulfillment at ${viewport.width}`);
       assert.equal(result.hasPaymentAction, false, `no payment/Messenger action at ${viewport.width}`);

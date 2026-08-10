@@ -76,15 +76,10 @@ assert.ok(!html.includes("<button") || !html.includes("Reassign</button>"), "com
 
 dashboard.state.productionTab = "fulfillment";
 html = dashboard.renderProduction({ items: [completed, legacyCompleted, fulfilledOrder] });
-assert.ok(html.includes("FULFILLMENT"), "fulfillment tab renders");
-assert.ok(html.includes("Method") && html.includes("Pickup"), "method is visible read-only");
-assert.ok(html.includes("Customer Tracking") && html.includes("Ready for Pickup"), "production completion preserves actual tracking");
-assert.ok(html.includes("Customer Visible Status") && html.includes("Ready for Pickup"), "customer-visible status follows tracking, not production stage");
-assert.ok(html.includes("Front counter"), "address is visible read-only");
-assert.ok(html.includes("Bring valid ID."), "customer note is visible read-only");
-assert.ok(html.includes("Order-owned fulfillment"), "ownership boundary copy is visible");
-assert.ok(!html.includes("Fulfillment Completed"), "Production drawer does not claim final fulfillment completion without Order proof");
-assert.ok(!html.includes("Save Fulfillment"), "fulfillment remains read-only");
+assert.ok(!html.includes('data-mvp-production-tab="fulfillment"'), "Production drawer does not render a Fulfillment tab");
+assert.ok(!html.includes("Customer Visible Status"), "Completed Production drawer has no fulfillment-owned body");
+assert.ok(html.includes("ORDER SUMMARY"), "stale fulfillment tab state normalizes back to Overview");
+assert.ok(!html.includes("Save Fulfillment"), "Production drawer does not expose fulfillment writes");
 
 dashboard.state.productionTab = "history";
 html = dashboard.renderProduction({ items: [completed, legacyCompleted, fulfilledOrder] });
@@ -110,12 +105,13 @@ assert.ok(!html.includes("PRD-"), "completed drawer does not invent Production j
 global.window.location.search = "?order=TRRY-ORD-FULFILLED11";
 dashboard.state.productionTab = "fulfillment";
 html = dashboard.renderProduction({ items: [completed, legacyCompleted, fulfilledOrder] });
-assert.ok(html.includes("Customer Tracking") && html.includes("Completed"), "actual Order-owned completed tracking can be displayed when present");
+assert.ok(!html.includes("Customer Tracking"), "Completed Production drawer does not display Order-owned tracking as a tab body");
+assert.ok(html.includes("ORDER SUMMARY"), "stale fulfillment tab state normalizes back to Overview");
 
 const source = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(source.includes("productionCompletedDrawer"), "completed drawer uses dedicated shared Production drawer path");
 assert.ok(source.includes("Production work and internal handoff are complete."), "production-owned completion copy is encoded");
-assert.ok(source.includes("Order-owned fulfillment"), "fulfillment ownership boundary is encoded");
+assert.ok(!source.includes("productionCompletedFulfillment"), "Completed Production drawer has no fulfillment-owned panel");
 assert.ok(source.includes("data-mvp-open-messenger"), "Messenger behavior remains elsewhere and untouched");
 
 await verifyResponsiveCompletedDrawer();
@@ -244,7 +240,7 @@ async function verifyResponsiveCompletedDrawer() {
       assert.equal(result.hasDrawer, true, `Completed drawer renders at ${viewport.width}`);
       assert.ok(result.width <= Math.min(390, viewport.width), `drawer width is viewport-safe at ${viewport.width}`);
       assert.ok(result.rightOverflow <= 16, `drawer avoids horizontal overflow beyond scrollbar gutter at ${viewport.width}: ${result.rightOverflow}`);
-      assert.equal(result.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `tab order matches Figma at ${viewport.width}`);
+      assert.equal(result.tabs, "Overview|Workflow|Assignment|History", `tab order matches Figma at ${viewport.width}`);
       assert.equal(result.hasViewOrder, true, `View Order action exists at ${viewport.width}`);
       assert.equal(result.hasMutation, false, `no production mutation hook at ${viewport.width}`);
       assert.equal(result.hasSaveFulfillment, false, `no Save Fulfillment at ${viewport.width}`);

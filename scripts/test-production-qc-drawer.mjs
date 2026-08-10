@@ -74,7 +74,7 @@ assert.ok(html.includes("QC Started") && html.includes("Aug 1, 2026"), "Overview
 assert.ok(html.includes("Louvelyngel - Staff"), "QC started actor resolves from admin_users identity");
 assert.ok(html.includes("NOW: QUALITY CHECK"), "QC footer NOW shows Quality Check");
 assert.ok(html.includes("NEXT: READY"), "QC footer NEXT shows Ready");
-assert.ok(html.includes("Complete Quality Check"), "QC footer exposes completion action");
+assert.ok(html.includes("COMPLETE QUALITY CHECK"), "QC footer exposes completion action");
 assert.ok(html.includes('data-mvp-next="ready"'), "completion action maps to ready transition");
 assert.ok(!/Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(html), "QC drawer exposes no payment or Messenger action");
 
@@ -96,8 +96,9 @@ assert.ok(html.includes('data-mvp-save-qc-note="TRY-QC-DRAWER"'), "Save QC Note 
 
 dashboard.state.productionTab = "fulfillment";
 html = dashboard.renderProduction({ items: [queued, inProgress, qc, blockedQc, legacyQc] });
-assert.ok(html.includes("FULFILLMENT"), "Fulfillment tab renders");
-assert.ok(html.includes("Customer Visible Status") && html.includes("Not Ready"), "QC derives customer-visible status as Not Ready");
+assert.ok(!html.includes('data-mvp-production-tab="fulfillment"'), "Production drawer does not render a Fulfillment tab");
+assert.ok(!html.includes("Customer Visible Status"), "QC drawer has no fulfillment-owned body");
+assert.ok(html.includes("ORDER SUMMARY"), "stale fulfillment tab state normalizes back to Overview");
 assert.ok(!html.includes("Save Fulfillment"), "QC drawer keeps fulfillment read-only");
 
 dashboard.state.productionTab = "history";
@@ -121,8 +122,8 @@ assert.ok(!html.includes("PRD-"), "QC drawer does not invent Production job IDs"
 global.window.location.search = "?order=TRRY-ORD-QUEUEDQC";
 html = dashboard.renderProduction({ items: [queued, inProgress, qc, blockedQc, legacyQc] });
 assert.ok(html.includes("START PRODUCTION"), "queued regression still offers Start Production");
-assert.ok(html.includes("NOW: Queued for Production"), "queued regression keeps explicit NOW state");
-assert.ok(html.includes("NEXT: In Production"), "queued regression keeps explicit NEXT state");
+assert.ok(html.includes("NOW: QUEUED FOR PRODUCTION"), "queued regression keeps explicit NOW state");
+assert.ok(html.includes("NEXT: IN PRODUCTION"), "queued regression keeps explicit NEXT state");
 
 global.window.location.search = "?order=TRRY-ORD-INPRODQC";
 html = dashboard.renderProduction({ items: [queued, inProgress, qc, blockedQc, legacyQc] });
