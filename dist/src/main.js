@@ -46,8 +46,11 @@ import {
 import {
   catalogOptions,
   catalogStatusOptions,
+  createAdminProductCategory,
   createAdminCatalogProduct,
+  getAdminProductCategories,
   getAdminCatalogProducts,
+  updateAdminProductCategory,
   updateAdminCatalogProduct,
 } from "./services/adminCatalog.js";
 import {
@@ -439,15 +442,27 @@ let hasLoadedCatalogProducts = false;
 let orderLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 let clientLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 let catalogProducts = [];
+let productCategories = [];
 let catalogLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
 let catalogLoadError = "";
+let categoryLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
+let categoryLoadError = "";
 let activeCatalogKey = "trry_webapp";
+let activeCatalogPanel = "categories";
 let selectedCatalogProductId = null;
 let catalogDrawerMode = "";
 let catalogDraft = null;
 let catalogValidationError = "";
 let catalogSaveState = "idle";
 let catalogSaveError = "";
+let categoryStatusFilter = "active";
+let selectedCategoryId = null;
+let categoryDrawerMode = "";
+let categoryDraft = null;
+let categoryValidationError = "";
+let categorySaveState = "idle";
+let categorySaveError = "";
+let hasLoadedProductCategories = false;
 let isAccountMenuOpen = false;
 let staffUsers = [];
 let staffLoadState = "idle";
@@ -516,6 +531,7 @@ const routes = {
   "/inquiries": "Inquiries",
   "/orders": "Orders",
   "/production": "Production",
+  "/catalog": "Catalog",
   "/my-tasks": "My Tasks",
   "/calendar": "Calendar",
   "/workboard": "Workboard",
@@ -582,7 +598,7 @@ function render() {
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = false;
+  const isAdminSaasRoute = currentRoute === "Catalog";
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
@@ -607,7 +623,9 @@ function render() {
                       ? renderCalendarPage()
                       : currentRoute === "Workboard"
                         ? renderWorkboardPage()
-                  : renderOverviewPage()
+                        : currentRoute === "Catalog"
+                          ? renderCatalogPage()
+                          : renderOverviewPage()
         }
         ${renderFooter()}
       </section>
@@ -1220,6 +1238,7 @@ function startAdminDataLoading() {
   loadAdminOrders();
   loadAdminClients();
   loadCatalogProducts();
+  loadProductCategories();
   if (isTaskFeatureUiEnabled()) loadMyTasks();
 }
 
@@ -1287,6 +1306,32 @@ async function loadCatalogProducts() {
     catalogProducts = [];
     catalogLoadState = "error";
     catalogLoadError = error.message || "Unable to load catalog records.";
+  } finally {
+    render();
+  }
+}
+
+async function loadProductCategories() {
+  if (hasLoadedProductCategories && categoryLoadState !== "loading") return;
+  hasLoadedProductCategories = true;
+  categoryLoadState = "loading";
+  categoryLoadError = "";
+
+  try {
+    const result = await getAdminProductCategories(adminAuthSession);
+    const nextCategories = Array.isArray(result?.categories) ? result.categories : [];
+    productCategories = sortProductCategories(nextCategories);
+    categoryLoadState = result?.status === "error" ? "error" : nextCategories.length ? "success" : "empty";
+    categoryLoadError = result?.error?.message ?? "";
+
+    if (!productCategories.some((item) => item.id === selectedCategoryId)) {
+      selectedCategoryId = productCategories[0]?.id ?? null;
+    }
+  } catch (error) {
+    console.error("Unable to apply product categories.", error);
+    productCategories = [];
+    categoryLoadState = "error";
+    categoryLoadError = error.message || "Unable to load product categories.";
   } finally {
     render();
   }
@@ -4917,8 +4962,11 @@ function renderProductsPage(selectedProduct) {
 
 function renderCatalogPage() {
   const visibleProducts = getVisibleCatalogProducts();
+  const visibleCategories = getVisibleProductCategories();
   const selectedProduct = catalogProducts.find((item) => item.id === selectedCatalogProductId);
-  const canWrite = canWriteCatalogProducts();
+  const selectedCategory = productCategories.find((item) => item.id === selectedCategoryId);
+  const canWriteCategories = canManageProductCategories();
+  const canWriteCatalog = canWriteCatalogProducts();
   const destinationCounts = getCatalogDestinationCounts();
   const categoryOptions = getCatalogCategoryOptions();
 
@@ -4926,12 +4974,63 @@ function renderCatalogPage() {
     <main class="orders-page catalog-page admin-saas-page">
       <div class="page-heading catalog-heading">
         <div>
-          <h1>Catalog</h1>
-          <p class="subtitle">Manage how approved products appear across customer-facing catalogs.</p>
+          <h1>Master Catalog</h1>
+          <p class="subtitle">Manage category taxonomy for internal products and downstream catalog setup.</p>
         </div>
-        ${canWrite ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ Add Catalog Item</button>` : ""}
+        ${activeCatalogPanel === "categories" && canWriteCategories ? `<button class="catalog-add-button" data-category-add type="button">+ Add Category</button>` : ""}
+        ${activeCatalogPanel === "items" && canWriteCatalog ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ Add Catalog Item</button>` : ""}
       </div>
 
+      <section class="catalog-mode-tabs" aria-label="Master catalog sections">
+        <button class="${activeCatalogPanel === "categories" ? "active" : ""}" data-catalog-panel="categories" type="button">
+          <span>Categories</span>
+          <strong>${productCategories.length}</strong>
+        </button>
+        <button class="${activeCatalogPanel === "items" ? "active" : ""}" data-catalog-panel="items" type="button">
+          <span>Catalog Items</span>
+          <strong>${catalogProducts.length}</strong>
+        </button>
+      </section>
+
+      ${activeCatalogPanel === "categories" ? `
+        <section class="catalog-controls category-controls" aria-label="Category controls">
+          <div class="catalog-filter-row">
+            <label class="search-field catalog-search">
+              ${renderIcon("search", "search-icon")}
+              <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search categories" type="search" />
+            </label>
+            <select class="catalog-status-filter" id="category-status-filter" aria-label="Category status filter">
+              <option value="active" ${categoryStatusFilter === "active" ? "selected" : ""}>Active categories</option>
+              <option value="archived" ${categoryStatusFilter === "archived" ? "selected" : ""}>Archived categories</option>
+              <option value="all" ${categoryStatusFilter === "all" ? "selected" : ""}>All categories</option>
+            </select>
+          </div>
+        </section>
+
+        ${renderCategoryNotice()}
+
+        <article class="content-card table-card catalog-table-card">
+          <p class="table-helper-text catalog-count-label">${visibleCategories.length} ${visibleCategories.length === 1 ? "CATEGORY" : "CATEGORIES"}</p>
+          <table class="products-table catalog-table category-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Code</th>
+                <th>Parent</th>
+                <th>Children</th>
+                <th>Status</th>
+                <th>Archived</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${visibleCategories.map(renderProductCategoryRow).join("")}
+            </tbody>
+          </table>
+          ${renderCategoryEmptyState(visibleCategories)}
+        </article>
+        ${categoryDrawerMode ? renderCategoryDrawer(selectedCategory) : ""}
+      ` : `
       <section class="catalog-controls" aria-label="Catalog controls">
         <div class="catalog-tabs" role="tablist" aria-label="Catalog destinations">
           ${catalogOptions.map((catalog) => `
@@ -4983,6 +5082,7 @@ function renderCatalogPage() {
         ${renderCatalogEmptyState(visibleProducts)}
       </article>
       ${catalogDrawerMode ? renderCatalogDrawer(selectedProduct) : ""}
+      `}
     </main>
   `;
 }
@@ -5013,6 +5113,268 @@ function getVisibleCatalogProducts() {
 
     return matchesCatalog && matchesStatus && matchesCategory && matchesFeatured && matchesQuery;
   });
+}
+
+function getVisibleProductCategories() {
+  const normalizedQuery = productQuery.trim().toLowerCase();
+
+  return sortProductCategories(productCategories).filter((item) => {
+    const matchesStatus =
+      categoryStatusFilter === "active"
+        ? item.active && !item.archivedAt
+        : categoryStatusFilter === "archived"
+          ? !item.active || Boolean(item.archivedAt)
+          : true;
+    const parent = getProductCategoryParent(item);
+    const matchesQuery =
+      !normalizedQuery ||
+      [item.name, item.code, parent?.name, item.archiveReason]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+
+    return matchesStatus && matchesQuery;
+  });
+}
+
+function renderCategoryNotice() {
+  if (categorySaveState === "success") {
+    return `<div class="catalog-notice success">Category saved successfully.</div>`;
+  }
+
+  if (categoryLoadState === "loading") {
+    return `<div class="catalog-notice">Loading product category taxonomy...</div>`;
+  }
+
+  if (categoryLoadState === "error") {
+    return `<div class="catalog-notice error">Unable to load product categories. Check Supabase access and M1 RLS policies.</div>`;
+  }
+
+  if (!canManageProductCategories()) {
+    return `<div class="catalog-notice">Viewer access: product category taxonomy is read-only.</div>`;
+  }
+
+  return "";
+}
+
+function renderCategoryEmptyState(visibleCategories) {
+  if (visibleCategories.length > 0) return "";
+
+  if (categoryLoadState === "loading") {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading categories...</strong><span>Checking Master Catalog taxonomy records.</span></div>`;
+  }
+
+  if (!productCategories.length) {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No categories yet</strong><span>Add the first Master Catalog category before creating M1 products.</span></div>`;
+  }
+
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No categories match</strong><span>Try another search term or status filter.</span></div>`;
+}
+
+function renderProductCategoryRow(category) {
+  const parent = getProductCategoryParent(category);
+  const children = productCategories.filter((item) => item.parentCategoryId === category.id).length;
+  const indent = getCategoryDepth(category) * 18;
+  const archived = category.archivedAt ? formatCatalogUpdated(category.archivedAt) : "-";
+
+  return `
+    <tr class="${category.id === selectedCategoryId ? "selected" : ""}" data-category-edit="${escapeHtml(category.id)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(category.name)} category details">
+      <td class="catalog-name-cell"><div class="category-name-stack" style="--category-indent: ${indent}px"><strong title="${escapeHtml(category.name)}">${escapeHtml(category.name)}</strong><span>${escapeHtml(getCategoryPath(category))}</span></div></td>
+      <td class="mono-value" data-mobile-label="Code">${escapeHtml(category.code)}</td>
+      <td data-mobile-label="Parent">${escapeHtml(parent?.name || "Root")}</td>
+      <td data-mobile-label="Children">${children}</td>
+      <td data-mobile-label="Status">${category.active && !category.archivedAt ? `<span class="status-pill active">Active</span>` : `<span class="status-pill archived">Archived</span>`}</td>
+      <td data-mobile-label="Archived">${escapeHtml(archived)}</td>
+      <td data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(category.updatedAt))}</span></td>
+    </tr>
+  `;
+}
+
+function renderCategoryDrawer(selectedCategory) {
+  const draft = categoryDraft ?? createCategoryDraft(selectedCategory);
+  const isSaving = categorySaveState === "saving";
+  const canWrite = canManageProductCategories();
+  const isArchived = !draft.active || Boolean(draft.archivedAt);
+  const title = draft.name || (categoryDrawerMode === "edit" ? "Category" : "Add Category");
+
+  return `
+    <div class="catalog-drawer-backdrop" data-category-close></div>
+    <aside class="catalog-drawer category-drawer" aria-label="${escapeHtml(title)} category details">
+      <header>
+        <div>
+          <span>MASTER CATALOG CATEGORY</span>
+          <h2>${escapeHtml(title)}</h2>
+          ${isArchived ? `<span class="status-pill archived">Archived</span>` : `<span class="status-pill active">Active</span>`}
+        </div>
+        <button class="catalog-drawer-close" data-category-close type="button" aria-label="Close category drawer">X</button>
+      </header>
+      <form class="catalog-form" id="category-form">
+        ${categoryValidationError ? `<p class="catalog-form-error">${escapeHtml(categoryValidationError)}</p>` : ""}
+        ${categorySaveError ? `<p class="catalog-form-error">${escapeHtml(categorySaveError)}</p>` : ""}
+
+        <section class="catalog-drawer-section" aria-label="Category identity">
+          <h3>Identity</h3>
+          ${renderCategoryInput("name", "Name", draft.name, "text", true, isSaving || !canWrite)}
+          ${renderCategoryInput("code", "Code", draft.code, "text", true, isSaving || !canWrite)}
+          ${renderCatalogField("parentCategoryId", "Parent category", renderCategoryParentSelect(draft, isSaving || !canWrite))}
+        </section>
+
+        <section class="catalog-drawer-section" aria-label="Governance">
+          <h3>Governance</h3>
+          <div class="catalog-kv-list">
+            ${renderCatalogDetailRow("Created", formatCatalogUpdated(draft.createdAt))}
+            ${renderCatalogDetailRow("Updated", formatCatalogUpdated(draft.updatedAt))}
+            ${renderCatalogDetailRow("Archived", draft.archivedAt ? formatCatalogUpdated(draft.archivedAt) : "Not archived")}
+          </div>
+          ${isArchived
+            ? renderCategoryInput("restoreReason", "Restore note", draft.restoreReason, "text", false, isSaving || !canWrite)
+            : renderCategoryInput("archiveReason", "Archive reason", draft.archiveReason, "text", false, isSaving || !canWrite)}
+        </section>
+      </form>
+      <div class="catalog-drawer-actions">
+        <button class="primary-button catalog-save-button" form="category-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : "Save Category"}</button>
+        ${draft.id && canWrite ? `<button class="note-button category-archive-button" data-category-archive-action="${isArchived ? "restore" : "archive"}" type="button" ${isSaving ? "disabled" : ""}>${isArchived ? "Restore" : "Archive"}</button>` : ""}
+        <button class="note-button" data-category-close type="button">Cancel</button>
+      </div>
+    </aside>
+  `;
+}
+
+function renderCategoryInput(field, label, value, type = "text", required = false, disabled = false) {
+  return renderCatalogField(field, label, `<input id="catalog-${field}" data-category-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} ${disabled ? "disabled" : ""} />`);
+}
+
+function renderCategoryParentSelect(draft, disabled = false) {
+  const options = getCategoryParentOptions(draft);
+  return `<select id="catalog-parentCategoryId" data-category-field="parentCategoryId" ${disabled ? "disabled" : ""}><option value="">Root category</option>${options.map((category) => `<option value="${escapeHtml(category.id)}" ${category.id === draft.parentCategoryId ? "selected" : ""}>${escapeHtml(getCategoryPath(category))}</option>`).join("")}</select>`;
+}
+
+function getCategoryParentOptions(draft) {
+  const blockedIds = new Set(draft.id ? [draft.id, ...getCategoryDescendantIds(draft.id)] : []);
+  return sortProductCategories(productCategories).filter((category) => !blockedIds.has(category.id) && category.active && !category.archivedAt);
+}
+
+function getCategoryDescendantIds(categoryId) {
+  const children = productCategories.filter((item) => item.parentCategoryId === categoryId);
+  return children.flatMap((child) => [child.id, ...getCategoryDescendantIds(child.id)]);
+}
+
+function getProductCategoryParent(category) {
+  return productCategories.find((item) => item.id === category?.parentCategoryId) ?? null;
+}
+
+function getCategoryPath(category) {
+  const names = [];
+  let current = category;
+  const seen = new Set();
+  while (current && !seen.has(current.id)) {
+    names.unshift(current.name);
+    seen.add(current.id);
+    current = getProductCategoryParent(current);
+  }
+  return names.join(" / ");
+}
+
+function getCategoryDepth(category) {
+  let depth = 0;
+  let current = getProductCategoryParent(category);
+  const seen = new Set([category?.id]);
+  while (current && !seen.has(current.id)) {
+    depth += 1;
+    seen.add(current.id);
+    current = getProductCategoryParent(current);
+  }
+  return depth;
+}
+
+function sortProductCategories(categories) {
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const pathFor = (category) => {
+    const names = [];
+    let current = category;
+    const seen = new Set();
+    while (current && !seen.has(current.id)) {
+      names.unshift(current.name);
+      seen.add(current.id);
+      current = byId.get(current.parentCategoryId);
+    }
+    return names.join(" / ");
+  };
+
+  return [...categories].sort((a, b) => pathFor(a).localeCompare(pathFor(b)) || a.code.localeCompare(b.code));
+}
+
+function createCategoryDraft(category = null) {
+  if (category) {
+    return {
+      ...category,
+      restoreReason: "",
+    };
+  }
+
+  return {
+    name: "",
+    code: "",
+    parentCategoryId: "",
+    active: true,
+    archivedAt: "",
+    archivedByUserId: "",
+    archiveReason: "",
+    restoreReason: "",
+  };
+}
+
+function updateCategoryDraftField(field, value) {
+  if (!categoryDraft) return;
+  const nextValue = String(value ?? "");
+  const shouldCreateCode = field === "name" && (!categoryDraft.code || categoryDraft.code === createCategoryCode(categoryDraft.name));
+  categoryDraft = {
+    ...categoryDraft,
+    [field]: nextValue,
+  };
+  if (shouldCreateCode) {
+    categoryDraft.code = createCategoryCode(nextValue);
+  }
+  categoryValidationError = "";
+  categorySaveError = "";
+}
+
+function normalizeCategoryDraft(draft) {
+  return {
+    ...draft,
+    name: String(draft.name || "").trim(),
+    code: createCategoryCode(draft.code || draft.name),
+    parentCategoryId: String(draft.parentCategoryId || "").trim(),
+    active: draft.active !== false,
+    archiveReason: String(draft.archiveReason || "").trim(),
+    restoreReason: String(draft.restoreReason || "").trim(),
+  };
+}
+
+function validateCategory(category) {
+  if (!category.name) return "Category name is required.";
+  if (!category.code) return "Category code is required.";
+  if (category.parentCategoryId && category.parentCategoryId === category.id) return "A category cannot be its own parent.";
+  if (category.parentCategoryId && getCategoryDescendantIds(category.id).includes(category.parentCategoryId)) return "A category cannot be moved under its own child.";
+  const duplicate = productCategories.find((item) => item.id !== category.id && (item.name.toLowerCase() === category.name.toLowerCase() || item.code.toLowerCase() === category.code.toLowerCase()));
+  if (duplicate) return "Category name and code must be unique.";
+  return "";
+}
+
+function createCategoryCode(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function canManageProductCategories() {
+  return ["owner", "admin"].includes(adminUser?.role);
+}
+
+function getAdminActorUserId() {
+  return adminUser?.userId || adminUser?.user_id || adminAuthSession?.user?.id || "";
 }
 
 function renderCatalogNotice() {
@@ -6127,6 +6489,7 @@ function renderSidebar(currentRoute) {
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
+    { label: "Catalog", path: "/catalog", icon: "package" },
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
@@ -6227,6 +6590,7 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
+    { label: "Catalog", path: "/catalog", icon: "package" },
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
@@ -6298,6 +6662,122 @@ function focusFieldAtEnd(id) {
     field.setSelectionRange(length, length);
   }
 }
+
+function openCategoryDrawer(mode, categoryId = null) {
+  if (mode === "create" && !canManageProductCategories()) return;
+  const category = productCategories.find((item) => item.id === categoryId) ?? null;
+  categoryDrawerMode = mode;
+  selectedCategoryId = category?.id ?? selectedCategoryId;
+  categoryDraft = createCategoryDraft(category);
+  categoryValidationError = "";
+  categorySaveError = "";
+  categorySaveState = "idle";
+  render();
+}
+
+function closeCategoryDrawer() {
+  categoryDrawerMode = "";
+  categoryDraft = null;
+  categoryValidationError = "";
+  categorySaveError = "";
+  categorySaveState = "idle";
+  render();
+}
+
+async function saveCategoryDraft() {
+  if (!canManageProductCategories() || !categoryDraft || categorySaveState === "saving") return;
+
+  const category = normalizeCategoryDraft(categoryDraft);
+  const validationError = validateCategory(category);
+  if (validationError) {
+    categoryValidationError = validationError;
+    render();
+    return;
+  }
+
+  categorySaveState = "saving";
+  categorySaveError = "";
+  categoryValidationError = "";
+  render();
+
+  try {
+    const savedCategory = categoryDrawerMode === "edit" && category.id
+      ? await updateAdminProductCategory(category.id, category, adminAuthSession)
+      : await createAdminProductCategory(category, adminAuthSession);
+
+    if (savedCategory) {
+      productCategories = upsertProductCategory(productCategories, savedCategory);
+      selectedCategoryId = savedCategory.id;
+    }
+
+    categoryDrawerMode = "";
+    categoryDraft = null;
+    categorySaveState = "success";
+    window.setTimeout(() => {
+      if (categorySaveState === "success") {
+        categorySaveState = "idle";
+        render();
+      }
+    }, 1800);
+    render();
+  } catch (error) {
+    console.error("Unable to save product category.", error);
+    categorySaveState = "idle";
+    categorySaveError = error.message || "Save failed. Check M1 category RLS and constraints.";
+    render();
+  }
+}
+
+async function archiveOrRestoreCategory(action) {
+  if (!canManageProductCategories() || !categoryDraft?.id || categorySaveState === "saving") return;
+
+  const isRestore = action === "restore";
+  const reason = String(isRestore ? categoryDraft.restoreReason : categoryDraft.archiveReason).trim();
+  if (!isRestore && !reason) {
+    categoryValidationError = "Archive reason is required.";
+    render();
+    return;
+  }
+
+  const nextCategory = normalizeCategoryDraft({
+    ...categoryDraft,
+    active: isRestore,
+    archivedAt: isRestore ? "" : new Date().toISOString(),
+    archivedByUserId: isRestore ? "" : getAdminActorUserId(),
+    archiveReason: isRestore ? "" : reason,
+  });
+
+  categorySaveState = "saving";
+  categorySaveError = "";
+  categoryValidationError = "";
+  render();
+
+  try {
+    const savedCategory = await updateAdminProductCategory(nextCategory.id, nextCategory, adminAuthSession);
+    if (savedCategory) {
+      productCategories = upsertProductCategory(productCategories, savedCategory);
+      selectedCategoryId = savedCategory.id;
+    }
+    categoryDrawerMode = "";
+    categoryDraft = null;
+    categorySaveState = "success";
+    render();
+  } catch (error) {
+    console.error("Unable to update category archive state.", error);
+    categorySaveState = "idle";
+    categorySaveError = error.message || "Archive update failed. Check linked products and category state.";
+    render();
+  }
+}
+
+function upsertProductCategory(items, category) {
+  const nextItems = items.some((item) => item.id === category.id)
+    ? items.map((item) => item.id === category.id ? category : item)
+    : [...items, category];
+
+  return sortProductCategories(nextItems);
+}
+
 function openCatalogDrawer(mode, productId = null) {
   if (mode === "create" && !canWriteCatalogProducts()) return;
   const product = catalogProducts.find((item) => item.id === productId) ?? null;
@@ -6870,6 +7350,70 @@ function bindEvents() {
   bindWorkboardEvents();
   bindMyTasksEvents();
   bindCalendarEvents();
+  document.querySelectorAll("[data-catalog-panel]").forEach((button) => {
+    button.addEventListener("click", () => {
+      activeCatalogPanel = button.dataset.catalogPanel;
+      catalogDrawerMode = "";
+      catalogDraft = null;
+      categoryDrawerMode = "";
+      categoryDraft = null;
+      render();
+    });
+  });
+
+  document.getElementById("category-status-filter")?.addEventListener("change", (event) => {
+    categoryStatusFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-category-add]")?.addEventListener("click", () => {
+    openCategoryDrawer("create");
+  });
+
+  document.querySelectorAll("[data-category-edit]").forEach((element) => {
+    const openCategoryRow = () => openCategoryDrawer("edit", element.dataset.categoryEdit);
+
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openCategoryRow();
+    });
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openCategoryRow();
+    });
+  });
+
+  document.querySelectorAll("[data-category-close]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeCategoryDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-category-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      updateCategoryDraftField(field.dataset.categoryField, event.target.value);
+      if (field.dataset.categoryField === "name") {
+        const codeInput = document.getElementById("catalog-code");
+        if (codeInput && categoryDraft?.code) codeInput.value = categoryDraft.code;
+      }
+    });
+    field.addEventListener("change", (event) => {
+      updateCategoryDraftField(field.dataset.categoryField, event.target.value);
+    });
+  });
+
+  document.querySelector("[data-category-archive-action]")?.addEventListener("click", async (event) => {
+    await archiveOrRestoreCategory(event.currentTarget.dataset.categoryArchiveAction);
+  });
+
+  document.getElementById("category-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveCategoryDraft();
+  });
+
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCatalogKey = button.dataset.catalogTab;

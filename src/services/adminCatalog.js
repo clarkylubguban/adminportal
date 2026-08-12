@@ -6,6 +6,7 @@ import {
 } from "../lib/supabaseClient.js";
 
 export const CATALOG_PRODUCTS_TABLE = "catalog_products";
+export const PRODUCT_CATEGORIES_TABLE = "product_categories";
 
 export const catalogOptions = [
   { key: "trry_webapp", label: "TRRY WEBAPP" },
@@ -14,6 +15,64 @@ export const catalogOptions = [
 ];
 
 export const catalogStatusOptions = ["draft", "published", "hidden", "archived"];
+
+export async function getAdminProductCategories(authSession) {
+  if (!isSupabaseReady()) {
+    return {
+      categories: [],
+      status: "empty",
+      source: "local",
+      error: null,
+    };
+  }
+
+  try {
+    const rows = await readSupabaseTableWithAuth(
+      PRODUCT_CATEGORIES_TABLE,
+      {
+        select: "*",
+        order: "name.asc",
+      },
+      getAccessToken(authSession)
+    );
+
+    return {
+      categories: Array.isArray(rows) ? rows.map(mapCategoryRowToCategory) : [],
+      status: rows?.length ? "success" : "empty",
+      source: "supabase",
+      error: null,
+    };
+  } catch (error) {
+    console.error("Unable to load Supabase product categories.", error);
+    return {
+      categories: [],
+      status: "error",
+      source: "supabase",
+      error,
+    };
+  }
+}
+
+export async function createAdminProductCategory(category, authSession) {
+  const rows = await createSupabaseRowWithAuth(
+    PRODUCT_CATEGORIES_TABLE,
+    mapCategoryToRow(category),
+    getAccessToken(authSession)
+  );
+
+  return mapCategoryRowToCategory(rows?.[0] ?? category);
+}
+
+export async function updateAdminProductCategory(id, category, authSession) {
+  const rows = await updateSupabaseRowsWithAuth(
+    PRODUCT_CATEGORIES_TABLE,
+    { id: `eq.${id}` },
+    mapCategoryToRow(category),
+    getAccessToken(authSession)
+  );
+
+  return rows?.[0] ? mapCategoryRowToCategory(rows[0]) : null;
+}
 
 export async function getAdminCatalogProducts(authSession) {
   if (!isSupabaseReady()) {
@@ -113,6 +172,36 @@ function mapCatalogProductToRow(product) {
     sort_order: Number(product.sortOrder || 0),
     is_featured: product.isFeatured === true,
     status: product.status || "draft",
+    updated_at: new Date().toISOString(),
+  });
+}
+
+function mapCategoryRowToCategory(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    code: row.code,
+    parentCategoryId: row.parent_category_id ?? "",
+    active: row.active !== false,
+    archivedAt: row.archived_at ?? "",
+    archivedByUserId: row.archived_by_user_id ?? "",
+    archiveReason: row.archive_reason ?? "",
+    createdByUserId: row.created_by_user_id ?? "",
+    updatedByUserId: row.updated_by_user_id ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
+function mapCategoryToRow(category) {
+  return cleanRow({
+    name: category.name,
+    code: category.code,
+    parent_category_id: emptyToNull(category.parentCategoryId),
+    active: category.active !== false,
+    archived_at: category.archivedAt || null,
+    archived_by_user_id: category.archivedByUserId || null,
+    archive_reason: emptyToNull(category.archiveReason),
     updated_at: new Date().toISOString(),
   });
 }
