@@ -50,6 +50,7 @@ import {
   createAdminCatalogProduct,
   getAdminProductCategories,
   getAdminCatalogProducts,
+  productTypeOptions,
   updateAdminProductCategory,
   updateAdminCatalogProduct,
 } from "./services/adminCatalog.js";
@@ -118,6 +119,7 @@ const lucideIcons = {
   "clipboard-plus": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 14h6"></path><path d="M12 11v6"></path>',
   "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M19 8v6"></path><path d="M22 11h-6"></path>',
   "package-plus": '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 8v8"></path><path d="M8 12h8"></path>',
+  "alert-circle": '<circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line>',
   sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.064 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.064a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path><path d="M4 17v2"></path><path d="M5 18H3"></path>',
 };
 
@@ -427,6 +429,7 @@ let productFilter = "All";
 let catalogStatusFilter = "active";
 let catalogCategoryFilter = "all";
 let catalogFeaturedFilter = "all";
+let catalogProductTypeFilter = "all";
 let query = "";
 let draftStatus = orders[0]?.status ?? "Pending Review";
 let clientQuery = "";
@@ -448,14 +451,20 @@ let catalogLoadError = "";
 let categoryLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
 let categoryLoadError = "";
 let activeCatalogKey = "trry_webapp";
-let activeCatalogPanel = "categories";
 let selectedCatalogProductId = null;
-let catalogDrawerMode = "";
+let catalogExpandedProductId = null;
+let catalogQuickSaveState = "idle";
+let catalogQuickSaveError = "";
+let catalogEditorMode = "";
+let catalogEditorRouteKey = "";
 let catalogDraft = null;
 let catalogValidationError = "";
 let catalogSaveState = "idle";
 let catalogSaveError = "";
+const CATALOG_PRODUCT_IMAGE_LIMIT = 6;
 let categoryStatusFilter = "active";
+let categoryProductTypeFilter = "all";
+let categoryHierarchyFilter = "all";
 let selectedCategoryId = null;
 let categoryDrawerMode = "";
 let categoryDraft = null;
@@ -536,6 +545,8 @@ const routes = {
   "/calendar": "Calendar",
   "/workboard": "Workboard",
   "/overview": "Overview",
+  "/catalog": "Catalog",
+  "/catalog/categories": "Catalog",
 };
 
 const defaultRoutePath = "/";
@@ -4961,76 +4972,34 @@ function renderProductsPage(selectedProduct) {
 }
 
 function renderCatalogPage() {
+  const editorRoute = getCatalogProductEditorRoute();
+  if (editorRoute) {
+    return renderCatalogProductEditorPage(editorRoute);
+  }
+  if (getRoutePath() === "/catalog/categories") {
+    return renderCatalogCategoriesPage();
+  }
+
   const visibleProducts = getVisibleCatalogProducts();
-  const visibleCategories = getVisibleProductCategories();
-  const selectedProduct = catalogProducts.find((item) => item.id === selectedCatalogProductId);
-  const selectedCategory = productCategories.find((item) => item.id === selectedCategoryId);
-  const canWriteCategories = canManageProductCategories();
   const canWriteCatalog = canWriteCatalogProducts();
   const destinationCounts = getCatalogDestinationCounts();
   const categoryOptions = getCatalogCategoryOptions();
+  const summaryCards = getCatalogProductSummaryCards();
 
   return `
     <main class="orders-page catalog-page admin-saas-page">
       <div class="page-heading catalog-heading">
         <div>
           <h1>Master Catalog</h1>
-          <p class="subtitle">Manage category taxonomy for internal products and downstream catalog setup.</p>
+          <p class="subtitle">Manage products, variants, cost, and selling price from one source of truth.</p>
         </div>
-        ${activeCatalogPanel === "categories" && canWriteCategories ? `<button class="catalog-add-button" data-category-add type="button">+ Add Category</button>` : ""}
-        ${activeCatalogPanel === "items" && canWriteCatalog ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ Add Catalog Item</button>` : ""}
+        ${canWriteCatalog ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ New Product</button>` : ""}
       </div>
 
-      <section class="catalog-mode-tabs" aria-label="Master catalog sections">
-        <button class="${activeCatalogPanel === "categories" ? "active" : ""}" data-catalog-panel="categories" type="button">
-          <span>Categories</span>
-          <strong>${productCategories.length}</strong>
-        </button>
-        <button class="${activeCatalogPanel === "items" ? "active" : ""}" data-catalog-panel="items" type="button">
-          <span>Catalog Items</span>
-          <strong>${catalogProducts.length}</strong>
-        </button>
+      <section class="catalog-summary-grid" aria-label="Product catalog summary">
+        ${summaryCards.map((card) => renderCatalogSummaryCard(card)).join("")}
       </section>
 
-      ${activeCatalogPanel === "categories" ? `
-        <section class="catalog-controls category-controls" aria-label="Category controls">
-          <div class="catalog-filter-row">
-            <label class="search-field catalog-search">
-              ${renderIcon("search", "search-icon")}
-              <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search categories" type="search" />
-            </label>
-            <select class="catalog-status-filter" id="category-status-filter" aria-label="Category status filter">
-              <option value="active" ${categoryStatusFilter === "active" ? "selected" : ""}>Active categories</option>
-              <option value="archived" ${categoryStatusFilter === "archived" ? "selected" : ""}>Archived categories</option>
-              <option value="all" ${categoryStatusFilter === "all" ? "selected" : ""}>All categories</option>
-            </select>
-          </div>
-        </section>
-
-        ${renderCategoryNotice()}
-
-        <article class="content-card table-card catalog-table-card">
-          <p class="table-helper-text catalog-count-label">${visibleCategories.length} ${visibleCategories.length === 1 ? "CATEGORY" : "CATEGORIES"}</p>
-          <table class="products-table catalog-table category-table">
-            <thead>
-              <tr>
-                <th>Category</th>
-                <th>Code</th>
-                <th>Parent</th>
-                <th>Children</th>
-                <th>Status</th>
-                <th>Archived</th>
-                <th>Updated</th>
-              </tr>
-            </thead>
-            <tbody>
-              ${visibleCategories.map(renderProductCategoryRow).join("")}
-            </tbody>
-          </table>
-          ${renderCategoryEmptyState(visibleCategories)}
-        </article>
-        ${categoryDrawerMode ? renderCategoryDrawer(selectedCategory) : ""}
-      ` : `
       <section class="catalog-controls" aria-label="Catalog controls">
         <div class="catalog-tabs" role="tablist" aria-label="Catalog destinations">
           ${catalogOptions.map((catalog) => `
@@ -5050,11 +5019,16 @@ function renderCatalogPage() {
           <select class="catalog-status-filter" id="catalog-category-filter" aria-label="Category filter">
             ${categoryOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogCategoryFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
           </select>
+          <select class="catalog-status-filter" id="catalog-product-type-filter" aria-label="Product type filter">
+            <option value="all" ${catalogProductTypeFilter === "all" ? "selected" : ""}>All Types</option>
+            ${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogProductTypeFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+          </select>
           <select class="catalog-status-filter" id="catalog-featured-filter" aria-label="Featured filter">
             <option value="all" ${catalogFeaturedFilter === "all" ? "selected" : ""}>All featured states</option>
             <option value="featured" ${catalogFeaturedFilter === "featured" ? "selected" : ""}>Featured only</option>
             <option value="standard" ${catalogFeaturedFilter === "standard" ? "selected" : ""}>Not featured</option>
           </select>
+          <button class="note-button catalog-reset-button" data-catalog-reset-filters type="button">Reset Filters</button>
         </div>
       </section>
 
@@ -5062,17 +5036,19 @@ function renderCatalogPage() {
 
       <article class="content-card table-card catalog-table-card">
         <p class="table-helper-text catalog-count-label">${visibleProducts.length} ${visibleProducts.length === 1 ? "CATALOG ITEM" : "CATALOG ITEMS"}</p>
-        <table class="products-table catalog-table">
+        <table class="products-table catalog-table catalog-products-table">
           <thead>
             <tr>
+              <th></th>
               <th>Product</th>
-              <th>Destination</th>
               <th>Category</th>
-              <th>Price Display</th>
-              <th>Min Qty</th>
-              <th>Featured</th>
-              <th>Publish Status</th>
+              <th>SKU</th>
+              <th>Variants</th>
+              <th>Unit Cost</th>
+              <th>Selling Price</th>
+              <th>Margin</th>
               <th>Updated</th>
+              <th>Status</th>
             </tr>
           </thead>
           <tbody>
@@ -5081,8 +5057,79 @@ function renderCatalogPage() {
         </table>
         ${renderCatalogEmptyState(visibleProducts)}
       </article>
-      ${catalogDrawerMode ? renderCatalogDrawer(selectedProduct) : ""}
-      `}
+    </main>
+  `;
+}
+
+function renderCatalogCategoriesPage() {
+  const visibleCategories = getVisibleProductCategories();
+  const selectedCategory = productCategories.find((item) => item.id === selectedCategoryId);
+  const canWriteCategories = canManageProductCategories();
+  const summaryCards = getCategorySummaryCards();
+
+  return `
+    <main class="orders-page catalog-page catalog-categories-page admin-saas-page">
+      <div class="page-heading catalog-heading">
+        <div>
+          <h1>Categories</h1>
+          <p class="subtitle">Manage product taxonomy, hierarchy, product-type binding, assignments, and archive status.</p>
+        </div>
+        ${canWriteCategories ? `<button class="catalog-add-button" data-category-add type="button">+ New Category</button>` : ""}
+      </div>
+
+      <section class="catalog-summary-grid" aria-label="Category governance summary">
+        ${summaryCards.map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="catalog-controls category-controls" aria-label="Category controls">
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search category name or code" type="search" />
+          </label>
+          <select class="catalog-status-filter" id="category-product-type-filter" aria-label="Product type filter">
+            <option value="all" ${categoryProductTypeFilter === "all" ? "selected" : ""}>All Product Types</option>
+            ${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === categoryProductTypeFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+          </select>
+          <select class="catalog-status-filter" id="category-hierarchy-filter" aria-label="Hierarchy filter">
+            <option value="all" ${categoryHierarchyFilter === "all" ? "selected" : ""}>All Hierarchy</option>
+            <option value="root" ${categoryHierarchyFilter === "root" ? "selected" : ""}>Root Categories</option>
+            <option value="child" ${categoryHierarchyFilter === "child" ? "selected" : ""}>Subcategories</option>
+          </select>
+          <select class="catalog-status-filter" id="category-status-filter" aria-label="Category status filter">
+            <option value="active" ${categoryStatusFilter === "active" ? "selected" : ""}>Active categories</option>
+            <option value="archived" ${categoryStatusFilter === "archived" ? "selected" : ""}>Archived categories</option>
+            <option value="all" ${categoryStatusFilter === "all" ? "selected" : ""}>All categories</option>
+          </select>
+          <button class="note-button catalog-reset-button" data-category-reset-filters type="button">Reset Filters</button>
+        </div>
+      </section>
+
+      ${renderCategoryNotice()}
+
+      <article class="content-card table-card catalog-table-card">
+        <p class="table-helper-text catalog-count-label">${visibleCategories.length} ${visibleCategories.length === 1 ? "CATEGORY" : "CATEGORIES"}</p>
+        <table class="products-table catalog-table category-table">
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Code</th>
+              <th>Product Type</th>
+              <th>Parent</th>
+              <th>Children</th>
+              <th>Products</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visibleCategories.map(renderProductCategoryRow).join("")}
+          </tbody>
+        </table>
+        ${renderCategoryEmptyState(visibleCategories)}
+      </article>
+      ${categoryDrawerMode ? renderCategoryDrawer(selectedCategory) : ""}
     </main>
   `;
 }
@@ -5099,6 +5146,8 @@ function getVisibleCatalogProducts() {
           ? true
           : item.status === catalogStatusFilter;
     const matchesCategory = catalogCategoryFilter === "all" || item.category === catalogCategoryFilter;
+    const itemProductType = item.productType || inferCatalogProductType(item) || "";
+    const matchesProductType = catalogProductTypeFilter === "all" || itemProductType === catalogProductTypeFilter;
     const matchesFeatured =
       catalogFeaturedFilter === "all" ||
       (catalogFeaturedFilter === "featured" && item.isFeatured) ||
@@ -5111,7 +5160,7 @@ function getVisibleCatalogProducts() {
         .toLowerCase()
         .includes(normalizedQuery);
 
-    return matchesCatalog && matchesStatus && matchesCategory && matchesFeatured && matchesQuery;
+    return matchesCatalog && matchesStatus && matchesCategory && matchesProductType && matchesFeatured && matchesQuery;
   });
 }
 
@@ -5125,6 +5174,11 @@ function getVisibleProductCategories() {
         : categoryStatusFilter === "archived"
           ? !item.active || Boolean(item.archivedAt)
           : true;
+    const matchesProductType = categoryProductTypeFilter === "all" || item.productType === categoryProductTypeFilter;
+    const matchesHierarchy =
+      categoryHierarchyFilter === "all" ||
+      (categoryHierarchyFilter === "root" && !item.parentCategoryId) ||
+      (categoryHierarchyFilter === "child" && Boolean(item.parentCategoryId));
     const parent = getProductCategoryParent(item);
     const matchesQuery =
       !normalizedQuery ||
@@ -5133,8 +5187,51 @@ function getVisibleProductCategories() {
         .toLowerCase()
         .includes(normalizedQuery);
 
-    return matchesStatus && matchesQuery;
+    return matchesStatus && matchesProductType && matchesHierarchy && matchesQuery;
   });
+}
+
+function getCatalogProductSummaryCards() {
+  const scopedProducts = catalogProducts.filter((item) => item.catalogKey === activeCatalogKey);
+  const ready = scopedProducts.filter((item) => item.status === "published").length;
+  const archived = scopedProducts.filter((item) => item.status === "archived").length;
+  const needsSetup = scopedProducts.filter((item) => getCatalogProductHealthChecks(item).some((check) => !check.ready)).length;
+  const categories = new Set(scopedProducts.map((item) => item.category).filter(Boolean)).size;
+  const variants = scopedProducts.reduce((count, item) => count + getCatalogVariantCount(item), 0);
+
+  return [
+    { label: "Ready for Sale", value: ready, helper: "Published products" },
+    { label: "Needs Setup", value: needsSetup, helper: "Incomplete checks" },
+    { label: "Categories", value: categories, helper: "Used by products" },
+    { label: "Variants", value: variants, helper: "Listed combinations" },
+    { label: "Archived", value: archived, helper: "Hidden from active catalog" },
+  ];
+}
+
+function getCategorySummaryCards() {
+  const active = productCategories.filter((item) => item.active && !item.archivedAt).length;
+  const roots = productCategories.filter((item) => !item.parentCategoryId).length;
+  const children = productCategories.filter((item) => item.parentCategoryId).length;
+  const assignedProducts = productCategories.reduce((sum, item) => sum + Number(item.productCount ?? 0), 0);
+  const archived = productCategories.filter((item) => !item.active || Boolean(item.archivedAt)).length;
+
+  return [
+    { label: "Active Categories", value: active, helper: "Available for products" },
+    { label: "Root Categories", value: roots, helper: "Top-level taxonomy" },
+    { label: "Subcategories", value: children, helper: "Depth-two children" },
+    { label: "Assigned Products", value: assignedProducts, helper: "Canonical products" },
+    { label: "Archived", value: archived, helper: "Inactive taxonomy" },
+  ];
+}
+
+function renderCatalogSummaryCard(card) {
+  return `
+    <article class="catalog-summary-card">
+      <span>${escapeHtml(card.label)}</span>
+      <strong>${escapeHtml(String(card.value))}</strong>
+      <small>${escapeHtml(card.helper)}</small>
+    </article>
+  `;
 }
 
 function renderCategoryNotice() {
@@ -5175,17 +5272,22 @@ function renderProductCategoryRow(category) {
   const parent = getProductCategoryParent(category);
   const children = productCategories.filter((item) => item.parentCategoryId === category.id).length;
   const indent = getCategoryDepth(category) * 18;
-  const archived = category.archivedAt ? formatCatalogUpdated(category.archivedAt) : "-";
+  const assignedProducts = Number(category.productCount ?? 0);
+  const statusMarkup = category.active && !category.archivedAt
+    ? `<span class="status-pill active">Active</span>`
+    : `<span class="status-pill archived">Archived</span>`;
 
   return `
     <tr class="${category.id === selectedCategoryId ? "selected" : ""}" data-category-edit="${escapeHtml(category.id)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(category.name)} category details">
       <td class="catalog-name-cell"><div class="category-name-stack" style="--category-indent: ${indent}px"><strong title="${escapeHtml(category.name)}">${escapeHtml(category.name)}</strong><span>${escapeHtml(getCategoryPath(category))}</span></div></td>
       <td class="mono-value" data-mobile-label="Code">${escapeHtml(category.code)}</td>
+      <td data-mobile-label="Product Type">${escapeHtml(formatProductType(category.productType))}</td>
       <td data-mobile-label="Parent">${escapeHtml(parent?.name || "Root")}</td>
       <td data-mobile-label="Children">${children}</td>
-      <td data-mobile-label="Status">${category.active && !category.archivedAt ? `<span class="status-pill active">Active</span>` : `<span class="status-pill archived">Archived</span>`}</td>
-      <td data-mobile-label="Archived">${escapeHtml(archived)}</td>
+      <td data-mobile-label="Products">${assignedProducts}</td>
+      <td data-mobile-label="Status">${statusMarkup}</td>
       <td data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(category.updatedAt))}</span></td>
+      <td data-mobile-label="Action"><button class="note-button compact-action" data-category-edit="${escapeHtml(category.id)}" type="button">Edit</button></td>
     </tr>
   `;
 }
@@ -5195,15 +5297,30 @@ function renderCategoryDrawer(selectedCategory) {
   const isSaving = categorySaveState === "saving";
   const canWrite = canManageProductCategories();
   const isArchived = !draft.active || Boolean(draft.archivedAt);
-  const title = draft.name || (categoryDrawerMode === "edit" ? "Category" : "Add Category");
+  const isEdit = categoryDrawerMode === "edit";
+  const categoryChildren = getCategoryDirectChildren(draft.id).length;
+  const assignedProducts = Number(draft.productCount ?? selectedCategory?.productCount ?? 0);
+  const locksProductType = isEdit && (categoryChildren > 0 || assignedProducts > 0);
+  const title = draft.name || (isEdit ? "Edit Category" : "New Category");
+  const productTypeHelper = locksProductType
+    ? "Product Type is locked while products or child categories exist."
+    : "Select the product type before choosing a parent category.";
+  const archiveRule = isEdit
+    ? assignedProducts > 0
+      ? "Blocked while assigned"
+      : isArchived
+        ? "Ready to restore"
+        : "Available with archive reason"
+    : "Available after creation";
 
   return `
     <div class="catalog-drawer-backdrop" data-category-close></div>
     <aside class="catalog-drawer category-drawer" aria-label="${escapeHtml(title)} category details">
       <header>
         <div>
-          <span>MASTER CATALOG CATEGORY</span>
-          <h2>${escapeHtml(title)}</h2>
+          <span>MASTER CATALOG TAXONOMY</span>
+          <h2>${escapeHtml(isEdit ? title : "New Category")}</h2>
+          <p>${isEdit ? "Update taxonomy governance. Product Type is locked while products or child categories exist." : "Create a taxonomy record. Product Type must be selected before choosing a parent."}</p>
           ${isArchived ? `<span class="status-pill archived">Archived</span>` : `<span class="status-pill active">Active</span>`}
         </div>
         <button class="catalog-drawer-close" data-category-close type="button" aria-label="Close category drawer">X</button>
@@ -5214,14 +5331,20 @@ function renderCategoryDrawer(selectedCategory) {
 
         <section class="catalog-drawer-section" aria-label="Category identity">
           <h3>Identity</h3>
-          ${renderCategoryInput("name", "Name", draft.name, "text", true, isSaving || !canWrite)}
-          ${renderCategoryInput("code", "Code", draft.code, "text", true, isSaving || !canWrite)}
-          ${renderCatalogField("parentCategoryId", "Parent category", renderCategoryParentSelect(draft, isSaving || !canWrite))}
+          ${renderCategoryInput("name", "Category name", draft.name, "text", true, isSaving || !canWrite, "Use the customer-facing category name.")}
+          ${renderCategoryInput("code", "Category code", draft.code, "text", true, true, "Auto-generated from the category name and saved as the stable taxonomy reference.")}
+          ${renderCatalogField("productType", "Product Type", renderCategoryProductTypeSelect(draft, isSaving || !canWrite || locksProductType), productTypeHelper)}
+          ${renderCatalogField("parentCategoryId", "Parent category", renderCategoryParentSelect(draft, isSaving || !canWrite || !draft.productType), draft.productType ? "Only categories with the same product type are available." : "Select a product type before choosing a parent category.")}
         </section>
 
         <section class="catalog-drawer-section" aria-label="Governance">
           <h3>Governance</h3>
           <div class="catalog-kv-list">
+            ${renderCatalogDetailRow("Hierarchy", getCategoryDepth(draft) > 0 ? "Subcategory" : "Root category")}
+            ${renderCatalogDetailRow("Child categories", String(categoryChildren))}
+            ${renderCatalogDetailRow("Assigned products", String(assignedProducts))}
+            ${renderCatalogDetailRow("Status", isArchived ? "Archived" : "Active")}
+            ${renderCatalogDetailRow("Archive rule", archiveRule)}
             ${renderCatalogDetailRow("Created", formatCatalogUpdated(draft.createdAt))}
             ${renderCatalogDetailRow("Updated", formatCatalogUpdated(draft.updatedAt))}
             ${renderCatalogDetailRow("Archived", draft.archivedAt ? formatCatalogUpdated(draft.archivedAt) : "Not archived")}
@@ -5230,28 +5353,47 @@ function renderCategoryDrawer(selectedCategory) {
             ? renderCategoryInput("restoreReason", "Restore note", draft.restoreReason, "text", false, isSaving || !canWrite)
             : renderCategoryInput("archiveReason", "Archive reason", draft.archiveReason, "text", false, isSaving || !canWrite)}
         </section>
+        <section class="catalog-drawer-section" aria-label="Assignment rules">
+          <h3>Product-type binding rule</h3>
+          <p class="catalog-helper-text">A category belongs to exactly one product type. Parent and child categories must use the same type; hierarchy depth is limited to two levels. Parent options are active, non-archived, same Product Type, and cycle-safe. Product records are never reclassified automatically.</p>
+        </section>
       </form>
       <div class="catalog-drawer-actions">
-        <button class="primary-button catalog-save-button" form="category-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : "Save Category"}</button>
-        ${draft.id && canWrite ? `<button class="note-button category-archive-button" data-category-archive-action="${isArchived ? "restore" : "archive"}" type="button" ${isSaving ? "disabled" : ""}>${isArchived ? "Restore" : "Archive"}</button>` : ""}
         <button class="note-button" data-category-close type="button">Cancel</button>
+        ${draft.id && canWrite ? `<button class="note-button category-archive-button" data-category-archive-action="${isArchived ? "restore" : "archive"}" type="button" ${isSaving ? "disabled" : ""}>${isArchived ? "Restore" : "Archive"}</button>` : ""}
+        <button class="primary-button catalog-save-button" form="category-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Create Category")}</button>
       </div>
     </aside>
   `;
 }
 
-function renderCategoryInput(field, label, value, type = "text", required = false, disabled = false) {
-  return renderCatalogField(field, label, `<input id="catalog-${field}" data-category-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} ${disabled ? "disabled" : ""} />`);
+function renderCategoryInput(field, label, value, type = "text", required = false, disabled = false, helperText = "") {
+  return renderCatalogField(field, label, `<input id="catalog-${field}" data-category-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} ${disabled ? "disabled" : ""} />`, helperText);
 }
 
 function renderCategoryParentSelect(draft, disabled = false) {
   const options = getCategoryParentOptions(draft);
-  return `<select id="catalog-parentCategoryId" data-category-field="parentCategoryId" ${disabled ? "disabled" : ""}><option value="">Root category</option>${options.map((category) => `<option value="${escapeHtml(category.id)}" ${category.id === draft.parentCategoryId ? "selected" : ""}>${escapeHtml(getCategoryPath(category))}</option>`).join("")}</select>`;
+  return `<select id="catalog-parentCategoryId" data-category-field="parentCategoryId" ${disabled ? "disabled" : ""}><option value="">No parent — root category</option>${options.map((category) => `<option value="${escapeHtml(category.id)}" ${category.id === draft.parentCategoryId ? "selected" : ""}>${escapeHtml(getCategoryPath(category))}</option>`).join("")}</select>`;
+}
+
+function renderCategoryProductTypeSelect(draft, disabled = false) {
+  return `<select id="catalog-productType" data-category-field="productType" required ${disabled ? "disabled" : ""}><option value="" ${draft.productType ? "" : "selected"}>Select product type</option>${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === draft.productType ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select>`;
 }
 
 function getCategoryParentOptions(draft) {
   const blockedIds = new Set(draft.id ? [draft.id, ...getCategoryDescendantIds(draft.id)] : []);
-  return sortProductCategories(productCategories).filter((category) => !blockedIds.has(category.id) && category.active && !category.archivedAt);
+  return sortProductCategories(productCategories).filter((category) =>
+    !blockedIds.has(category.id) &&
+    category.active &&
+    !category.archivedAt &&
+    !category.parentCategoryId &&
+    category.productType === draft.productType
+  );
+}
+
+function getCategoryDirectChildren(categoryId) {
+  if (!categoryId) return [];
+  return productCategories.filter((item) => item.parentCategoryId === categoryId);
 }
 
 function getCategoryDescendantIds(categoryId) {
@@ -5308,6 +5450,8 @@ function createCategoryDraft(category = null) {
   if (category) {
     return {
       ...category,
+      productType: category.productType || "",
+      originalProductType: category.productType || "",
       restoreReason: "",
     };
   }
@@ -5315,6 +5459,8 @@ function createCategoryDraft(category = null) {
   return {
     name: "",
     code: "",
+    productType: "",
+    originalProductType: "",
     parentCategoryId: "",
     active: true,
     archivedAt: "",
@@ -5332,6 +5478,9 @@ function updateCategoryDraftField(field, value) {
     ...categoryDraft,
     [field]: nextValue,
   };
+  if (field === "productType") {
+    categoryDraft.parentCategoryId = "";
+  }
   if (shouldCreateCode) {
     categoryDraft.code = createCategoryCode(nextValue);
   }
@@ -5344,6 +5493,8 @@ function normalizeCategoryDraft(draft) {
     ...draft,
     name: String(draft.name || "").trim(),
     code: createCategoryCode(draft.code || draft.name),
+    productType: productTypeOptions.some((option) => option.value === draft.productType) ? draft.productType : "",
+    originalProductType: String(draft.originalProductType || "").trim(),
     parentCategoryId: String(draft.parentCategoryId || "").trim(),
     active: draft.active !== false,
     archiveReason: String(draft.archiveReason || "").trim(),
@@ -5354,11 +5505,29 @@ function normalizeCategoryDraft(draft) {
 function validateCategory(category) {
   if (!category.name) return "Category name is required.";
   if (!category.code) return "Category code is required.";
+  if (!productTypeOptions.some((option) => option.value === category.productType)) return "Select a product type.";
   if (category.parentCategoryId && category.parentCategoryId === category.id) return "A category cannot be its own parent.";
   if (category.parentCategoryId && getCategoryDescendantIds(category.id).includes(category.parentCategoryId)) return "A category cannot be moved under its own child.";
-  const duplicate = productCategories.find((item) => item.id !== category.id && (item.name.toLowerCase() === category.name.toLowerCase() || item.code.toLowerCase() === category.code.toLowerCase()));
-  if (duplicate) return "Category name and code must be unique.";
+  const parent = getProductCategoryParent(category);
+  if (parent?.productType && parent.productType !== category.productType) return "Only categories with the same product type are available.";
+  if (parent?.parentCategoryId) return "Hierarchy depth is limited to two levels.";
+  if (category.id && category.originalProductType && category.originalProductType !== category.productType && (getCategoryDirectChildren(category.id).length > 0 || Number(category.productCount ?? 0) > 0)) {
+    return "Product type cannot be changed while this category is in use.";
+  }
+  const duplicateCode = productCategories.find((item) => item.id !== category.id && item.code.toLowerCase() === category.code.toLowerCase());
+  if (duplicateCode) return "Category code must be unique.";
+  const duplicateName = productCategories.find((item) =>
+    item.id !== category.id &&
+    item.name.toLowerCase() === category.name.toLowerCase() &&
+    item.productType === category.productType &&
+    (item.parentCategoryId || "") === (category.parentCategoryId || "")
+  );
+  if (duplicateName) return "Category name must be unique within the selected product type and parent.";
   return "";
+}
+
+function formatProductType(value) {
+  return productTypeOptions.find((option) => option.value === value)?.label ?? "";
 }
 
 function createCategoryCode(value) {
@@ -5415,121 +5584,525 @@ function renderCatalogEmptyState(visibleProducts) {
 function renderCatalogProductRow(item) {
   const sourceProduct = getCatalogSourceProduct(item);
   const secondary = item.slug ? item.slug : sourceProduct?.code ? `Source: ${sourceProduct.code}` : "No source product linked";
+  const expanded = item.id === catalogExpandedProductId;
+  const sku = getCatalogEditorSku(item);
+  const variantCount = getCatalogVariantCount(item);
+  const margin = getCatalogEditorMargin(item);
 
   return `
-    <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}" role="button" tabindex="0" aria-label="Open ${escapeHtml(item.name)} catalog presentation details">
+    <tr class="${expanded ? "selected" : ""}" data-catalog-toggle-product="${item.id}" role="button" tabindex="0" aria-expanded="${expanded ? "true" : "false"}" aria-label="Open ${escapeHtml(item.name)} product quick controls">
+      <td class="catalog-expand-cell" data-mobile-label="Quick">${renderIcon(expanded ? "chevron-down" : "chevron-right", "catalog-expand-icon")}</td>
       <td class="catalog-name-cell"><div class="client-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : "empty"}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')" aria-label="Catalog image"` : `role="img" aria-label="No catalog image"`}>${item.imageUrl ? "" : renderIcon("package", "catalog-placeholder-icon")}</span><div><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span title="${escapeHtml(secondary)}">${escapeHtml(secondary)}</span></div></div></td>
-      <td class="catalog-destination-cell" data-mobile-label="Destination" title="${escapeHtml(getCatalogLabel(item.catalogKey))}" aria-label="Destination: ${escapeHtml(getCatalogLabel(item.catalogKey))}">${escapeHtml(getCatalogLabel(item.catalogKey))}</td>
       <td class="catalog-category-cell" data-mobile-label="Category">${escapeHtml(item.category || "-")}</td>
-      <td class="catalog-price-cell" data-mobile-label="Price">${escapeHtml(formatCatalogPrice(item))}</td>
-      <td class="catalog-moq-cell" data-mobile-label="Min Qty">${escapeHtml(item.minimumQuantity)}</td>
-      <td class="catalog-featured-cell" data-mobile-label="Featured">${item.isFeatured ? `<span class="status-pill visible">Featured</span>` : `<span class="catalog-featured-muted">No</span>`}</td>
-      <td class="catalog-status-cell" data-mobile-label="Status">${renderStatusPill(item.status)}</td>
+      <td class="mono-value" data-mobile-label="SKU">${escapeHtml(sku)}</td>
+      <td class="catalog-moq-cell" data-mobile-label="Variants">${variantCount}</td>
+      <td class="catalog-price-cell" data-mobile-label="Unit Cost">${escapeHtml(formatCatalogMoney(item.unitCost || ""))}</td>
+      <td class="catalog-price-cell" data-mobile-label="Selling Price">${escapeHtml(formatCatalogPrice(item))}</td>
+      <td class="catalog-price-cell" data-mobile-label="Margin">${escapeHtml(margin.label)}</td>
       <td class="catalog-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(item.updatedAt))}</span></td>
+      <td class="catalog-status-cell" data-mobile-label="Status">${renderStatusPill(item.status)}</td>
+    </tr>
+    ${expanded ? renderCatalogProductQuickControl(item) : ""}
+  `;
+}
+
+function renderCatalogProductQuickControl(item) {
+  const canWrite = canWriteCatalogProducts();
+  const checks = getCatalogProductHealthChecks(item);
+  const readyCount = checks.filter((check) => check.ready).length;
+  const margin = getCatalogEditorMargin(item);
+  const saving = catalogQuickSaveState === item.id;
+  const sku = getCatalogEditorSku(item);
+
+  return `
+    <tr class="catalog-product-quick-row">
+      <td colspan="10">
+        <section class="catalog-product-quick-control" aria-label="${escapeHtml(item.name)} quick control">
+          ${catalogQuickSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogQuickSaveError)}</p>` : ""}
+          <div class="catalog-quick-health">
+            <div>
+              <span>Catalog Health</span>
+              <strong>${readyCount}/${checks.length} complete</strong>
+            </div>
+            <div class="catalog-health-chip-row">
+              ${checks.map((check) => `<span class="catalog-health-chip ${check.ready ? "ready" : "pending"}">${escapeHtml(check.label)}</span>`).join("")}
+            </div>
+          </div>
+          <div class="catalog-quick-pricing">
+            <div class="catalog-quick-metric"><span>Cost</span><strong>${escapeHtml(formatCatalogMoney(item.unitCost || ""))}</strong></div>
+            <label class="catalog-quick-price-input">
+              <span>Selling Price</span>
+              <input data-catalog-quick-selling-price="${escapeHtml(item.id)}" type="number" min="0" step="0.01" value="${escapeHtml(item.startingPrice ?? "")}" ${canWrite && !saving ? "" : "disabled"} />
+            </label>
+            <div class="catalog-quick-metric"><span>Margin</span><strong>${escapeHtml(margin.label)}</strong><small>${escapeHtml(margin.helper)}</small></div>
+            <button class="primary-button catalog-quick-button" data-catalog-quick-price-save="${escapeHtml(item.id)}" type="button" ${canWrite && !saving ? "" : "disabled"}>${saving ? "Updating..." : "Update Price"}</button>
+          </div>
+          <div class="catalog-quick-status">
+            <label>
+              <span>Status and visibility</span>
+              <select data-catalog-quick-status="${escapeHtml(item.id)}" ${canWrite && !saving ? "" : "disabled"}>
+                ${catalogStatusOptions.map((status) => `<option value="${status}" ${status === item.status ? "selected" : ""}>${status}</option>`).join("")}
+              </select>
+            </label>
+            <span class="status-pill ${item.status === "published" ? "visible" : statusToClass(item.status)}">${item.status === "published" ? "Visible" : item.status}</span>
+            <button class="note-button" data-catalog-archive-product="${escapeHtml(item.id)}" type="button" ${canWrite && !saving && item.status !== "archived" ? "" : "disabled"}>Archive</button>
+          </div>
+          <div class="catalog-quick-actions">
+            <button class="note-button" data-catalog-copy-sku="${escapeHtml(sku)}" type="button">Copy SKU</button>
+            <button class="note-button" data-catalog-duplicate="${escapeHtml(item.id)}" type="button" ${canWrite && !saving ? "" : "disabled"}>Duplicate</button>
+            <label class="note-button catalog-quick-image-button ${canWrite && !saving ? "" : "disabled"}">
+              Update Image
+              <input data-catalog-quick-image-file="${escapeHtml(item.id)}" type="file" accept="image/jpeg,image/png,image/webp,image/avif" ${canWrite && !saving ? "" : "disabled"} />
+            </label>
+            <button class="primary-button catalog-quick-button" data-catalog-full-edit="${escapeHtml(item.id)}" type="button">Full Edit Product</button>
+          </div>
+        </section>
+      </td>
     </tr>
   `;
 }
 
-function renderCatalogDrawer(selectedProduct) {
-  const draft = catalogDraft ?? createCatalogDraft(selectedProduct);
+function getCatalogProductHealthChecks(item) {
+  return [
+    { label: "Image", ready: Boolean(item.imageUrl) },
+    { label: "Category", ready: Boolean(item.category) },
+    { label: "Cost", ready: Boolean(item.unitCost) },
+    { label: "Price", ready: Boolean(item.startingPrice) },
+    { label: "Variants", ready: getCatalogVariantCount(item) > 0 },
+  ];
+}
+
+function getCatalogVariantCount(item) {
+  const sizes = Array.isArray(item.availableSizes) ? item.availableSizes.filter(Boolean).length : 0;
+  const colors = Array.isArray(item.availableColors) ? item.availableColors.filter(Boolean).length : 0;
+  if (sizes && colors) return Math.min(sizes * colors, 99);
+  return sizes || colors || 0;
+}
+
+function formatCatalogMoney(value) {
+  if (value === "" || value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  return `PHP ${Number(value).toLocaleString("en-US")}`;
+}
+
+function renderCatalogProductEditorPage(editorRoute) {
+  const selectedProduct = editorRoute.mode === "edit"
+    ? catalogProducts.find((item) => item.id === editorRoute.productId) ?? null
+    : null;
+  if (editorRoute.mode === "edit" && !selectedProduct) {
+    const isLoading = catalogLoadState === "loading";
+    return `
+      <main class="orders-page catalog-page admin-saas-page catalog-product-editor-page" data-catalog-product-editor data-editor-mode="edit">
+        <section class="catalog-editor-denied">
+          <span>MASTER CATALOG</span>
+          <h1>${isLoading ? "Loading Product" : "Product not found"}</h1>
+          <p>${isLoading ? "Loading the selected catalog product before opening the editor." : "Return to Master Catalog and select an available product."}</p>
+          <button class="note-button" data-catalog-editor-cancel type="button">Back to Catalog</button>
+        </section>
+      </main>
+    `;
+  }
+  const draft = prepareCatalogEditorDraft(editorRoute, selectedProduct);
   const isSaving = catalogSaveState === "saving" || catalogSaveState === "uploading";
   const canWrite = canWriteCatalogProducts();
-  const title = draft.name || (catalogDrawerMode === "edit" ? "Catalog Item" : "Add Catalog Item");
-  const sourceProduct = getCatalogSourceProduct(draft);
+  const isEdit = editorRoute.mode === "edit";
+  const title = isEdit ? "Edit Product" : "New Product";
+  const displayName = draft.name || "New Product";
+  const typeLabel = formatProductType(draft.productType) || "Select type";
+  const skuValue = getCatalogEditorSku(draft);
+  const categoryValue = getCatalogEditorCategoryLabel(draft);
+  const imageCount = getCatalogEditorImageCount(draft);
+  const margin = getCatalogEditorMargin(draft);
+  const readiness = getCatalogEditorReadiness(draft);
+  const status = draft.status || "draft";
+  const summaryMeta = isEdit ? `${skuValue} - ${typeLabel}` : "Product code generated after creation - Draft";
+  const heroImage = getCatalogEditorPrimaryImage(draft);
+  const footerMessage = catalogValidationError
+    ? "Fix required fields before creating this product."
+    : isEdit
+      ? "Unsaved changes will remain in this frame only."
+      : "Creates as Draft. Ready stays locked until requirements pass.";
+
+  if (!canWrite && !isEdit) {
+    return `
+      <main class="orders-page catalog-page admin-saas-page catalog-product-editor-page" data-catalog-product-editor>
+        <section class="catalog-editor-denied">
+          <span>MASTER CATALOG</span>
+          <h1>Read-only access</h1>
+          <p>Your account can view catalog records, but cannot create products.</p>
+          <button class="note-button" data-catalog-editor-cancel type="button">Back to Catalog</button>
+        </section>
+      </main>
+    `;
+  }
 
   return `
-    <div class="catalog-drawer-backdrop" data-catalog-close-drawer></div>
-    <aside class="catalog-drawer" aria-label="${escapeHtml(title)} catalog presentation details">
-      <header>
+    <main class="orders-page catalog-page admin-saas-page catalog-product-editor-page" data-catalog-product-editor data-editor-mode="${escapeHtml(editorRoute.mode)}">
+      <div class="catalog-editor-mobile-topbar">
+        <button class="catalog-editor-icon-button" data-catalog-editor-cancel type="button" aria-label="Back to Master Catalog">${renderIcon("chevron-right", "catalog-editor-back-icon")}</button>
         <div>
-          <span>${escapeHtml(getCatalogLabel(draft.catalogKey))}</span>
           <h2>${escapeHtml(title)}</h2>
-          ${renderStatusPill(draft.status || "draft")}
+          <span>${escapeHtml(typeLabel)}</span>
         </div>
-        <button class="catalog-drawer-close" data-catalog-close-drawer type="button" aria-label="Close catalog drawer">X</button>
-      </header>
-      <form class="catalog-form" id="catalog-product-form">
-        ${catalogValidationError ? `<p class="catalog-form-error">${escapeHtml(catalogValidationError)}</p>` : ""}
-        ${catalogSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogSaveError)}</p>` : ""}
-
-        <section class="catalog-drawer-section catalog-preview-section" aria-label="Catalog preview">
-          <h3>Preview</h3>
-          <div class="catalog-preview-card">
-            <div class="catalog-preview-image ${draft.imageUrl || draft.imageFilePreviewUrl ? "has-image" : "empty"}">${draft.imageUrl || draft.imageFilePreviewUrl ? `<img src="${escapeHtml(draft.imageFilePreviewUrl || draft.imageUrl)}" alt="${escapeHtml(draft.name || "Catalog image")}" />` : `<span role="img" aria-label="No catalog image">${renderIcon("package", "catalog-placeholder-icon")}</span>`}</div>
-            <div>
-              <strong>${escapeHtml(draft.name || "Customer-facing name")}</strong>
-              <p>${escapeHtml(draft.description || "No short description yet.")}</p>
-              <span>${escapeHtml(formatCatalogPrice(draft))}</span>
-              <small>MOQ ${escapeHtml(draft.minimumQuantity || 1)}</small>
-            </div>
-          </div>
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Publishing">
-          <h3>Publishing</h3>
-          <div class="catalog-form-grid">
-            ${renderCatalogField("catalog", "Destination", renderCatalogSelect(draft))}
-            ${renderCatalogField("status", "Publish status", renderCatalogStatusSelect(draft))}
-          </div>
-          <div class="catalog-form-grid">
-            ${renderCatalogFeaturedSetting(draft)}
-            ${renderCatalogInput("sortOrder", "Sort order", draft.sortOrder, "number")}
-          </div>
-          <div class="catalog-kv-list">
-            ${renderCatalogDetailRow("Last published", draft.status === "published" ? formatCatalogUpdated(draft.updatedAt) : "Not published")}
-            ${renderCatalogDetailRow("Last updated", formatCatalogUpdated(draft.updatedAt))}
-          </div>
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Customer-facing details">
-          <h3>Customer-facing Details</h3>
-          ${renderCatalogInput("name", "Display name", draft.name, "text", true)}
-          ${renderCatalogInput("slug", "Slug", draft.slug, "text", true)}
-          ${renderCatalogInput("category", "Category", draft.category)}
-          ${renderCatalogTextarea("description", "Short description", draft.description)}
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Pricing display">
-          <h3>Pricing Display</h3>
-          <div class="catalog-form-grid">
-            ${renderCatalogInput("startingPrice", "Starting price", draft.startingPrice, "number")}
-            ${renderCatalogInput("priceLabel", "Price label", draft.priceLabel)}
-          </div>
-          ${renderCatalogInput("minimumQuantity", "Minimum quantity", draft.minimumQuantity, "number", true)}
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Customer options">
-          <h3>Customer Options</h3>
-          ${renderCatalogInput("availableSizesText", "Available sizes", draft.availableSizesText)}
-          ${renderCatalogInput("availableColorsText", "Available colors", draft.availableColorsText)}
-          ${renderCatalogInput("printMethodsText", "Print methods", draft.printMethodsText)}
-        </section>
-
-        <section class="catalog-drawer-section catalog-source-section" aria-label="Source product">
-          <h3>Source Product</h3>
-          ${sourceProduct
-            ? `<div class="catalog-kv-list">
-                ${renderCatalogDetailRow("Linked product", sourceProduct.product)}
-                ${renderCatalogDetailRow("Internal code", sourceProduct.code, true)}
-                ${renderCatalogDetailRow("Availability", sourceProduct.status || "Available")}
-              </div>
-              <button class="note-button catalog-secondary-action" type="button" disabled>Products record parked</button>`
-            : `<div class="catalog-source-empty"><strong>No source Product linked</strong><span>This Catalog item can still be edited, but staff should confirm the matching internal Product record before publishing.</span></div>`}
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Media">
-          <h3>Media</h3>
-          ${renderCatalogImageField(draft, canWrite, isSaving)}
-        </section>
-
-      </form>
-      <div class="catalog-drawer-actions">
-        <button class="primary-button catalog-save-button" form="catalog-product-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${catalogSaveState === "uploading" ? "Uploading..." : isSaving ? "Saving..." : getCatalogPrimaryActionLabel(draft)}</button>
-        <button class="note-button" data-catalog-close-drawer type="button">Cancel</button>
+        ${renderStatusPill(status)}
       </div>
-    </aside>
+
+      ${catalogValidationError ? `<div class="catalog-editor-toast error" role="alert"><strong>Fix required fields before creating product</strong><span>${escapeHtml(catalogValidationError)}</span></div>` : ""}
+      ${catalogSaveState === "success" ? `<div class="catalog-editor-toast success" role="status"><strong>${isEdit ? "Changes saved successfully" : "Product created successfully"}</strong><span>${escapeHtml(displayName)} is ${isEdit ? "updated" : "ready to review"}.</span></div>` : ""}
+      ${catalogSaveError ? `<div class="catalog-editor-toast error" role="alert"><strong>Save failed</strong><span>${escapeHtml(catalogSaveError)}</span></div>` : ""}
+
+      <section class="catalog-editor-header">
+        <nav class="catalog-editor-breadcrumb" aria-label="Breadcrumb">
+          <span>Home</span><span>Master Catalog</span><strong>${escapeHtml(title)}</strong>
+        </nav>
+        <div class="catalog-editor-heading-row">
+          <div>
+            <h1>${escapeHtml(title)}</h1>
+            <p class="subtitle">${isEdit ? "Update product images, catalog details, pricing, production information, variants, and status." : "Create a product draft. Required fields must pass before Ready for Sale."}</p>
+          </div>
+          <button class="note-button" data-catalog-editor-cancel type="button">Back to Catalog</button>
+        </div>
+      </section>
+
+      <section class="catalog-editor-summary-strip" aria-label="Product draft summary">
+        <div class="catalog-editor-summary-main">
+          <span class="catalog-editor-product-thumb ${heroImage ? "has-image" : "empty"}">${heroImage ? `<img src="${escapeHtml(heroImage)}" alt="${escapeHtml(displayName)}" />` : renderIcon("package", "catalog-placeholder-icon")}</span>
+          <div>
+            <strong>${escapeHtml(displayName)}</strong>
+            <span>${escapeHtml(summaryMeta)}</span>
+          </div>
+          ${renderStatusPill(status)}
+        </div>
+        <div class="catalog-editor-summary-stat">
+          <span>${isEdit ? "CURRENT MARGIN" : "PRODUCT STATUS"}</span>
+          <strong>${isEdit ? escapeHtml(margin.label) : escapeHtml(status.toUpperCase())}</strong>
+          <small>${escapeHtml(isEdit ? margin.helper : readiness.every((item) => item.ready) ? "Ready checks passed" : "Not ready for sale")}</small>
+        </div>
+      </section>
+
+      <form class="catalog-editor-form" id="catalog-product-form">
+        <section class="catalog-editor-grid">
+          <div class="catalog-editor-main-column">
+            ${renderCatalogEditorProductInformation(draft, isSaving || !canWrite)}
+            ${renderCatalogEditorImages(draft, canWrite, isSaving)}
+            ${renderCatalogEditorPricing(draft, isSaving || !canWrite)}
+            ${renderCatalogEditorProduction(draft, isSaving || !canWrite)}
+            ${renderCatalogEditorVariants(draft, isSaving || !canWrite)}
+          </div>
+          <aside class="catalog-editor-side-column">
+            ${renderCatalogEditorStatusCard(draft, isSaving || !canWrite)}
+            ${renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCount)}
+            ${renderCatalogEditorReadinessCard(readiness)}
+            ${renderCatalogEditorAvailabilityCard()}
+          </aside>
+        </section>
+      </form>
+
+      <div class="catalog-editor-footer">
+        <span class="${catalogValidationError ? "error" : ""}">${escapeHtml(footerMessage)}</span>
+        <div>
+          <button class="note-button" data-catalog-editor-cancel type="button" ${isSaving ? "disabled" : ""}>Cancel</button>
+          <button class="primary-button catalog-save-button" form="catalog-product-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${catalogSaveState === "uploading" ? "Uploading..." : isSaving ? "Saving..." : isEdit ? "Save Changes" : "Create Product"}</button>
+        </div>
+      </div>
+    </main>
   `;
 }
+
+function renderCatalogEditorProductInformation(draft, disabled = false) {
+  return `
+    <article class="catalog-editor-card" aria-label="Product Information">
+      <header><h2>Product Information</h2><p>Customer-facing identity and category binding.</p></header>
+      <div class="catalog-editor-field-grid">
+        ${renderCatalogInput("name", "Product Name", draft.name, "text", true, disabled, "Enter product name")}
+        ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled), "Required before choosing a parent category.")}
+        ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "Only categories with the same product type are available." : "Select Product Type first.")}
+        ${renderCatalogInput("subcategory", "Subcategory", draft.subcategory || "", "text", false, disabled, "Select subcategory")}
+        ${renderCatalogField("slug", "SKU / Code", `<input id="catalog-slug" data-catalog-field="slug" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, "Auto-generated from the product name.")}
+        ${renderCatalogField("catalog", "Destination", renderCatalogSelect(draft, disabled))}
+      </div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorImages(draft, canWrite, isSaving) {
+  const images = getCatalogEditorImages(draft);
+  const slots = Array.from({ length: CATALOG_PRODUCT_IMAGE_LIMIT }, (_, index) => {
+    const image = images[index] ?? null;
+    const isPrimary = index === 0 && Boolean(image);
+    return `
+      <div class="catalog-editor-image-slot ${image ? "has-image" : "empty"}" data-image-slot="${index}">
+        <div class="catalog-editor-image-preview">
+          ${image ? `<img src="${escapeHtml(image.url)}" alt="${escapeHtml(draft.name || "Product image")}" />` : renderIcon("package-plus", "catalog-placeholder-icon")}
+        </div>
+        <div class="catalog-editor-image-actions">
+          <span>${isPrimary ? "PRIMARY" : image ? "IMAGE" : "ADD IMAGE"}</span>
+          ${image && canWrite ? `<button type="button" data-catalog-remove-image ${isSaving ? "disabled" : ""}>Remove</button>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+  const disabled = !canWrite || isSaving || images.length >= CATALOG_PRODUCT_IMAGE_LIMIT;
+
+  return `
+    <article class="catalog-editor-card ${catalogValidationError && images.length === 0 ? "has-error" : ""}" aria-label="Product Images">
+      <header>
+        <div><h2>Product Images</h2><p>Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product. Set the first uploaded image as primary.</p></div>
+        <strong>${images.length} of ${CATALOG_PRODUCT_IMAGE_LIMIT} uploaded</strong>
+      </header>
+      <div class="catalog-editor-image-grid">${slots}</div>
+      <label class="catalog-editor-upload ${disabled ? "disabled" : ""}">
+        <span>${images.length ? "Change primary image" : "Upload primary image"}</span>
+        <input data-catalog-image-file type="file" accept="image/jpeg,image/png,image/webp,image/avif" ${disabled ? "disabled" : ""} />
+      </label>
+      ${draft.imageError ? `<p class="catalog-form-error">${escapeHtml(draft.imageError)}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderCatalogEditorPricing(draft, disabled = false) {
+  const margin = getCatalogEditorMargin(draft);
+  return `
+    <article class="catalog-editor-card" aria-label="Pricing">
+      <header><h2>Pricing</h2><p>Base cost, selling price, and calculated margin.</p></header>
+      <div class="catalog-editor-field-grid">
+        ${renderCatalogInput("unitCost", "Unit Cost", draft.unitCost || "", "number", false, disabled, "0.00")}
+        ${renderCatalogInput("startingPrice", "Selling Price", draft.startingPrice, "number", false, disabled, "0.00")}
+        ${renderCatalogInput("priceLabel", "Price Label", draft.priceLabel, "text", false, disabled, "Shown in catalog")}
+        ${renderCatalogInput("minimumQuantity", "Minimum Qty", draft.minimumQuantity, "number", true, disabled)}
+      </div>
+      <div class="catalog-editor-calculated-row"><span>Calculated Margin</span><strong>${escapeHtml(margin.label)}</strong><small>${escapeHtml(margin.helper)}</small></div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorProduction(draft, disabled = false) {
+  return `
+    <article class="catalog-editor-card ${catalogValidationError && !draft.productionUse ? "has-error" : ""}" aria-label="Production Information">
+      <header><h2>Production Information</h2><p>Manufacturing notes used by admin and production teams.</p></header>
+      <div class="catalog-editor-field-grid">
+        ${renderCatalogInput("material", "Material / Fabric", draft.material || "", "text", false, disabled)}
+        ${renderCatalogInput("weightGsm", "Weight / GSM", draft.weightGsm || "", "text", false, disabled)}
+        ${renderCatalogInput("fitCut", "Fit / Cut", draft.fitCut || "", "text", false, disabled)}
+        ${renderCatalogInput("productionUse", "Production Use", draft.productionUse || "", "text", false, disabled)}
+        ${renderCatalogInput("printMethodsText", "Compatible Methods", draft.printMethodsText, "text", false, disabled)}
+        ${renderCatalogTextarea("productionNotes", "Production Notes", draft.productionNotes || "", disabled)}
+      </div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorVariants(draft, disabled = false) {
+  const sizes = splitCatalogList(draft.availableSizesText);
+  const colors = splitCatalogList(draft.availableColorsText);
+  const variants = sizes.length || colors.length
+    ? (sizes.length ? sizes : ["Default"]).flatMap((size) => (colors.length ? colors : ["Default"]).map((color) => ({ size, color }))).slice(0, 6)
+    : [];
+  const rows = variants.map((variant, index) => `
+    <tr>
+      <td>${escapeHtml(variant.color)}</td>
+      <td>${escapeHtml(variant.size)}</td>
+      <td class="mono-value">${escapeHtml(`${getCatalogEditorSku(draft)}-${index + 1}`)}</td>
+      <td>${escapeHtml(formatCatalogPrice(draft))}</td>
+      <td>${renderStatusPill("draft")}</td>
+    </tr>
+  `).join("");
+
+  return `
+    <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" aria-label="Variants">
+      <header>
+        <div><h2>Variants</h2><p>Size and color combinations for this catalog product.</p></div>
+        <button class="note-button" type="button" disabled>Add Variant</button>
+      </header>
+      <div class="catalog-editor-field-grid">
+        ${renderCatalogInput("availableSizesText", "Available Sizes", draft.availableSizesText, "text", false, disabled)}
+        ${renderCatalogInput("availableColorsText", "Available Colors", draft.availableColorsText, "text", false, disabled)}
+      </div>
+      ${rows
+        ? `<table class="catalog-editor-variant-table"><thead><tr><th>Color</th><th>Size</th><th>Variant SKU</th><th>Price</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`
+        : `<div class="catalog-editor-empty"><strong>No variants yet</strong><span>Add size and color combinations when this product needs variants.</span></div>`}
+    </article>
+  `;
+}
+
+function renderCatalogEditorStatusCard(draft, disabled = false) {
+  const statuses = [
+    { value: "draft", label: "Draft" },
+    { value: "published", label: "Ready" },
+    { value: "archived", label: "Archived" },
+  ];
+  return `
+    <article class="catalog-editor-card compact" aria-label="Catalog Status">
+      <header><h2>Catalog Status</h2></header>
+      <div class="catalog-editor-status-options">
+        ${statuses.map((status) => `<button class="${draft.status === status.value ? "active" : ""}" data-catalog-status-choice="${status.value}" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(status.label)}</button>`).join("")}
+      </div>
+      ${renderStatusPill(draft.status || "draft")}
+    </article>
+  `;
+}
+
+function renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCount) {
+  return `
+    <article class="catalog-editor-card compact" aria-label="Product Summary">
+      <header><h2>Product Summary</h2></header>
+      <div class="catalog-kv-list">
+        ${renderCatalogDetailRow("SKU", skuValue)}
+        ${renderCatalogDetailRow("Type", formatProductType(draft.productType) || "Not selected")}
+        ${renderCatalogDetailRow("Category", categoryValue || "Not selected")}
+        ${renderCatalogDetailRow("Variants", String(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length || 0))}
+        ${renderCatalogDetailRow("Last updated", draft.updatedAt ? formatCatalogUpdated(draft.updatedAt) : "Not saved")}
+        ${renderCatalogDetailRow("Images", `${imageCount} of ${CATALOG_PRODUCT_IMAGE_LIMIT}`)}
+        ${renderCatalogDetailRow("Production info", draft.productionUse ? "Complete" : "Incomplete")}
+      </div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorReadinessCard(readiness) {
+  return `
+    <article class="catalog-editor-card compact" aria-label="Catalog Readiness">
+      <header><h2>Catalog Readiness</h2></header>
+      <div class="catalog-editor-readiness-list">
+        ${readiness.map((item) => `<div class="${item.ready ? "ready" : "pending"}">${renderIcon(item.ready ? "circle-check" : "alert-circle", "catalog-readiness-icon")}<span>${escapeHtml(item.label)}</span></div>`).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorAvailabilityCard() {
+  return `
+    <article class="catalog-editor-card compact" aria-label="Sales & Availability">
+      <header><h2>Sales & Availability</h2></header>
+      <div class="catalog-kv-list">
+        ${renderCatalogDetailRow("POS", "Available")}
+        ${renderCatalogDetailRow("Website", "Catalog controlled")}
+        ${renderCatalogDetailRow("Inquiry / Quotation", "Available")}
+        ${renderCatalogDetailRow("Reorder", "Available")}
+      </div>
+    </article>
+  `;
+}
+
+function getCatalogProductEditorRoute() {
+  if (getRoutePath() !== "/catalog") return null;
+  const productParam = new URLSearchParams(window.location.search).get("product");
+  if (!productParam) return null;
+  return productParam === "new"
+    ? { mode: "create", productId: "" }
+    : { mode: "edit", productId: productParam };
+}
+
+function prepareCatalogEditorDraft(editorRoute, selectedProduct) {
+  const routeKey = `${editorRoute.mode}:${editorRoute.productId || "new"}`;
+  if (catalogEditorRouteKey !== routeKey) {
+    clearCatalogImagePreview();
+    catalogEditorMode = editorRoute.mode;
+    catalogEditorRouteKey = routeKey;
+    catalogDraft = createCatalogDraft(selectedProduct);
+    catalogValidationError = "";
+    catalogSaveError = "";
+    catalogSaveState = "idle";
+    selectedCatalogProductId = selectedProduct?.id ?? selectedCatalogProductId;
+  }
+
+  return catalogDraft ?? createCatalogDraft(selectedProduct);
+}
+
+function openCatalogProductEditor(mode, productId = "") {
+  if (mode === "create" && !canWriteCatalogProducts()) return;
+  navigateTo(mode === "create" ? "/catalog?product=new" : `/catalog?product=${encodeURIComponent(productId)}`);
+  render();
+}
+
+function closeCatalogProductEditor() {
+  clearCatalogImagePreview();
+  catalogEditorMode = "";
+  catalogEditorRouteKey = "";
+  catalogDraft = null;
+  catalogValidationError = "";
+  catalogSaveError = "";
+  catalogSaveState = "idle";
+  navigateTo("/catalog");
+  render();
+}
+
+function toggleCatalogProductQuickControl(productId) {
+  catalogExpandedProductId = catalogExpandedProductId === productId ? null : productId;
+  selectedCatalogProductId = productId;
+  catalogQuickSaveError = "";
+  render();
+}
+
+function getCatalogEditorActiveCategories(draft) {
+  return sortProductCategories(productCategories).filter((category) =>
+    category.active &&
+    !category.archivedAt &&
+    (!draft.productType || category.productType === draft.productType)
+  );
+}
+
+function renderCatalogProductTypeSelect(draft, disabled = false) {
+  return `<select id="catalog-productType" data-catalog-field="productType" required ${disabled ? "disabled" : ""}><option value="" ${draft.productType ? "" : "selected"}>Select Product Type</option>${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === draft.productType ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select>`;
+}
+
+function renderCatalogCategorySelect(draft, disabled = false) {
+  const options = getCatalogEditorActiveCategories(draft);
+  return `<select id="catalog-category" data-catalog-field="category" ${disabled ? "disabled" : ""}><option value="" ${draft.category ? "" : "selected"}>${draft.productType ? "Select category" : "Select Product Type first"}</option>${options.map((category) => `<option value="${escapeHtml(category.name)}" ${category.name === draft.category ? "selected" : ""}>${escapeHtml(getCategoryPath(category))}</option>`).join("")}</select>`;
+}
+
+function getCatalogEditorCategoryLabel(draft) {
+  const category = productCategories.find((item) => item.name === draft.category);
+  return category ? getCategoryPath(category) : draft.category || "";
+}
+
+function getCatalogEditorSku(draft) {
+  const slug = slugify(draft.slug || draft.name || "");
+  return slug ? slug.toUpperCase().replace(/-/g, "-") : "AUTO-GENERATED";
+}
+
+function getCatalogEditorImages(draft) {
+  const images = [];
+  const previewUrl = draft.imageFilePreviewUrl || (!draft.removeImage ? draft.imageUrl : "");
+  if (previewUrl) images.push({ url: previewUrl, primary: true });
+  return images.slice(0, CATALOG_PRODUCT_IMAGE_LIMIT);
+}
+
+function getCatalogEditorImageCount(draft) {
+  return getCatalogEditorImages(draft).length;
+}
+
+function getCatalogEditorPrimaryImage(draft) {
+  return getCatalogEditorImages(draft)[0]?.url || "";
+}
+
+function getCatalogEditorMargin(draft) {
+  const unitCost = Number(draft.unitCost || 0);
+  const sellingPrice = Number(draft.startingPrice || 0);
+  if (!unitCost || !sellingPrice) return { label: "Pending", helper: "Calculated after cost and price" };
+  const margin = Math.round(((sellingPrice - unitCost) / sellingPrice) * 100);
+  return { label: `${margin}%`, helper: margin >= 35 ? "Healthy margin" : "Review pricing" };
+}
+
+function getCatalogEditorReadiness(draft) {
+  return [
+    { label: "Product identity", ready: Boolean(draft.name && draft.productType && draft.category) },
+    { label: "Cost and selling price", ready: Boolean(draft.startingPrice) },
+    { label: "Variants", ready: Boolean(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length) },
+    { label: "At least 1 product image", ready: getCatalogEditorImageCount(draft) > 0 },
+    { label: "Production information", ready: Boolean(draft.productionUse || draft.printMethodsText) },
+  ];
+}
+
+function validateCatalogProductEditor(draft, product) {
+  const baseError = validateCatalogProduct(product);
+  if (baseError) return baseError;
+  if (!draft.productType) return "Product Type is required.";
+  const category = productCategories.find((item) => item.name === draft.category);
+  if (!draft.category) return "Category is required.";
+  if (category && category.productType !== draft.productType) return "Category must match the selected Product Type.";
+  return "";
+}
+
 function getCatalogDestinationCounts() {
   return catalogOptions.reduce((counts, catalog) => {
     counts[catalog.key] = catalogProducts.filter((item) => item.catalogKey === catalog.key).length;
@@ -5628,24 +6201,24 @@ function formatCatalogUpdated(value) {
   }).toUpperCase();
 }
 
-function renderCatalogSelect(draft) {
-  return `<select data-catalog-field="catalogKey">${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
+function renderCatalogSelect(draft, disabled = false) {
+  return `<select data-catalog-field="catalogKey" ${disabled ? "disabled" : ""}>${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
 }
 
-function renderCatalogStatusSelect(draft) {
-  return `<select data-catalog-field="status">${catalogStatusOptions.map((status) => `<option value="${status}" ${status === draft.status ? "selected" : ""}>${status}</option>`).join("")}</select>`;
+function renderCatalogStatusSelect(draft, disabled = false) {
+  return `<select data-catalog-field="status" ${disabled ? "disabled" : ""}>${catalogStatusOptions.map((status) => `<option value="${status}" ${status === draft.status ? "selected" : ""}>${status}</option>`).join("")}</select>`;
 }
 
-function renderCatalogField(id, label, control) {
-  return `<label class="catalog-field" for="catalog-${id}"><span>${label}</span>${control}</label>`;
+function renderCatalogField(id, label, control, helperText = "") {
+  return `<label class="catalog-field" for="catalog-${id}"><span>${label}</span>${control}${helperText ? `<small>${escapeHtml(helperText)}</small>` : ""}</label>`;
 }
 
-function renderCatalogInput(field, label, value, type = "text", required = false) {
-  return renderCatalogField(field, label, `<input id="catalog-${field}" data-catalog-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} />`);
+function renderCatalogInput(field, label, value, type = "text", required = false, disabled = false, placeholder = "") {
+  return renderCatalogField(field, label, `<input id="catalog-${field}" data-catalog-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} ${disabled ? "disabled" : ""} ${placeholder ? `placeholder="${escapeHtml(placeholder)}"` : ""} />`);
 }
 
-function renderCatalogTextarea(field, label, value) {
-  return renderCatalogField(field, label, `<textarea id="catalog-${field}" data-catalog-field="${field}" rows="3">${escapeHtml(value ?? "")}</textarea>`);
+function renderCatalogTextarea(field, label, value, disabled = false) {
+  return renderCatalogField(field, label, `<textarea id="catalog-${field}" data-catalog-field="${field}" rows="3" ${disabled ? "disabled" : ""}>${escapeHtml(value ?? "")}</textarea>`);
 }
 
 function getCatalogFilterOptions() {
@@ -5672,7 +6245,7 @@ function formatCatalogPrice(item) {
 }
 
 function canWriteCatalogProducts() {
-  return ["owner", "admin", "staff"].includes(adminUser?.role);
+  return ["owner", "admin"].includes(adminUser?.role);
 }
 
 function canManageStaffAccounts() {
@@ -5691,6 +6264,14 @@ function createCatalogDraft(product = null) {
       availableSizesText: product.availableSizes.join(", "),
       availableColorsText: product.availableColors.join(", "),
       printMethodsText: product.printMethods.join(", "),
+      productType: product.productType || inferCatalogProductType(product) || "PHYSICAL",
+      subcategory: product.subcategory || "",
+      unitCost: product.unitCost || "",
+      material: product.material || "",
+      weightGsm: product.weightGsm || "",
+      fitCut: product.fitCut || "",
+      productionUse: product.productionUse || "",
+      productionNotes: product.productionNotes || "",
     };
   }
 
@@ -5718,12 +6299,26 @@ function createCatalogDraft(product = null) {
     sortOrder: 0,
     isFeatured: false,
     status: "draft",
+    productType: "",
+    subcategory: "",
+    unitCost: "",
+    material: "",
+    weightGsm: "",
+    fitCut: "",
+    productionUse: "",
+    productionNotes: "",
   };
 }
 function createDraftImageId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
+
+function inferCatalogProductType(product) {
+  const category = productCategories.find((item) => item.name === product?.category);
+  return category?.productType || "";
+}
+
 function createEmptyStaffDraft() {
   return { displayName: "", email: "", role: "staff" };
 }
@@ -6484,6 +7079,7 @@ function renderProductImageManager(product) {
 }
 
 function renderSidebar(currentRoute) {
+  const routePath = getRoutePath();
   const navItems = [
     { label: "Overview", path: "/overview" },
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
@@ -6494,13 +7090,34 @@ function renderSidebar(currentRoute) {
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
+  const catalogSubnav = [
+    { label: "Products", path: "/catalog" },
+    { label: "Categories", path: "/catalog/categories" },
+  ];
+  const renderNavItem = (item) => {
+    const isActive = item.label === currentRoute;
+    const subnav = item.label === "Catalog"
+      ? `<div class="catalog-subnav" aria-label="Master Catalog sections">
+          ${catalogSubnav.map((subitem) => {
+            const isSubActive = subitem.path === "/catalog/categories"
+              ? routePath === "/catalog/categories"
+              : routePath === "/catalog";
+            return `<a class="catalog-subnav-link ${isSubActive ? "active" : ""}" href="${subitem.path}" data-route-link>${escapeHtml(subitem.label)}</a>`;
+          }).join("")}
+        </div>`
+      : "";
+    return `<div class="sidebar-nav-group ${item.label === "Catalog" ? "catalog-nav-group" : ""}">
+      <a class="${isActive ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>
+      ${subnav}
+    </div>`;
+  };
 
   return `
     <aside class="sidebar ${isSidebarCollapsed ? "is-collapsed" : ""}">
       <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
-        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label}</span></a>`).join("")}
+        ${navItems.map(renderNavItem).join("")}
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -6778,29 +7395,6 @@ function upsertProductCategory(items, category) {
   return sortProductCategories(nextItems);
 }
 
-function openCatalogDrawer(mode, productId = null) {
-  if (mode === "create" && !canWriteCatalogProducts()) return;
-  const product = catalogProducts.find((item) => item.id === productId) ?? null;
-  clearCatalogImagePreview();
-  catalogDrawerMode = mode;
-  selectedCatalogProductId = product?.id ?? selectedCatalogProductId;
-  catalogDraft = createCatalogDraft(product);
-  catalogValidationError = "";
-  catalogSaveError = "";
-  catalogSaveState = "idle";
-  render();
-}
-
-function closeCatalogDrawer() {
-  clearCatalogImagePreview();
-  catalogDrawerMode = "";
-  catalogDraft = null;
-  catalogValidationError = "";
-  catalogSaveError = "";
-  catalogSaveState = "idle";
-  render();
-}
-
 function clearCatalogImagePreview() {
   if (catalogDraft?.imageFilePreviewUrl) {
     URL.revokeObjectURL(catalogDraft.imageFilePreviewUrl);
@@ -6848,6 +7442,139 @@ function removeCatalogImageFromDraft() {
   catalogSaveError = "";
   render();
 }
+
+async function updateCatalogQuickPrice(productId) {
+  if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle") return;
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return;
+  const priceInput = document.querySelector(`[data-catalog-quick-selling-price="${cssEscape(productId)}"]`);
+  const nextPrice = String(priceInput?.value ?? "").trim();
+  if (nextPrice && Number(nextPrice) < 0) {
+    catalogQuickSaveError = "Selling price cannot be negative.";
+    render();
+    return;
+  }
+
+  await saveCatalogQuickProduct(productId, { startingPrice: nextPrice });
+}
+
+async function updateCatalogQuickStatus(productId, status) {
+  if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle" || !catalogStatusOptions.includes(status)) return;
+  await saveCatalogQuickProduct(productId, { status });
+}
+
+async function archiveCatalogQuickProduct(productId) {
+  if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle") return;
+  await saveCatalogQuickProduct(productId, { status: "archived" });
+}
+
+async function saveCatalogQuickProduct(productId, updates) {
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return;
+
+  catalogQuickSaveState = productId;
+  catalogQuickSaveError = "";
+  render();
+
+  try {
+    const savedProduct = await updateAdminCatalogProduct(productId, { ...product, ...updates }, adminAuthSession);
+    if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
+    catalogQuickSaveState = "idle";
+    catalogSaveState = "success";
+    window.setTimeout(() => {
+      if (catalogSaveState === "success") {
+        catalogSaveState = "idle";
+        render();
+      }
+    }, 1400);
+    render();
+  } catch (error) {
+    console.error("Unable to update catalog product quick control.", error);
+    catalogQuickSaveState = "idle";
+    catalogQuickSaveError = error.message || "Quick update failed. Check catalog product permissions.";
+    render();
+  }
+}
+
+async function updateCatalogQuickImage(productId, file) {
+  if (!canWriteCatalogProducts() || !file || catalogQuickSaveState !== "idle") return;
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return;
+
+  const validationError = await validateCatalogImageFileWithDimensions(file);
+  if (validationError) {
+    catalogQuickSaveError = validationError;
+    render();
+    return;
+  }
+
+  const previousImageUrl = String(product.imageUrl || "").trim();
+  let uploadedImage = null;
+  catalogQuickSaveState = productId;
+  catalogQuickSaveError = "";
+  render();
+
+  try {
+    uploadedImage = await uploadCatalogImage(file, product, adminAuthSession);
+    const savedProduct = await updateAdminCatalogProduct(productId, { ...product, imageUrl: uploadedImage.publicUrl }, adminAuthSession);
+    if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
+    if (previousImageUrl && previousImageUrl !== uploadedImage.publicUrl) {
+      deleteCatalogImageByUrl(previousImageUrl, adminAuthSession).catch((error) => console.warn("Unable to remove replaced catalog image.", error));
+    }
+    catalogQuickSaveState = "idle";
+    catalogSaveState = "success";
+    render();
+  } catch (error) {
+    console.error("Unable to update catalog product image.", error);
+    if (uploadedImage?.path) {
+      deleteCatalogImagePath(uploadedImage.path, adminAuthSession).catch((cleanupError) => console.warn("Unable to clean up failed quick image upload.", cleanupError));
+    }
+    catalogQuickSaveState = "idle";
+    catalogQuickSaveError = error.message || "Image update failed. Check catalog image storage permissions.";
+    render();
+  }
+}
+
+async function duplicateCatalogProduct(productId) {
+  if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle") return;
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return;
+  const copySuffix = Date.now().toString().slice(-6);
+  const copy = {
+    ...product,
+    id: "",
+    name: `${product.name} Copy`,
+    slug: `${slugify(product.slug || product.name)}-copy-${copySuffix}`,
+    status: "draft",
+    isFeatured: false,
+    sortOrder: Number(product.sortOrder || 0) + 1,
+  };
+
+  catalogQuickSaveState = productId;
+  catalogQuickSaveError = "";
+  render();
+
+  try {
+    const savedProduct = await createAdminCatalogProduct(copy, adminAuthSession);
+    if (savedProduct) {
+      catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
+      catalogExpandedProductId = savedProduct.id;
+      selectedCatalogProductId = savedProduct.id;
+    }
+    catalogQuickSaveState = "idle";
+    render();
+  } catch (error) {
+    console.error("Unable to duplicate catalog product.", error);
+    catalogQuickSaveState = "idle";
+    catalogQuickSaveError = error.message || "Duplicate failed. Check catalog product permissions.";
+    render();
+  }
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(value);
+  return String(value).replace(/["\\]/g, "\\$&");
+}
 function updateCatalogDraftField(field, value, inputType = "text") {
   if (!catalogDraft) return;
   const nextValue = inputType === "checkbox" ? Boolean(value) : value;
@@ -6862,6 +7589,13 @@ function updateCatalogDraftField(field, value, inputType = "text") {
     catalogDraft.slug = slugify(nextValue);
   }
 
+  if (field === "productType") {
+    const category = productCategories.find((item) => item.name === catalogDraft.category);
+    if (category && category.productType !== nextValue) {
+      catalogDraft.category = "";
+    }
+  }
+
   catalogValidationError = "";
   catalogSaveError = "";
 }
@@ -6872,7 +7606,7 @@ async function saveCatalogDraft() {
   const draft = catalogDraft;
   const previousImageUrl = String(draft.imageUrl || "").trim();
   const product = normalizeCatalogDraft(draft);
-  const validationError = validateCatalogProduct(product);
+  const validationError = validateCatalogProductEditor(draft, product);
   if (validationError) {
     catalogValidationError = validationError;
     render();
@@ -6908,7 +7642,8 @@ async function saveCatalogDraft() {
       product.imageUrl = "";
     }
 
-    const savedProduct = catalogDrawerMode === "edit" && draft.id
+    const isEdit = catalogEditorMode === "edit" && draft.id;
+    const savedProduct = isEdit
       ? await updateAdminCatalogProduct(draft.id, product, adminAuthSession)
       : await createAdminCatalogProduct(product, adminAuthSession);
 
@@ -6926,9 +7661,13 @@ async function saveCatalogDraft() {
     );
 
     clearCatalogImagePreview();
-    catalogDrawerMode = "";
-    catalogDraft = null;
+    catalogEditorMode = savedProduct?.id ? "edit" : catalogEditorMode;
+    catalogEditorRouteKey = savedProduct?.id ? `edit:${savedProduct.id}` : catalogEditorRouteKey;
+    catalogDraft = createCatalogDraft(savedProduct ?? product);
     catalogSaveState = "success";
+    if (savedProduct?.id && !isEdit) {
+      window.history.replaceState({}, "", `/catalog?product=${encodeURIComponent(savedProduct.id)}`);
+    }
     window.setTimeout(() => {
       if (catalogSaveState === "success") {
         catalogSaveState = "idle";
@@ -7350,19 +8089,27 @@ function bindEvents() {
   bindWorkboardEvents();
   bindMyTasksEvents();
   bindCalendarEvents();
-  document.querySelectorAll("[data-catalog-panel]").forEach((button) => {
-    button.addEventListener("click", () => {
-      activeCatalogPanel = button.dataset.catalogPanel;
-      catalogDrawerMode = "";
-      catalogDraft = null;
-      categoryDrawerMode = "";
-      categoryDraft = null;
-      render();
-    });
-  });
 
   document.getElementById("category-status-filter")?.addEventListener("change", (event) => {
     categoryStatusFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("category-product-type-filter")?.addEventListener("change", (event) => {
+    categoryProductTypeFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("category-hierarchy-filter")?.addEventListener("change", (event) => {
+    categoryHierarchyFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-category-reset-filters]")?.addEventListener("click", () => {
+    productQuery = "";
+    categoryProductTypeFilter = "all";
+    categoryHierarchyFilter = "all";
+    categoryStatusFilter = "active";
     render();
   });
 
@@ -7420,7 +8167,8 @@ function bindEvents() {
       catalogStatusFilter = catalogStatusFilter || "active";
       selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
       clearCatalogImagePreview();
-      catalogDrawerMode = "";
+      catalogEditorMode = "";
+      catalogEditorRouteKey = "";
       catalogDraft = null;
       render();
     });
@@ -7436,18 +8184,32 @@ function bindEvents() {
     render();
   });
 
+  document.getElementById("catalog-product-type-filter")?.addEventListener("change", (event) => {
+    catalogProductTypeFilter = event.target.value;
+    render();
+  });
+
   document.getElementById("catalog-featured-filter")?.addEventListener("change", (event) => {
     catalogFeaturedFilter = event.target.value;
     render();
   });
 
+  document.querySelector("[data-catalog-reset-filters]")?.addEventListener("click", () => {
+    productQuery = "";
+    catalogStatusFilter = "active";
+    catalogCategoryFilter = "all";
+    catalogProductTypeFilter = "all";
+    catalogFeaturedFilter = "all";
+    render();
+  });
+
 
   document.querySelector("[data-catalog-add-product]")?.addEventListener("click", () => {
-    openCatalogDrawer("create");
+    openCatalogProductEditor("create");
   });
 
   document.querySelectorAll("[data-catalog-edit-product]").forEach((element) => {
-    const openCatalogRow = () => openCatalogDrawer("edit", element.dataset.catalogEditProduct);
+    const openCatalogRow = () => openCatalogProductEditor("edit", element.dataset.catalogEditProduct);
 
     element.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -7461,10 +8223,76 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-catalog-close-drawer]").forEach((element) => {
+  document.querySelectorAll("[data-catalog-toggle-product]").forEach((element) => {
+    const toggleRow = () => toggleCatalogProductQuickControl(element.dataset.catalogToggleProduct);
+
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleRow();
+    });
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleRow();
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-full-edit]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openCatalogProductEditor("edit", button.dataset.catalogFullEdit);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-copy-sku]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await copyToClipboard(button.dataset.catalogCopySku);
+      showFeedback("SKU copied.");
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-quick-price-save]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await updateCatalogQuickPrice(button.dataset.catalogQuickPriceSave);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-quick-status]").forEach((select) => {
+    select.addEventListener("change", async (event) => {
+      event.stopPropagation();
+      await updateCatalogQuickStatus(select.dataset.catalogQuickStatus, event.target.value);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-archive-product]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await archiveCatalogQuickProduct(button.dataset.catalogArchiveProduct);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-duplicate]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await duplicateCatalogProduct(button.dataset.catalogDuplicate);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-quick-image-file]").forEach((field) => {
+    field.addEventListener("change", async (event) => {
+      event.stopPropagation();
+      const file = event.target.files?.[0] ?? null;
+      if (file) await updateCatalogQuickImage(field.dataset.catalogQuickImageFile, file);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-editor-cancel]").forEach((element) => {
     element.addEventListener("click", (event) => {
       event.preventDefault();
-      closeCatalogDrawer();
+      closeCatalogProductEditor();
     });
   });
 
@@ -7474,8 +8302,16 @@ function bindEvents() {
       updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
       if (field.dataset.catalogField === "name") {
         const slugInput = document.getElementById("catalog-slug");
-        if (slugInput && catalogDraft?.slug) slugInput.value = catalogDraft.slug;
+        if (slugInput && catalogDraft?.slug) slugInput.value = getCatalogEditorSku(catalogDraft);
       }
+      if (field.dataset.catalogField === "productType") render();
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-status-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateCatalogDraftField("status", button.dataset.catalogStatusChoice);
+      render();
     });
   });
 

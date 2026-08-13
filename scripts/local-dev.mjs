@@ -24,6 +24,8 @@ const appRoutes = new Set([
   "/calendar",
   "/workboard",
   "/overview",
+  "/catalog",
+  "/catalog/categories",
   "/set-password",
 ]);
 
