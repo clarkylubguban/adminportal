@@ -472,6 +472,7 @@ let categoryValidationError = "";
 let categorySaveState = "idle";
 let categorySaveError = "";
 let hasLoadedProductCategories = false;
+let isCatalogNavExpanded = false;
 let isAccountMenuOpen = false;
 let staffUsers = [];
 let staffLoadState = "idle";
@@ -5279,15 +5280,15 @@ function renderProductCategoryRow(category) {
 
   return `
     <tr class="${category.id === selectedCategoryId ? "selected" : ""}" data-category-edit="${escapeHtml(category.id)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(category.name)} category details">
-      <td class="catalog-name-cell"><div class="category-name-stack" style="--category-indent: ${indent}px"><strong title="${escapeHtml(category.name)}">${escapeHtml(category.name)}</strong><span>${escapeHtml(getCategoryPath(category))}</span></div></td>
-      <td class="mono-value" data-mobile-label="Code">${escapeHtml(category.code)}</td>
-      <td data-mobile-label="Product Type">${escapeHtml(formatProductType(category.productType))}</td>
-      <td data-mobile-label="Parent">${escapeHtml(parent?.name || "Root")}</td>
-      <td data-mobile-label="Children">${children}</td>
-      <td data-mobile-label="Products">${assignedProducts}</td>
-      <td data-mobile-label="Status">${statusMarkup}</td>
-      <td data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(category.updatedAt))}</span></td>
-      <td data-mobile-label="Action"><button class="note-button compact-action" data-category-edit="${escapeHtml(category.id)}" type="button">Edit</button></td>
+      <td class="catalog-name-cell category-main-cell"><div class="category-name-stack" style="--category-indent: ${indent}px"><strong title="${escapeHtml(category.name)}">${escapeHtml(category.name)}</strong><span title="${escapeHtml(getCategoryPath(category))}">${escapeHtml(getCategoryPath(category))}</span></div></td>
+      <td class="mono-value category-code-cell" data-mobile-label="Code" title="${escapeHtml(category.code)}">${escapeHtml(category.code)}</td>
+      <td class="category-product-type-cell" data-mobile-label="Product Type" title="${escapeHtml(formatProductType(category.productType))}">${escapeHtml(formatProductType(category.productType))}</td>
+      <td class="category-parent-cell" data-mobile-label="Parent" title="${escapeHtml(parent?.name || "Root")}">${escapeHtml(parent?.name || "Root")}</td>
+      <td class="category-count-cell" data-mobile-label="Children">${children}</td>
+      <td class="category-count-cell" data-mobile-label="Products">${assignedProducts}</td>
+      <td class="category-status-cell" data-mobile-label="Status">${statusMarkup}</td>
+      <td class="category-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(category.updatedAt))}</span></td>
+      <td class="category-action-cell" data-mobile-label="Action"><button class="note-button compact-action" data-category-edit="${escapeHtml(category.id)}" type="button">Edit</button></td>
     </tr>
   `;
 }
@@ -5810,7 +5811,7 @@ function renderCatalogProductEditorPage(editorRoute) {
 
 function renderCatalogEditorProductInformation(draft, disabled = false) {
   return `
-    <article class="catalog-editor-card" aria-label="Product Information">
+    <article class="catalog-editor-card" id="catalog-section-product-identity" tabindex="-1" aria-label="Product Information">
       <header><h2>Product Information</h2><p>Customer-facing identity and category binding.</p></header>
       <div class="catalog-editor-field-grid">
         ${renderCatalogInput("name", "Product Name", draft.name, "text", true, disabled, "Enter product name")}
@@ -5844,7 +5845,7 @@ function renderCatalogEditorImages(draft, canWrite, isSaving) {
   const disabled = !canWrite || isSaving || images.length >= CATALOG_PRODUCT_IMAGE_LIMIT;
 
   return `
-    <article class="catalog-editor-card ${catalogValidationError && images.length === 0 ? "has-error" : ""}" aria-label="Product Images">
+    <article class="catalog-editor-card ${catalogValidationError && images.length === 0 ? "has-error" : ""}" id="catalog-section-images" tabindex="-1" aria-label="Product Images">
       <header>
         <div><h2>Product Images</h2><p>Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product. Set the first uploaded image as primary.</p></div>
         <strong>${images.length} of ${CATALOG_PRODUCT_IMAGE_LIMIT} uploaded</strong>
@@ -5862,7 +5863,7 @@ function renderCatalogEditorImages(draft, canWrite, isSaving) {
 function renderCatalogEditorPricing(draft, disabled = false) {
   const margin = getCatalogEditorMargin(draft);
   return `
-    <article class="catalog-editor-card" aria-label="Pricing">
+    <article class="catalog-editor-card" id="catalog-section-pricing" tabindex="-1" aria-label="Pricing">
       <header><h2>Pricing</h2><p>Base cost, selling price, and calculated margin.</p></header>
       <div class="catalog-editor-field-grid">
         ${renderCatalogInput("unitCost", "Unit Cost", draft.unitCost || "", "number", false, disabled, "0.00")}
@@ -5908,7 +5909,7 @@ function renderCatalogEditorVariants(draft, disabled = false) {
   `).join("");
 
   return `
-    <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" aria-label="Variants">
+    <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
       <header>
         <div><h2>Variants</h2><p>Size and color combinations for this catalog product.</p></div>
         <button class="note-button" type="button" disabled>Add Variant</button>
@@ -5959,11 +5960,17 @@ function renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCou
 }
 
 function renderCatalogEditorReadinessCard(readiness) {
+  const completeCount = readiness.filter((item) => item.ready).length;
   return `
     <article class="catalog-editor-card compact" aria-label="Catalog Readiness">
-      <header><h2>Catalog Readiness</h2></header>
-      <div class="catalog-editor-readiness-list">
-        ${readiness.map((item) => `<div class="${item.ready ? "ready" : "pending"}">${renderIcon(item.ready ? "circle-check" : "alert-circle", "catalog-readiness-icon")}<span>${escapeHtml(item.label)}</span></div>`).join("")}
+      <header><h2>Catalog Readiness</h2><p>${completeCount} of ${readiness.length} requirements complete</p></header>
+      <div class="catalog-editor-readiness-list" role="list">
+        ${readiness.map((item) => `
+          <button class="catalog-readiness-item ${item.ready ? "ready" : "pending"}" type="button" data-catalog-readiness-target="${escapeHtml(item.target)}" ${item.ready ? "disabled" : ""} role="listitem">
+            ${renderIcon(item.ready ? "circle-check" : "alert-circle", "catalog-readiness-icon")}
+            <span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.ready ? "Complete" : item.missing)}</small></span>
+          </button>
+        `).join("")}
       </div>
     </article>
   `;
@@ -6085,11 +6092,10 @@ function getCatalogEditorMargin(draft) {
 
 function getCatalogEditorReadiness(draft) {
   return [
-    { label: "Product identity", ready: Boolean(draft.name && draft.productType && draft.category) },
-    { label: "Cost and selling price", ready: Boolean(draft.startingPrice) },
-    { label: "Variants", ready: Boolean(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length) },
-    { label: "At least 1 product image", ready: getCatalogEditorImageCount(draft) > 0 },
-    { label: "Production information", ready: Boolean(draft.productionUse || draft.printMethodsText) },
+    { label: "Product identity", ready: Boolean(draft.name && draft.productType && draft.category), target: "catalog-section-product-identity", missing: "Add name, product type, and category." },
+    { label: "Cost and selling price", ready: Boolean(draft.unitCost && draft.startingPrice), target: "catalog-section-pricing", missing: "Enter unit cost and selling price." },
+    { label: "Variants", ready: Boolean(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length), target: "catalog-section-variants", missing: "Add at least one size or color." },
+    { label: "At least one product image", ready: getCatalogEditorImageCount(draft) > 0, target: "catalog-section-images", missing: "Upload a product image." },
   ];
 }
 
@@ -7080,6 +7086,8 @@ function renderProductImageManager(product) {
 
 function renderSidebar(currentRoute) {
   const routePath = getRoutePath();
+  const isCatalogRoute = routePath === "/catalog" || routePath === "/catalog/categories";
+  const isCatalogExpanded = isCatalogRoute || isCatalogNavExpanded;
   const navItems = [
     { label: "Overview", path: "/overview" },
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
@@ -7097,7 +7105,7 @@ function renderSidebar(currentRoute) {
   const renderNavItem = (item) => {
     const isActive = item.label === currentRoute;
     const subnav = item.label === "Catalog"
-      ? `<div class="catalog-subnav" aria-label="Master Catalog sections">
+      ? `<div class="catalog-subnav" id="catalog-subnav" role="group" aria-label="Master Catalog sections" ${isCatalogExpanded ? "" : "hidden"}>
           ${catalogSubnav.map((subitem) => {
             const isSubActive = subitem.path === "/catalog/categories"
               ? routePath === "/catalog/categories"
@@ -7106,8 +7114,15 @@ function renderSidebar(currentRoute) {
           }).join("")}
         </div>`
       : "";
-    return `<div class="sidebar-nav-group ${item.label === "Catalog" ? "catalog-nav-group" : ""}">
-      <a class="${isActive ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>
+    const itemLabel = item.label === "Staff" ? "Staff Access" : item.label;
+    if (item.label === "Catalog") {
+      return `<div class="sidebar-nav-group catalog-nav-group ${isCatalogExpanded ? "is-expanded" : ""}">
+        <button class="catalog-nav-toggle ${isCatalogRoute ? "section-active" : ""}" type="button" data-catalog-nav-toggle aria-expanded="${isCatalogExpanded ? "true" : "false"}" aria-controls="catalog-subnav" title="Catalog" aria-label="Toggle Catalog navigation">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">Catalog</span>${renderIcon("chevron-right", "catalog-nav-chevron")}</button>
+        ${subnav}
+      </div>`;
+    }
+    return `<div class="sidebar-nav-group">
+      <a class="${isActive ? "active" : ""}" href="${item.path}" data-route-link title="${itemLabel}" aria-label="${itemLabel}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${itemLabel}</span></a>
       ${subnav}
     </div>`;
   };
@@ -7600,6 +7615,16 @@ function updateCatalogDraftField(field, value, inputType = "text") {
   catalogSaveError = "";
 }
 
+function focusCatalogEditorSection(sectionId) {
+  if (!sectionId) return;
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+  section.focus({ preventScroll: true });
+  const control = section.querySelector("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+  if (control) control.focus({ preventScroll: true });
+}
+
 async function saveCatalogDraft() {
   if (!canWriteCatalogProducts() || !catalogDraft || catalogSaveState === "saving" || catalogSaveState === "uploading") return;
 
@@ -8032,6 +8057,11 @@ function bindEvents() {
     });
   });
 
+  document.querySelector("[data-catalog-nav-toggle]")?.addEventListener("click", () => {
+    isCatalogNavExpanded = !isCatalogNavExpanded;
+    render();
+  });
+
   document.querySelectorAll("[data-route-link]").forEach((link) => {
     const openRoute = () => {
       navigateTo(link.getAttribute("href"));
@@ -8323,6 +8353,13 @@ function bindEvents() {
   document.querySelector("[data-catalog-remove-image]")?.addEventListener("click", () => {
     removeCatalogImageFromDraft();
   });
+
+  document.querySelectorAll("[data-catalog-readiness-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      focusCatalogEditorSection(button.dataset.catalogReadinessTarget);
+    });
+  });
+
   document.getElementById("catalog-product-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await saveCatalogDraft();
@@ -9168,6 +9205,10 @@ function getRoutePath() {
 
 function navigateTo(path) {
   const normalizedPath = normalizeRoutePath(path);
+  const routeOnly = normalizedPath.split("?")[0];
+  if (routeOnly !== "/catalog" && routeOnly !== "/catalog/categories") {
+    isCatalogNavExpanded = false;
+  }
   window.history.pushState({}, "", normalizedPath);
 }
 
