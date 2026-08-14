@@ -1,4 +1,4 @@
-const SUPABASE_REST_VERSION = "v1";
+﻿const SUPABASE_REST_VERSION = "v1";
 const ADMIN_AUTH_STORAGE_KEY = "trry_admin_supabase_auth_session_v1";
 
 export function getSupabaseConfig() {
@@ -101,6 +101,38 @@ async function writeSupabaseTableRequest(tableName, { method = "POST", params = 
   if (!response.ok) {
     const message = await response.text();
     throw new Error(`Supabase write failed for ${tableName}: ${message || response.status}`);
+  }
+
+  if (response.status === 204) return [];
+  const text = await response.text();
+  return text ? JSON.parse(text) : [];
+}
+
+export async function executeSupabaseRpcWithAuth(functionName, body = {}, accessToken) {
+  if (!accessToken) {
+    throw new Error("Supabase auth session is missing.");
+  }
+
+  const config = getSupabaseConfig();
+  if (!isSupabaseReady()) {
+    throw new Error("Supabase env is missing or disabled.");
+  }
+
+  const response = await fetch(`${config.url}/rest/${SUPABASE_REST_VERSION}/rpc/${functionName}`, {
+    method: "POST",
+    headers: {
+      apikey: config.anonKey,
+      Authorization: `Bearer ${accessToken}`,
+      Accept: "application/json",
+      "Content-Type": "application/json",
+      Prefer: "return=representation",
+    },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Supabase RPC failed for ${functionName}: ${message || response.status}`);
   }
 
   if (response.status === 204) return [];

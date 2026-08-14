@@ -27610,3 +27610,77 @@ pre,
 .mvp-drawer.inquiry.locked .mvp-action-primary span {
   font-weight: 500;
 }
+
+/* MC-02 canonical Product image controls */
+.catalog-editor-image-slot[draggable="true"] {
+  cursor: grab;
+}
+
+.catalog-editor-image-slot[draggable="true"]:active {
+  cursor: grabbing;
+}
+
+.catalog-editor-image-preview {
+  position: relative;
+  overflow: hidden;
+}
+
+.catalog-primary-badge {
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  z-index: 2;
+  border-radius: 4px;
+  background: #bef264;
+  color: #1f2933;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  padding: 5px 6px;
+  letter-spacing: 0;
+}
+
+.catalog-drag-handle {
+  position: absolute;
+  right: 8px;
+  top: 8px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  background: rgba(17, 24, 39, 0.72);
+  color: #f8fafc;
+  cursor: grab;
+}
+
+.catalog-drag-handle svg,
+.catalog-drag-icon {
+  width: 16px !important;
+  height: 16px !important;
+  flex: 0 0 16px;
+}
+
+.catalog-image-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.catalog-image-order-actions button {
+  min-height: 28px;
+  border-radius: 4px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  background: #ffffff;
+  color: #334155;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 8px;
+}
+
+.catalog-image-order-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.48;
+}

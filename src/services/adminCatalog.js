@@ -1,18 +1,21 @@
-import {
+﻿import {
   createSupabaseRowWithAuth,
+  executeSupabaseRpcWithAuth,
   isSupabaseReady,
   readSupabaseTableWithAuth,
   updateSupabaseRowsWithAuth,
 } from "../lib/supabaseClient.js";
 
-export const CATALOG_PRODUCTS_TABLE = "catalog_products";
+export const LEGACY_CATALOG_PRODUCTS_TABLE = "catalog_products";
 export const PRODUCT_CATEGORIES_TABLE = "product_categories";
 export const MASTER_PRODUCTS_TABLE = "products";
+export const PRODUCT_VARIANTS_TABLE = "product_variants";
+export const PRODUCT_IMAGES_TABLE = "product_images";
 
 export const catalogOptions = [
-  { key: "trry_webapp", label: "TRRY WEBAPP" },
-  { key: "foghead", label: "FOGHEAD" },
-  { key: "trry_portal", label: "TRRY PORTAL" },
+  { key: "trry_webapp", label: "TRRY WEBAPP", channel: "TRRY_WEBAPP" },
+  { key: "foghead", label: "FOGHEAD", channel: "FOGHEAD" },
+  { key: "trry_portal", label: "TRRY PORTAL", channel: "TRRY_PORTAL" },
 ];
 
 export const catalogStatusOptions = ["draft", "published", "hidden", "archived"];
@@ -108,23 +111,36 @@ export async function getAdminCatalogProducts(authSession) {
   }
 
   try {
-    const rows = await readSupabaseTableWithAuth(
-      CATALOG_PRODUCTS_TABLE,
-      {
+    const accessToken = getAccessToken(authSession);
+    const [products, categories, variants, images] = await Promise.all([
+      readSupabaseTableWithAuth(MASTER_PRODUCTS_TABLE, { select: "*", order: "name.asc" }, accessToken),
+      readSupabaseTableWithAuth(PRODUCT_CATEGORIES_TABLE, { select: "id,name,code,product_type,parent_category_id" }, accessToken),
+      readSupabaseTableWithAuth(PRODUCT_VARIANTS_TABLE, { select: "*", order: "created_at.asc" }, accessToken),
+      readSupabaseTableWithAuth(PRODUCT_IMAGES_TABLE, {
         select: "*",
-        order: "sort_order.asc,name.asc",
-      },
-      getAccessToken(authSession)
-    );
+        active: "eq.true",
+        archived_at: "is.null",
+        order: "position.asc,created_at.asc",
+      }, accessToken),
+    ]);
+    const categoryById = new Map((Array.isArray(categories) ? categories : []).map((category) => [category.id, category]));
+    const variantsByProduct = groupBy(Array.isArray(variants) ? variants : [], "product_id");
+    const imagesByProduct = groupBy(Array.isArray(images) ? images : [], "product_id");
+    const mappedProducts = (Array.isArray(products) ? products : []).map((row) => mapCanonicalRowToProduct(
+      row,
+      categoryById.get(row.category_id),
+      variantsByProduct.get(row.id) ?? [],
+      imagesByProduct.get(row.id) ?? []
+    ));
 
     return {
-      products: Array.isArray(rows) ? rows.map(mapCatalogRowToProduct) : [],
-      status: rows?.length ? "success" : "empty",
+      products: mappedProducts.sort(sortCatalogProducts),
+      status: mappedProducts.length ? "success" : "empty",
       source: "supabase",
       error: null,
     };
   } catch (error) {
-    console.error("Unable to load Supabase catalog products.", error);
+    console.error("Unable to load Supabase canonical products.", error);
     return {
       products: [],
       status: "error",
@@ -134,36 +150,398 @@ export async function getAdminCatalogProducts(authSession) {
   }
 }
 
-export async function createAdminCatalogProduct(product, authSession) {
-  const rows = await createSupabaseRowWithAuth(
-    CATALOG_PRODUCTS_TABLE,
-    mapCatalogProductToRow(product),
+export async function getLegacyCatalogProductsReadOnly(authSession) {
+  const rows = await readSupabaseTableWithAuth(
+    LEGACY_CATALOG_PRODUCTS_TABLE,
+    {
+      select: "*",
+      order: "sort_order.asc,name.asc",
+    },
     getAccessToken(authSession)
   );
-
-  return mapCatalogRowToProduct(rows?.[0] ?? product);
+  return Array.isArray(rows) ? rows.map(mapLegacyCatalogRowToProduct) : [];
 }
 
-export async function updateAdminCatalogProduct(id, product, authSession) {
+export async function createAdminProduct(product, authSession) {
+  const accessToken = getAccessToken(authSession);
+  const productRows = await createSupabaseRowWithAuth(
+    MASTER_PRODUCTS_TABLE,
+    mapProductToCanonicalRow(product, { create: true }),
+    accessToken
+  );
+  const savedRow = productRows?.[0];
+  if (!savedRow?.id) throw new Error("Product create failed before identifiers were returned.");
+
+  await replaceProductVariants(savedRow, product, accessToken);
+  if (Array.isArray(product.images)) {
+    await replaceProductImages(savedRow.id, product.images, accessToken);
+  }
+  return getAdminProductById(savedRow.id, authSession);
+}
+
+export async function updateAdminProduct(id, product, authSession) {
+  const accessToken = getAccessToken(authSession);
   const rows = await updateSupabaseRowsWithAuth(
-    CATALOG_PRODUCTS_TABLE,
+    MASTER_PRODUCTS_TABLE,
     { id: `eq.${id}` },
-    mapCatalogProductToRow(product),
-    getAccessToken(authSession)
+    mapProductToCanonicalRow(product, { create: false }),
+    accessToken
   );
+  const savedRow = rows?.[0];
+  if (!savedRow?.id) throw new Error("Product update failed or returned no rows.");
 
-  return rows?.[0] ? mapCatalogRowToProduct(rows[0]) : null;
+  await replaceProductVariants(savedRow, product, accessToken);
+  if (Array.isArray(product.images)) {
+    await replaceProductImages(savedRow.id, product.images, accessToken);
+  }
+  return getAdminProductById(savedRow.id, authSession);
 }
 
-function mapCatalogRowToProduct(row) {
+export async function duplicateAdminProduct(product, authSession) {
+  const duplicate = {
+    ...product,
+    id: "",
+    masterProductId: "",
+    productCode: "",
+    name: `${product.name} Copy`,
+    status: "draft",
+    isFeatured: false,
+    sortOrder: Number(product.sortOrder || 0) + 1,
+    variants: (product.variants ?? []).map((variant) => ({
+      ...variant,
+      id: "",
+      masterVariantId: "",
+      sku: "",
+      globalSku: "",
+    })),
+    images: (product.images ?? []).map((image) => ({
+      storagePath: image.storagePath,
+      publicUrl: image.publicUrl || image.url,
+      altText: image.altText || product.name,
+    })).filter((image) => image.storagePath),
+  };
+  return createAdminProduct(duplicate, authSession);
+}
+
+async function getAdminProductById(id, authSession) {
+  const accessToken = getAccessToken(authSession);
+  const [products, categories, variants, images] = await Promise.all([
+    readSupabaseTableWithAuth(MASTER_PRODUCTS_TABLE, { select: "*", id: `eq.${id}`, limit: "1" }, accessToken),
+    readSupabaseTableWithAuth(PRODUCT_CATEGORIES_TABLE, { select: "id,name,code,product_type,parent_category_id" }, accessToken),
+    readSupabaseTableWithAuth(PRODUCT_VARIANTS_TABLE, { select: "*", product_id: `eq.${id}`, order: "created_at.asc" }, accessToken),
+    readSupabaseTableWithAuth(PRODUCT_IMAGES_TABLE, {
+      select: "*",
+      product_id: `eq.${id}`,
+      active: "eq.true",
+      archived_at: "is.null",
+      order: "position.asc,created_at.asc",
+    }, accessToken),
+  ]);
+  const row = products?.[0];
+  if (!row) return null;
+  const categoryById = new Map((Array.isArray(categories) ? categories : []).map((category) => [category.id, category]));
+  return mapCanonicalRowToProduct(row, categoryById.get(row.category_id), variants ?? [], images ?? []);
+}
+
+function mapProductToCanonicalRow(product, { create = false } = {}) {
+  const statusFields = mapCatalogStatusToCanonical(product.status, product);
+  const row = cleanRow({
+    category_id: product.categoryId || product.category_id || null,
+    name: product.name,
+    description: emptyToNull(product.description),
+    brand: emptyToNull(product.brand),
+    product_type: normalizeProductType(product.productType) || "PHYSICAL",
+    eligible_channels: mapCatalogKeysToChannels(product.catalogKeys ?? [product.catalogKey]),
+    typed_config: mapProductToTypedConfig(product),
+    updated_at: new Date().toISOString(),
+    ...statusFields,
+  });
+
+  if (create) {
+    row.created_by_user_id = undefined;
+  }
+
+  return row;
+}
+
+function mapProductToTypedConfig(product) {
+  return {
+    price_label: emptyToNull(product.priceLabel),
+    minimum_quantity: Number(product.minimumQuantity || 1),
+    print_methods: product.printMethods ?? [],
+    material: emptyToNull(product.material),
+    weight_gsm: emptyToNull(product.weightGsm),
+    fit_cut: emptyToNull(product.fitCut),
+    production_use: emptyToNull(product.productionUse),
+    production_notes: emptyToNull(product.productionNotes),
+    is_featured: product.isFeatured === true,
+    sort_order: Number(product.sortOrder || 0),
+    subcategory: emptyToNull(product.subcategory),
+  };
+}
+
+function mapCatalogStatusToCanonical(status, product = {}) {
+  if (status === "archived") {
+    return {
+      active: false,
+      readiness_status: "ARCHIVED",
+      sellable: false,
+      purchasable: false,
+      archived_at: product.archivedAt || new Date().toISOString(),
+      archive_reason: product.archiveReason || "Archived from Admin Product editor",
+    };
+  }
+  if (status === "published") {
+    return {
+      active: true,
+      readiness_status: "READY_FOR_SALE",
+      sellable: true,
+      purchasable: false,
+      archived_at: null,
+      archived_by_user_id: null,
+      archive_reason: null,
+    };
+  }
+  if (status === "hidden") {
+    return {
+      active: true,
+      readiness_status: "NEEDS_SETUP",
+      sellable: false,
+      purchasable: false,
+      archived_at: null,
+      archived_by_user_id: null,
+      archive_reason: null,
+    };
+  }
+  return {
+    active: true,
+    readiness_status: "DRAFT",
+    sellable: false,
+    purchasable: false,
+    archived_at: null,
+    archived_by_user_id: null,
+    archive_reason: null,
+  };
+}
+
+async function replaceProductVariants(savedProduct, product, accessToken) {
+  const desiredVariants = buildDesiredVariants(product);
+  const existingRows = await readSupabaseTableWithAuth(
+    PRODUCT_VARIANTS_TABLE,
+    { select: "*", product_id: `eq.${savedProduct.id}`, order: "created_at.asc" },
+    accessToken
+  );
+  const activeExisting = (Array.isArray(existingRows) ? existingRows : []).filter((row) => row.active !== false && !row.archived_at);
+
+  for (let index = 0; index < desiredVariants.length; index += 1) {
+    const desired = desiredVariants[index];
+    const existing = activeExisting[index];
+    if (existing) {
+      await updateSupabaseRowsWithAuth(
+        PRODUCT_VARIANTS_TABLE,
+        { id: `eq.${existing.id}` },
+        mapVariantToRow(desired, product, { update: true }),
+        accessToken
+      );
+    } else {
+      await createSupabaseRowWithAuth(
+        PRODUCT_VARIANTS_TABLE,
+        mapVariantToRow(desired, product, { productId: savedProduct.id }),
+        accessToken
+      );
+    }
+  }
+
+  for (const stale of activeExisting.slice(desiredVariants.length)) {
+    await updateSupabaseRowsWithAuth(
+      PRODUCT_VARIANTS_TABLE,
+      { id: `eq.${stale.id}` },
+      {
+        active: false,
+        archived_at: new Date().toISOString(),
+        archive_reason: "Removed from Product editor",
+        updated_at: new Date().toISOString(),
+      },
+      accessToken
+    );
+  }
+}
+
+function buildDesiredVariants(product) {
+  const supplied = Array.isArray(product.variants) ? product.variants.filter((variant) => variant?.active !== false) : [];
+  if (supplied.length) {
+    return supplied.map((variant) => ({
+      size: variant.size || "",
+      color: variant.color || "",
+      sellingPrice: variant.sellingPrice ?? product.startingPrice ?? 0,
+      unitCost: variant.unitCost ?? product.unitCost ?? 0,
+      variantType: variant.variantType || getVariantTypeForProduct(product.productType),
+    }));
+  }
+
+  const sizes = Array.isArray(product.availableSizes) && product.availableSizes.length ? product.availableSizes : [""];
+  const colors = Array.isArray(product.availableColors) && product.availableColors.length ? product.availableColors : [""];
+  return sizes.flatMap((size) => colors.map((color) => ({
+    size,
+    color,
+    sellingPrice: product.startingPrice || 0,
+    unitCost: product.unitCost || 0,
+    variantType: getVariantTypeForProduct(product.productType),
+  })));
+}
+
+function mapVariantToRow(variant, product, options = {}) {
+  const row = cleanRow({
+    product_id: options.productId,
+    master_variant_id: options.update ? undefined : null,
+    sku: options.update ? undefined : null,
+    global_sku: options.update ? undefined : null,
+    size: emptyToNull(variant.size),
+    color: emptyToNull(variant.color),
+    selling_price: Number(variant.sellingPrice || 0),
+    unit_cost: Number(variant.unitCost || 0),
+    variant_type: variant.variantType || getVariantTypeForProduct(product.productType),
+    active: true,
+    archived_at: null,
+    archived_by_user_id: null,
+    archive_reason: null,
+    updated_at: new Date().toISOString(),
+  });
+  return row;
+}
+
+async function replaceProductImages(productId, images, accessToken) {
+  const payload = images.slice(0, 6).map((image) => ({
+    id: image.id || undefined,
+    storagePath: image.storagePath || image.storage_path || "",
+    publicUrl: image.publicUrl || image.public_url || image.url || "",
+    altText: image.altText || image.alt_text || "",
+  })).filter((image) => image.storagePath);
+  await executeSupabaseRpcWithAuth("set_product_images_for_product", {
+    p_product_id: productId,
+    p_images: payload,
+  }, accessToken);
+}
+
+function mapCanonicalRowToProduct(row, category, variants, images) {
+  const typedConfig = isPlainObject(row.typed_config) ? row.typed_config : {};
+  const mappedImages = images
+    .slice()
+    .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
+    .map(mapImageRowToProductImage);
+  const activeVariants = variants.filter((variant) => variant.active !== false && !variant.archived_at);
+  const primaryVariant = activeVariants[0] ?? null;
+  const catalogKeys = mapChannelsToCatalogKeys(row.eligible_channels);
+  const catalogKey = catalogKeys[0] ?? catalogOptions[0].key;
+
+  return {
+    id: row.id,
+    masterProductId: row.master_product_id,
+    productCode: row.product_code,
+    catalogKey,
+    catalogKeys,
+    name: row.name,
+    slug: row.product_code,
+    categoryId: row.category_id,
+    category: category?.name ?? "",
+    categoryCode: category?.code ?? "",
+    description: row.description ?? "",
+    imageUrl: mappedImages[0]?.url ?? "",
+    images: mappedImages,
+    startingPrice: primaryVariant?.selling_price === null || primaryVariant?.selling_price === undefined ? "" : String(primaryVariant.selling_price),
+    unitCost: primaryVariant?.unit_cost === null || primaryVariant?.unit_cost === undefined ? "" : String(primaryVariant.unit_cost),
+    priceLabel: typedConfig.price_label ?? "",
+    minimumQuantity: Number(typedConfig.minimum_quantity ?? 1),
+    availableSizes: uniqueList(activeVariants.map((variant) => variant.size).filter(Boolean)),
+    availableColors: uniqueList(activeVariants.map((variant) => variant.color).filter(Boolean)),
+    printMethods: Array.isArray(typedConfig.print_methods) ? typedConfig.print_methods : [],
+    sortOrder: Number(typedConfig.sort_order ?? 0),
+    isFeatured: typedConfig.is_featured === true,
+    status: mapCanonicalStatusToCatalog(row),
+    productType: normalizeProductType(row.product_type),
+    subcategory: typedConfig.subcategory ?? "",
+    material: typedConfig.material ?? "",
+    weightGsm: typedConfig.weight_gsm ?? "",
+    fitCut: typedConfig.fit_cut ?? "",
+    productionUse: typedConfig.production_use ?? "",
+    productionNotes: typedConfig.production_notes ?? "",
+    variants: activeVariants.map(mapVariantRowToProductVariant),
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+    archivedAt: row.archived_at ?? "",
+    archiveReason: row.archive_reason ?? "",
+  };
+}
+
+function mapImageRowToProductImage(row) {
+  return {
+    id: row.id,
+    storagePath: row.storage_path,
+    publicUrl: row.public_url ?? "",
+    url: row.public_url ?? "",
+    altText: row.alt_text ?? "",
+    position: Number(row.position ?? 0),
+    isPrimary: row.is_primary === true,
+  };
+}
+
+function mapVariantRowToProductVariant(row) {
+  return {
+    id: row.id,
+    masterVariantId: row.master_variant_id,
+    sku: row.sku,
+    globalSku: row.global_sku,
+    size: row.size ?? "",
+    color: row.color ?? "",
+    sellingPrice: row.selling_price === null || row.selling_price === undefined ? "" : String(row.selling_price),
+    unitCost: row.unit_cost === null || row.unit_cost === undefined ? "" : String(row.unit_cost),
+    variantType: row.variant_type ?? "STANDARD",
+    active: row.active !== false,
+  };
+}
+
+function mapCanonicalStatusToCatalog(row) {
+  if (row.readiness_status === "ARCHIVED" || row.active === false || row.archived_at) return "archived";
+  if (row.sellable === true || row.readiness_status === "READY_FOR_SALE") return "published";
+  if (row.readiness_status === "NEEDS_SETUP") return "hidden";
+  return "draft";
+}
+
+function mapCatalogKeysToChannels(keys) {
+  const normalizedKeys = (Array.isArray(keys) ? keys : [keys]).filter(Boolean);
+  const channels = normalizedKeys
+    .map((key) => catalogOptions.find((catalog) => catalog.key === key)?.channel || String(key).trim().toUpperCase())
+    .filter(Boolean);
+  return channels.length ? Array.from(new Set(channels)) : [catalogOptions[0].channel];
+}
+
+function mapChannelsToCatalogKeys(channels) {
+  return (Array.isArray(channels) ? channels : [])
+    .map((channel) => catalogOptions.find((catalog) => catalog.channel === channel)?.key)
+    .filter(Boolean);
+}
+
+function getVariantTypeForProduct(productType) {
+  if (productType === "SERVICE") return "SERVICE_TIER";
+  if (productType === "MATERIAL_SUPPLY") return "SUPPLY_OPTION";
+  return "STANDARD";
+}
+
+function sortCatalogProducts(a, b) {
+  return a.catalogKey.localeCompare(b.catalogKey) || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.name.localeCompare(b.name);
+}
+
+function mapLegacyCatalogRowToProduct(row) {
   return {
     id: row.id,
     catalogKey: row.catalog_key,
+    catalogKeys: [row.catalog_key].filter(Boolean),
     name: row.name,
     slug: row.slug,
     category: row.category ?? "",
     description: row.description ?? "",
     imageUrl: row.image_url ?? "",
+    images: row.image_url ? [{ url: row.image_url, publicUrl: row.image_url, storagePath: "", isPrimary: true, position: 0 }] : [],
     startingPrice: row.starting_price === null || row.starting_price === undefined ? "" : String(row.starting_price),
     priceLabel: row.price_label ?? "",
     minimumQuantity: Number(row.minimum_quantity ?? 1),
@@ -176,27 +554,6 @@ function mapCatalogRowToProduct(row) {
     createdAt: row.created_at ?? "",
     updatedAt: row.updated_at ?? "",
   };
-}
-
-function mapCatalogProductToRow(product) {
-  return cleanRow({
-    catalog_key: product.catalogKey,
-    name: product.name,
-    slug: product.slug,
-    category: emptyToNull(product.category),
-    description: emptyToNull(product.description),
-    image_url: emptyToNull(product.imageUrl),
-    starting_price: product.startingPrice === "" || product.startingPrice === null ? null : Number(product.startingPrice),
-    price_label: emptyToNull(product.priceLabel),
-    minimum_quantity: Number(product.minimumQuantity || 1),
-    available_sizes: product.availableSizes ?? [],
-    available_colors: product.availableColors ?? [],
-    print_methods: product.printMethods ?? [],
-    sort_order: Number(product.sortOrder || 0),
-    is_featured: product.isFeatured === true,
-    status: product.status || "draft",
-    updated_at: new Date().toISOString(),
-  });
 }
 
 async function getCategoryProductCounts(authSession) {
@@ -306,4 +663,20 @@ function cleanRow(row) {
   return Object.fromEntries(
     Object.entries(row).filter(([, value]) => value !== undefined)
   );
+}
+
+function groupBy(rows, key) {
+  const grouped = new Map();
+  for (const row of rows) {
+    const groupKey = row[key];
+    if (!groupKey) continue;
+    const group = grouped.get(groupKey) ?? [];
+    group.push(row);
+    grouped.set(groupKey, group);
+  }
+  return grouped;
+}
+
+function uniqueList(values) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
 }

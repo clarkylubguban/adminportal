@@ -1,9 +1,10 @@
-import { readFileSync } from "node:fs";
+﻿import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
 const main = readFileSync(join(root, "src", "main.js"), "utf8");
 const styles = readFileSync(join(root, "src", "styles.css"), "utf8");
+const service = readFileSync(join(root, "src", "services", "adminCatalog.js"), "utf8");
 
 const checks = [
   ["Catalog parent is a toggle, not a route link", main.includes("data-catalog-nav-toggle") && main.includes("aria-expanded") && main.includes("aria-controls=\"catalog-subnav\"")],
@@ -18,7 +19,8 @@ const checks = [
   ["Categories table avoids desktop overflow and allows narrow overflow", styles.includes(".catalog-table-card:has(.category-table)") && styles.includes("overflow-x: hidden !important") && styles.includes("@media (max-width: 860px)") && styles.includes("overflow-x: auto !important")],
   ["Long category values keep accessible titles", main.includes("category-code-cell") && main.includes("title=\"${escapeHtml(category.code)}\"") && main.includes("title=\"${escapeHtml(parent?.name || \"Root\")}\"")],
   ["Six-image maximum remains unchanged", main.includes("const CATALOG_PRODUCT_IMAGE_LIMIT = 6") && main.includes("Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images")],
-  ["Canonical binding remains blocked instead of silently dual-writing", main.includes("createAdminCatalogProduct(product, adminAuthSession)") && main.includes("updateAdminCatalogProduct(draft.id, product, adminAuthSession)") && !main.includes("createAdminProductImage(")],
+  ["Canonical binding is active and legacy writes are absent", main.includes("createAdminProduct(baseProduct, adminAuthSession)") && main.includes("updateAdminProduct(draft.id, baseProduct, adminAuthSession)") && service.includes("PRODUCT_IMAGES_TABLE") && !main.includes("createAdminCatalogProduct(") && !main.includes("updateAdminCatalogProduct(")],
+  ["MC-02 controls are present", main.includes("catalog-primary-badge") && main.includes("data-catalog-image-drag") && main.includes("data-catalog-move-image")],
 ];
 
 const failures = checks.filter(([, passed]) => !passed);

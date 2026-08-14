@@ -47,15 +47,15 @@ import {
   catalogOptions,
   catalogStatusOptions,
   createAdminProductCategory,
-  createAdminCatalogProduct,
+  createAdminProduct,
   getAdminProductCategories,
   getAdminCatalogProducts,
   productTypeOptions,
+  duplicateAdminProduct,
   updateAdminProductCategory,
-  updateAdminCatalogProduct,
+  updateAdminProduct,
 } from "./services/adminCatalog.js";
 import {
-  deleteCatalogImageByUrl,
   deleteCatalogImagePath,
   uploadCatalogImage,
   validateCatalogImageFileWithDimensions,
@@ -5139,7 +5139,7 @@ function getVisibleCatalogProducts() {
   const normalizedQuery = productQuery.trim().toLowerCase();
 
   return catalogProducts.filter((item) => {
-    const matchesCatalog = item.catalogKey === activeCatalogKey;
+    const matchesCatalog = Array.isArray(item.catalogKeys) ? item.catalogKeys.includes(activeCatalogKey) : item.catalogKey === activeCatalogKey;
     const matchesStatus =
       catalogStatusFilter === "active"
         ? item.status !== "archived"
@@ -5156,7 +5156,7 @@ function getVisibleCatalogProducts() {
     const sourceProduct = getCatalogSourceProduct(item);
     const matchesQuery =
       !normalizedQuery ||
-      [item.name, item.slug, item.category, item.description, item.priceLabel, sourceProduct?.product, sourceProduct?.code]
+      [item.name, item.productCode, item.slug, item.category, item.description, item.priceLabel, sourceProduct?.product, sourceProduct?.code]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
@@ -5193,7 +5193,7 @@ function getVisibleProductCategories() {
 }
 
 function getCatalogProductSummaryCards() {
-  const scopedProducts = catalogProducts.filter((item) => item.catalogKey === activeCatalogKey);
+  const scopedProducts = catalogProducts.filter((item) => Array.isArray(item.catalogKeys) ? item.catalogKeys.includes(activeCatalogKey) : item.catalogKey === activeCatalogKey);
   const ready = scopedProducts.filter((item) => item.status === "published").length;
   const archived = scopedProducts.filter((item) => item.status === "archived").length;
   const needsSetup = scopedProducts.filter((item) => getCatalogProductHealthChecks(item).some((check) => !check.ready)).length;
@@ -5374,7 +5374,7 @@ function renderCategoryInput(field, label, value, type = "text", required = fals
 
 function renderCategoryParentSelect(draft, disabled = false) {
   const options = getCategoryParentOptions(draft);
-  return `<select id="catalog-parentCategoryId" data-category-field="parentCategoryId" ${disabled ? "disabled" : ""}><option value="">No parent — root category</option>${options.map((category) => `<option value="${escapeHtml(category.id)}" ${category.id === draft.parentCategoryId ? "selected" : ""}>${escapeHtml(getCategoryPath(category))}</option>`).join("")}</select>`;
+  return `<select id="catalog-parentCategoryId" data-category-field="parentCategoryId" ${disabled ? "disabled" : ""}><option value="">No parent - root category</option>${options.map((category) => `<option value="${escapeHtml(category.id)}" ${category.id === draft.parentCategoryId ? "selected" : ""}>${escapeHtml(getCategoryPath(category))}</option>`).join("")}</select>`;
 }
 
 function renderCategoryProductTypeSelect(draft, disabled = false) {
@@ -5818,7 +5818,7 @@ function renderCatalogEditorProductInformation(draft, disabled = false) {
         ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled), "Required before choosing a parent category.")}
         ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "Only categories with the same product type are available." : "Select Product Type first.")}
         ${renderCatalogInput("subcategory", "Subcategory", draft.subcategory || "", "text", false, disabled, "Select subcategory")}
-        ${renderCatalogField("slug", "SKU / Code", `<input id="catalog-slug" data-catalog-field="slug" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, "Auto-generated from the product name.")}
+        ${renderCatalogField("productCode", "Product Code", `<input id="catalog-productCode" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, draft.productCode ? "Generated canonical Product Code." : "Generated on save.")}
         ${renderCatalogField("catalog", "Destination", renderCatalogSelect(draft, disabled))}
       </div>
     </article>
@@ -5831,13 +5831,16 @@ function renderCatalogEditorImages(draft, canWrite, isSaving) {
     const image = images[index] ?? null;
     const isPrimary = index === 0 && Boolean(image);
     return `
-      <div class="catalog-editor-image-slot ${image ? "has-image" : "empty"}" data-image-slot="${index}">
+      <div class="catalog-editor-image-slot ${image ? "has-image" : "empty"}" data-image-slot="${index}" ${image && canWrite ? `draggable="true" data-catalog-image-drag="${index}"` : ""}>
         <div class="catalog-editor-image-preview">
-          ${image ? `<img src="${escapeHtml(image.url)}" alt="${escapeHtml(draft.name || "Product image")}" />` : renderIcon("package-plus", "catalog-placeholder-icon")}
+          ${image ? `<img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.altText || draft.name || "Product image")}" />` : renderIcon("package-plus", "catalog-placeholder-icon")}
+          ${isPrimary ? `<span class="catalog-primary-badge">PRIMARY</span>` : ""}
+          ${image && canWrite ? `<span class="catalog-drag-handle" aria-hidden="true">${renderIcon("grip", "catalog-drag-icon")}</span>` : ""}
         </div>
         <div class="catalog-editor-image-actions">
-          <span>${isPrimary ? "PRIMARY" : image ? "IMAGE" : "ADD IMAGE"}</span>
-          ${image && canWrite ? `<button type="button" data-catalog-remove-image ${isSaving ? "disabled" : ""}>Remove</button>` : ""}
+          <span>${image ? `${index + 1} of ${CATALOG_PRODUCT_IMAGE_LIMIT}` : "ADD IMAGE"}</span>
+          ${image && canWrite ? `<div class="catalog-image-order-actions"><button type="button" data-catalog-move-image="${index}" data-direction="left" ${isSaving || index === 0 ? "disabled" : ""}>Move Left</button><button type="button" data-catalog-move-image="${index}" data-direction="right" ${isSaving || index === images.length - 1 ? "disabled" : ""}>Move Right</button></div>` : ""}
+          ${image && canWrite ? `<button type="button" data-catalog-remove-image="${index}" ${isSaving ? "disabled" : ""}>Remove</button>` : ""}
         </div>
       </div>
     `;
@@ -5847,12 +5850,12 @@ function renderCatalogEditorImages(draft, canWrite, isSaving) {
   return `
     <article class="catalog-editor-card ${catalogValidationError && images.length === 0 ? "has-error" : ""}" id="catalog-section-images" tabindex="-1" aria-label="Product Images">
       <header>
-        <div><h2>Product Images</h2><p>Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product. Set the first uploaded image as primary.</p></div>
+        <div><h2>Product Images</h2><p>Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product. First ordered image is primary.</p></div>
         <strong>${images.length} of ${CATALOG_PRODUCT_IMAGE_LIMIT} uploaded</strong>
       </header>
       <div class="catalog-editor-image-grid">${slots}</div>
       <label class="catalog-editor-upload ${disabled ? "disabled" : ""}">
-        <span>${images.length ? "Change primary image" : "Upload primary image"}</span>
+        <span>${images.length ? "Add another image" : "Upload primary image"}</span>
         <input data-catalog-image-file type="file" accept="image/jpeg,image/png,image/webp,image/avif" ${disabled ? "disabled" : ""} />
       </label>
       ${draft.imageError ? `<p class="catalog-form-error">${escapeHtml(draft.imageError)}</p>` : ""}
@@ -6063,15 +6066,28 @@ function getCatalogEditorCategoryLabel(draft) {
 }
 
 function getCatalogEditorSku(draft) {
-  const slug = slugify(draft.slug || draft.name || "");
-  return slug ? slug.toUpperCase().replace(/-/g, "-") : "AUTO-GENERATED";
+  return draft.productCode || draft.slug || "Generated on save.";
+}
+
+function normalizeCatalogDraftImages(images) {
+  return (Array.isArray(images) ? images : [])
+    .map((image, index) => ({
+      id: image.id || "",
+      storagePath: image.storagePath || image.storage_path || "",
+      publicUrl: image.publicUrl || image.public_url || image.url || "",
+      url: image.url || image.publicUrl || image.public_url || image.previewUrl || "",
+      previewUrl: image.previewUrl || "",
+      altText: image.altText || image.alt_text || "",
+      file: image.file || null,
+      isNew: image.isNew === true,
+      position: index,
+      isPrimary: index === 0,
+    }))
+    .slice(0, CATALOG_PRODUCT_IMAGE_LIMIT);
 }
 
 function getCatalogEditorImages(draft) {
-  const images = [];
-  const previewUrl = draft.imageFilePreviewUrl || (!draft.removeImage ? draft.imageUrl : "");
-  if (previewUrl) images.push({ url: previewUrl, primary: true });
-  return images.slice(0, CATALOG_PRODUCT_IMAGE_LIMIT);
+  return normalizeCatalogDraftImages(draft.images);
 }
 
 function getCatalogEditorImageCount(draft) {
@@ -6111,7 +6127,7 @@ function validateCatalogProductEditor(draft, product) {
 
 function getCatalogDestinationCounts() {
   return catalogOptions.reduce((counts, catalog) => {
-    counts[catalog.key] = catalogProducts.filter((item) => item.catalogKey === catalog.key).length;
+    counts[catalog.key] = catalogProducts.filter((item) => Array.isArray(item.catalogKeys) ? item.catalogKeys.includes(catalog.key) : item.catalogKey === catalog.key).length;
     return counts;
   }, {});
 }
@@ -6260,9 +6276,13 @@ function canManageStaffAccounts() {
 
 function createCatalogDraft(product = null) {
   if (product) {
+    const images = normalizeCatalogDraftImages(product.images?.length ? product.images : (product.imageUrl ? [{ url: product.imageUrl, publicUrl: product.imageUrl, storagePath: "", isPrimary: true }] : []));
     return {
       ...product,
+      productCode: product.productCode || product.slug || "",
+      slug: product.productCode || product.slug || "",
       imageDraftId: product.id,
+      images,
       imageFile: null,
       imageFilePreviewUrl: "",
       imageError: "",
@@ -6284,11 +6304,15 @@ function createCatalogDraft(product = null) {
   return {
     imageDraftId: createDraftImageId(),
     catalogKey: activeCatalogKey,
+    catalogKeys: [activeCatalogKey],
     name: "",
     slug: "",
+    productCode: "",
     category: "",
+    categoryId: "",
     description: "",
     imageUrl: "",
+    images: [],
     imageFile: null,
     imageFilePreviewUrl: "",
     imageError: "",
@@ -6315,6 +6339,7 @@ function createCatalogDraft(product = null) {
     productionNotes: "",
   };
 }
+
 function createDraftImageId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
@@ -7411,31 +7436,47 @@ function upsertProductCategory(items, category) {
 }
 
 function clearCatalogImagePreview() {
-  if (catalogDraft?.imageFilePreviewUrl) {
-    URL.revokeObjectURL(catalogDraft.imageFilePreviewUrl);
-  }
+  if (!catalogDraft?.images) return;
+  catalogDraft.images.forEach((image) => {
+    if (image.previewUrl && image.isNew) URL.revokeObjectURL(image.previewUrl);
+  });
 }
 
 async function updateCatalogImageFile(file) {
   if (!catalogDraft || !canWriteCatalogProducts()) return;
 
-  clearCatalogImagePreview();
-  const validationError = await validateCatalogImageFileWithDimensions(file);
-  if (validationError) {
-    catalogDraft = {
-      ...catalogDraft,
-      imageFile: null,
-      imageFilePreviewUrl: "",
-      imageError: validationError,
-    };
+  const images = getCatalogEditorImages(catalogDraft);
+  if (images.length >= CATALOG_PRODUCT_IMAGE_LIMIT) {
+    catalogDraft = { ...catalogDraft, imageError: `Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product.` };
     render();
     return;
   }
 
+  const validationError = await validateCatalogImageFileWithDimensions(file);
+  if (validationError) {
+    catalogDraft = { ...catalogDraft, imageError: validationError };
+    render();
+    return;
+  }
+
+  const previewUrl = URL.createObjectURL(file);
   catalogDraft = {
     ...catalogDraft,
+    images: normalizeCatalogDraftImages([
+      ...images,
+      {
+        id: "",
+        storagePath: "",
+        publicUrl: "",
+        url: previewUrl,
+        previewUrl,
+        altText: catalogDraft.name || "Product image",
+        file,
+        isNew: true,
+      },
+    ]),
     imageFile: file,
-    imageFilePreviewUrl: URL.createObjectURL(file),
+    imageFilePreviewUrl: "",
     imageError: "",
     removeImage: false,
   };
@@ -7443,17 +7484,33 @@ async function updateCatalogImageFile(file) {
   render();
 }
 
-function removeCatalogImageFromDraft() {
+function removeCatalogImageFromDraft(index = 0) {
   if (!catalogDraft || !canWriteCatalogProducts()) return;
 
-  clearCatalogImagePreview();
+  const images = getCatalogEditorImages(catalogDraft);
+  const removed = images[index];
+  if (removed?.previewUrl && removed.isNew) URL.revokeObjectURL(removed.previewUrl);
   catalogDraft = {
     ...catalogDraft,
+    images: normalizeCatalogDraftImages(images.filter((_, imageIndex) => imageIndex !== index)),
     imageFile: null,
     imageFilePreviewUrl: "",
     imageError: "",
-    removeImage: true,
+    removeImage: images.length === 1,
   };
+  catalogSaveError = "";
+  render();
+}
+
+function moveCatalogImageInDraft(index, direction) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const images = getCatalogEditorImages(catalogDraft);
+  const nextIndex = direction === "left" ? index - 1 : index + 1;
+  if (index < 0 || nextIndex < 0 || index >= images.length || nextIndex >= images.length) return;
+  const reordered = [...images];
+  const [moved] = reordered.splice(index, 1);
+  reordered.splice(nextIndex, 0, moved);
+  catalogDraft = { ...catalogDraft, images: normalizeCatalogDraftImages(reordered), imageError: "" };
   catalogSaveError = "";
   render();
 }
@@ -7492,7 +7549,7 @@ async function saveCatalogQuickProduct(productId, updates) {
   render();
 
   try {
-    const savedProduct = await updateAdminCatalogProduct(productId, { ...product, ...updates }, adminAuthSession);
+    const savedProduct = await updateAdminProduct(productId, { ...product, ...updates }, adminAuthSession);
     if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
     catalogQuickSaveState = "idle";
     catalogSaveState = "success";
@@ -7523,7 +7580,6 @@ async function updateCatalogQuickImage(productId, file) {
     return;
   }
 
-  const previousImageUrl = String(product.imageUrl || "").trim();
   let uploadedImage = null;
   catalogQuickSaveState = productId;
   catalogQuickSaveError = "";
@@ -7531,11 +7587,17 @@ async function updateCatalogQuickImage(productId, file) {
 
   try {
     uploadedImage = await uploadCatalogImage(file, product, adminAuthSession);
-    const savedProduct = await updateAdminCatalogProduct(productId, { ...product, imageUrl: uploadedImage.publicUrl }, adminAuthSession);
+    const nextImages = normalizeCatalogDraftImages([
+      {
+        storagePath: uploadedImage.path,
+        publicUrl: uploadedImage.publicUrl,
+        url: uploadedImage.publicUrl,
+        altText: product.name || "Product image",
+      },
+      ...(product.images ?? []).filter((image) => image.storagePath).slice(0, CATALOG_PRODUCT_IMAGE_LIMIT - 1),
+    ]);
+    const savedProduct = await updateAdminProduct(productId, { ...product, images: nextImages }, adminAuthSession);
     if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
-    if (previousImageUrl && previousImageUrl !== uploadedImage.publicUrl) {
-      deleteCatalogImageByUrl(previousImageUrl, adminAuthSession).catch((error) => console.warn("Unable to remove replaced catalog image.", error));
-    }
     catalogQuickSaveState = "idle";
     catalogSaveState = "success";
     render();
@@ -7554,23 +7616,13 @@ async function duplicateCatalogProduct(productId) {
   if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle") return;
   const product = catalogProducts.find((item) => item.id === productId);
   if (!product) return;
-  const copySuffix = Date.now().toString().slice(-6);
-  const copy = {
-    ...product,
-    id: "",
-    name: `${product.name} Copy`,
-    slug: `${slugify(product.slug || product.name)}-copy-${copySuffix}`,
-    status: "draft",
-    isFeatured: false,
-    sortOrder: Number(product.sortOrder || 0) + 1,
-  };
 
   catalogQuickSaveState = productId;
   catalogQuickSaveError = "";
   render();
 
   try {
-    const savedProduct = await createAdminCatalogProduct(copy, adminAuthSession);
+    const savedProduct = await duplicateAdminProduct(product, adminAuthSession);
     if (savedProduct) {
       catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
       catalogExpandedProductId = savedProduct.id;
@@ -7593,21 +7645,26 @@ function cssEscape(value) {
 function updateCatalogDraftField(field, value, inputType = "text") {
   if (!catalogDraft) return;
   const nextValue = inputType === "checkbox" ? Boolean(value) : value;
-  const shouldCreateSlug = field === "name" && (!catalogDraft.slug || catalogDraft.slug === slugify(catalogDraft.name));
 
   catalogDraft = {
     ...catalogDraft,
     [field]: nextValue,
   };
 
-  if (shouldCreateSlug) {
-    catalogDraft.slug = slugify(nextValue);
+  if (field === "catalogKey") {
+    catalogDraft.catalogKeys = [nextValue];
+  }
+
+  if (field === "category") {
+    const category = productCategories.find((item) => item.name === nextValue);
+    catalogDraft.categoryId = category?.id || "";
   }
 
   if (field === "productType") {
     const category = productCategories.find((item) => item.name === catalogDraft.category);
     if (category && category.productType !== nextValue) {
       catalogDraft.category = "";
+      catalogDraft.categoryId = "";
     }
   }
 
@@ -7629,7 +7686,6 @@ async function saveCatalogDraft() {
   if (!canWriteCatalogProducts() || !catalogDraft || catalogSaveState === "saving" || catalogSaveState === "uploading") return;
 
   const draft = catalogDraft;
-  const previousImageUrl = String(draft.imageUrl || "").trim();
   const product = normalizeCatalogDraft(draft);
   const validationError = validateCatalogProductEditor(draft, product);
   if (validationError) {
@@ -7638,8 +7694,10 @@ async function saveCatalogDraft() {
     return;
   }
 
-  if (draft.imageFile) {
-    const imageValidationError = await validateCatalogImageFileWithDimensions(draft.imageFile);
+  const draftImages = getCatalogEditorImages(draft);
+  for (const image of draftImages) {
+    if (!image.file) continue;
+    const imageValidationError = await validateCatalogImageFileWithDimensions(image.file);
     if (imageValidationError) {
       catalogDraft = { ...draft, imageError: imageValidationError };
       render();
@@ -7647,43 +7705,48 @@ async function saveCatalogDraft() {
     }
   }
 
-  let uploadedImage = null;
-  let failedPhase = "save";
-  catalogSaveState = draft.imageFile ? "uploading" : "saving";
+  const uploadedImages = [];
+  const isEdit = catalogEditorMode === "edit" && draft.id;
+  catalogSaveState = draftImages.some((image) => image.file) ? "uploading" : "saving";
   catalogSaveError = "";
   catalogValidationError = "";
   catalogDraft = { ...draft, imageError: "" };
   render();
 
   try {
-    if (draft.imageFile) {
-      failedPhase = "upload";
-      uploadedImage = await uploadCatalogImage(draft.imageFile, product, adminAuthSession);
-      product.imageUrl = uploadedImage.publicUrl;
-      failedPhase = "save";
-      catalogSaveState = "saving";
-      render();
-    } else if (draft.removeImage) {
-      product.imageUrl = "";
+    const baseProduct = { ...product };
+    delete baseProduct.images;
+    let savedProduct = isEdit
+      ? await updateAdminProduct(draft.id, baseProduct, adminAuthSession)
+      : await createAdminProduct(baseProduct, adminAuthSession);
+
+    const finalImages = [];
+    for (const image of draftImages) {
+      if (image.file) {
+        catalogSaveState = "uploading";
+        render();
+        const uploadedImage = await uploadCatalogImage(image.file, savedProduct, adminAuthSession);
+        uploadedImages.push(uploadedImage);
+        finalImages.push({
+          storagePath: uploadedImage.path,
+          publicUrl: uploadedImage.publicUrl,
+          url: uploadedImage.publicUrl,
+          altText: image.altText || savedProduct.name || "Product image",
+        });
+      } else if (image.storagePath) {
+        finalImages.push(image);
+      }
     }
 
-    const isEdit = catalogEditorMode === "edit" && draft.id;
-    const savedProduct = isEdit
-      ? await updateAdminCatalogProduct(draft.id, product, adminAuthSession)
-      : await createAdminCatalogProduct(product, adminAuthSession);
+    catalogSaveState = "saving";
+    render();
+    savedProduct = await updateAdminProduct(savedProduct.id, { ...savedProduct, images: normalizeCatalogDraftImages(finalImages) }, adminAuthSession);
 
     if (savedProduct) {
       catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
       selectedCatalogProductId = savedProduct.id;
       activeCatalogKey = savedProduct.catalogKey;
     }
-
-    const shouldDeletePreviousImage = Boolean(
-      savedProduct &&
-      previousImageUrl &&
-      previousImageUrl !== savedProduct.imageUrl &&
-      (uploadedImage || draft.removeImage)
-    );
 
     clearCatalogImagePreview();
     catalogEditorMode = savedProduct?.id ? "edit" : catalogEditorMode;
@@ -7700,18 +7763,14 @@ async function saveCatalogDraft() {
       }
     }, 1800);
     render();
-
-    if (shouldDeletePreviousImage) {
-      deleteCatalogImageByUrl(previousImageUrl, adminAuthSession).catch((error) => {
-        console.warn("Unable to remove replaced catalog image.", error);
-      });
-    }
   } catch (error) {
-    if (uploadedImage?.path) {
-      try {
-        await deleteCatalogImagePath(uploadedImage.path, adminAuthSession);
-      } catch (cleanupError) {
-        console.warn("Unable to clean up uploaded catalog image after failed save.", cleanupError);
+    for (const uploadedImage of uploadedImages) {
+      if (uploadedImage?.path) {
+        try {
+          await deleteCatalogImagePath(uploadedImage.path, adminAuthSession);
+        } catch (cleanupError) {
+          console.warn("Unable to clean up uploaded catalog image after failed save.", cleanupError);
+        }
       }
     }
 
@@ -7721,7 +7780,7 @@ async function saveCatalogDraft() {
     if (catalogDraft) {
       catalogDraft = {
         ...catalogDraft,
-        imageError: failedPhase === "upload" ? catalogSaveError : catalogDraft.imageError,
+        imageError: catalogSaveError,
       };
     }
     render();
@@ -7729,13 +7788,18 @@ async function saveCatalogDraft() {
 }
 
 function normalizeCatalogDraft(draft) {
+  const category = productCategories.find((item) => item.name === draft.category);
   return {
     ...draft,
     name: String(draft.name || "").trim(),
-    slug: slugify(draft.slug || draft.name),
+    productCode: String(draft.productCode || "").trim(),
+    slug: String(draft.productCode || draft.slug || "").trim(),
+    catalogKeys: [draft.catalogKey].filter(Boolean),
     category: String(draft.category || "").trim(),
+    categoryId: draft.categoryId || category?.id || "",
     description: String(draft.description || "").trim(),
-    imageUrl: draft.removeImage ? "" : String(draft.imageUrl || "").trim(),
+    imageUrl: getCatalogEditorPrimaryImage(draft),
+    images: getCatalogEditorImages(draft),
     startingPrice: draft.startingPrice === "" ? "" : Number(draft.startingPrice),
     priceLabel: String(draft.priceLabel || "").trim(),
     minimumQuantity: Number(draft.minimumQuantity || 1),
@@ -7751,11 +7815,11 @@ function normalizeCatalogDraft(draft) {
 function validateCatalogProduct(product) {
   if (!catalogOptions.some((catalog) => catalog.key === product.catalogKey)) return "Choose a valid catalog.";
   if (!product.name) return "Product name is required.";
-  if (!product.slug) return "Slug is required.";
   if (!catalogStatusOptions.includes(product.status)) return "Choose a valid status.";
   if (!Number.isFinite(product.minimumQuantity) || product.minimumQuantity < 1) return "Minimum quantity must be at least 1.";
   if (product.startingPrice !== "" && (!Number.isFinite(product.startingPrice) || product.startingPrice < 0)) return "Starting price cannot be negative.";
   if (!Number.isFinite(product.sortOrder) || product.sortOrder < 0) return "Sort order cannot be negative.";
+  if (getCatalogEditorImageCount(product) > CATALOG_PRODUCT_IMAGE_LIMIT) return `Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product.`;
   return "";
 }
 
@@ -8330,10 +8394,6 @@ function bindEvents() {
     const eventName = field.type === "checkbox" ? "change" : "input";
     field.addEventListener(eventName, (event) => {
       updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
-      if (field.dataset.catalogField === "name") {
-        const slugInput = document.getElementById("catalog-slug");
-        if (slugInput && catalogDraft?.slug) slugInput.value = getCatalogEditorSku(catalogDraft);
-      }
       if (field.dataset.catalogField === "productType") render();
     });
   });
@@ -8350,8 +8410,29 @@ function bindEvents() {
     if (file) await updateCatalogImageFile(file);
   });
 
-  document.querySelector("[data-catalog-remove-image]")?.addEventListener("click", () => {
-    removeCatalogImageFromDraft();
+  document.querySelectorAll("[data-catalog-remove-image]").forEach((button) => {
+    button.addEventListener("click", () => removeCatalogImageFromDraft(Number(button.dataset.catalogRemoveImage || 0)));
+  });
+
+  document.querySelectorAll("[data-catalog-move-image]").forEach((button) => {
+    button.addEventListener("click", () => moveCatalogImageInDraft(Number(button.dataset.catalogMoveImage || 0), button.dataset.direction));
+  });
+
+  document.querySelectorAll("[data-catalog-image-drag]").forEach((slot) => {
+    slot.addEventListener("dragstart", (event) => { event.dataTransfer?.setData("text/plain", slot.dataset.catalogImageDrag); });
+    slot.addEventListener("dragover", (event) => event.preventDefault());
+    slot.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const fromIndex = Number(event.dataTransfer?.getData("text/plain") || -1);
+      const toIndex = Number(slot.dataset.catalogImageDrag || -1);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex || !catalogDraft) return;
+      const images = getCatalogEditorImages(catalogDraft);
+      const reordered = [...images];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, moved);
+      catalogDraft = { ...catalogDraft, images: normalizeCatalogDraftImages(reordered), imageError: "" };
+      render();
+    });
   });
 
   document.querySelectorAll("[data-catalog-readiness-target]").forEach((button) => {
