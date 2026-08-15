@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260726022516
+-- Original filename: 20260726022516_enable_task_domain_staging.sql
+-- Original fetched SHA-256: 3F6F981292E3BFC3DE7486E5FF115CFB536D9E6B79FAF2F3A36BBA40CCB1E42B
+-- Classification: HISTORY/METADATA ONLY
+-- Canonical replacement or metadata status: metadata-only: temporary staging enablement superseded by 202608010001 disabled flag
+-- Evidence file: supabase/migration-history/staging-recovered/20260726022516_enable_task_domain_staging.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

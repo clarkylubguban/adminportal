@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260726020726
+-- Original filename: 20260726020726_cleanup_admin_auth_hardening_policy_grants.sql
+-- Original fetched SHA-256: C5206D3FDABB3405888E1EC802FB7695A2CD8DAAFA8A83FB64D477B4ADBF18B6
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202607220001_harden_admin_auth_profiles.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260726020726_cleanup_admin_auth_hardening_policy_grants.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

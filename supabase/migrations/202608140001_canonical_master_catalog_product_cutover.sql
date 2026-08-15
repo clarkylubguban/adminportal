@@ -9,7 +9,7 @@ language sql
 volatile
 set search_path = ''
 as $$
-  select 'MP-' || upper(public.gen_random_uuid()::text);
+  select 'MP-' || upper(pg_catalog.gen_random_uuid()::text);
 $$;
 
 create or replace function public.generate_master_variant_id()
@@ -18,7 +18,7 @@ language sql
 volatile
 set search_path = ''
 as $$
-  select 'MV-' || upper(public.gen_random_uuid()::text);
+  select 'MV-' || upper(pg_catalog.gen_random_uuid()::text);
 $$;
 
 create or replace function public.master_catalog_manila_yymmdd()
@@ -36,7 +36,7 @@ language sql
 volatile
 set search_path = ''
 as $$
-  select upper(encode(public.gen_random_bytes(greatest(1, p_bytes)), 'hex'));
+  select upper(encode(extensions.gen_random_bytes(greatest(1, p_bytes)), 'hex'));
 $$;
 
 create or replace function public.generate_product_code_candidate()
@@ -111,7 +111,7 @@ revoke all on function public.generate_variant_sku_candidate(text, text, text, i
 create or replace function public.assign_product_canonical_identity()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare
@@ -158,7 +158,7 @@ $$;
 create or replace function public.assign_variant_canonical_identity()
 returns trigger
 language plpgsql
-security invoker
+security definer
 set search_path = ''
 as $$
 declare

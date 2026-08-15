@@ -1,0 +1,1 @@
+202608130001_add_master_catalog_t31_category_product_type_binding.sql;

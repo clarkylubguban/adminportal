@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260809012142
+-- Original filename: 20260809012142_native_order_status_authority.sql
+-- Original fetched SHA-256: EA1D3C41E483CA4367754CD3AC69A3B0AE1DEEBADDF87C5292E60C3D3A4317AD
+-- Classification: DUPLICATE OF TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202608080008_native_order_status_authority.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260809012142_native_order_status_authority.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

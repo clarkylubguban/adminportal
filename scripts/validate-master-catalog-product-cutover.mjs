@@ -10,7 +10,10 @@ const dockerEnv = { ...process.env };
 const bootstrap = `
 create schema if not exists auth;
 create schema if not exists storage;
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+select extensions.gen_random_bytes(1);
+select pg_catalog.gen_random_uuid();
 
 create table if not exists auth.users (
   id uuid primary key default gen_random_uuid(),

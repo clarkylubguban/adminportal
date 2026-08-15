@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260726020523
+-- Original filename: 20260726020523_add_order_dashboard_fields.sql
+-- Original fetched SHA-256: 6CE3CF5DF41C23F55B7EA5AF24F9597E4CB3AC55296BA650991DC929C08E3820
+-- Classification: DUPLICATE OF TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202607120002_add_order_dashboard_fields.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260726020523_add_order_dashboard_fields.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

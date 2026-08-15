@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260803092716
+-- Original filename: 20260803092716_phase_8_2_add_task_approve_and_assign.sql
+-- Original fetched SHA-256: 6A655F02BC5E2458C761F3D78C246C98215921855830559C8664EA7F958BB13C
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202608030001_add_task_approve_and_assign.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260803092716_phase_8_2_add_task_approve_and_assign.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

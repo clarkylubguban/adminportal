@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260730120556
+-- Original filename: 20260730120556_online_payment_review_stale_version_fix.sql
+-- Original fetched SHA-256: EAB579F4A88CBC5EB0CD9B67CC9964DB1BEB32FF8C17084F612838C994FBBB9B
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 20260731030830_allow_admin_down_payment_confirmations.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260730120556_online_payment_review_stale_version_fix.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

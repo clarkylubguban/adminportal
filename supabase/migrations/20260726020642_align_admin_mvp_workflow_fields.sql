@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260726020642
+-- Original filename: 20260726020642_align_admin_mvp_workflow_fields.sql
+-- Original fetched SHA-256: A8D3C2E61DC5A8BC6BB208840677DF1CC2134FBD42B51BE0BEFE79E142D0C280
+-- Classification: DUPLICATE OF TRACKED CANONICAL
+-- Canonical replacement or metadata status: 20260717043119_align_admin_mvp_workflow_fields.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260726020642_align_admin_mvp_workflow_fields.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.
