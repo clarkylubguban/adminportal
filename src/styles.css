@@ -2511,6 +2511,12 @@ td:nth-child(9) {
   font-size: 12px;
 }
 
+.note-button.danger,
+.compact-action.danger {
+  border-color: #f1c3c5;
+  color: #cc1b23;
+}
+
 .note-button span::before {
   inset: 3px 5px;
   border: 1.7px solid currentColor;
@@ -14905,6 +14911,17 @@ body,
   color: var(--trry-text);
 }
 
+.catalog-subnav-link.disabled {
+  color: #555555;
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.catalog-subnav-link.disabled:hover {
+  background: transparent;
+  color: #555555;
+}
+
 .sidebar.is-collapsed .catalog-subnav {
   display: none;
 }
@@ -14986,7 +15003,9 @@ body,
 .app-shell.admin-saas-shell .catalog-products-table th:nth-child(9),
 .app-shell.admin-saas-shell .catalog-products-table td:nth-child(9),
 .app-shell.admin-saas-shell .catalog-products-table th:nth-child(10),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(10) {
+.app-shell.admin-saas-shell .catalog-products-table td:nth-child(10),
+.app-shell.admin-saas-shell .catalog-products-table th:nth-child(11),
+.app-shell.admin-saas-shell .catalog-products-table td:nth-child(11) {
   width: 118px;
 }
 

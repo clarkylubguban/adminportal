@@ -8,8 +8,8 @@ const service = readFileSync(join(root, "src", "services", "adminCatalog.js"), "
 const localDev = readFileSync(join(root, "scripts", "local-dev.mjs"), "utf8");
 
 const checks = [
-  ["Catalog Categories route is registered", main.includes('"/catalog/categories": "Catalog"') && localDev.includes('"/catalog/categories"')],
-  ["Master Catalog sidebar subtree exists", main.includes("catalog-subnav") && main.includes("Products") && main.includes("/catalog/categories") && styles.includes(".catalog-subnav-link")],
+  ["Catalog Brands and Categories routes are registered", main.includes('"/catalog/brands": "Catalog"') && main.includes('"/catalog/categories": "Catalog"') && localDev.includes('"/catalog/brands"') && localDev.includes('"/catalog/categories"')],
+  ["Master Catalog sidebar subtree exists", main.includes("catalog-subnav") && main.includes("Products") && main.includes("Brands") && main.includes("/catalog/brands") && main.includes("/catalog/categories") && styles.includes(".catalog-subnav-link")],
   ["Products route stays on full-page editor flow", main.includes("function getCatalogProductEditorRoute") && main.includes('getRoutePath() !== "/catalog"') && main.includes("/catalog?product=new")],
   ["Standalone Categories page exists", main.includes("function renderCatalogCategoriesPage") && main.includes("Active Categories") && main.includes("Root Categories") && main.includes("Assigned Products")],
   ["Categories use canonical Admin Catalog service", main.includes("getAdminProductCategories") && main.includes("productCategories") && !main.includes("retail_categories") && !main.includes("retailCategory")],

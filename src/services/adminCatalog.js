@@ -8,6 +8,7 @@
 
 export const LEGACY_CATALOG_PRODUCTS_TABLE = "catalog_products";
 export const PRODUCT_CATEGORIES_TABLE = "product_categories";
+export const BRANDS_TABLE = "brands";
 export const MASTER_PRODUCTS_TABLE = "products";
 export const PRODUCT_VARIANTS_TABLE = "product_variants";
 export const PRODUCT_IMAGES_TABLE = "product_images";
@@ -100,6 +101,75 @@ export async function updateAdminProductCategory(id, category, authSession) {
   return rows?.[0] ? mapCategoryRowToCategory(rows[0]) : null;
 }
 
+export async function getAdminBrands(authSession) {
+  if (!isSupabaseReady()) {
+    return {
+      brands: [],
+      status: "empty",
+      source: "local",
+      error: null,
+    };
+  }
+
+  try {
+    const accessToken = getAccessToken(authSession);
+    const [rows, productRows] = await Promise.all([
+      readSupabaseTableWithAuth(BRANDS_TABLE, { select: "*", order: "name.asc" }, accessToken),
+      readSupabaseTableWithAuth(MASTER_PRODUCTS_TABLE, { select: "brand_id" }, accessToken),
+    ]);
+    const productCounts = getBrandProductCounts(productRows);
+    const brands = Array.isArray(rows) ? rows.map((row) => mapBrandRowToBrand(row, productCounts.get(row.id) ?? 0)) : [];
+
+    return {
+      brands: brands.sort(sortBrands),
+      status: brands.length ? "success" : "empty",
+      source: "supabase",
+      error: null,
+    };
+  } catch (error) {
+    console.error("Unable to load Supabase brands.", error);
+    return {
+      brands: [],
+      status: "error",
+      source: "supabase",
+      error,
+    };
+  }
+}
+
+export async function createAdminBrand(brand, authSession) {
+  assertValidBrandForWrite(brand);
+  let rows;
+  try {
+    rows = await createSupabaseRowWithAuth(
+      BRANDS_TABLE,
+      mapBrandToRow(brand),
+      getAccessToken(authSession)
+    );
+  } catch (error) {
+    throw getBrandWriteError(error);
+  }
+
+  return rows?.[0] ? mapBrandRowToBrand(rows[0]) : null;
+}
+
+export async function updateAdminBrand(id, brand, authSession) {
+  assertValidBrandForWrite(brand, { edit: true });
+  let rows;
+  try {
+    rows = await updateSupabaseRowsWithAuth(
+      BRANDS_TABLE,
+      { id: `eq.${id}` },
+      mapBrandToRow(brand, { edit: true }),
+      getAccessToken(authSession)
+    );
+  } catch (error) {
+    throw getBrandWriteError(error);
+  }
+
+  return rows?.[0] ? mapBrandRowToBrand(rows[0]) : null;
+}
+
 export async function getAdminCatalogProducts(authSession) {
   if (!isSupabaseReady()) {
     return {
@@ -112,9 +182,10 @@ export async function getAdminCatalogProducts(authSession) {
 
   try {
     const accessToken = getAccessToken(authSession);
-    const [products, categories, variants, images] = await Promise.all([
+    const [products, categories, brands, variants, images] = await Promise.all([
       readSupabaseTableWithAuth(MASTER_PRODUCTS_TABLE, { select: "*", order: "name.asc" }, accessToken),
       readSupabaseTableWithAuth(PRODUCT_CATEGORIES_TABLE, { select: "id,name,code,product_type,parent_category_id" }, accessToken),
+      readSupabaseTableWithAuth(BRANDS_TABLE, { select: "id,brand_code,name,ownership_type,owner_name,website_slug,status" }, accessToken),
       readSupabaseTableWithAuth(PRODUCT_VARIANTS_TABLE, { select: "*", order: "created_at.asc" }, accessToken),
       readSupabaseTableWithAuth(PRODUCT_IMAGES_TABLE, {
         select: "*",
@@ -124,11 +195,13 @@ export async function getAdminCatalogProducts(authSession) {
       }, accessToken),
     ]);
     const categoryById = new Map((Array.isArray(categories) ? categories : []).map((category) => [category.id, category]));
+    const brandById = new Map((Array.isArray(brands) ? brands : []).map((brand) => [brand.id, brand]));
     const variantsByProduct = groupBy(Array.isArray(variants) ? variants : [], "product_id");
     const imagesByProduct = groupBy(Array.isArray(images) ? images : [], "product_id");
     const mappedProducts = (Array.isArray(products) ? products : []).map((row) => mapCanonicalRowToProduct(
       row,
       categoryById.get(row.category_id),
+      brandById.get(row.brand_id),
       variantsByProduct.get(row.id) ?? [],
       imagesByProduct.get(row.id) ?? []
     ));
@@ -225,9 +298,10 @@ export async function duplicateAdminProduct(product, authSession) {
 
 async function getAdminProductById(id, authSession) {
   const accessToken = getAccessToken(authSession);
-  const [products, categories, variants, images] = await Promise.all([
+  const [products, categories, brands, variants, images] = await Promise.all([
     readSupabaseTableWithAuth(MASTER_PRODUCTS_TABLE, { select: "*", id: `eq.${id}`, limit: "1" }, accessToken),
     readSupabaseTableWithAuth(PRODUCT_CATEGORIES_TABLE, { select: "id,name,code,product_type,parent_category_id" }, accessToken),
+    readSupabaseTableWithAuth(BRANDS_TABLE, { select: "id,brand_code,name,ownership_type,owner_name,website_slug,status" }, accessToken),
     readSupabaseTableWithAuth(PRODUCT_VARIANTS_TABLE, { select: "*", product_id: `eq.${id}`, order: "created_at.asc" }, accessToken),
     readSupabaseTableWithAuth(PRODUCT_IMAGES_TABLE, {
       select: "*",
@@ -240,16 +314,18 @@ async function getAdminProductById(id, authSession) {
   const row = products?.[0];
   if (!row) return null;
   const categoryById = new Map((Array.isArray(categories) ? categories : []).map((category) => [category.id, category]));
-  return mapCanonicalRowToProduct(row, categoryById.get(row.category_id), variants ?? [], images ?? []);
+  const brandById = new Map((Array.isArray(brands) ? brands : []).map((brand) => [brand.id, brand]));
+  return mapCanonicalRowToProduct(row, categoryById.get(row.category_id), brandById.get(row.brand_id), variants ?? [], images ?? []);
 }
 
 function mapProductToCanonicalRow(product, { create = false } = {}) {
   const statusFields = mapCatalogStatusToCanonical(product.status, product);
   const row = cleanRow({
     category_id: product.categoryId || product.category_id || null,
+    brand_id: product.brandId || product.brand_id || null,
     name: product.name,
     description: emptyToNull(product.description),
-    brand: emptyToNull(product.brand),
+    brand: emptyToNull(product.brandName || product.brand),
     product_type: normalizeProductType(product.productType) || "PHYSICAL",
     eligible_channels: mapCatalogKeysToChannels(product.catalogKeys ?? [product.catalogKey]),
     typed_config: mapProductToTypedConfig(product),
@@ -423,7 +499,7 @@ async function replaceProductImages(productId, images, accessToken) {
   }, accessToken);
 }
 
-function mapCanonicalRowToProduct(row, category, variants, images) {
+function mapCanonicalRowToProduct(row, category, brand, variants, images) {
   const typedConfig = isPlainObject(row.typed_config) ? row.typed_config : {};
   const mappedImages = images
     .slice()
@@ -445,6 +521,11 @@ function mapCanonicalRowToProduct(row, category, variants, images) {
     categoryId: row.category_id,
     category: category?.name ?? "",
     categoryCode: category?.code ?? "",
+    brandId: row.brand_id ?? "",
+    brandCode: brand?.brand_code ?? "",
+    brandName: brand?.name ?? row.brand ?? "",
+    brandStatus: brand?.status ?? "",
+    brand: brand?.name ?? row.brand ?? "",
     description: row.description ?? "",
     imageUrl: mappedImages[0]?.url ?? "",
     images: mappedImages,
@@ -531,6 +612,11 @@ function sortCatalogProducts(a, b) {
   return a.catalogKey.localeCompare(b.catalogKey) || Number(a.sortOrder || 0) - Number(b.sortOrder || 0) || a.name.localeCompare(b.name);
 }
 
+function sortBrands(a, b) {
+  const statusRank = Number(a.status === "archived") - Number(b.status === "archived");
+  return statusRank || a.name.localeCompare(b.name);
+}
+
 function mapLegacyCatalogRowToProduct(row) {
   return {
     id: row.id,
@@ -598,6 +684,24 @@ function mapCategoryRowToCategory(row, categoryProductCounts = new Map()) {
   };
 }
 
+function mapBrandRowToBrand(row, productCount = 0) {
+  return {
+    id: row.id,
+    brandCode: row.brand_code,
+    name: row.name,
+    ownershipType: row.ownership_type,
+    ownerName: row.owner_name,
+    websiteSlug: row.website_slug ?? "",
+    status: row.status,
+    active: row.status === "active",
+    productCount: Number(productCount ?? 0),
+    createdByUserId: row.created_by_user_id ?? "",
+    updatedByUserId: row.updated_by_user_id ?? "",
+    createdAt: row.created_at ?? "",
+    updatedAt: row.updated_at ?? "",
+  };
+}
+
 function mapCategoryToRow(category) {
   return cleanRow({
     name: category.name,
@@ -612,10 +716,39 @@ function mapCategoryToRow(category) {
   });
 }
 
+function mapBrandToRow(brand, { edit = false } = {}) {
+  return cleanRow({
+    brand_code: edit ? undefined : String(brand.brandCode ?? "").trim().toUpperCase(),
+    name: brand.name,
+    ownership_type: brand.ownershipType,
+    owner_name: brand.ownerName,
+    website_slug: emptyToNull(brand.websiteSlug),
+    status: brand.status || "active",
+    updated_at: new Date().toISOString(),
+  });
+}
+
+function getBrandProductCounts(rows) {
+  const counts = new Map();
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!row.brand_id) continue;
+    counts.set(row.brand_id, (counts.get(row.brand_id) ?? 0) + 1);
+  }
+  return counts;
+}
+
 function assertValidCategoryForWrite(category) {
   if (!normalizeProductType(category?.productType)) {
     throw new Error("Select a product type.");
   }
+}
+
+function assertValidBrandForWrite(brand, { edit = false } = {}) {
+  if (!edit && !String(brand?.brandCode ?? "").trim()) throw new Error("Brand Code is required.");
+  if (!String(brand?.name ?? "").trim()) throw new Error("Brand name is required.");
+  if (!String(brand?.ownerName ?? "").trim()) throw new Error("Owner name is required.");
+  if (!["internal", "partner"].includes(brand?.ownershipType)) throw new Error("Choose a valid ownership type.");
+  if (!["active", "archived"].includes(brand?.status || "active")) throw new Error("Choose a valid brand status.");
 }
 
 function normalizeProductType(value) {
@@ -639,6 +772,20 @@ function getCategoryWriteError(error) {
     ["CATEGORY_CHILD_PRODUCT_TYPE_MISMATCH", "Product type cannot be changed while this category has child categories or assigned products."],
     ["CATEGORY_MAX_DEPTH_EXCEEDED", "Hierarchy depth is limited to two levels."],
     ["CATEGORY_PRODUCT_TYPE_MAPPING_REQUIRED", "Existing categories need an approved product type mapping before this change can be applied."],
+  ];
+  const mapped = mappings.find(([token]) => message.includes(token));
+  return new Error(mapped?.[1] ?? message);
+}
+
+function getBrandWriteError(error) {
+  const message = String(error?.message || error || "");
+  const mappings = [
+    ["BRAND_CODE_IMMUTABLE", "Brand Code cannot be changed after creation."],
+    ["BRAND_HAS_ASSIGNED_PRODUCTS", "Archive is blocked while products are assigned to this Brand."],
+    ["duplicate key", "Brand Code, name, and website slug must be unique."],
+    ["brands_brand_code_not_blank", "Brand Code is required."],
+    ["brands_name_not_blank", "Brand name is required."],
+    ["brands_owner_name_not_blank", "Owner name is required."],
   ];
   const mapped = mappings.find(([token]) => message.includes(token));
   return new Error(mapped?.[1] ?? message);

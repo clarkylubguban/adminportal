@@ -9,8 +9,8 @@ const service = readFileSync(join(root, "src", "services", "adminCatalog.js"), "
 const checks = [
   ["Catalog parent is a toggle, not a route link", main.includes("data-catalog-nav-toggle") && main.includes("aria-expanded") && main.includes("aria-controls=\"catalog-subnav\"")],
   ["Catalog children are hidden when collapsed", main.includes("catalog-subnav\" id=\"catalog-subnav\"") && main.includes("${isCatalogExpanded ? \"\" : \"hidden\"}") && styles.includes(".catalog-subnav[hidden]")],
-  ["Catalog auto-expands on Catalog routes", main.includes('routePath === "/catalog" || routePath === "/catalog/categories"') && main.includes("const isCatalogExpanded = isCatalogRoute || isCatalogNavExpanded")],
-  ["Catalog route changes collapse the group outside Catalog", main.includes("if (routeOnly !== \"/catalog\" && routeOnly !== \"/catalog/categories\")") && main.includes("isCatalogNavExpanded = false")],
+  ["Catalog auto-expands on Catalog routes", main.includes('routePath === "/catalog" || routePath === "/catalog/brands" || routePath === "/catalog/categories"') && main.includes("const isCatalogExpanded = isCatalogRoute || isCatalogNavExpanded")],
+  ["Catalog route changes collapse the group outside Catalog", main.includes("if (routeOnly !== \"/catalog\" && routeOnly !== \"/catalog/brands\" && routeOnly !== \"/catalog/categories\")") && main.includes("isCatalogNavExpanded = false")],
   ["Only Catalog children get primary selected state", main.includes("catalog-nav-toggle ${isCatalogRoute ? \"section-active\" : \"\"}") && styles.includes(".catalog-nav-toggle.section-active") && styles.includes(".catalog-subnav-link.active")],
   ["Readiness has four required checks and summary", main.includes("requirements complete") && main.includes("At least one product image") && !main.includes("Production information\", ready")],
   ["Readiness can focus relevant sections", main.includes("data-catalog-readiness-target") && main.includes("function focusCatalogEditorSection") && main.includes("catalog-section-product-identity")],

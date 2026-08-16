@@ -46,12 +46,15 @@ import {
 import {
   catalogOptions,
   catalogStatusOptions,
+  createAdminBrand,
   createAdminProductCategory,
   createAdminProduct,
+  getAdminBrands,
   getAdminProductCategories,
   getAdminCatalogProducts,
   productTypeOptions,
   duplicateAdminProduct,
+  updateAdminBrand,
   updateAdminProductCategory,
   updateAdminProduct,
 } from "./services/adminCatalog.js";
@@ -446,10 +449,13 @@ let orderLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 let clientLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 let catalogProducts = [];
 let productCategories = [];
+let brands = [];
 let catalogLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
 let catalogLoadError = "";
 let categoryLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
 let categoryLoadError = "";
+let brandLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
+let brandLoadError = "";
 let activeCatalogKey = "trry_webapp";
 let selectedCatalogProductId = null;
 let catalogExpandedProductId = null;
@@ -472,6 +478,14 @@ let categoryValidationError = "";
 let categorySaveState = "idle";
 let categorySaveError = "";
 let hasLoadedProductCategories = false;
+let hasLoadedBrands = false;
+let brandStatusFilter = "active";
+let selectedBrandId = null;
+let brandDrawerMode = "";
+let brandDraft = null;
+let brandValidationError = "";
+let brandSaveState = "idle";
+let brandSaveError = "";
 let isCatalogNavExpanded = false;
 let isAccountMenuOpen = false;
 let staffUsers = [];
@@ -547,6 +561,7 @@ const routes = {
   "/workboard": "Workboard",
   "/overview": "Overview",
   "/catalog": "Catalog",
+  "/catalog/brands": "Catalog",
   "/catalog/categories": "Catalog",
 };
 
@@ -1251,6 +1266,7 @@ function startAdminDataLoading() {
   loadAdminClients();
   loadCatalogProducts();
   loadProductCategories();
+  loadBrands();
   if (isTaskFeatureUiEnabled()) loadMyTasks();
 }
 
@@ -1344,6 +1360,32 @@ async function loadProductCategories() {
     productCategories = [];
     categoryLoadState = "error";
     categoryLoadError = error.message || "Unable to load product categories.";
+  } finally {
+    render();
+  }
+}
+
+async function loadBrands() {
+  if (hasLoadedBrands && brandLoadState !== "loading") return;
+  hasLoadedBrands = true;
+  brandLoadState = "loading";
+  brandLoadError = "";
+
+  try {
+    const result = await getAdminBrands(adminAuthSession);
+    const nextBrands = Array.isArray(result?.brands) ? result.brands : [];
+    brands = sortBrands(nextBrands);
+    brandLoadState = result?.status === "error" ? "error" : nextBrands.length ? "success" : "empty";
+    brandLoadError = result?.error?.message ?? "";
+
+    if (!brands.some((item) => item.id === selectedBrandId)) {
+      selectedBrandId = brands[0]?.id ?? null;
+    }
+  } catch (error) {
+    console.error("Unable to apply brands.", error);
+    brands = [];
+    brandLoadState = "error";
+    brandLoadError = error.message || "Unable to load brands.";
   } finally {
     render();
   }
@@ -4977,6 +5019,9 @@ function renderCatalogPage() {
   if (editorRoute) {
     return renderCatalogProductEditorPage(editorRoute);
   }
+  if (getRoutePath() === "/catalog/brands") {
+    return renderCatalogBrandsPage();
+  }
   if (getRoutePath() === "/catalog/categories") {
     return renderCatalogCategoriesPage();
   }
@@ -5042,6 +5087,7 @@ function renderCatalogPage() {
             <tr>
               <th></th>
               <th>Product</th>
+              <th>Brand</th>
               <th>Category</th>
               <th>SKU</th>
               <th>Variants</th>
@@ -5135,6 +5181,68 @@ function renderCatalogCategoriesPage() {
   `;
 }
 
+function renderCatalogBrandsPage() {
+  const visibleBrands = getVisibleBrands();
+  const selectedBrand = brands.find((item) => item.id === selectedBrandId);
+  const canWriteBrands = canManageBrands();
+  const summaryCards = getBrandSummaryCards();
+
+  return `
+    <main class="orders-page catalog-page catalog-brands-page admin-saas-page">
+      <div class="page-heading catalog-heading">
+        <div>
+          <h1>Brands</h1>
+          <p class="subtitle">Manage brand identity, ownership, storefront slug, and product assignment.</p>
+        </div>
+        ${canWriteBrands ? `<button class="catalog-add-button" data-brand-add type="button">+ New Brand</button>` : ""}
+      </div>
+
+      <section class="catalog-summary-grid" aria-label="Brand summary">
+        ${summaryCards.map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="catalog-controls brand-controls" aria-label="Brand controls">
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search brand, owner, or storefront" type="search" />
+          </label>
+          <select class="catalog-status-filter" id="brand-status-filter" aria-label="Brand status filter">
+            <option value="active" ${brandStatusFilter === "active" ? "selected" : ""}>Active brands</option>
+            <option value="archived" ${brandStatusFilter === "archived" ? "selected" : ""}>Archived brands</option>
+            <option value="all" ${brandStatusFilter === "all" ? "selected" : ""}>All brands</option>
+          </select>
+          <button class="note-button catalog-reset-button" data-brand-reset-filters type="button">Reset Filters</button>
+        </div>
+      </section>
+
+      ${renderBrandNotice()}
+
+      <article class="content-card table-card catalog-table-card">
+        <p class="table-helper-text catalog-count-label">${visibleBrands.length} ${visibleBrands.length === 1 ? "BRAND" : "BRANDS"}</p>
+        <table class="products-table catalog-table brand-table">
+          <thead>
+            <tr>
+              <th>Brand</th>
+              <th>Owner</th>
+              <th>Products</th>
+              <th>Website Slug</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visibleBrands.map(renderBrandRow).join("")}
+          </tbody>
+        </table>
+        ${renderBrandEmptyState(visibleBrands)}
+      </article>
+      ${brandDrawerMode ? renderBrandDrawer(selectedBrand) : ""}
+    </main>
+  `;
+}
+
 function getVisibleCatalogProducts() {
   const normalizedQuery = productQuery.trim().toLowerCase();
 
@@ -5192,6 +5300,27 @@ function getVisibleProductCategories() {
   });
 }
 
+function getVisibleBrands() {
+  const normalizedQuery = productQuery.trim().toLowerCase();
+
+  return sortBrands(brands).filter((item) => {
+    const matchesStatus =
+      brandStatusFilter === "active"
+        ? item.status === "active"
+        : brandStatusFilter === "archived"
+          ? item.status === "archived"
+          : true;
+    const matchesQuery =
+      !normalizedQuery ||
+      [item.name, item.brandCode, item.ownerName, item.ownershipType, item.websiteSlug]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+
+    return matchesStatus && matchesQuery;
+  });
+}
+
 function getCatalogProductSummaryCards() {
   const scopedProducts = catalogProducts.filter((item) => Array.isArray(item.catalogKeys) ? item.catalogKeys.includes(activeCatalogKey) : item.catalogKey === activeCatalogKey);
   const ready = scopedProducts.filter((item) => item.status === "published").length;
@@ -5225,6 +5354,22 @@ function getCategorySummaryCards() {
   ];
 }
 
+function getBrandSummaryCards() {
+  const active = brands.filter((item) => item.status === "active").length;
+  const partners = brands.filter((item) => item.ownershipType === "partner").length;
+  const assignedProducts = brands.reduce((sum, item) => sum + Number(item.productCount ?? 0), 0);
+  const storefronts = brands.filter((item) => item.websiteSlug).length;
+  const archived = brands.filter((item) => item.status === "archived").length;
+
+  return [
+    { label: "Active Brands", value: active, helper: "Ready for assignment" },
+    { label: "External Owners", value: partners, helper: "Partner brands onboarded" },
+    { label: "Products Assigned", value: assignedProducts, helper: "Canonical products" },
+    { label: "Storefronts", value: storefronts, helper: "Live or planned slugs" },
+    { label: "Archived", value: archived, helper: "Unavailable for products" },
+  ];
+}
+
 function renderCatalogSummaryCard(card) {
   return `
     <article class="catalog-summary-card">
@@ -5253,6 +5398,109 @@ function renderCategoryNotice() {
   }
 
   return "";
+}
+
+function renderBrandNotice() {
+  if (brandSaveState === "success") {
+    return `<div class="catalog-notice success">Brand saved successfully.</div>`;
+  }
+
+  if (brandLoadState === "loading") {
+    return `<div class="catalog-notice">Loading canonical Brands...</div>`;
+  }
+
+  if (brandLoadState === "error") {
+    return `<div class="catalog-notice error">Unable to load Brands. Check Supabase grants and Brand RLS policies.</div>`;
+  }
+
+  if (!canManageBrands()) {
+    return `<div class="catalog-notice">Viewer access: Brands are read-only.</div>`;
+  }
+
+  return "";
+}
+
+function renderBrandEmptyState(visibleBrands) {
+  if (visibleBrands.length > 0) return "";
+
+  if (brandLoadState === "loading") {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading brands...</strong><span>Checking canonical Brand reference records.</span></div>`;
+  }
+
+  if (!brands.length) {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No brands yet</strong><span>The Brand Foundation migration must create STLO, TRRY Apparel, and Generic / Unbranded.</span></div>`;
+  }
+
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No brands match</strong><span>Try another search term or status filter.</span></div>`;
+}
+
+function renderBrandRow(brand) {
+  const statusMarkup = brand.status === "active"
+    ? `<span class="status-pill active">Active</span>`
+    : `<span class="status-pill archived">Archived</span>`;
+  const canWrite = canManageBrands();
+  const archiveDisabled = !canWrite || brand.status === "archived" || Number(brand.productCount ?? 0) > 0;
+  const actionLabel = brand.status === "archived" ? "Archived" : "Archive";
+  return `
+    <tr class="${brand.id === selectedBrandId ? "selected" : ""}" data-brand-edit="${escapeHtml(brand.id)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(brand.name)} brand details">
+      <td class="catalog-name-cell brand-main-cell"><div class="category-name-stack"><strong title="${escapeHtml(brand.name)}">${escapeHtml(brand.name)}</strong><span title="Code: ${escapeHtml(brand.brandCode)}">Code: ${escapeHtml(brand.brandCode)}</span></div></td>
+      <td data-mobile-label="Owner"><div class="category-name-stack"><strong>${escapeHtml(brand.ownerName)}</strong><span>${escapeHtml(formatOwnershipType(brand.ownershipType))}</span></div></td>
+      <td class="category-count-cell" data-mobile-label="Products">${Number(brand.productCount ?? 0)}</td>
+      <td class="mono-value" data-mobile-label="Website Slug">${escapeHtml(brand.websiteSlug || "Admin only")}</td>
+      <td class="category-status-cell" data-mobile-label="Status">${statusMarkup}</td>
+      <td class="category-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(brand.updatedAt))}</span></td>
+      <td class="category-action-cell" data-mobile-label="Action">
+        <button class="note-button compact-action" data-brand-edit="${escapeHtml(brand.id)}" type="button">${canWrite ? "Edit" : "View"}</button>
+        <button class="note-button compact-action danger" data-brand-archive="${escapeHtml(brand.id)}" type="button" ${archiveDisabled ? "disabled" : ""}>${actionLabel}</button>
+      </td>
+    </tr>
+  `;
+}
+
+function renderBrandDrawer(selectedBrand) {
+  const draft = brandDraft ?? createBrandDraft(selectedBrand);
+  const isSaving = brandSaveState === "saving";
+  const canWrite = canManageBrands();
+  const isEdit = brandDrawerMode === "edit";
+  const assignedProducts = Number(draft.productCount ?? selectedBrand?.productCount ?? 0);
+  const title = draft.name || (isEdit ? "Edit Brand" : "Create Brand");
+
+  return `
+    <div class="catalog-drawer-backdrop" data-brand-close></div>
+    <aside class="catalog-drawer brand-drawer" aria-label="${escapeHtml(title)} brand details">
+      <header>
+        <div>
+          <span>BRAND DIRECTORY</span>
+          <h2>${escapeHtml(isEdit ? title : "Create Brand")}</h2>
+          <p>${isEdit ? "Update brand identity, owner, storefront slug, and assignment status." : "Create a brand identity for product assignment and future storefront publishing."}</p>
+          ${draft.status === "archived" ? `<span class="status-pill archived">Archived</span>` : `<span class="status-pill active">Active</span>`}
+        </div>
+        <button class="catalog-drawer-close" data-brand-close type="button" aria-label="Close brand drawer">X</button>
+      </header>
+      <form class="catalog-form" id="brand-form">
+        ${brandValidationError ? `<p class="catalog-form-error">${escapeHtml(brandValidationError)}</p>` : ""}
+        ${brandSaveError ? `<p class="catalog-form-error">${escapeHtml(brandSaveError)}</p>` : ""}
+
+        <section class="catalog-drawer-section" aria-label="Brand identity">
+          <h3>Identity</h3>
+          ${renderBrandInput("name", "Brand Name", draft.name, "text", true, isSaving || !canWrite, "Customer-facing label shown across catalog and storefront.")}
+          ${renderBrandInput("brandCode", "Brand Code", draft.brandCode, "text", true, isEdit || isSaving || !canWrite, isEdit ? "Stable and immutable after creation." : "Manually entered, normalized to uppercase, and never derived from slug.")}
+          ${renderBrandInput("ownerName", "Brand Owner", draft.ownerName, "text", true, isSaving || !canWrite, "Internal team or partner owner name.")}
+          ${renderBrandField("ownershipType", "Ownership Type", renderBrandOwnershipSelect(draft, isSaving || !canWrite))}
+          ${renderBrandInput("websiteSlug", "Website Slug", draft.websiteSlug || "", "text", false, isSaving || !canWrite, "Optional; unique when present.")}
+          ${renderBrandField("status", "Status", renderBrandStatusSelect(draft, isSaving || !canWrite || (assignedProducts > 0 && draft.status === "active")), assignedProducts > 0 ? "Archive is blocked while products are assigned." : "Active brands can be assigned to products.")}
+        </section>
+
+        <footer class="catalog-drawer-footer">
+          <span>${assignedProducts} ${assignedProducts === 1 ? "product" : "products"} assigned</span>
+          <div>
+            <button class="note-button" data-brand-close type="button" ${isSaving ? "disabled" : ""}>Cancel</button>
+            <button class="primary-button catalog-save-button" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Create Brand")}</button>
+          </div>
+        </footer>
+      </form>
+    </aside>
+  `;
 }
 
 function renderCategoryEmptyState(visibleCategories) {
@@ -5543,6 +5791,102 @@ function canManageProductCategories() {
   return ["owner", "admin"].includes(adminUser?.role);
 }
 
+function canManageBrands() {
+  return ["owner", "admin"].includes(adminUser?.role);
+}
+
+function renderBrandInput(field, label, value, type = "text", required = false, disabled = false, helperText = "") {
+  return renderBrandField(field, label, `<input id="brand-${field}" data-brand-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} ${disabled ? "disabled" : ""} />`, helperText);
+}
+
+function renderBrandField(id, label, control, helperText = "") {
+  return `<label class="catalog-field" for="brand-${id}"><span>${label}</span>${control}${helperText ? `<small>${escapeHtml(helperText)}</small>` : ""}</label>`;
+}
+
+function renderBrandOwnershipSelect(draft, disabled = false) {
+  return `<select id="brand-ownershipType" data-brand-field="ownershipType" required ${disabled ? "disabled" : ""}>
+    <option value="internal" ${draft.ownershipType === "internal" ? "selected" : ""}>Internal</option>
+    <option value="partner" ${draft.ownershipType === "partner" ? "selected" : ""}>Partner</option>
+  </select>`;
+}
+
+function renderBrandStatusSelect(draft, disabled = false) {
+  return `<select id="brand-status" data-brand-field="status" required ${disabled ? "disabled" : ""}>
+    <option value="active" ${draft.status === "active" ? "selected" : ""}>Active</option>
+    <option value="archived" ${draft.status === "archived" ? "selected" : ""}>Archived</option>
+  </select>`;
+}
+
+function createBrandDraft(brand = null) {
+  if (brand) return { ...brand };
+  return {
+    name: "",
+    brandCode: "",
+    ownershipType: "internal",
+    ownerName: "",
+    websiteSlug: "",
+    status: "active",
+    productCount: 0,
+  };
+}
+
+function updateBrandDraftField(field, value) {
+  if (!brandDraft) return;
+  const nextValue = field === "brandCode" ? String(value ?? "").trim().toUpperCase() : String(value ?? "");
+  brandDraft = {
+    ...brandDraft,
+    [field]: nextValue,
+  };
+  brandValidationError = "";
+  brandSaveError = "";
+}
+
+function normalizeBrandDraft(draft) {
+  return {
+    ...draft,
+    name: String(draft.name || "").trim(),
+    brandCode: String(draft.brandCode || "").trim().toUpperCase(),
+    ownershipType: ["internal", "partner"].includes(draft.ownershipType) ? draft.ownershipType : "internal",
+    ownerName: String(draft.ownerName || "").trim(),
+    websiteSlug: String(draft.websiteSlug || "").trim(),
+    status: ["active", "archived"].includes(draft.status) ? draft.status : "active",
+  };
+}
+
+function validateBrand(brand) {
+  if (!brand.name) return "Brand name is required.";
+  if (!brand.id && !brand.brandCode) return "Brand Code is required.";
+  if (!brand.ownerName) return "Owner name is required.";
+  if (!["internal", "partner"].includes(brand.ownershipType)) return "Choose a valid ownership type.";
+  if (!["active", "archived"].includes(brand.status)) return "Choose a valid status.";
+  const duplicateCode = brand.brandCode ? brands.find((item) => item.id !== brand.id && item.brandCode.toLowerCase() === brand.brandCode.toLowerCase()) : null;
+  if (duplicateCode) return "Brand Code must be unique.";
+  const duplicateName = brands.find((item) => item.id !== brand.id && item.name.toLowerCase() === brand.name.toLowerCase());
+  if (duplicateName) return "Brand name must be unique.";
+  const duplicateSlug = brand.websiteSlug ? brands.find((item) => item.id !== brand.id && item.websiteSlug && item.websiteSlug.toLowerCase() === brand.websiteSlug.toLowerCase()) : null;
+  if (duplicateSlug) return "Website slug must be unique.";
+  if (brand.status === "archived" && Number(brand.productCount ?? 0) > 0) return "Archive is blocked while products are assigned to this Brand.";
+  return "";
+}
+
+function sortBrands(items) {
+  return [...items].sort((a, b) => {
+    const statusRank = Number(a.status === "archived") - Number(b.status === "archived");
+    return statusRank || a.name.localeCompare(b.name) || a.brandCode.localeCompare(b.brandCode);
+  });
+}
+
+function upsertBrand(items, brand) {
+  const nextItems = items.some((item) => item.id === brand.id)
+    ? items.map((item) => item.id === brand.id ? { ...item, ...brand } : item)
+    : [...items, brand];
+  return sortBrands(nextItems);
+}
+
+function formatOwnershipType(value) {
+  return value === "partner" ? "Partner owner" : "Internal owner";
+}
+
 function getAdminActorUserId() {
   return adminUser?.userId || adminUser?.user_id || adminAuthSession?.user?.id || "";
 }
@@ -5594,6 +5938,7 @@ function renderCatalogProductRow(item) {
     <tr class="${expanded ? "selected" : ""}" data-catalog-toggle-product="${item.id}" role="button" tabindex="0" aria-expanded="${expanded ? "true" : "false"}" aria-label="Open ${escapeHtml(item.name)} product quick controls">
       <td class="catalog-expand-cell" data-mobile-label="Quick">${renderIcon(expanded ? "chevron-down" : "chevron-right", "catalog-expand-icon")}</td>
       <td class="catalog-name-cell"><div class="client-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : "empty"}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')" aria-label="Catalog image"` : `role="img" aria-label="No catalog image"`}>${item.imageUrl ? "" : renderIcon("package", "catalog-placeholder-icon")}</span><div><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span title="${escapeHtml(secondary)}">${escapeHtml(secondary)}</span></div></div></td>
+      <td class="catalog-category-cell" data-mobile-label="Brand">${escapeHtml(item.brandName || item.brand || "-")}</td>
       <td class="catalog-category-cell" data-mobile-label="Category">${escapeHtml(item.category || "-")}</td>
       <td class="mono-value" data-mobile-label="SKU">${escapeHtml(sku)}</td>
       <td class="catalog-moq-cell" data-mobile-label="Variants">${variantCount}</td>
@@ -5617,7 +5962,7 @@ function renderCatalogProductQuickControl(item) {
 
   return `
     <tr class="catalog-product-quick-row">
-      <td colspan="10">
+      <td colspan="11">
         <section class="catalog-product-quick-control" aria-label="${escapeHtml(item.name)} quick control">
           ${catalogQuickSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogQuickSaveError)}</p>` : ""}
           <div class="catalog-quick-health">
@@ -5665,6 +6010,7 @@ function renderCatalogProductQuickControl(item) {
 
 function getCatalogProductHealthChecks(item) {
   return [
+    { label: "Brand", ready: Boolean(item.brandId) },
     { label: "Image", ready: Boolean(item.imageUrl) },
     { label: "Category", ready: Boolean(item.category) },
     { label: "Cost", ready: Boolean(item.unitCost) },
@@ -5709,13 +6055,14 @@ function renderCatalogProductEditorPage(editorRoute) {
   const title = isEdit ? "Edit Product" : "New Product";
   const displayName = draft.name || "New Product";
   const typeLabel = formatProductType(draft.productType) || "Select type";
+  const brandLabel = getCatalogEditorBrandLabel(draft) || "Brand required";
   const skuValue = getCatalogEditorSku(draft);
   const categoryValue = getCatalogEditorCategoryLabel(draft);
   const imageCount = getCatalogEditorImageCount(draft);
   const margin = getCatalogEditorMargin(draft);
   const readiness = getCatalogEditorReadiness(draft);
   const status = draft.status || "draft";
-  const summaryMeta = isEdit ? `${skuValue} - ${typeLabel}` : "Product code generated after creation - Draft";
+  const summaryMeta = isEdit ? `${brandLabel} - ${skuValue} - ${typeLabel}` : `${brandLabel} - Product code generated on save`;
   const heroImage = getCatalogEditorPrimaryImage(draft);
   const footerMessage = catalogValidationError
     ? "Fix required fields before creating this product."
@@ -5793,7 +6140,7 @@ function renderCatalogProductEditorPage(editorRoute) {
             ${renderCatalogEditorStatusCard(draft, isSaving || !canWrite)}
             ${renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCount)}
             ${renderCatalogEditorReadinessCard(readiness)}
-            ${renderCatalogEditorAvailabilityCard()}
+            ${renderCatalogEditorAvailabilityCard(draft)}
           </aside>
         </section>
       </form>
@@ -5815,6 +6162,7 @@ function renderCatalogEditorProductInformation(draft, disabled = false) {
       <header><h2>Product Information</h2><p>Customer-facing identity and category binding.</p></header>
       <div class="catalog-editor-field-grid">
         ${renderCatalogInput("name", "Product Name", draft.name, "text", true, disabled, "Enter product name")}
+        ${renderCatalogField("brandId", "Brand", renderCatalogBrandSelect(draft, disabled), "Required. Only active Brands can be assigned.")}
         ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled), "Required before choosing a parent category.")}
         ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "Only categories with the same product type are available." : "Select Product Type first.")}
         ${renderCatalogInput("subcategory", "Subcategory", draft.subcategory || "", "text", false, disabled, "Select subcategory")}
@@ -5951,6 +6299,7 @@ function renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCou
       <header><h2>Product Summary</h2></header>
       <div class="catalog-kv-list">
         ${renderCatalogDetailRow("SKU", skuValue)}
+        ${renderCatalogDetailRow("Brand", getCatalogEditorBrandLabel(draft) || "Not selected")}
         ${renderCatalogDetailRow("Type", formatProductType(draft.productType) || "Not selected")}
         ${renderCatalogDetailRow("Category", categoryValue || "Not selected")}
         ${renderCatalogDetailRow("Variants", String(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length || 0))}
@@ -5979,13 +6328,15 @@ function renderCatalogEditorReadinessCard(readiness) {
   `;
 }
 
-function renderCatalogEditorAvailabilityCard() {
+function renderCatalogEditorAvailabilityCard(draft) {
+  const brand = brands.find((item) => item.id === draft.brandId);
+  const websiteLabel = brand?.websiteSlug ? `${brand.name} storefront` : "Admin only";
   return `
     <article class="catalog-editor-card compact" aria-label="Sales & Availability">
       <header><h2>Sales & Availability</h2></header>
       <div class="catalog-kv-list">
         ${renderCatalogDetailRow("POS", "Available")}
-        ${renderCatalogDetailRow("Website", "Catalog controlled")}
+        ${renderCatalogDetailRow("Website", websiteLabel)}
         ${renderCatalogDetailRow("Inquiry / Quotation", "Available")}
         ${renderCatalogDetailRow("Reorder", "Available")}
       </div>
@@ -6051,6 +6402,22 @@ function getCatalogEditorActiveCategories(draft) {
   );
 }
 
+function getCatalogEditorActiveBrands(draft) {
+  return sortBrands(brands).filter((brand) =>
+    brand.status === "active" || brand.id === draft.brandId
+  );
+}
+
+function renderCatalogBrandSelect(draft, disabled = false) {
+  const options = getCatalogEditorActiveBrands(draft);
+  return `<select id="catalog-brandId" data-catalog-field="brandId" required ${disabled ? "disabled" : ""}><option value="" ${draft.brandId ? "" : "selected"}>${brandLoadState === "loading" ? "Loading brands" : "Select brand"}</option>${options.map((brand) => `<option value="${escapeHtml(brand.id)}" ${brand.id === draft.brandId ? "selected" : ""}>${escapeHtml(brand.name)} (${escapeHtml(brand.brandCode)})</option>`).join("")}</select>`;
+}
+
+function getCatalogEditorBrandLabel(draft) {
+  const brand = brands.find((item) => item.id === draft.brandId);
+  return brand?.name || draft.brandName || draft.brand || "";
+}
+
 function renderCatalogProductTypeSelect(draft, disabled = false) {
   return `<select id="catalog-productType" data-catalog-field="productType" required ${disabled ? "disabled" : ""}><option value="" ${draft.productType ? "" : "selected"}>Select Product Type</option>${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === draft.productType ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select>`;
 }
@@ -6108,7 +6475,7 @@ function getCatalogEditorMargin(draft) {
 
 function getCatalogEditorReadiness(draft) {
   return [
-    { label: "Product identity", ready: Boolean(draft.name && draft.productType && draft.category), target: "catalog-section-product-identity", missing: "Add name, product type, and category." },
+    { label: "Brand and product identity", ready: Boolean(draft.name && draft.brandId && draft.productType && draft.category), target: "catalog-section-product-identity", missing: "Add name, Brand, product type, and category." },
     { label: "Cost and selling price", ready: Boolean(draft.unitCost && draft.startingPrice), target: "catalog-section-pricing", missing: "Enter unit cost and selling price." },
     { label: "Variants", ready: Boolean(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length), target: "catalog-section-variants", missing: "Add at least one size or color." },
     { label: "At least one product image", ready: getCatalogEditorImageCount(draft) > 0, target: "catalog-section-images", missing: "Upload a product image." },
@@ -6118,6 +6485,10 @@ function getCatalogEditorReadiness(draft) {
 function validateCatalogProductEditor(draft, product) {
   const baseError = validateCatalogProduct(product);
   if (baseError) return baseError;
+  if (!draft.brandId) return "Brand is required.";
+  const brand = brands.find((item) => item.id === draft.brandId);
+  if (!brand) return "Choose a valid Brand.";
+  if (brand.status !== "active") return "Only active Brands can be assigned to products.";
   if (!draft.productType) return "Product Type is required.";
   const category = productCategories.find((item) => item.name === draft.category);
   if (!draft.category) return "Category is required.";
@@ -6290,6 +6661,8 @@ function createCatalogDraft(product = null) {
       availableSizesText: product.availableSizes.join(", "),
       availableColorsText: product.availableColors.join(", "),
       printMethodsText: product.printMethods.join(", "),
+      brandId: product.brandId || "",
+      brandName: product.brandName || product.brand || "",
       productType: product.productType || inferCatalogProductType(product) || "PHYSICAL",
       subcategory: product.subcategory || "",
       unitCost: product.unitCost || "",
@@ -6310,6 +6683,9 @@ function createCatalogDraft(product = null) {
     productCode: "",
     category: "",
     categoryId: "",
+    brandId: "",
+    brandName: "",
+    brand: "",
     description: "",
     imageUrl: "",
     images: [],
@@ -7111,7 +7487,7 @@ function renderProductImageManager(product) {
 
 function renderSidebar(currentRoute) {
   const routePath = getRoutePath();
-  const isCatalogRoute = routePath === "/catalog" || routePath === "/catalog/categories";
+  const isCatalogRoute = routePath === "/catalog" || routePath === "/catalog/brands" || routePath === "/catalog/categories";
   const isCatalogExpanded = isCatalogRoute || isCatalogNavExpanded;
   const navItems = [
     { label: "Overview", path: "/overview" },
@@ -7125,17 +7501,21 @@ function renderSidebar(currentRoute) {
   ];
   const catalogSubnav = [
     { label: "Products", path: "/catalog" },
+    { label: "Brands", path: "/catalog/brands" },
     { label: "Categories", path: "/catalog/categories" },
+    { label: "Suppliers", path: "/catalog/suppliers", disabled: true },
+    { label: "Purchasing", path: "/catalog/purchasing", disabled: true },
+    { label: "Inventory", path: "/catalog/inventory", disabled: true },
   ];
   const renderNavItem = (item) => {
     const isActive = item.label === currentRoute;
     const subnav = item.label === "Catalog"
       ? `<div class="catalog-subnav" id="catalog-subnav" role="group" aria-label="Master Catalog sections" ${isCatalogExpanded ? "" : "hidden"}>
           ${catalogSubnav.map((subitem) => {
-            const isSubActive = subitem.path === "/catalog/categories"
-              ? routePath === "/catalog/categories"
-              : routePath === "/catalog";
-            return `<a class="catalog-subnav-link ${isSubActive ? "active" : ""}" href="${subitem.path}" data-route-link>${escapeHtml(subitem.label)}</a>`;
+            const isSubActive = routePath === subitem.path;
+            return subitem.disabled
+              ? `<span class="catalog-subnav-link disabled" aria-disabled="true">${escapeHtml(subitem.label)}</span>`
+              : `<a class="catalog-subnav-link ${isSubActive ? "active" : ""}" href="${subitem.path}" data-route-link>${escapeHtml(subitem.label)}</a>`;
           }).join("")}
         </div>`
       : "";
@@ -7339,6 +7719,106 @@ function closeCategoryDrawer() {
   categorySaveError = "";
   categorySaveState = "idle";
   render();
+}
+
+function openBrandDrawer(mode, brandId = null) {
+  if (mode === "create" && !canManageBrands()) return;
+  const brand = brands.find((item) => item.id === brandId) ?? null;
+  brandDrawerMode = mode;
+  selectedBrandId = brand?.id ?? selectedBrandId;
+  brandDraft = createBrandDraft(brand);
+  brandValidationError = "";
+  brandSaveError = "";
+  brandSaveState = "idle";
+  render();
+}
+
+function closeBrandDrawer() {
+  brandDrawerMode = "";
+  brandDraft = null;
+  brandValidationError = "";
+  brandSaveError = "";
+  brandSaveState = "idle";
+  render();
+}
+
+async function saveBrandDraft() {
+  if (!canManageBrands() || !brandDraft || brandSaveState === "saving") return;
+
+  const brand = normalizeBrandDraft(brandDraft);
+  const validationError = validateBrand(brand);
+  if (validationError) {
+    brandValidationError = validationError;
+    render();
+    return;
+  }
+
+  brandSaveState = "saving";
+  brandSaveError = "";
+  brandValidationError = "";
+  render();
+
+  try {
+    const savedBrand = brandDrawerMode === "edit" && brand.id
+      ? await updateAdminBrand(brand.id, brand, adminAuthSession)
+      : await createAdminBrand(brand, adminAuthSession);
+
+    if (savedBrand) {
+      brands = upsertBrand(brands, { ...savedBrand, productCount: brand.productCount ?? savedBrand.productCount ?? 0 });
+      selectedBrandId = savedBrand.id;
+    }
+
+    brandDrawerMode = "";
+    brandDraft = null;
+    brandSaveState = "success";
+    hasLoadedBrands = false;
+    await loadBrands();
+    window.setTimeout(() => {
+      if (brandSaveState === "success") {
+        brandSaveState = "idle";
+        render();
+      }
+    }, 1800);
+    render();
+  } catch (error) {
+    console.error("Unable to save brand.", error);
+    brandSaveState = "idle";
+    brandSaveError = error.message || "Save failed. Check Brand RLS and constraints.";
+    render();
+  }
+}
+
+async function archiveBrand(brandId) {
+  if (!canManageBrands() || brandSaveState === "saving") return;
+  const brand = brands.find((item) => item.id === brandId);
+  if (!brand || brand.status === "archived") return;
+  if (Number(brand.productCount ?? 0) > 0) {
+    brandSaveError = "Archive is blocked while products are assigned to this Brand.";
+    render();
+    return;
+  }
+
+  brandSaveState = "saving";
+  brandSaveError = "";
+  render();
+
+  try {
+    const savedBrand = await updateAdminBrand(brand.id, { ...brand, status: "archived" }, adminAuthSession);
+    if (savedBrand) brands = upsertBrand(brands, { ...brand, ...savedBrand, status: "archived" });
+    brandSaveState = "success";
+    window.setTimeout(() => {
+      if (brandSaveState === "success") {
+        brandSaveState = "idle";
+        render();
+      }
+    }, 1800);
+    render();
+  } catch (error) {
+    console.error("Unable to archive brand.", error);
+    brandSaveState = "idle";
+    brandSaveError = error.message || "Archive failed. Check Brand assignment guard.";
+    render();
+  }
 }
 
 async function saveCategoryDraft() {
@@ -7655,6 +8135,12 @@ function updateCatalogDraftField(field, value, inputType = "text") {
     catalogDraft.catalogKeys = [nextValue];
   }
 
+  if (field === "brandId") {
+    const brand = brands.find((item) => item.id === nextValue);
+    catalogDraft.brandName = brand?.name || "";
+    catalogDraft.brand = brand?.name || "";
+  }
+
   if (field === "category") {
     const category = productCategories.find((item) => item.name === nextValue);
     catalogDraft.categoryId = category?.id || "";
@@ -7795,6 +8281,8 @@ function normalizeCatalogDraft(draft) {
     productCode: String(draft.productCode || "").trim(),
     slug: String(draft.productCode || draft.slug || "").trim(),
     catalogKeys: [draft.catalogKey].filter(Boolean),
+    brandId: String(draft.brandId || "").trim(),
+    brandName: getCatalogEditorBrandLabel(draft),
     category: String(draft.category || "").trim(),
     categoryId: draft.categoryId || category?.id || "",
     description: String(draft.description || "").trim(),
@@ -8205,6 +8693,64 @@ function bindEvents() {
     categoryHierarchyFilter = "all";
     categoryStatusFilter = "active";
     render();
+  });
+
+  document.getElementById("brand-status-filter")?.addEventListener("change", (event) => {
+    brandStatusFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-brand-reset-filters]")?.addEventListener("click", () => {
+    productQuery = "";
+    brandStatusFilter = "active";
+    render();
+  });
+
+  document.querySelector("[data-brand-add]")?.addEventListener("click", () => {
+    openBrandDrawer("create");
+  });
+
+  document.querySelectorAll("[data-brand-edit]").forEach((element) => {
+    const openBrandRow = () => openBrandDrawer("edit", element.dataset.brandEdit);
+
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openBrandRow();
+    });
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openBrandRow();
+    });
+  });
+
+  document.querySelectorAll("[data-brand-close]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeBrandDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-brand-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      updateBrandDraftField(field.dataset.brandField, event.target.value);
+    });
+    field.addEventListener("change", (event) => {
+      updateBrandDraftField(field.dataset.brandField, event.target.value);
+    });
+  });
+
+  document.querySelectorAll("[data-brand-archive]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await archiveBrand(button.dataset.brandArchive);
+    });
+  });
+
+  document.getElementById("brand-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveBrandDraft();
   });
 
   document.querySelector("[data-category-add]")?.addEventListener("click", () => {
@@ -9287,7 +9833,7 @@ function getRoutePath() {
 function navigateTo(path) {
   const normalizedPath = normalizeRoutePath(path);
   const routeOnly = normalizedPath.split("?")[0];
-  if (routeOnly !== "/catalog" && routeOnly !== "/catalog/categories") {
+  if (routeOnly !== "/catalog" && routeOnly !== "/catalog/brands" && routeOnly !== "/catalog/categories") {
     isCatalogNavExpanded = false;
   }
   window.history.pushState({}, "", normalizedPath);
