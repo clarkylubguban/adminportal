@@ -5,13 +5,16 @@ const root = process.cwd();
 const main = readFileSync(join(root, "src", "main.js"), "utf8");
 const styles = readFileSync(join(root, "src", "styles.css"), "utf8");
 const service = readFileSync(join(root, "src", "services", "adminCatalog.js"), "utf8");
+const sidebarStart = main.indexOf("function renderSidebar");
+const sidebarEnd = main.indexOf("function getAdminDisplayName");
+const sidebar = main.slice(sidebarStart, sidebarEnd);
+const supplyOrder = ["Products", "Brands", "Categories", "Suppliers", "Purchasing", "Inventory"].map((label) => sidebar.indexOf(`label: "${label}"`));
 
 const checks = [
-  ["Catalog parent is a toggle, not a route link", main.includes("data-catalog-nav-toggle") && main.includes("aria-expanded") && main.includes("aria-controls=\"catalog-subnav\"")],
-  ["Catalog children are hidden when collapsed", main.includes("catalog-subnav\" id=\"catalog-subnav\"") && main.includes("${isCatalogExpanded ? \"\" : \"hidden\"}") && styles.includes(".catalog-subnav[hidden]")],
-  ["Catalog auto-expands on Catalog routes", main.includes('routePath === "/catalog" || routePath === "/catalog/brands" || routePath === "/catalog/categories"') && main.includes("const isCatalogExpanded = isCatalogRoute || isCatalogNavExpanded")],
-  ["Catalog route changes collapse the group outside Catalog", main.includes("if (routeOnly !== \"/catalog\" && routeOnly !== \"/catalog/brands\" && routeOnly !== \"/catalog/categories\")") && main.includes("isCatalogNavExpanded = false")],
-  ["Only Catalog children get primary selected state", main.includes("catalog-nav-toggle ${isCatalogRoute ? \"section-active\" : \"\"}") && styles.includes(".catalog-nav-toggle.section-active") && styles.includes(".catalog-subnav-link.active")],
+  ["Catalog parent toggle is removed", !sidebar.includes("data-catalog-nav-toggle") && !main.includes("isCatalogNavExpanded")],
+  ["Catalog & Supply section is always visible", sidebar.includes("CATALOG &amp; SUPPLY") && sidebar.includes("catalog-supply-nav") && !sidebar.includes("hidden")],
+  ["Catalog direct route order is approved", supplyOrder.every((index) => index > -1) && supplyOrder.every((index, position) => position === 0 || index > supplyOrder[position - 1])],
+  ["Catalog direct routes get primary selected state", sidebar.includes('activePaths: ["/catalog"]') && sidebar.includes('activePaths: ["/catalog/brands"]') && sidebar.includes('activePaths: ["/catalog/categories"]') && styles.includes(".sidebar a.active") && styles.includes("box-shadow: inset 3px 0 0 var(--trry-lime)")],
   ["Readiness has four required checks and summary", main.includes("requirements complete") && main.includes("At least one product image") && !main.includes("Production information\", ready")],
   ["Readiness can focus relevant sections", main.includes("data-catalog-readiness-target") && main.includes("function focusCatalogEditorSection") && main.includes("catalog-section-product-identity")],
   ["Readiness SVGs are constrained", styles.includes(".catalog-readiness-icon svg") && styles.includes("height: 18px !important") && styles.includes("width: 18px !important")],

@@ -46,7 +46,13 @@ try {
       const firstRow = document.querySelector(".mvp-orders-table-row");
       const headers = [...document.querySelectorAll(".mvp-orders-table-head span")].map((node) => node.textContent.trim()).join("|");
       const page = document.querySelector(".mvp-orders-dashboard-page");
+      const totalOrders = document.querySelector(".mvp-orders-dashboard-header aside strong")?.textContent.trim() || "";
+      const footerText = document.querySelector(".mvp-orders-pagination")?.innerText || "";
       const rect = page.getBoundingClientRect();
+      const mobileCards = [...document.querySelectorAll(".mvp-order-mobile-card")].map((node) => node.getBoundingClientRect());
+      const nav = document.querySelector(".mobile-bottom-nav");
+      const navTop = nav?.getBoundingClientRect().top || window.innerHeight;
+      const lastCardBottom = mobileCards.length ? Math.max(...mobileCards.map((item) => item.bottom)) : 0;
       return {
         hasShell: Boolean(page),
         headers,
@@ -56,6 +62,11 @@ try {
         hasLegacyReference: document.body.innerText.includes("TRRY-LEGACY-PROD01"),
         hasDrawerBefore: Boolean(document.querySelector(".mvp-drawer")),
         rowCanOpen: Boolean(firstRow?.dataset.mvpOpen === "order"),
+        totalOrders,
+        footerText,
+        visibleRowCount: document.querySelectorAll(".mvp-orders-table-row").length,
+        visibleCardCount: document.querySelectorAll(".mvp-order-mobile-card").length,
+        mobileClearance: window.innerWidth > 768 || !mobileCards.length || lastCardBottom <= navTop - 8 || document.documentElement.scrollHeight > window.innerHeight,
         pageLeft: rect.left,
         pageRight: rect.right,
         bodyOverflowX: document.documentElement.scrollWidth > window.innerWidth + 2,
@@ -66,8 +77,14 @@ try {
     assert.equal(result.hasNativeReference, true, `native order reference visible at ${viewport.width}`);
     assert.equal(result.hasLegacyReference, true, `legacy compatibility reference visible at ${viewport.width}`);
     assert.equal(result.rowCanOpen, true, `row opens existing drawer at ${viewport.width}`);
+    assert.equal(result.bodyOverflowX, false, `orders dashboard has no page horizontal overflow at ${viewport.width}`);
+    assert.equal(result.totalOrders, "5", `fixture total order count matches rows at ${viewport.width}`);
+    assert.match(result.footerText, /Showing 1 to 5 of 5 orders/, `fixture footer count matches rows at ${viewport.width}`);
     if (viewport.width > 768) assert.equal(result.tableVisible, true, `desktop/tablet table visible at ${viewport.width}`);
+    if (viewport.width > 768) assert.equal(result.visibleRowCount, 5, `desktop/table shows all fixture rows at ${viewport.width}`);
     if (viewport.width <= 768) assert.equal(result.cardsVisible, true, `mobile cards visible at ${viewport.width}`);
+    if (viewport.width <= 768) assert.equal(result.visibleCardCount, 5, `mobile card count matches fixture rows at ${viewport.width}`);
+    if (viewport.width <= 768) assert.equal(result.mobileClearance, true, `mobile order final card can scroll above bottom navigation at ${viewport.width}`);
   }
 
   await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
@@ -91,13 +108,21 @@ try {
       width: Math.round(rect?.width || 0),
       hasTabs: [...document.querySelectorAll("[data-mvp-order-tab]")].map((node) => node.textContent.trim()).join("|"),
       hasCopy: Boolean(drawer?.querySelector("[data-mvp-copy]")),
+      surface: getComputedStyle(drawer).backgroundColor,
+      bodySurface: getComputedStyle(drawer?.querySelector(".mvp-order-drawer-body")).backgroundColor,
+      hasHorizontalOverflow: document.documentElement.scrollWidth > window.innerWidth + 2,
+      footerVisible: Math.round(drawer?.querySelector(".mvp-order-drawer-footer")?.getBoundingClientRect().bottom || 0) <= window.innerHeight + 1,
     };
   })()`);
   assert.equal(drawer.open, true, "existing order drawer opens from dashboard row");
   assert.ok(drawer.text.includes("TRRY-ORD-AWAIT01"), "drawer uses native order reference");
   assert.equal(drawer.width, 390, "desktop order drawer width is 390px");
-  assert.equal(drawer.hasTabs, "Overview|Requirements|Payment|Fulfillment|History|Confirm Payment|Requirements", "drawer tab order and footer tab actions render");
+  assert.equal(drawer.hasTabs, "Overview|Requirements|Payment|Fulfillment|History|Record Payment|Requirements", "drawer tab order and footer tab actions render");
   assert.equal(drawer.hasCopy, true, "drawer copy control renders");
+  assert.equal(drawer.surface, "rgb(255, 255, 255)", "order drawer surface is opaque white");
+  assert.notEqual(drawer.bodySurface, "rgba(0, 0, 0, 0)", "order drawer body has an opaque panel surface");
+  assert.equal(drawer.hasHorizontalOverflow, false, "order drawer does not introduce horizontal overflow");
+  assert.equal(drawer.footerVisible, true, "order drawer sticky footer is reachable");
 
   await evaluate(cdp, `document.querySelector('[data-mvp-order-tab="requirements"]').click()`);
   await waitForText(cdp, "PRODUCTION REQUIREMENTS");

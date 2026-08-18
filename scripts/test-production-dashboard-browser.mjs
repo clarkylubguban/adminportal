@@ -45,6 +45,18 @@ try {
       const cards = document.querySelector(".mvp-production-card-list");
       const firstRow = document.querySelector(".mvp-production-table-row");
       const headers = [...document.querySelectorAll(".mvp-production-table-head span")].map((node) => node.textContent.trim().replace(/\\s+↕$/, "")).join("|");
+      const activeJobs = document.querySelector(".mvp-production-dashboard-header aside strong")?.textContent.trim() || "";
+      const footerText = document.querySelector(".mvp-production-pagination")?.innerText || "";
+      const rowRects = [...document.querySelectorAll(".mvp-production-table-row")].map((node) => node.getBoundingClientRect());
+      const rowsDoNotOverlap = rowRects.every((rect, index) => index === 0 || rect.top >= rowRects[index - 1].bottom - 1);
+      const stagePills = [...document.querySelectorAll(".mvp-production-table-row > :nth-child(9)")];
+      const stageLabels = stagePills.map((node) => node.textContent.trim()).join("|");
+      const stageMetrics = stagePills.map((node) => node.textContent.trim() + ":" + node.clientWidth + "/" + node.scrollWidth + "/" + Math.round(node.getBoundingClientRect().width)).join("|");
+      const stagePillsReadable = stagePills.every((node) => node.scrollWidth <= node.clientWidth + 1);
+      const mobileCards = [...document.querySelectorAll(".mvp-production-mobile-card")].map((node) => node.getBoundingClientRect());
+      const nav = document.querySelector(".mobile-bottom-nav");
+      const navTop = nav?.getBoundingClientRect().top || window.innerHeight;
+      const lastCardBottom = mobileCards.length ? Math.max(...mobileCards.map((item) => item.bottom)) : 0;
       return {
         hasShell: Boolean(page),
         headers,
@@ -55,6 +67,16 @@ try {
         hasReadyToRelease: document.body.innerText.includes("READY TO RELEASE"),
         hasPaymentAction: /Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(document.body.innerText),
         rowCanOpen: Boolean(firstRow?.dataset.mvpOpen === "production"),
+        activeJobs,
+        footerText,
+        visibleRowCount: document.querySelectorAll(".mvp-production-table-row").length,
+        visibleCardCount: document.querySelectorAll(".mvp-production-mobile-card").length,
+        rowsDoNotOverlap,
+        stageLabels,
+        stageMetrics,
+        stagePillsReadable,
+        mobileClearance: window.innerWidth > 768 || !mobileCards.length || lastCardBottom <= navTop - 8 || document.documentElement.scrollHeight > window.innerHeight,
+        bodyOverflowX: document.documentElement.scrollWidth > window.innerWidth + 2,
       };
     })()`);
     assert.equal(result.hasShell, true, `Production dashboard shell renders at ${viewport.width}`);
@@ -64,8 +86,17 @@ try {
     assert.equal(result.hasReadyToRelease, false, `Production does not show READY TO RELEASE at ${viewport.width}`);
     assert.equal(result.hasPaymentAction, false, `Production has no payment action at ${viewport.width}`);
     assert.equal(result.rowCanOpen, true, `production row opens existing drawer at ${viewport.width}`);
+    assert.equal(result.bodyOverflowX, false, `production dashboard has no page horizontal overflow at ${viewport.width}`);
+    assert.equal(result.activeJobs, "6", `fixture active job count excludes completed jobs at ${viewport.width}`);
+    assert.match(result.footerText, /Showing 1 to 5 of 6 jobs/, `fixture footer count matches released jobs at ${viewport.width}`);
     if (viewport.width > 768) assert.equal(result.tableVisible, true, `desktop/tablet table visible at ${viewport.width}`);
+    if (viewport.width > 768) assert.equal(result.visibleRowCount, 5, `desktop production page shows first five fixture rows at ${viewport.width}`);
+    if (viewport.width > 768) assert.equal(result.rowsDoNotOverlap, true, `desktop production fixture rows do not overlap at ${viewport.width}`);
+    if (viewport.width > 768) assert.match(result.stageLabels, /IN PRODUCTION|QUALITY CHECK|READY|BLOCKED|COMPLETED/, `desktop production stage labels render at ${viewport.width}`);
+    if (viewport.width > 768) assert.equal(result.stagePillsReadable, true, `desktop production stage pills are not clipped at ${viewport.width}: ${result.stageMetrics}`);
     if (viewport.width <= 768) assert.equal(result.cardsVisible, true, `mobile cards visible at ${viewport.width}`);
+    if (viewport.width <= 768) assert.equal(result.visibleCardCount, 5, `mobile production card count matches first page at ${viewport.width}`);
+    if (viewport.width <= 768) assert.equal(result.mobileClearance, true, `mobile production final card can scroll above bottom navigation at ${viewport.width}`);
   }
 
   await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 1000, deviceScaleFactor: 1, mobile: false });
@@ -101,15 +132,23 @@ try {
         tabs,
         text: drawer?.innerText || "",
         hasQcAction: Boolean(drawer?.querySelector('[data-mvp-advance][data-mvp-next="qc"]')),
-        hasPaymentAction: /Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(drawer?.innerText || "")
+        hasPaymentAction: /Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(drawer?.innerText || ""),
+        surface: drawer ? getComputedStyle(drawer).backgroundColor : "",
+        bodySurface: drawer ? getComputedStyle(drawer.querySelector(".mvp-production-drawer-body")).backgroundColor : "",
+        footerVisible: Math.round(drawer?.querySelector(".mvp-production-drawer-footer")?.getBoundingClientRect().bottom || 0) <= window.innerHeight + 1,
+        pageOverflowX: document.documentElement.scrollWidth > window.innerWidth + 2
       };
     })()`);
     assert.equal(startedDrawer.hasDrawer, true, `IN PRODUCTION drawer renders at ${viewport.width}`);
     assert.ok(startedDrawer.width <= Math.min(390, viewport.width), `drawer width is viewport-safe at ${viewport.width}`);
     assert.ok(startedDrawer.rightOverflow <= 1, `drawer avoids horizontal overflow at ${viewport.width}`);
-    assert.equal(startedDrawer.tabs, "Overview|Workflow|Assignment|History", `tab order matches Figma at ${viewport.width}`);
+    assert.equal(startedDrawer.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `tab order matches owner gate at ${viewport.width}`);
     assert.equal(startedDrawer.hasQcAction, true, `started drawer exposes QC action at ${viewport.width}`);
     assert.equal(startedDrawer.hasPaymentAction, false, `started drawer has no payment/Messenger action at ${viewport.width}`);
+    assert.equal(startedDrawer.surface, "rgb(255, 255, 255)", `started drawer surface is opaque at ${viewport.width}`);
+    assert.notEqual(startedDrawer.bodySurface, "rgba(0, 0, 0, 0)", `started drawer body has opaque panel surface at ${viewport.width}`);
+    assert.equal(startedDrawer.footerVisible, true, `started drawer footer is reachable at ${viewport.width}`);
+    assert.equal(startedDrawer.pageOverflowX, false, `started drawer does not create page overflow at ${viewport.width}`);
 
     await evaluate(cdp, `document.querySelector('[data-mvp-production-tab="workflow"]').click()`);
     await waitForText(cdp, "Released to Production");
@@ -137,15 +176,23 @@ try {
         tabs,
         text: drawer?.innerText || "",
         hasReadyAction: Boolean(drawer?.querySelector('[data-mvp-advance][data-mvp-next="ready"]')),
-        hasPaymentAction: /Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(drawer?.innerText || "")
+        hasPaymentAction: /Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(drawer?.innerText || ""),
+        surface: drawer ? getComputedStyle(drawer).backgroundColor : "",
+        bodySurface: drawer ? getComputedStyle(drawer.querySelector(".mvp-production-drawer-body")).backgroundColor : "",
+        footerVisible: Math.round(drawer?.querySelector(".mvp-production-drawer-footer")?.getBoundingClientRect().bottom || 0) <= window.innerHeight + 1,
+        pageOverflowX: document.documentElement.scrollWidth > window.innerWidth + 2
       };
     })()`);
     assert.equal(qcDrawer.hasDrawer, true, `QUALITY CHECK drawer renders at ${viewport.width}`);
     assert.ok(qcDrawer.width <= Math.min(390, viewport.width), `QC drawer width is viewport-safe at ${viewport.width}`);
     assert.ok(qcDrawer.rightOverflow <= 1, `QC drawer avoids horizontal overflow at ${viewport.width}`);
-    assert.equal(qcDrawer.tabs, "Overview|Workflow|Assignment|History", `QC tab order matches Figma at ${viewport.width}`);
+    assert.equal(qcDrawer.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `QC tab order matches owner gate at ${viewport.width}`);
     assert.equal(qcDrawer.hasReadyAction, true, `QC drawer exposes Complete QC action at ${viewport.width}`);
     assert.equal(qcDrawer.hasPaymentAction, false, `QC drawer has no payment/Messenger action at ${viewport.width}`);
+    assert.equal(qcDrawer.surface, "rgb(255, 255, 255)", `QC drawer surface is opaque at ${viewport.width}`);
+    assert.notEqual(qcDrawer.bodySurface, "rgba(0, 0, 0, 0)", `QC drawer body has opaque panel surface at ${viewport.width}`);
+    assert.equal(qcDrawer.footerVisible, true, `QC drawer footer is reachable at ${viewport.width}`);
+    assert.equal(qcDrawer.pageOverflowX, false, `QC drawer does not create page overflow at ${viewport.width}`);
     assert.ok(qcDrawer.text.includes("QC Started") || qcDrawer.text.includes("Quality Check"), `QC drawer shows QC metadata at ${viewport.width}`);
 
     await evaluate(cdp, `document.querySelector('[data-mvp-production-tab="assignment"]').dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))`);

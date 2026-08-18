@@ -6,10 +6,14 @@ const main = readFileSync(join(root, "src", "main.js"), "utf8");
 const styles = readFileSync(join(root, "src", "styles.css"), "utf8");
 const service = readFileSync(join(root, "src", "services", "adminCatalog.js"), "utf8");
 const localDev = readFileSync(join(root, "scripts", "local-dev.mjs"), "utf8");
+const sidebarStart = main.indexOf("function renderSidebar");
+const sidebarEnd = main.indexOf("function getAdminDisplayName");
+const sidebar = main.slice(sidebarStart, sidebarEnd);
+const supplyOrder = ["Products", "Brands", "Categories", "Suppliers", "Purchasing", "Inventory"].map((label) => sidebar.indexOf(`label: "${label}"`));
 
 const checks = [
   ["Catalog Brands and Categories routes are registered", main.includes('"/catalog/brands": "Catalog"') && main.includes('"/catalog/categories": "Catalog"') && localDev.includes('"/catalog/brands"') && localDev.includes('"/catalog/categories"')],
-  ["Master Catalog sidebar subtree exists", main.includes("catalog-subnav") && main.includes("Products") && main.includes("Brands") && main.includes("/catalog/brands") && main.includes("/catalog/categories") && styles.includes(".catalog-subnav-link")],
+  ["Master Catalog sidebar subtree is direct and always visible", sidebar.includes("CATALOG &amp; SUPPLY") && sidebar.includes("catalog-supply-nav") && supplyOrder.every((index) => index > -1) && supplyOrder.every((index, position) => position === 0 || index > supplyOrder[position - 1]) && !sidebar.includes("data-catalog-nav-toggle")],
   ["Products route stays on full-page editor flow", main.includes("function getCatalogProductEditorRoute") && main.includes('getRoutePath() !== "/catalog"') && main.includes("/catalog?product=new")],
   ["Standalone Categories page exists", main.includes("function renderCatalogCategoriesPage") && main.includes("Active Categories") && main.includes("Root Categories") && main.includes("Assigned Products")],
   ["Categories use canonical Admin Catalog service", main.includes("getAdminProductCategories") && main.includes("productCategories") && !main.includes("retail_categories") && !main.includes("retailCategory")],

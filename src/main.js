@@ -430,6 +430,7 @@ let activeFilter = "All";
 let clientKpiFilter = "All";
 let productFilter = "All";
 let catalogStatusFilter = "active";
+let catalogBrandFilter = "all";
 let catalogCategoryFilter = "all";
 let catalogFeaturedFilter = "all";
 let catalogProductTypeFilter = "all";
@@ -486,7 +487,6 @@ let brandDraft = null;
 let brandValidationError = "";
 let brandSaveState = "idle";
 let brandSaveError = "";
-let isCatalogNavExpanded = false;
 let isAccountMenuOpen = false;
 let staffUsers = [];
 let staffLoadState = "idle";
@@ -5028,9 +5028,9 @@ function renderCatalogPage() {
 
   const visibleProducts = getVisibleCatalogProducts();
   const canWriteCatalog = canWriteCatalogProducts();
-  const destinationCounts = getCatalogDestinationCounts();
+  const brandOptions = getCatalogBrandOptions();
   const categoryOptions = getCatalogCategoryOptions();
-  const summaryCards = getCatalogProductSummaryCards();
+  const summaryCards = getCatalogProductSummaryCards(visibleProducts);
 
   return `
     <main class="orders-page catalog-page admin-saas-page">
@@ -5047,20 +5047,13 @@ function renderCatalogPage() {
       </section>
 
       <section class="catalog-controls" aria-label="Catalog controls">
-        <div class="catalog-tabs" role="tablist" aria-label="Catalog destinations">
-          ${catalogOptions.map((catalog) => `
-            <button class="${catalog.key === activeCatalogKey ? "active" : ""}" data-catalog-tab="${catalog.key}" type="button" role="tab" aria-selected="${catalog.key === activeCatalogKey ? "true" : "false"}">
-              <span>${catalog.label}</span>
-              <strong>${destinationCounts[catalog.key] ?? 0}</strong>
-            </button>`).join("")}
-        </div>
         <div class="catalog-filter-row">
           <label class="search-field catalog-search">
             ${renderIcon("search", "search-icon")}
             <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search catalog" type="search" />
           </label>
-          <select class="catalog-status-filter" id="catalog-status-filter" aria-label="Publish status filter">
-            ${getCatalogFilterOptions().map((option) => `<option value="${option.value}" ${option.value === catalogStatusFilter ? "selected" : ""}>${option.label}</option>`).join("")}
+          <select class="catalog-status-filter" id="catalog-brand-filter" aria-label="Brand filter">
+            ${brandOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogBrandFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
           </select>
           <select class="catalog-status-filter" id="catalog-category-filter" aria-label="Category filter">
             ${categoryOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogCategoryFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
@@ -5069,8 +5062,11 @@ function renderCatalogPage() {
             <option value="all" ${catalogProductTypeFilter === "all" ? "selected" : ""}>All Types</option>
             ${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogProductTypeFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
           </select>
+          <select class="catalog-status-filter" id="catalog-status-filter" aria-label="Publish status filter">
+            ${getCatalogFilterOptions().map((option) => `<option value="${option.value}" ${option.value === catalogStatusFilter ? "selected" : ""}>${option.label}</option>`).join("")}
+          </select>
           <select class="catalog-status-filter" id="catalog-featured-filter" aria-label="Featured filter">
-            <option value="all" ${catalogFeaturedFilter === "all" ? "selected" : ""}>All featured states</option>
+            <option value="all" ${catalogFeaturedFilter === "all" ? "selected" : ""}>All featured</option>
             <option value="featured" ${catalogFeaturedFilter === "featured" ? "selected" : ""}>Featured only</option>
             <option value="standard" ${catalogFeaturedFilter === "standard" ? "selected" : ""}>Not featured</option>
           </select>
@@ -5254,6 +5250,7 @@ function getVisibleCatalogProducts() {
         : catalogStatusFilter === "all"
           ? true
           : item.status === catalogStatusFilter;
+    const matchesBrand = catalogBrandFilter === "all" || item.brandId === catalogBrandFilter;
     const matchesCategory = catalogCategoryFilter === "all" || item.category === catalogCategoryFilter;
     const itemProductType = item.productType || inferCatalogProductType(item) || "";
     const matchesProductType = catalogProductTypeFilter === "all" || itemProductType === catalogProductTypeFilter;
@@ -5269,7 +5266,7 @@ function getVisibleCatalogProducts() {
         .toLowerCase()
         .includes(normalizedQuery);
 
-    return matchesCatalog && matchesStatus && matchesCategory && matchesProductType && matchesFeatured && matchesQuery;
+    return matchesCatalog && matchesStatus && matchesBrand && matchesCategory && matchesProductType && matchesFeatured && matchesQuery;
   });
 }
 
@@ -5321,13 +5318,12 @@ function getVisibleBrands() {
   });
 }
 
-function getCatalogProductSummaryCards() {
-  const scopedProducts = catalogProducts.filter((item) => Array.isArray(item.catalogKeys) ? item.catalogKeys.includes(activeCatalogKey) : item.catalogKey === activeCatalogKey);
-  const ready = scopedProducts.filter((item) => item.status === "published").length;
-  const archived = scopedProducts.filter((item) => item.status === "archived").length;
-  const needsSetup = scopedProducts.filter((item) => getCatalogProductHealthChecks(item).some((check) => !check.ready)).length;
-  const categories = new Set(scopedProducts.map((item) => item.category).filter(Boolean)).size;
-  const variants = scopedProducts.reduce((count, item) => count + getCatalogVariantCount(item), 0);
+function getCatalogProductSummaryCards(effectiveProducts = getVisibleCatalogProducts()) {
+  const ready = effectiveProducts.filter((item) => item.status === "published").length;
+  const archived = effectiveProducts.filter((item) => item.status === "archived").length;
+  const needsSetup = effectiveProducts.filter((item) => getCatalogProductHealthChecks(item).some((check) => !check.ready)).length;
+  const categories = new Set(effectiveProducts.map((item) => item.category).filter(Boolean)).size;
+  const variants = effectiveProducts.reduce((count, item) => count + getCatalogVariantCount(item), 0);
 
   return [
     { label: "Ready for Sale", value: ready, helper: "Published products" },
@@ -5443,10 +5439,10 @@ function renderBrandRow(brand) {
   const actionLabel = brand.status === "archived" ? "Archived" : "Archive";
   return `
     <tr class="${brand.id === selectedBrandId ? "selected" : ""}" data-brand-edit="${escapeHtml(brand.id)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(brand.name)} brand details">
-      <td class="catalog-name-cell brand-main-cell"><div class="category-name-stack"><strong title="${escapeHtml(brand.name)}">${escapeHtml(brand.name)}</strong><span title="Code: ${escapeHtml(brand.brandCode)}">Code: ${escapeHtml(brand.brandCode)}</span></div></td>
-      <td data-mobile-label="Owner"><div class="category-name-stack"><strong>${escapeHtml(brand.ownerName)}</strong><span>${escapeHtml(formatOwnershipType(brand.ownershipType))}</span></div></td>
+      <td class="brand-main-cell" data-mobile-label="Brand"><div class="brand-row-stack"><strong title="${escapeHtml(brand.name)}">${escapeHtml(brand.name)}</strong><span title="Code: ${escapeHtml(brand.brandCode)}">Code: ${escapeHtml(brand.brandCode)}</span></div></td>
+      <td class="brand-owner-cell" data-mobile-label="Owner"><div class="brand-row-stack"><strong title="${escapeHtml(brand.ownerName)}">${escapeHtml(brand.ownerName)}</strong><span>${escapeHtml(formatOwnershipType(brand.ownershipType))} owner</span></div></td>
       <td class="category-count-cell" data-mobile-label="Products">${Number(brand.productCount ?? 0)}</td>
-      <td class="mono-value" data-mobile-label="Website Slug">${escapeHtml(brand.websiteSlug || "Admin only")}</td>
+      <td class="brand-slug-cell" data-mobile-label="Website Slug">${escapeHtml(brand.websiteSlug || "Not published")}</td>
       <td class="category-status-cell" data-mobile-label="Status">${statusMarkup}</td>
       <td class="category-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(brand.updatedAt))}</span></td>
       <td class="category-action-cell" data-mobile-label="Action">
@@ -5464,6 +5460,9 @@ function renderBrandDrawer(selectedBrand) {
   const isEdit = brandDrawerMode === "edit";
   const assignedProducts = Number(draft.productCount ?? selectedBrand?.productCount ?? 0);
   const title = draft.name || (isEdit ? "Edit Brand" : "Create Brand");
+  const normalizedDraft = normalizeBrandDraft(draft);
+  const isDirty = !isEdit || isBrandDraftDirty(selectedBrand, normalizedDraft);
+  const canSave = canWrite && !isSaving && isDirty && !validateBrand(normalizedDraft);
 
   return `
     <div class="catalog-drawer-backdrop" data-brand-close></div>
@@ -5484,7 +5483,7 @@ function renderBrandDrawer(selectedBrand) {
         <section class="catalog-drawer-section" aria-label="Brand identity">
           <h3>Identity</h3>
           ${renderBrandInput("name", "Brand Name", draft.name, "text", true, isSaving || !canWrite, "Customer-facing label shown across catalog and storefront.")}
-          ${renderBrandInput("brandCode", "Brand Code", draft.brandCode, "text", true, isEdit || isSaving || !canWrite, isEdit ? "Stable and immutable after creation." : "Manually entered, normalized to uppercase, and never derived from slug.")}
+          ${renderBrandInput("brandCode", "Brand Code", draft.brandCode, "text", true, isSaving || !canWrite, isEdit ? "Stable and immutable after creation." : "Manually entered, normalized to uppercase, and never derived from slug.", { readonly: isEdit, locked: isEdit })}
           ${renderBrandInput("ownerName", "Brand Owner", draft.ownerName, "text", true, isSaving || !canWrite, "Internal team or partner owner name.")}
           ${renderBrandField("ownershipType", "Ownership Type", renderBrandOwnershipSelect(draft, isSaving || !canWrite))}
           ${renderBrandInput("websiteSlug", "Website Slug", draft.websiteSlug || "", "text", false, isSaving || !canWrite, "Optional; unique when present.")}
@@ -5495,7 +5494,7 @@ function renderBrandDrawer(selectedBrand) {
           <span>${assignedProducts} ${assignedProducts === 1 ? "product" : "products"} assigned</span>
           <div>
             <button class="note-button" data-brand-close type="button" ${isSaving ? "disabled" : ""}>Cancel</button>
-            <button class="primary-button catalog-save-button" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Create Brand")}</button>
+            <button class="primary-button catalog-save-button" type="submit" ${canSave ? "" : "disabled"}>${isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Create Brand")}</button>
           </div>
         </footer>
       </form>
@@ -5795,8 +5794,9 @@ function canManageBrands() {
   return ["owner", "admin"].includes(adminUser?.role);
 }
 
-function renderBrandInput(field, label, value, type = "text", required = false, disabled = false, helperText = "") {
-  return renderBrandField(field, label, `<input id="brand-${field}" data-brand-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} ${disabled ? "disabled" : ""} />`, helperText);
+function renderBrandInput(field, label, value, type = "text", required = false, disabled = false, helperText = "", options = {}) {
+  const className = options.locked ? ` class="locked-field"` : "";
+  return renderBrandField(field, label, `<input id="brand-${field}" data-brand-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}"${className} ${required ? "required" : ""} ${disabled ? "disabled" : ""} ${options.readonly ? "readonly aria-readonly=\"true\"" : ""} />`, helperText);
 }
 
 function renderBrandField(id, label, control, helperText = "") {
@@ -5867,6 +5867,14 @@ function validateBrand(brand) {
   if (duplicateSlug) return "Website slug must be unique.";
   if (brand.status === "archived" && Number(brand.productCount ?? 0) > 0) return "Archive is blocked while products are assigned to this Brand.";
   return "";
+}
+
+function isBrandDraftDirty(originalBrand, draft) {
+  if (!originalBrand) return true;
+  const original = normalizeBrandDraft(originalBrand);
+  return ["name", "brandCode", "ownerName", "ownershipType", "websiteSlug", "status"].some((field) =>
+    String(original[field] ?? "") !== String(draft[field] ?? "")
+  );
 }
 
 function sortBrands(items) {
@@ -6503,8 +6511,19 @@ function getCatalogDestinationCounts() {
   }, {});
 }
 
+function getCatalogBrandOptions() {
+  const usedBrandIds = new Set(catalogProducts.map((item) => item.brandId).filter(Boolean));
+  const options = sortBrands(brands)
+    .filter((brand) => usedBrandIds.has(brand.id))
+    .map((brand) => ({ value: brand.id, label: brand.name }));
+  return [{ value: "all", label: "All brands" }, ...options];
+}
+
 function getCatalogCategoryOptions() {
-  const categories = Array.from(new Set(catalogProducts.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const categories = Array.from(new Set(catalogProducts
+    .filter((item) => catalogProductTypeFilter === "all" || (item.productType || inferCatalogProductType(item) || "") === catalogProductTypeFilter)
+    .map((item) => item.category)
+    .filter(Boolean))).sort((a, b) => a.localeCompare(b));
   return [{ value: "all", label: "All categories" }, ...categories.map((category) => ({ value: category, label: category }))];
 }
 
@@ -6591,7 +6610,7 @@ function formatCatalogUpdated(value) {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).toUpperCase();
+  });
 }
 
 function renderCatalogSelect(draft, disabled = false) {
@@ -7487,48 +7506,35 @@ function renderProductImageManager(product) {
 
 function renderSidebar(currentRoute) {
   const routePath = getRoutePath();
-  const isCatalogRoute = routePath === "/catalog" || routePath === "/catalog/brands" || routePath === "/catalog/categories";
-  const isCatalogExpanded = isCatalogRoute || isCatalogNavExpanded;
-  const navItems = [
+  const topNavItems = [
     { label: "Overview", path: "/overview" },
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
-    { label: "Catalog", path: "/catalog", icon: "package" },
+  ];
+  const catalogSupplyItems = [
+    { label: "Products", path: "/catalog", icon: "package", activePaths: ["/catalog"] },
+    { label: "Brands", path: "/catalog/brands", icon: "tag", activePaths: ["/catalog/brands"] },
+    { label: "Categories", path: "/catalog/categories", icon: "layers", activePaths: ["/catalog/categories"] },
+    { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", disabled: true },
+    { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", disabled: true },
+    { label: "Inventory", path: "/catalog/inventory", icon: "boxes", disabled: true },
+  ];
+  const workflowNavItems = [
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
-  const catalogSubnav = [
-    { label: "Products", path: "/catalog" },
-    { label: "Brands", path: "/catalog/brands" },
-    { label: "Categories", path: "/catalog/categories" },
-    { label: "Suppliers", path: "/catalog/suppliers", disabled: true },
-    { label: "Purchasing", path: "/catalog/purchasing", disabled: true },
-    { label: "Inventory", path: "/catalog/inventory", disabled: true },
-  ];
   const renderNavItem = (item) => {
-    const isActive = item.label === currentRoute;
-    const subnav = item.label === "Catalog"
-      ? `<div class="catalog-subnav" id="catalog-subnav" role="group" aria-label="Master Catalog sections" ${isCatalogExpanded ? "" : "hidden"}>
-          ${catalogSubnav.map((subitem) => {
-            const isSubActive = routePath === subitem.path;
-            return subitem.disabled
-              ? `<span class="catalog-subnav-link disabled" aria-disabled="true">${escapeHtml(subitem.label)}</span>`
-              : `<a class="catalog-subnav-link ${isSubActive ? "active" : ""}" href="${subitem.path}" data-route-link>${escapeHtml(subitem.label)}</a>`;
-          }).join("")}
-        </div>`
-      : "";
+    const isActive = item.activePaths ? item.activePaths.includes(routePath) : item.label === currentRoute;
     const itemLabel = item.label === "Staff" ? "Staff Access" : item.label;
-    if (item.label === "Catalog") {
-      return `<div class="sidebar-nav-group catalog-nav-group ${isCatalogExpanded ? "is-expanded" : ""}">
-        <button class="catalog-nav-toggle ${isCatalogRoute ? "section-active" : ""}" type="button" data-catalog-nav-toggle aria-expanded="${isCatalogExpanded ? "true" : "false"}" aria-controls="catalog-subnav" title="Catalog" aria-label="Toggle Catalog navigation">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">Catalog</span>${renderIcon("chevron-right", "catalog-nav-chevron")}</button>
-        ${subnav}
+    if (item.disabled) {
+      return `<div class="sidebar-nav-group">
+        <span class="catalog-supply-link disabled" aria-disabled="true" title="${itemLabel}" aria-label="${itemLabel}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${itemLabel}</span></span>
       </div>`;
     }
     return `<div class="sidebar-nav-group">
       <a class="${isActive ? "active" : ""}" href="${item.path}" data-route-link title="${itemLabel}" aria-label="${itemLabel}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${itemLabel}</span></a>
-      ${subnav}
     </div>`;
   };
 
@@ -7537,7 +7543,12 @@ function renderSidebar(currentRoute) {
       <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
-        ${navItems.map(renderNavItem).join("")}
+        ${topNavItems.map(renderNavItem).join("")}
+        <div class="sidebar-section-label">CATALOG &amp; SUPPLY</div>
+        <div class="catalog-supply-nav" role="group" aria-label="Catalog and supply">
+          ${catalogSupplyItems.map(renderNavItem).join("")}
+        </div>
+        ${workflowNavItems.map(renderNavItem).join("")}
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -8609,11 +8620,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelector("[data-catalog-nav-toggle]")?.addEventListener("click", () => {
-    isCatalogNavExpanded = !isCatalogNavExpanded;
-    render();
-  });
-
   document.querySelectorAll("[data-route-link]").forEach((link) => {
     const openRoute = () => {
       navigateTo(link.getAttribute("href"));
@@ -8819,6 +8825,11 @@ function bindEvents() {
     render();
   });
 
+  document.getElementById("catalog-brand-filter")?.addEventListener("change", (event) => {
+    catalogBrandFilter = event.target.value;
+    render();
+  });
+
   document.getElementById("catalog-category-filter")?.addEventListener("change", (event) => {
     catalogCategoryFilter = event.target.value;
     render();
@@ -8826,6 +8837,10 @@ function bindEvents() {
 
   document.getElementById("catalog-product-type-filter")?.addEventListener("change", (event) => {
     catalogProductTypeFilter = event.target.value;
+    const category = productCategories.find((item) => item.name === catalogCategoryFilter);
+    if (catalogProductTypeFilter !== "all" && category && category.productType !== catalogProductTypeFilter) {
+      catalogCategoryFilter = "all";
+    }
     render();
   });
 
@@ -8837,6 +8852,7 @@ function bindEvents() {
   document.querySelector("[data-catalog-reset-filters]")?.addEventListener("click", () => {
     productQuery = "";
     catalogStatusFilter = "active";
+    catalogBrandFilter = "all";
     catalogCategoryFilter = "all";
     catalogProductTypeFilter = "all";
     catalogFeaturedFilter = "all";
@@ -9832,10 +9848,6 @@ function getRoutePath() {
 
 function navigateTo(path) {
   const normalizedPath = normalizeRoutePath(path);
-  const routeOnly = normalizedPath.split("?")[0];
-  if (routeOnly !== "/catalog" && routeOnly !== "/catalog/brands" && routeOnly !== "/catalog/categories") {
-    isCatalogNavExpanded = false;
-  }
   window.history.pushState({}, "", normalizedPath);
 }
 

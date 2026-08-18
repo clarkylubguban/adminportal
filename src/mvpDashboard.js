@@ -217,7 +217,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       : context.loadState === "loading"
         ? `<small class="mvp-owner-save-state">Loading team members...</small>`
         : context.loadState === "error"
-          ? `<small class="mvp-inline-error">Unable to load team members.</small>`
+          ? `<small class="mvp-owner-fallback-note" title="${html(context.error || "Unable to load team members.")}">Team unavailable</small>`
           : error
             ? `<small class="mvp-inline-error">${html(error)}</small>`
             : "";
@@ -1576,7 +1576,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       <span class="artwork ${html(orderArtworkKey(item))}">${html(productionArtworkLabel(item))}</span>
       ${twoLineCell(dueParts.primary, dueParts.secondary, `due ${dueState.key}`)}
       <span class="staff">${html(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item))}</span>
-      ${status(stage.label, stage.tone)}
+      ${status(productionDashboardStageLabel(stage), stage.tone)}
       <span class="mvp-production-row-action"><button type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}">${html(action)} <i aria-hidden="true">&rsaquo;</i></button><button type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}" aria-label="More actions for ${html(jobReference(item))}">&ctdot;</button></span>
     </div>`;
   }
@@ -1660,8 +1660,17 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return "Update";
   }
 
+  function productionDashboardStageLabel(stateInfo) {
+    if (stateInfo.key === "in_production") return "IN PRODUCTION";
+    if (stateInfo.key === "qc") return "QUALITY CHECK";
+    if (stateInfo.key === "ready") return "READY";
+    if (stateInfo.key === "blocked") return "BLOCKED";
+    if (stateInfo.key === "completed") return "COMPLETED";
+    return stateInfo.label;
+  }
+
   function productionDrawerTabs() {
-    return ["overview", "workflow", "assignment", "history"];
+    return ["overview", "workflow", "assignment", "fulfillment", "history"];
   }
 
   function productionDrawerTabBar(tabs, activeTab) {
@@ -1769,6 +1778,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function productionCompletedPanel(item, activeTab) {
     if (activeTab === "workflow") return productionCompletedWorkflow(item);
     if (activeTab === "assignment") return productionCompletedAssignment(item);
+    if (activeTab === "fulfillment") return productionFulfillmentPanel(item);
     if (activeTab === "history") return productionCompletedHistory(item);
     return productionCompletedOverview(item);
   }
@@ -1776,6 +1786,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function productionReadyPanel(item, activeTab) {
     if (activeTab === "workflow") return productionReadyWorkflow(item);
     if (activeTab === "assignment") return productionReadyAssignment(item);
+    if (activeTab === "fulfillment") return productionFulfillmentPanel(item);
     if (activeTab === "history") return productionReadyHistory(item);
     return productionReadyOverview(item);
   }
@@ -1840,6 +1851,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function productionQualityCheckPanel(item, activeTab, fieldsReady) {
     if (activeTab === "workflow") return productionQualityCheckWorkflow(item);
     if (activeTab === "assignment") return productionQualityCheckAssignment(item, fieldsReady);
+    if (activeTab === "fulfillment") return productionFulfillmentPanel(item);
     if (activeTab === "history") return productionQualityCheckHistory(item);
     return productionQualityCheckOverview(item);
   }
@@ -1891,7 +1903,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function productionReadyFooter(item, activeTab, next, fieldsReady, gate) {
-    if (activeTab === "history") return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">VIEW ORDER</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
+    if (["fulfillment", "history"].includes(activeTab)) return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">VIEW ORDER</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
     const missingQcCompletion = !item.qcCompletedAt;
     const disabled = !fieldsReady || gate.length || next !== "completed" || missingQcCompletion;
     return `<div class="mvp-production-footer-state"><span>NOW: ${html(stageActionLabel("ready"))}</span><strong>NEXT: PRODUCTION COMPLETE</strong></div><button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="completed" ${disabled ? "disabled" : ""}>MARK PRODUCTION COMPLETE</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before completing Production: ${html(gate.join(", "))}</small>` : missingQcCompletion ? `<small>QC completion metadata is required before Production completion.</small>` : ""}`;
@@ -1961,7 +1973,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function productionQualityCheckFooter(item, activeTab, next, fieldsReady, gate) {
     if (activeTab === "assignment") return `<button class="mvp-primary-action" type="button" data-mvp-save-qc-note="${html(item.id)}" ${!fieldsReady ? "disabled" : ""}>Save QC Note</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
-    if (activeTab === "history") return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">VIEW ORDER</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
+    if (["fulfillment", "history"].includes(activeTab)) return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">VIEW ORDER</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
     const missingQcStart = !item.qcStartedAt;
     const disabled = !fieldsReady || gate.length || next !== "ready" || missingQcStart;
     return `<div class="mvp-production-footer-state"><span>NOW: ${html(stageActionLabel("qc"))}</span><strong>NEXT: ${html(stageActionLabel("ready"))}</strong></div><button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="ready" ${disabled ? "disabled" : ""}>COMPLETE QUALITY CHECK</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before completing QC: ${html(gate.join(", "))}</small>` : missingQcStart ? `<small>QC started metadata is required before completion.</small>` : ""}`;
@@ -1970,6 +1982,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function productionQueuedPanel(item, activeTab, fieldsReady) {
     if (activeTab === "workflow") return productionQueuedWorkflow(item);
     if (activeTab === "assignment") return productionQueuedAssignment(item, fieldsReady);
+    if (activeTab === "fulfillment") return productionFulfillmentPanel(item);
     if (activeTab === "history") return productionQueuedHistory(item);
     return productionQueuedOverview(item);
   }
@@ -2019,7 +2032,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function productionQueuedFooter(item, activeTab, fieldsReady, gate) {
     if (activeTab === "assignment") return `<button class="mvp-primary-action" type="button" data-mvp-save-production="${html(item.id)}" ${!fieldsReady ? "disabled" : ""}>Save Note</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
-    if (activeTab === "history") return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">VIEW ORDER</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
+    if (["fulfillment", "history"].includes(activeTab)) return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">VIEW ORDER</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
     const disabled = !fieldsReady || gate.length;
     return `<div class="mvp-production-footer-state"><span>NOW: QUEUED FOR PRODUCTION</span><strong>NEXT: IN PRODUCTION</strong></div><button class="mvp-primary-action" type="button" data-mvp-start-production="${html(item.id)}" ${disabled ? "disabled" : ""}>START PRODUCTION</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before starting: ${html(gate.join(", "))}</small>` : ""}`;
   }
@@ -2027,6 +2040,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function productionInProgressPanel(item, activeTab, fieldsReady) {
     if (activeTab === "workflow") return productionInProgressWorkflow(item);
     if (activeTab === "assignment") return productionInProgressAssignment(item, fieldsReady);
+    if (activeTab === "fulfillment") return productionFulfillmentPanel(item);
     if (activeTab === "history") return productionInProgressHistory(item);
     return productionInProgressOverview(item);
   }
@@ -2075,10 +2089,22 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function productionInProgressFooter(item, activeTab, next, fieldsReady, gate) {
     if (activeTab === "assignment") return `<button class="mvp-primary-action" type="button" data-mvp-save-production="${html(item.id)}" ${!fieldsReady ? "disabled" : ""}>Save Note</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
-    if (activeTab === "history") return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">VIEW ORDER</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
+    if (["fulfillment", "history"].includes(activeTab)) return `<button class="mvp-primary-action" type="button" data-mvp-route="/orders?order=${encodeURIComponent(orderReference(item))}">VIEW ORDER</button><button class="mvp-secondary-action" type="button" disabled>More</button>`;
     const disabled = !fieldsReady || gate.length || next !== "qc";
     const stage = displayProductionStage(item);
     return `<div class="mvp-production-footer-state"><span>NOW: ${html(stageActionLabel(stage))}</span><strong>NEXT: ${html(stageActionLabel("qc"))}</strong></div><button class="mvp-primary-action" type="button" data-mvp-advance="${html(item.id)}" data-mvp-next="qc" ${disabled ? "disabled" : ""}>MOVE TO QUALITY CHECK</button><button class="mvp-secondary-action" type="button" disabled>More</button>${gate.length ? `<small>Resolve before advancing: ${html(gate.join(", "))}</small>` : ""}`;
+  }
+
+  function productionFulfillmentPanel(item) {
+    const stage = displayProductionStage(item);
+    const readiness = stage === "ready" || stage === "completed" ? productionDisplay(item).label : "Not ready";
+    return `<section class="mvp-production-panel"><h3>FULFILLMENT HANDOFF</h3><div class="mvp-production-detail-list">
+      ${productionDetailLine("Order Reference", orderReference(item))}
+      ${productionDetailLine("Method", fulfillment(item))}
+      ${productionDetailLine("Customer Tracking", stage === "ready" || tracking(item) !== "Not set" ? tracking(item) : "Not set")}
+      ${productionDetailLine("Readiness", readiness, stage === "ready" || stage === "completed" ? "good" : "")}
+      ${productionDetailLine("Customer Owner", orderOwner(item))}
+    </div><article class="mvp-production-info-card neutral"><strong>Order-owned fulfillment</strong><span>Customer pickup, delivery, and final closure remain managed from the linked Order. Production keeps this as a read-only handoff view.</span></article></section>`;
   }
 
   function productionHistoryRows(item) {
