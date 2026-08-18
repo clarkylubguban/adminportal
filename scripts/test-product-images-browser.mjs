@@ -8,6 +8,7 @@ import { deflateSync } from "node:zlib";
 
 const root = process.cwd();
 const screenshotDir = "C:\\tmp\\trry-product-images-owner-review";
+const filterReviewDir = "C:\\tmp\\trry-admin-filter-quick-control-review";
 const port = Number(process.env.PRODUCT_IMAGES_BROWSER_PORT || 58420);
 const remotePort = port + 100;
 const edgePath = process.env.EDGE_PATH || "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
@@ -37,7 +38,7 @@ let products = [{
   description: "Synthetic Product Images QA record",
   brand: "TRRY Apparel",
   product_type: "PHYSICAL",
-  eligible_channels: ["TRRY_WEBAPP"],
+  eligible_channels: [],
   typed_config: {
     price_label: "Starts at",
     minimum_quantity: 12,
@@ -96,6 +97,7 @@ const brands = [{
 }];
 
 await mkdir(screenshotDir, { recursive: true });
+await mkdir(filterReviewDir, { recursive: true });
 await writeFile(productImagePath, createSolidPng(800, 800, 190, 242, 100));
 
 const server = createServer(handleRequest);
@@ -125,6 +127,17 @@ try {
   await seedSession(cdp, "owner");
   await navigate(cdp, "/catalog");
   await waitFor(cdp, `document.body.innerText.includes("Image QA Tee")`);
+  await verifyCanonicalProductVisibleWithoutChannel(cdp);
+  await captureReview(cdp, "01-products-compact-filters.png");
+  await evaluate(cdp, `document.querySelector("[data-catalog-toggle-product]")?.click()`);
+  await waitFor(cdp, `Boolean(document.querySelector(".catalog-product-quick-control"))`);
+  await captureReview(cdp, "02-products-quick-control.png");
+  await navigate(cdp, "/catalog/categories");
+  await waitFor(cdp, `document.body.innerText.includes("Shirts")`);
+  await captureReview(cdp, "06-categories-compact-filters.png");
+  await navigate(cdp, "/catalog/brands");
+  await waitFor(cdp, `document.body.innerText.includes("TRRY Apparel")`);
+  await captureReview(cdp, "07-brands-compact-filters.png");
   await navigate(cdp, `/catalog?product=${productId}`);
   await waitFor(cdp, `document.querySelector("#catalog-section-images") && document.body.innerText.includes("Image QA Tee")`);
   await verifyNoHorizontalOverflow(cdp, "desktop product editor");
@@ -172,7 +185,14 @@ try {
   await assertImageState(cdp, { count: 6, primaryAlt: "Image 3" });
   await assertOrder(cdp, ["Image 1", "Image 4", "Image 2", "Image 3", "Image QA Tee", "Image QA Tee"]);
 
+  await navigate(cdp, "/catalog");
+  await waitFor(cdp, `document.body.innerText.includes("Image QA Tee")`);
   await setViewport(cdp, { width: 390, height: 844 });
+  await evaluate(cdp, `document.querySelector(".app-shell.mobile-sidebar-open .sidebar-close-button")?.click()`);
+  await delay(250);
+  await captureReview(cdp, "08-mobile-products-compact-filters-390x844.png");
+  await navigate(cdp, `/catalog?product=${productId}`);
+  await waitFor(cdp, `document.querySelector("#catalog-section-images") && document.body.innerText.includes("Image QA Tee")`);
   await verifyNoHorizontalOverflow(cdp, "mobile product images");
   await waitFor(cdp, `document.querySelector("#catalog-section-images")`);
   await scrollImagesIntoView(cdp);
@@ -184,6 +204,7 @@ try {
   await seedSession(cdp, "staff");
   await navigate(cdp, "/catalog");
   await waitFor(cdp, `document.body.innerText.includes("Image QA Tee")`);
+  await verifyCanonicalProductVisibleWithoutChannel(cdp);
   await navigate(cdp, `/catalog?product=${productId}`);
   await waitFor(cdp, `document.querySelector("#catalog-section-images") && document.body.innerText.includes("Image QA Tee")`);
   const staffReadOnly = await evaluate(cdp, `(() => ({
@@ -375,6 +396,23 @@ async function verifyMaxLimit(cdp) {
     maxText: document.body.innerText.includes("6 of 6 uploaded") && document.body.innerText.includes("Maximum 6 images reached"),
   }))()`);
   assert.deepEqual(state, { count: 6, uploadDisabled: true, maxText: true }, "Six-image limit blocks seventh image with feedback");
+}
+
+async function verifyCanonicalProductVisibleWithoutChannel(cdp) {
+  const result = await evaluate(cdp, `(() => {
+    const rows = [...document.querySelectorAll(".catalog-products-table tbody tr")];
+    const countLabel = document.querySelector(".catalog-count-label")?.textContent.trim() || "";
+    return {
+      rowCount: rows.length,
+      countLabel,
+      hasProduct: rows.some((row) => row.textContent.includes("Image QA Tee")),
+      hasEmptyState: Boolean(document.querySelector(".catalog-empty-state")),
+    };
+  })()`);
+  assert.equal(result.hasProduct, true, "canonical Product with no channel assignment is visible under default filters");
+  assert.equal(result.rowCount > 0, true, "default Products table renders canonical rows without channel filtering");
+  assert.match(result.countLabel, /^[1-9]/, "visible Products count derives from canonical rows");
+  assert.equal(result.hasEmptyState, false, "canonical Products are not replaced by an empty state");
 }
 
 async function assertImageState(cdp, { count, primaryAlt }) {
@@ -689,6 +727,11 @@ async function verifyNoHorizontalOverflow(cdp, label) {
 async function capture(cdp, name) {
   const { data } = await cdp.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
   await writeFile(join(screenshotDir, name), Buffer.from(data, "base64"));
+}
+
+async function captureReview(cdp, name) {
+  const { data } = await cdp.send("Page.captureScreenshot", { format: "png", captureBeyondViewport: false });
+  await writeFile(join(filterReviewDir, name), Buffer.from(data, "base64"));
 }
 
 async function scrollImagesIntoView(cdp) {

@@ -1361,7 +1361,7 @@ async function loadCatalogProducts() {
     catalogLoadError = result?.error?.message ?? "";
 
     if (!catalogProducts.some((item) => item.id === selectedCatalogProductId)) {
-      selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+      selectedCatalogProductId = catalogProducts[0]?.id ?? null;
     }
   } catch (error) {
     console.error("Unable to apply catalog products.", error);
@@ -5277,7 +5277,6 @@ function getVisibleCatalogProducts() {
   const normalizedQuery = productQuery.trim().toLowerCase();
 
   return catalogProducts.filter((item) => {
-    const matchesCatalog = Array.isArray(item.catalogKeys) ? item.catalogKeys.includes(activeCatalogKey) : item.catalogKey === activeCatalogKey;
     const matchesStatus =
       catalogStatusFilter === "active"
         ? item.status !== "archived"
@@ -5300,7 +5299,7 @@ function getVisibleCatalogProducts() {
         .toLowerCase()
         .includes(normalizedQuery);
 
-    return matchesCatalog && matchesStatus && matchesBrand && matchesCategory && matchesProductType && matchesFeatured && matchesQuery;
+    return matchesStatus && matchesBrand && matchesCategory && matchesProductType && matchesFeatured && matchesQuery;
   });
 }
 
@@ -5960,9 +5959,8 @@ function renderCatalogEmptyState(visibleProducts) {
     return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading catalog...</strong><span>Checking customer-facing publishing records.</span></div>`;
   }
 
-  const catalogLabel = getCatalogLabel(activeCatalogKey);
-  if (!catalogProducts.some((item) => item.catalogKey === activeCatalogKey)) {
-    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No Catalog records</strong><span>${catalogLabel} does not have published presentation records yet.</span></div>`;
+  if (catalogProducts.length === 0) {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No Catalog records</strong><span>No canonical Products are available yet.</span></div>`;
   }
 
   return `<div class="empty-state compact-empty catalog-empty-state"><strong>No results from filters</strong><span>Try another search term, category, featured state, or publish status.</span></div>`;
@@ -5982,7 +5980,7 @@ function renderCatalogProductRow(item) {
       <td class="catalog-name-cell"><div class="client-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : "empty"}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')" aria-label="Catalog image"` : `role="img" aria-label="No catalog image"`}>${item.imageUrl ? "" : renderIcon("package", "catalog-placeholder-icon")}</span><div><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span title="${escapeHtml(secondary)}">${escapeHtml(secondary)}</span></div></div></td>
       <td class="catalog-category-cell" data-mobile-label="Brand">${escapeHtml(item.brandName || item.brand || "-")}</td>
       <td class="catalog-category-cell" data-mobile-label="Category">${escapeHtml(item.category || "-")}</td>
-      <td class="mono-value" data-mobile-label="SKU">${escapeHtml(sku)}</td>
+      <td class="mono-value catalog-sku-cell" data-mobile-label="SKU"><span title="${escapeHtml(sku)}">${escapeHtml(sku)}</span><button class="catalog-copy-sku-button" data-catalog-copy-sku="${escapeHtml(sku)}" type="button" aria-label="Copy SKU">Copy</button></td>
       <td class="catalog-moq-cell" data-mobile-label="Variants">${variantCount}</td>
       <td class="catalog-price-cell" data-mobile-label="Unit Cost">${escapeHtml(formatCatalogMoney(item.unitCost || ""))}</td>
       <td class="catalog-price-cell" data-mobile-label="Selling Price">${escapeHtml(formatCatalogPrice(item))}</td>
@@ -5998,51 +5996,48 @@ function renderCatalogProductQuickControl(item) {
   const canWrite = canWriteCatalogProducts();
   const checks = getCatalogProductHealthChecks(item);
   const readyCount = checks.filter((check) => check.ready).length;
-  const margin = getCatalogEditorMargin(item);
   const saving = catalogQuickSaveState === item.id;
-  const sku = getCatalogEditorSku(item);
+  const readinessLabel = readyCount === checks.length ? "READY" : "NEEDS SETUP";
+  const imageActionLabel = item.imageUrl ? "Update Image" : "Add Image";
 
   return `
     <tr class="catalog-product-quick-row">
       <td colspan="11">
         <section class="catalog-product-quick-control" aria-label="${escapeHtml(item.name)} quick control">
           ${catalogQuickSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogQuickSaveError)}</p>` : ""}
-          <div class="catalog-quick-health">
-            <div>
-              <span>Catalog Health</span>
-              <strong>${readyCount}/${checks.length} complete</strong>
-            </div>
-            <div class="catalog-health-chip-row">
-              ${checks.map((check) => `<span class="catalog-health-chip ${check.ready ? "ready" : "pending"}">${escapeHtml(check.label)}</span>`).join("")}
-            </div>
+          <div class="catalog-quick-summary">
+            <span>${readinessLabel} · ${readyCount}/${checks.length} COMPLETE</span>
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>${escapeHtml(item.brandName || item.brand || "No Brand")} · ${escapeHtml(item.category || "No Category")}</small>
           </div>
-          <div class="catalog-quick-pricing">
-            <div class="catalog-quick-metric"><span>Cost</span><strong>${escapeHtml(formatCatalogMoney(item.unitCost || ""))}</strong></div>
+          <div class="catalog-quick-price">
             <label class="catalog-quick-price-input">
-              <span>Selling Price</span>
+              <span>Price</span>
               <input data-catalog-quick-selling-price="${escapeHtml(item.id)}" type="number" min="0" step="0.01" value="${escapeHtml(item.startingPrice ?? "")}" ${canWrite && !saving ? "" : "disabled"} />
             </label>
-            <div class="catalog-quick-metric"><span>Margin</span><strong>${escapeHtml(margin.label)}</strong><small>${escapeHtml(margin.helper)}</small></div>
             <button class="primary-button catalog-quick-button" data-catalog-quick-price-save="${escapeHtml(item.id)}" type="button" ${canWrite && !saving ? "" : "disabled"}>${saving ? "Updating..." : "Update Price"}</button>
           </div>
           <div class="catalog-quick-status">
             <label>
-              <span>Status and visibility</span>
+              <span>Status / Visibility</span>
               <select data-catalog-quick-status="${escapeHtml(item.id)}" ${canWrite && !saving ? "" : "disabled"}>
                 ${catalogStatusOptions.map((status) => `<option value="${status}" ${status === item.status ? "selected" : ""}>${status}</option>`).join("")}
               </select>
             </label>
-            <span class="status-pill ${item.status === "published" ? "visible" : statusToClass(item.status)}">${item.status === "published" ? "Visible" : item.status}</span>
-            <button class="note-button" data-catalog-archive-product="${escapeHtml(item.id)}" type="button" ${canWrite && !saving && item.status !== "archived" ? "" : "disabled"}>Archive</button>
           </div>
           <div class="catalog-quick-actions">
-            <button class="note-button" data-catalog-copy-sku="${escapeHtml(sku)}" type="button">Copy SKU</button>
-            <button class="note-button" data-catalog-duplicate="${escapeHtml(item.id)}" type="button" ${canWrite && !saving ? "" : "disabled"}>Duplicate</button>
             <label class="note-button catalog-quick-image-button ${canWrite && !saving ? "" : "disabled"}">
-              Update Image
+              ${imageActionLabel}
               <input data-catalog-quick-image-file="${escapeHtml(item.id)}" type="file" accept="image/jpeg,image/png,image/webp,image/avif" ${canWrite && !saving ? "" : "disabled"} />
             </label>
             <button class="primary-button catalog-quick-button" data-catalog-full-edit="${escapeHtml(item.id)}" type="button">Full Edit Product</button>
+            <details class="catalog-quick-more">
+              <summary>More</summary>
+              <div>
+                <button data-catalog-duplicate="${escapeHtml(item.id)}" type="button" ${canWrite && !saving ? "" : "disabled"}>Duplicate</button>
+                <button data-catalog-archive-product="${escapeHtml(item.id)}" type="button" ${canWrite && !saving && item.status !== "archived" ? "" : "disabled"}>Archive</button>
+              </div>
+            </details>
           </div>
         </section>
       </td>
@@ -8873,7 +8868,7 @@ function bindEvents() {
     button.addEventListener("click", () => {
       activeCatalogKey = button.dataset.catalogTab;
       catalogStatusFilter = catalogStatusFilter || "active";
-      selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+      selectedCatalogProductId = catalogProducts[0]?.id ?? null;
       clearCatalogImagePreview();
       catalogEditorMode = "";
       catalogEditorRouteKey = "";
