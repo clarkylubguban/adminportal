@@ -23,7 +23,7 @@ const checks = [
   ["Long category values keep accessible titles", main.includes("category-code-cell") && main.includes("title=\"${escapeHtml(category.code)}\"") && main.includes("title=\"${escapeHtml(parent?.name || \"Root\")}\"")],
   ["Six-image maximum remains unchanged", main.includes("const CATALOG_PRODUCT_IMAGE_LIMIT = 6") && main.includes("Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images")],
   ["Canonical binding is active and legacy writes are absent", main.includes("createAdminProduct(baseProduct, adminAuthSession)") && main.includes("updateAdminProduct(draft.id, baseProduct, adminAuthSession)") && service.includes("PRODUCT_IMAGES_TABLE") && !main.includes("createAdminCatalogProduct(") && !main.includes("updateAdminCatalogProduct(")],
-  ["MC-02 controls are present", main.includes("catalog-primary-badge") && main.includes("data-catalog-image-drag") && main.includes("data-catalog-move-image")],
+  ["MC-02 controls are present", main.includes("catalog-primary-badge") && main.includes("data-catalog-image-drag") && main.includes("data-catalog-move-image") && main.includes("data-catalog-set-primary-image")],
 ];
 
 const failures = checks.filter(([, passed]) => !passed);

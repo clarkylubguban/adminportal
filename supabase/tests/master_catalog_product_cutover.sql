@@ -190,9 +190,19 @@ begin
   from public.product_images
   where product_id = v_product_id and position = 0 and is_primary = true;
   if v_image_id is null then
-    raise exception 'primary image not assigned to position zero';
+    raise exception 'fallback primary image not assigned to position zero';
   end if;
-  perform public.cutover_record_result('IMAGES', 'first active image is primary');
+  perform public.cutover_record_result('IMAGES', 'first active image is fallback primary');
+
+  perform public.set_product_images_for_product(v_product_id, jsonb_build_array(
+    jsonb_build_object('id', (select id from public.product_images where product_id = v_product_id and position = 0), 'storagePath', 'catalog/cutover/one.webp', 'publicUrl', 'https://example.test/one.webp', 'isPrimary', false),
+    jsonb_build_object('id', (select id from public.product_images where product_id = v_product_id and position = 1), 'storagePath', 'catalog/cutover/two.webp', 'publicUrl', 'https://example.test/two.webp', 'isPrimary', true)
+  ));
+
+  if not exists (select 1 from public.product_images where product_id = v_product_id and position = 1 and is_primary = true and storage_path = 'catalog/cutover/two.webp') then
+    raise exception 'explicit primary image did not remain independent from position';
+  end if;
+  perform public.cutover_record_result('IMAGES', 'explicit primary is independent from order');
 
   perform public.set_product_images_for_product(v_product_id, jsonb_build_array(
     jsonb_build_object('id', (select id from public.product_images where product_id = v_product_id and position = 1), 'storagePath', 'catalog/cutover/two.webp', 'publicUrl', 'https://example.test/two.webp')

@@ -5,6 +5,7 @@ const root = process.cwd();
 const main = readFileSync(join(root, "src", "main.js"), "utf8");
 const service = readFileSync(join(root, "src", "services", "adminCatalog.js"), "utf8");
 const migration = readFileSync(join(root, "supabase", "migrations", "202608140001_canonical_master_catalog_product_cutover.sql"), "utf8");
+const productImagesMigration = readFileSync(join(root, "supabase", "migrations", "202608180001_product_images_primary_independent_order.sql"), "utf8");
 const styles = readFileSync(join(root, "src", "styles.css"), "utf8");
 
 const checks = [
@@ -16,11 +17,13 @@ const checks = [
   ["Quick price uses canonical update", main.includes("updateCatalogQuickPrice") && main.includes("updateAdminProduct(productId")],
   ["Quick image uses product_images payload", main.includes("updateCatalogQuickImage") && main.includes("images: nextImages") && service.includes("set_product_images_for_product")],
   ["Duplicate uses canonical duplicate service", main.includes("duplicateAdminProduct(product, adminAuthSession)") && service.includes("duplicateAdminProduct")],
-  ["MC-02 primary and drag controls exist", main.includes("catalog-primary-badge") && main.includes("data-catalog-image-drag") && main.includes("data-catalog-move-image") && styles.includes("cursor: grab")],
+  ["MC-02 primary and drag controls exist", main.includes("catalog-primary-badge") && main.includes("data-catalog-image-drag") && main.includes("data-catalog-move-image") && main.includes("data-catalog-set-primary-image") && styles.includes("cursor: grab")],
+  ["Product PRIMARY is independent from order", main.includes("image.isPrimary === true || image.is_primary === true") && main.includes("images.find((image) => image.isPrimary)") && service.includes("isPrimary: image.isPrimary === true || image.is_primary === true") && service.includes("const primaryImage = mappedImages.find((image) => image.isPrimary)")],
   ["Six image app cap remains", main.includes("const CATALOG_PRODUCT_IMAGE_LIMIT = 6") && main.includes("images.length >= CATALOG_PRODUCT_IMAGE_LIMIT")],
   ["Database Product identifiers are generated", migration.includes("generate_product_code_candidate") && migration.includes("assign_product_canonical_identity") && migration.includes("PRODUCT_CODE_IMMUTABLE")],
   ["Database Variant identifiers are generated", migration.includes("generate_variant_sku_candidate") && migration.includes("assign_variant_canonical_identity") && migration.includes("GLOBAL_SKU_IMMUTABLE")],
   ["Database image governance is enforced", migration.includes("PRODUCT_IMAGE_LIMIT_EXCEEDED") && migration.includes("product_images_one_active_position_idx") && migration.includes("set_product_images_for_product")],
+  ["Database image PRIMARY is independent from position", productImagesMigration.includes("keep PRIMARY selection independent from display order") && productImagesMigration.includes("v_primary_input_count") && productImagesMigration.includes("image->>'isPrimary'") && !productImagesMigration.includes("PRODUCT_IMAGE_PRIMARY_POSITION_ZERO_REQUIRED")],
   ["Storage policy aligns Owner/Admin writes", migration.includes("Owners and admins can upload catalog images") && !migration.includes("Admin and staff can upload catalog images\"\non storage.objects\nfor insert")],
 ];
 

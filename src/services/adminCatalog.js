@@ -291,6 +291,7 @@ export async function duplicateAdminProduct(product, authSession) {
       storagePath: image.storagePath,
       publicUrl: image.publicUrl || image.url,
       altText: image.altText || product.name,
+      isPrimary: image.isPrimary === true,
     })).filter((image) => image.storagePath),
   };
   return createAdminProduct(duplicate, authSession);
@@ -492,6 +493,7 @@ async function replaceProductImages(productId, images, accessToken) {
     storagePath: image.storagePath || image.storage_path || "",
     publicUrl: image.publicUrl || image.public_url || image.url || "",
     altText: image.altText || image.alt_text || "",
+    isPrimary: image.isPrimary === true || image.is_primary === true,
   })).filter((image) => image.storagePath);
   await executeSupabaseRpcWithAuth("set_product_images_for_product", {
     p_product_id: productId,
@@ -505,6 +507,7 @@ function mapCanonicalRowToProduct(row, category, brand, variants, images) {
     .slice()
     .sort((a, b) => Number(a.position ?? 0) - Number(b.position ?? 0))
     .map(mapImageRowToProductImage);
+  const primaryImage = mappedImages.find((image) => image.isPrimary) ?? mappedImages[0] ?? null;
   const activeVariants = variants.filter((variant) => variant.active !== false && !variant.archived_at);
   const primaryVariant = activeVariants[0] ?? null;
   const catalogKeys = mapChannelsToCatalogKeys(row.eligible_channels);
@@ -527,7 +530,7 @@ function mapCanonicalRowToProduct(row, category, brand, variants, images) {
     brandStatus: brand?.status ?? "",
     brand: brand?.name ?? row.brand ?? "",
     description: row.description ?? "",
-    imageUrl: mappedImages[0]?.url ?? "",
+    imageUrl: primaryImage?.url ?? "",
     images: mappedImages,
     startingPrice: primaryVariant?.selling_price === null || primaryVariant?.selling_price === undefined ? "" : String(primaryVariant.selling_price),
     unitCost: primaryVariant?.unit_cost === null || primaryVariant?.unit_cost === undefined ? "" : String(primaryVariant.unit_cost),
@@ -749,6 +752,10 @@ function assertValidBrandForWrite(brand, { edit = false } = {}) {
   if (!String(brand?.ownerName ?? "").trim()) throw new Error("Owner name is required.");
   if (!["internal", "partner"].includes(brand?.ownershipType)) throw new Error("Choose a valid ownership type.");
   if (!["active", "archived"].includes(brand?.status || "active")) throw new Error("Choose a valid brand status.");
+}
+
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
 function normalizeProductType(value) {

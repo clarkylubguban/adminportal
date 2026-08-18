@@ -6185,18 +6185,16 @@ function renderCatalogEditorImages(draft, canWrite, isSaving) {
   const images = getCatalogEditorImages(draft);
   const slots = Array.from({ length: CATALOG_PRODUCT_IMAGE_LIMIT }, (_, index) => {
     const image = images[index] ?? null;
-    const isPrimary = index === 0 && Boolean(image);
+    const isPrimary = Boolean(image?.isPrimary);
     return `
       <div class="catalog-editor-image-slot ${image ? "has-image" : "empty"}" data-image-slot="${index}" ${image && canWrite ? `draggable="true" data-catalog-image-drag="${index}"` : ""}>
         <div class="catalog-editor-image-preview">
           ${image ? `<img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.altText || draft.name || "Product image")}" />` : renderIcon("package-plus", "catalog-placeholder-icon")}
           ${isPrimary ? `<span class="catalog-primary-badge">PRIMARY</span>` : ""}
-          ${image && canWrite ? `<span class="catalog-drag-handle" aria-hidden="true">${renderIcon("grip", "catalog-drag-icon")}</span>` : ""}
         </div>
         <div class="catalog-editor-image-actions">
           <span>${image ? `${index + 1} of ${CATALOG_PRODUCT_IMAGE_LIMIT}` : "ADD IMAGE"}</span>
-          ${image && canWrite ? `<div class="catalog-image-order-actions"><button type="button" data-catalog-move-image="${index}" data-direction="left" ${isSaving || index === 0 ? "disabled" : ""}>Move Left</button><button type="button" data-catalog-move-image="${index}" data-direction="right" ${isSaving || index === images.length - 1 ? "disabled" : ""}>Move Right</button></div>` : ""}
-          ${image && canWrite ? `<button type="button" data-catalog-remove-image="${index}" ${isSaving ? "disabled" : ""}>Remove</button>` : ""}
+          ${image && canWrite ? `<div class="catalog-image-card-actions">${isPrimary ? "" : `<button class="catalog-set-primary-button" type="button" data-catalog-set-primary-image="${index}" ${isSaving ? "disabled" : ""}>Primary</button>`}<button class="catalog-remove-image-button" type="button" data-catalog-remove-image="${index}" ${isSaving ? "disabled" : ""}>Remove</button></div>` : ""}
         </div>
       </div>
     `;
@@ -6206,7 +6204,7 @@ function renderCatalogEditorImages(draft, canWrite, isSaving) {
   return `
     <article class="catalog-editor-card ${catalogValidationError && images.length === 0 ? "has-error" : ""}" id="catalog-section-images" tabindex="-1" aria-label="Product Images">
       <header>
-        <div><h2>Product Images</h2><p>Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product. First ordered image is primary.</p></div>
+        <div><h2>Product Images</h2><p>Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product. Choose one PRIMARY image independently from order.</p></div>
         <strong>${images.length} of ${CATALOG_PRODUCT_IMAGE_LIMIT} uploaded</strong>
       </header>
       <div class="catalog-editor-image-grid">${slots}</div>
@@ -6214,6 +6212,7 @@ function renderCatalogEditorImages(draft, canWrite, isSaving) {
         <span>${images.length ? "Add another image" : "Upload primary image"}</span>
         <input data-catalog-image-file type="file" accept="image/jpeg,image/png,image/webp,image/avif" ${disabled ? "disabled" : ""} />
       </label>
+      ${images.length >= CATALOG_PRODUCT_IMAGE_LIMIT ? `<p class="catalog-image-limit-note">Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images reached.</p>` : ""}
       ${draft.imageError ? `<p class="catalog-form-error">${escapeHtml(draft.imageError)}</p>` : ""}
     </article>
   `;
@@ -6445,7 +6444,7 @@ function getCatalogEditorSku(draft) {
 }
 
 function normalizeCatalogDraftImages(images) {
-  return (Array.isArray(images) ? images : [])
+  const normalized = (Array.isArray(images) ? images : [])
     .map((image, index) => ({
       id: image.id || "",
       storagePath: image.storagePath || image.storage_path || "",
@@ -6456,9 +6455,16 @@ function normalizeCatalogDraftImages(images) {
       file: image.file || null,
       isNew: image.isNew === true,
       position: index,
-      isPrimary: index === 0,
+      isPrimary: image.isPrimary === true || image.is_primary === true,
     }))
     .slice(0, CATALOG_PRODUCT_IMAGE_LIMIT);
+  const primaryIndex = normalized.findIndex((image) => image.isPrimary);
+  const resolvedPrimaryIndex = normalized.length ? Math.max(0, primaryIndex) : -1;
+  return normalized.map((image, index) => ({
+    ...image,
+    position: index,
+    isPrimary: index === resolvedPrimaryIndex,
+  }));
 }
 
 function getCatalogEditorImages(draft) {
@@ -6470,7 +6476,8 @@ function getCatalogEditorImageCount(draft) {
 }
 
 function getCatalogEditorPrimaryImage(draft) {
-  return getCatalogEditorImages(draft)[0]?.url || "";
+  const images = getCatalogEditorImages(draft);
+  return (images.find((image) => image.isPrimary) ?? images[0])?.url || "";
 }
 
 function getCatalogEditorMargin(draft) {
@@ -8006,6 +8013,22 @@ function moveCatalogImageInDraft(index, direction) {
   render();
 }
 
+function setCatalogPrimaryImageInDraft(index) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const images = getCatalogEditorImages(catalogDraft);
+  if (index < 0 || index >= images.length) return;
+  catalogDraft = {
+    ...catalogDraft,
+    images: normalizeCatalogDraftImages(images.map((image, imageIndex) => ({
+      ...image,
+      isPrimary: imageIndex === index,
+    }))),
+    imageError: "",
+  };
+  catalogSaveError = "";
+  render();
+}
+
 async function updateCatalogQuickPrice(productId) {
   if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle") return;
   const product = catalogProducts.find((item) => item.id === productId);
@@ -8084,8 +8107,12 @@ async function updateCatalogQuickImage(productId, file) {
         publicUrl: uploadedImage.publicUrl,
         url: uploadedImage.publicUrl,
         altText: product.name || "Product image",
+        isPrimary: true,
       },
-      ...(product.images ?? []).filter((image) => image.storagePath).slice(0, CATALOG_PRODUCT_IMAGE_LIMIT - 1),
+      ...(product.images ?? [])
+        .filter((image) => image.storagePath)
+        .slice(0, CATALOG_PRODUCT_IMAGE_LIMIT - 1)
+        .map((image) => ({ ...image, isPrimary: false })),
     ]);
     const savedProduct = await updateAdminProduct(productId, { ...product, images: nextImages }, adminAuthSession);
     if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
@@ -8229,6 +8256,7 @@ async function saveCatalogDraft() {
           publicUrl: uploadedImage.publicUrl,
           url: uploadedImage.publicUrl,
           altText: image.altText || savedProduct.name || "Product image",
+          isPrimary: image.isPrimary === true,
         });
       } else if (image.storagePath) {
         finalImages.push(image);
@@ -8980,6 +9008,10 @@ function bindEvents() {
     button.addEventListener("click", () => moveCatalogImageInDraft(Number(button.dataset.catalogMoveImage || 0), button.dataset.direction));
   });
 
+  document.querySelectorAll("[data-catalog-set-primary-image]").forEach((button) => {
+    button.addEventListener("click", () => setCatalogPrimaryImageInDraft(Number(button.dataset.catalogSetPrimaryImage || 0)));
+  });
+
   document.querySelectorAll("[data-catalog-image-drag]").forEach((slot) => {
     slot.addEventListener("dragstart", (event) => { event.dataTransfer?.setData("text/plain", slot.dataset.catalogImageDrag); });
     slot.addEventListener("dragover", (event) => event.preventDefault());
@@ -8993,6 +9025,7 @@ function bindEvents() {
       const [moved] = reordered.splice(fromIndex, 1);
       reordered.splice(toIndex, 0, moved);
       catalogDraft = { ...catalogDraft, images: normalizeCatalogDraftImages(reordered), imageError: "" };
+      catalogSaveError = "";
       render();
     });
   });

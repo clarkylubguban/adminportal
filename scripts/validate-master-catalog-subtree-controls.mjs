@@ -21,6 +21,7 @@ const checks = [
   ["Product Quick Control is preserved", main.includes("function renderCatalogProductQuickControl") && main.includes("Catalog Health") && main.includes("Copy SKU") && main.includes("Full Edit Product")],
   ["Update Price uses canonical product update", main.includes("function updateCatalogQuickPrice") && main.includes("updateAdminProduct(productId") && main.includes("data-catalog-quick-selling-price")],
   ["Update Image uses canonical product image persistence", main.includes("function updateCatalogQuickImage") && main.includes("uploadCatalogImage(file, product, adminAuthSession)") && main.includes("images: nextImages")],
+  ["Product Images preserve explicit Primary selection", main.includes("data-catalog-set-primary-image") && main.includes("function setCatalogPrimaryImageInDraft") && service.includes("isPrimary: image.isPrimary === true || image.is_primary === true")],
   ["Duplicate uses canonical duplicate service", main.includes("function duplicateCatalogProduct") && main.includes("duplicateAdminProduct(product, adminAuthSession)")],
   ["Product drawer was not restored", !main.includes("function renderCatalogDrawer") && !main.includes("openCatalogDrawer(") && !main.includes("data-catalog-close-drawer")],
   ["Six-image maximum remains explicit", main.includes("const CATALOG_PRODUCT_IMAGE_LIMIT = 6") && main.includes("Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images")],
