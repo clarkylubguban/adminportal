@@ -235,7 +235,7 @@ export function readRecoverySessionFromUrl() {
 }
 
 function readAuthSessionFromUrl(expectedType) {
-  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const params = getAuthCallbackParams();
   const accessToken = params.get("access_token") || "";
   const refreshToken = params.get("refresh_token") || "";
   const expiresIn = Number(params.get("expires_in") || 3600);
@@ -246,7 +246,8 @@ function readAuthSessionFromUrl(expectedType) {
     return { error };
   }
 
-  if (!accessToken || type !== expectedType) {
+  const typeMatches = type === expectedType || (expectedType === "recovery" && !type);
+  if (!accessToken || !typeMatches) {
     return null;
   }
 
@@ -257,6 +258,27 @@ function readAuthSessionFromUrl(expectedType) {
     user: {},
     type,
   };
+}
+
+function getAuthCallbackParams() {
+  const params = new URLSearchParams();
+  const appendParams = (value) => {
+    const normalized = String(value || "").replace(/^[?#]/, "");
+    if (!normalized) return;
+    const nextParams = new URLSearchParams(normalized);
+    nextParams.forEach((paramValue, key) => {
+      if (!params.has(key)) params.set(key, paramValue);
+    });
+  };
+
+  appendParams(window.location.hash);
+  appendParams(window.location.search);
+  return params;
+}
+
+export function cleanAdminAuthCallbackUrl(pathname = window.location.pathname) {
+  const route = String(pathname || "/").replace(/\/+$/, "") || "/";
+  window.history.replaceState({}, "", route);
 }
 
 export async function updateAdminInvitePassword(inviteSession, password) {
@@ -311,6 +333,17 @@ function getPasswordResetRequestError(message, status) {
     return "Password reset redirect is not configured for Admin Staging.";
   }
   return "Unable to send password reset email. Check the address and try again.";
+}
+
+function getPasswordUpdateError(message, status) {
+  const normalized = String(message || "").toLowerCase();
+  if (status === 401 || status === 403 || normalized.includes("jwt") || normalized.includes("token")) {
+    return "Invalid or expired password link. Request a new reset link.";
+  }
+  if (status === 422 || normalized.includes("password")) {
+    return "Password does not meet the minimum requirements.";
+  }
+  return "Unable to update password. Request a new reset link and try again.";
 }
 export async function getCurrentAdminAuthSession() {
   const storedSession = readStoredAdminAuthSession();

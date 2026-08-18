@@ -67,6 +67,7 @@ import {
   getCurrentAdminAuthSession,
   getSupabaseConfig,
   getAdminPasswordResetRedirectUrl,
+  cleanAdminAuthCallbackUrl,
   readInviteSessionFromUrl,
   readRecoverySessionFromUrl,
   isSupabaseReady,
@@ -593,6 +594,7 @@ let passwordSetupStatus = "idle";
 let passwordSetupError = "";
 let passwordSetupSession = null;
 let passwordSetupMode = "invite";
+let passwordSetupSuccess = "";
 let isSidebarCollapsed = getStoredSidebarCollapsed();
 let isMobileSidebarOpen = false;
 
@@ -613,6 +615,11 @@ function render() {
 
   if (isForgotPasswordRoute()) {
     renderForgotPasswordScreen();
+    return;
+  }
+
+  if (isLoginRoute() && adminAuthStatus !== "approved") {
+    renderAdminAuthGate();
     return;
   }
 
@@ -854,27 +861,31 @@ function renderPasswordSetupScreen(mode = "invite") {
   const isSaving = passwordSetupStatus === "saving";
   const isInvalid = !passwordSetupSession?.access_token || Boolean(inviteError);
   const isRecovery = mode === "recovery";
-  const invalidMessage = isRecovery ? "Recovery link is expired or invalid." : "Invitation link is expired or invalid.";
+  const isInvalidRecovery = isRecovery && isInvalid && !passwordSetupSuccess;
+  const invalidMessage = isRecovery ? "This password reset link is invalid or has expired." : "Invitation link is expired or invalid.";
   const activeMessage = isRecovery ? "Choose a new password for your Admin Staging account." : "Create your password to activate your staff account.";
-  const message = inviteError || (isInvalid ? invalidMessage : activeMessage);
+  const message = passwordSetupSuccess || inviteError || (isInvalid ? invalidMessage : activeMessage);
+  const heading = isInvalidRecovery ? "PASSWORD RESET LINK EXPIRED" : isRecovery ? "Reset Password" : "Set password";
 
   document.getElementById("root").innerHTML = `
     <main class="admin-access-page">
       <section class="admin-access-card admin-login-card" aria-label="TRRY Admin ${isRecovery ? "password reset" : "password setup"}">
         <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
         <div class="admin-access-heading">
-          <h1>${isRecovery ? "Set new password" : "Set password"}</h1>
+          <h1>${escapeHtml(heading)}</h1>
           <span>${escapeHtml(message)}</span>
         </div>
-        <form class="admin-access-form" id="admin-password-setup-form">
+        ${isInvalidRecovery ? "" : `<form class="admin-access-form" id="admin-password-setup-form">
           <label for="admin-new-password">NEW PASSWORD</label>
           <input id="admin-new-password" value="${escapeHtml(passwordSetupDraft.password)}" type="password" autocomplete="new-password" aria-invalid="${passwordSetupError ? "true" : "false"}" ${isInvalid || isSaving ? "disabled" : ""} />
           <label for="admin-confirm-password">CONFIRM PASSWORD</label>
           <input id="admin-confirm-password" value="${escapeHtml(passwordSetupDraft.confirm)}" type="password" autocomplete="new-password" aria-invalid="${passwordSetupError ? "true" : "false"}" ${isInvalid || isSaving ? "disabled" : ""} />
+          ${passwordSetupSuccess ? `<p class="admin-access-success" role="status">${escapeHtml(passwordSetupSuccess)}</p>` : ""}
           ${passwordSetupError ? `<p class="admin-access-error" role="alert">${escapeHtml(passwordSetupError)}</p>` : ""}
-          <button type="submit" ${isInvalid || isSaving ? "disabled" : ""}>${isSaving ? "SAVING..." : isRecovery ? "SAVE NEW PASSWORD" : "SAVE PASSWORD"}</button>
-        </form>
-        ${isInvalid ? `<button class="admin-auth-link" data-back-to-login type="button">Back to Login</button>` : ""}
+          <button type="submit" ${isInvalid || isSaving ? "disabled" : ""}>${isSaving ? "UPDATING..." : isRecovery ? "UPDATE PASSWORD" : "SAVE PASSWORD"}</button>
+        </form>`}
+        ${isInvalidRecovery ? `<button class="admin-auth-link" data-request-new-reset type="button">REQUEST NEW RESET LINK</button>` : ""}
+        ${isInvalid || passwordSetupSuccess ? `<button class="admin-auth-link" data-back-to-login type="button">BACK TO LOGIN</button>` : ""}
         <p class="admin-login-note">Authorized staff only.</p>
       </section>
     </main>
@@ -891,11 +902,13 @@ function bindPasswordSetupEvents() {
   password?.addEventListener("input", (event) => {
     passwordSetupDraft.password = event.target.value;
     passwordSetupError = "";
+    passwordSetupSuccess = "";
   });
 
   confirm?.addEventListener("input", (event) => {
     passwordSetupDraft.confirm = event.target.value;
     passwordSetupError = "";
+    passwordSetupSuccess = "";
   });
 
   form?.addEventListener("submit", async (event) => {
@@ -907,7 +920,17 @@ function bindPasswordSetupEvents() {
     passwordSetupSession = null;
     passwordSetupDraft = { password: "", confirm: "" };
     passwordSetupError = "";
-    navigateTo("/");
+    passwordSetupSuccess = "";
+    navigateTo("/login");
+    render();
+  });
+
+  document.querySelector("[data-request-new-reset]")?.addEventListener("click", () => {
+    passwordSetupSession = null;
+    passwordSetupDraft = { password: "", confirm: "" };
+    passwordSetupError = "";
+    passwordSetupSuccess = "";
+    navigateTo("/forgot-password");
     render();
   });
 
@@ -934,13 +957,14 @@ async function submitPasswordSetup() {
     passwordSetupStatus = "idle";
     passwordSetupError = "";
     passwordSetupSession = null;
+    passwordSetupSuccess = "Password updated successfully.";
     adminAuthSession = null;
     adminUser = null;
     adminAuthStatus = "login";
     adminLoginNotice = passwordSetupMode === "recovery"
-      ? "PASSWORD UPDATED. YOU CAN NOW SIGN IN."
+      ? "Password updated successfully."
       : "PASSWORD SET. YOU CAN NOW SIGN IN.";
-    window.history.replaceState({}, "", passwordSetupMode === "recovery" ? "/?password_reset=1" : "/?password_set=1");
+    window.history.replaceState({}, "", passwordSetupMode === "recovery" ? "/login?password_reset=1" : "/login?password_set=1");
     render();
   } catch (error) {
     console.error("Admin password setup failed.", error);
@@ -1074,7 +1098,9 @@ async function initializeAdminAuth() {
   if (isPasswordSetupRoute()) {
     passwordSetupSession = readInviteSessionFromUrl();
     passwordSetupMode = "invite";
+    passwordSetupSuccess = "";
     adminAuthStatus = "password-setup";
+    if (passwordSetupSession?.access_token) cleanAdminAuthCallbackUrl("/set-password");
     render();
     return;
   }
@@ -1082,13 +1108,21 @@ async function initializeAdminAuth() {
   if (isPasswordResetRoute()) {
     passwordSetupSession = readRecoverySessionFromUrl();
     passwordSetupMode = "recovery";
+    passwordSetupSuccess = "";
     adminAuthStatus = "password-reset";
+    if (passwordSetupSession?.access_token) cleanAdminAuthCallbackUrl("/reset-password");
     render();
     return;
   }
 
   if (isForgotPasswordRoute()) {
     adminAuthStatus = "forgot-password";
+    render();
+    return;
+  }
+
+  if (isLoginRoute()) {
+    adminAuthStatus = isSupabaseReady() ? "login" : "access-code";
     render();
     return;
   }
@@ -9866,6 +9900,10 @@ function isPasswordResetRoute() {
 function isForgotPasswordRoute() {
   return window.location.pathname.replace(/\/+$/, "") === "/forgot-password";
 }
+
+function isLoginRoute() {
+  return window.location.pathname.replace(/\/+$/, "") === "/login";
+}
 function getCurrentRoute() {
   return routes[getRoutePath()] ?? routes[defaultRoutePath];
 }
@@ -9888,7 +9926,7 @@ function normalizeRoutePath(path) {
   const url = new URL(String(path || defaultRoutePath), window.location.origin);
   const routePath = url.pathname.replace(/\/+$/, "") || "/";
   if (routePath === legacyOrderDashboardPath) return `${activeOrdersPath}${url.search}`;
-  if (["/forgot-password", "/reset-password", "/set-password"].includes(routePath)) {
+  if (["/forgot-password", "/reset-password", "/set-password", "/login"].includes(routePath)) {
     return `${routePath}${url.search}${url.hash}`;
   }
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;

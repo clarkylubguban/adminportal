@@ -27,7 +27,10 @@ const appRoutes = new Set([
   "/catalog",
   "/catalog/brands",
   "/catalog/categories",
+  "/login",
   "/set-password",
+  "/reset-password",
+  "/forgot-password",
 ]);
 
 async function handleRequest(request, response) {
