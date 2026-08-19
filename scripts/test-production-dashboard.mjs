@@ -56,7 +56,9 @@ assert.ok(html.includes("TRRY-ORD-QUEUED01"), "released native Order reference i
 assert.ok(html.includes("TRRY-ORD-QUEUED01"), "released native Order remains visible when source Inquiry status=approved");
 assert.ok(!html.includes("TRRY-LEGACY-PROD01"), "legacy Odoo-only work is read-only and not visible as active Production");
 assert.ok(!html.includes("SO-R4-ODOO-ONLY"), "Odoo-only status=won row does not become active Production");
-assert.ok(html.includes("FROM ORDER"), "job identity shows order linkage as secondary metadata");
+assert.ok(!html.includes("FROM ORDER"), "dashboard omits source secondary metadata");
+assert.ok(!html.includes("0917-000-0000"), "dashboard omits customer phone secondary metadata");
+assert.ok(!html.includes("DTF / PICKUP"), "dashboard omits method/fulfillment secondary metadata");
 assert.ok(!html.includes("PRD-1048"), "dashboard does not invent PRD job references");
 
 for (const label of ["Queued", "Ready", "In Production", "Quality Check", "Completed", "Blocked"]) {
@@ -66,8 +68,11 @@ for (const tab of ["All Jobs", "Queued", "Ready", "In Production", "Quality Chec
   assert.ok(html.includes(tab), `status tab renders: ${tab}`);
 }
 assert.ok(!html.includes("Pickup / Delivery"), "Production dashboard no longer exposes fulfillment-owned Pickup / Delivery tab");
-for (const header of ["JOB", "CUSTOMER", "SUMMARY", "METHOD", "MATERIALS", "ARTWORK", "DUE", "STAFF", "STAGE", "ACTION"]) {
+for (const header of ["JOB", "CUSTOMER", "SUMMARY", "METHOD", "DUE", "STAFF", "STAGE", "ACTION"]) {
   assert.ok(html.includes(header), `table header renders: ${header}`);
+}
+for (const removedHeader of ["MATERIALS", "ARTWORK"]) {
+  assert.ok(!html.includes(`<span role="columnheader">${removedHeader}`), `table header removed: ${removedHeader}`);
 }
 
 assert.ok(html.includes("Embroidery") && html.includes("Screen Print") && html.includes("DTF"), "method column/filter use production methods");
@@ -75,10 +80,8 @@ assert.ok(html.includes("QUEUED"), "first station released work maps to queued p
 assert.ok(html.includes("IN PRODUCTION"), "persisted start timestamp maps to In Production");
 assert.ok(html.includes("TRRY-ORD-COMPAT01"), "compatibility pre-start raw-state row remains visible after release");
 assert.ok(html.includes("QUALITY CHECK"), "qc stage maps to Quality Check");
-assert.ok(html.includes("READY FOR FULFILLMENT"), "ready stage maps truthfully to Ready for Fulfillment");
-assert.ok(html.includes("Thread color missing"), "explicit production blocker/material issue is visible");
-assert.ok(html.includes("Not tracked"), "materials column does not fabricate unsupported readiness");
-assert.ok(html.includes("APPROVED"), "artwork approval renders from current data");
+assert.ok(html.includes("READY"), "ready stage maps to compact dashboard label");
+assert.ok(html.includes("BLOCKED"), "explicit production blocker maps to compact dashboard stage");
 assert.ok(html.includes("Start") && html.includes("Update") && html.includes("Inspect") && html.includes("Resolve"), "row actions map to existing drawer open behavior");
 assert.ok(!/Confirm Payment|Pay Online|Pay at Shop|Messenger/i.test(html), "Production dashboard has no payment or Messenger controls");
 

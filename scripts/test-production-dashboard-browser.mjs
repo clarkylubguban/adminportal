@@ -49,10 +49,23 @@ try {
       const footerText = document.querySelector(".mvp-production-pagination")?.innerText || "";
       const rowRects = [...document.querySelectorAll(".mvp-production-table-row")].map((node) => node.getBoundingClientRect());
       const rowsDoNotOverlap = rowRects.every((rect, index) => index === 0 || rect.top >= rowRects[index - 1].bottom - 1);
-      const stagePills = [...document.querySelectorAll(".mvp-production-table-row > :nth-child(9)")];
+      const headerCells = [...document.querySelectorAll(".mvp-production-table-head > span")].map((node) => node.getBoundingClientRect());
+      const rowCells = [...firstRow?.children || []].map((node) => node.getBoundingClientRect());
+      const stagePills = [...document.querySelectorAll(".mvp-production-table-row .stage-cell .mvp-status")];
       const stageLabels = stagePills.map((node) => node.textContent.trim()).join("|");
       const stageMetrics = stagePills.map((node) => node.textContent.trim() + ":" + node.clientWidth + "/" + node.scrollWidth + "/" + Math.round(node.getBoundingClientRect().width)).join("|");
       const stagePillsReadable = stagePills.every((node) => node.scrollWidth <= node.clientWidth + 1);
+      const tableRowsText = [...document.querySelectorAll(".mvp-production-table-row")].map((node) => node.innerText).join("\\n");
+      const firstRowText = firstRow?.innerText || "";
+      const dueSecondaryTexts = [...document.querySelectorAll(".mvp-production-table-row .due small")].map((node) => node.textContent.trim());
+      const actionButton = firstRow?.querySelector(".mvp-production-row-action button:first-child")?.getBoundingClientRect();
+      const moreButton = firstRow?.querySelector(".mvp-production-row-action button:last-child")?.getBoundingClientRect();
+      const fontInfo = (selector) => {
+        const node = document.querySelector(selector);
+        if (!node) return { size: "", weight: "", family: "" };
+        const style = getComputedStyle(node);
+        return { size: style.fontSize, weight: style.fontWeight, family: style.fontFamily };
+      };
       const mobileCards = [...document.querySelectorAll(".mvp-production-mobile-card")].map((node) => node.getBoundingClientRect());
       const nav = document.querySelector(".mobile-bottom-nav");
       const navTop = nav?.getBoundingClientRect().top || window.innerHeight;
@@ -72,6 +85,37 @@ try {
         visibleRowCount: document.querySelectorAll(".mvp-production-table-row").length,
         visibleCardCount: document.querySelectorAll(".mvp-production-mobile-card").length,
         rowsDoNotOverlap,
+        rowHeight: Math.round(rowRects[0]?.height || 0),
+        jobWidth: Math.round(rowCells[0]?.width || 0),
+        customerWidth: Math.round(rowCells[1]?.width || 0),
+        summaryWidth: Math.round(rowCells[2]?.width || 0),
+        stageHeight: Math.round(stagePills[0]?.getBoundingClientRect().height || 0),
+        actionButtonHeight: Math.round(actionButton?.height || 0),
+        actionButtonWidth: Math.round(actionButton?.width || 0),
+        moreButtonWidth: Math.round(moreButton?.width || 0),
+        typography: {
+          header: fontInfo(".mvp-production-table-head span"),
+          job: fontInfo(".mvp-production-table-row .job-identity .mvp-copy span"),
+          customer: fontInfo(".mvp-production-table-row .customer"),
+          summary: fontInfo(".mvp-production-table-row .summary"),
+          method: fontInfo(".mvp-production-table-row .method"),
+          due: fontInfo(".mvp-production-table-row .due strong"),
+          staff: fontInfo(".mvp-production-table-row .staff"),
+          stage: fontInfo(".mvp-production-table-row .stage-cell .mvp-status"),
+          action: fontInfo(".mvp-production-row-action button:first-child"),
+        },
+        headerAligned: headerCells.length === rowCells.length && headerCells.every((cell, index) => Math.abs(Math.round(cell.left) - Math.round(rowCells[index].left)) <= 2 && Math.abs(Math.round(cell.width) - Math.round(rowCells[index].width)) <= 2),
+        firstRowText,
+        tableRowsText,
+        hasMaterialsHeader: headers.includes("MATERIALS"),
+        hasArtworkHeader: headers.includes("ARTWORK"),
+        hasFromOrderSecondary: tableRowsText.includes("FROM ORDER"),
+        hasPhoneSecondary: /0917|\\+639/.test(tableRowsText),
+        hasMethodSecondary: tableRowsText.includes("DTF / PICKUP"),
+        dueSecondaryTexts,
+        hasRedundantDueSecondary: dueSecondaryTexts.some((text) => ["COMPLETED", "UPCOMING", "TODAY"].includes(text)),
+        hasOverdue: dueSecondaryTexts.includes("OVERDUE"),
+        staffReadable: tableRowsText.includes("Inactive user") || tableRowsText.includes("James"),
         stageLabels,
         stageMetrics,
         stagePillsReadable,
@@ -80,7 +124,9 @@ try {
       };
     })()`);
     assert.equal(result.hasShell, true, `Production dashboard shell renders at ${viewport.width}`);
-    assert.equal(result.headers, "JOB|CUSTOMER|SUMMARY|METHOD|MATERIALS|ARTWORK|DUE|STAFF|STAGE|ACTION", `Figma production column order at ${viewport.width}`);
+    assert.equal(result.headers, "JOB|CUSTOMER|SUMMARY|METHOD|DUE|STAFF|STAGE|ACTION", `simplified production column order at ${viewport.width}`);
+    assert.equal(result.hasMaterialsHeader, false, `Materials column removed at ${viewport.width}`);
+    assert.equal(result.hasArtworkHeader, false, `Artwork column removed at ${viewport.width}`);
     assert.equal(result.hasReleasedNative, true, `released native order reference visible at ${viewport.width}`);
     assert.equal(result.hasUnreleasedReady, false, `unreleased ready order hidden at ${viewport.width}`);
     assert.equal(result.hasReadyToRelease, false, `Production does not show READY TO RELEASE at ${viewport.width}`);
@@ -92,6 +138,29 @@ try {
     if (viewport.width > 768) assert.equal(result.tableVisible, true, `desktop/tablet table visible at ${viewport.width}`);
     if (viewport.width > 768) assert.equal(result.visibleRowCount, 5, `desktop production page shows first five fixture rows at ${viewport.width}`);
     if (viewport.width > 768) assert.equal(result.rowsDoNotOverlap, true, `desktop production fixture rows do not overlap at ${viewport.width}`);
+    if (viewport.width > 768) assert.ok(result.rowHeight >= 56 && result.rowHeight <= 64, `desktop production row height is compact at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.ok(result.jobWidth >= 170, `desktop JOB width is readable at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.ok(result.customerWidth >= 190, `desktop CUSTOMER width is readable at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.ok(result.summaryWidth >= 260, `desktop SUMMARY width is useful at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.equal(result.hasFromOrderSecondary, false, `FROM ORDER secondary line removed at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.equal(result.hasPhoneSecondary, false, `Customer phone secondary line removed at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.equal(result.hasMethodSecondary, false, `Method secondary line removed at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.equal(result.hasRedundantDueSecondary, false, `redundant Due secondary states removed at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.equal(result.hasOverdue, true, `OVERDUE emphasis remains at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.equal(result.staffReadable, true, `Staff display is readable at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.ok(result.stageHeight >= 26 && result.stageHeight <= 32, `Stage pill is compact at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.ok(result.actionButtonHeight >= 36 && result.actionButtonHeight <= 40, `row action is compact at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.ok(result.actionButtonWidth <= 76 && result.moreButtonWidth <= 36, `row action controls do not dominate at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.equal(result.headerAligned, true, `header and row columns align at ${viewport.width}: ${JSON.stringify(result)}`);
+    if (viewport.width > 768) assert.ok(fontPx(result.typography.header.size) >= 11 && fontPx(result.typography.header.size) <= 12, `header typography is compact at ${viewport.width}: ${JSON.stringify(result.typography)}`);
+    if (viewport.width > 768) assert.equal(fontPx(result.typography.job.size), 14, `job typography is 14px at ${viewport.width}: ${JSON.stringify(result.typography)}`);
+    if (viewport.width > 768) assert.equal(fontPx(result.typography.customer.size), 14, `customer typography is 14px at ${viewport.width}: ${JSON.stringify(result.typography)}`);
+    if (viewport.width > 768) assert.equal(fontPx(result.typography.summary.size), 14, `summary typography is 14px at ${viewport.width}: ${JSON.stringify(result.typography)}`);
+    if (viewport.width > 768) assert.equal(fontPx(result.typography.method.size), 14, `method typography is 14px at ${viewport.width}: ${JSON.stringify(result.typography)}`);
+    if (viewport.width > 768) assert.equal(fontPx(result.typography.due.size), 14, `due typography is 14px at ${viewport.width}: ${JSON.stringify(result.typography)}`);
+    if (viewport.width > 768) assert.equal(fontPx(result.typography.staff.size), 14, `staff typography is 14px at ${viewport.width}: ${JSON.stringify(result.typography)}`);
+    if (viewport.width > 768) assert.ok(fontPx(result.typography.stage.size) >= 11 && fontPx(result.typography.stage.size) <= 12, `stage typography is compact at ${viewport.width}: ${JSON.stringify(result.typography)}`);
+    if (viewport.width > 768) assert.ok(fontPx(result.typography.action.size) >= 13 && fontPx(result.typography.action.size) <= 14, `action typography is compact at ${viewport.width}: ${JSON.stringify(result.typography)}`);
     if (viewport.width > 768) assert.match(result.stageLabels, /IN PRODUCTION|QUALITY CHECK|READY|BLOCKED|COMPLETED/, `desktop production stage labels render at ${viewport.width}`);
     if (viewport.width > 768) assert.equal(result.stagePillsReadable, true, `desktop production stage pills are not clipped at ${viewport.width}: ${result.stageMetrics}`);
     if (viewport.width <= 768) assert.equal(result.cardsVisible, true, `mobile cards visible at ${viewport.width}`);
@@ -430,4 +499,8 @@ async function evaluate(cdp, expression) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function fontPx(value) {
+  return Number.parseFloat(String(value || "").replace("px", ""));
 }

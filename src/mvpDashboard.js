@@ -1556,27 +1556,23 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function productionDashboardTable(items, total, currentPage, pageCount, pageSize) {
-    const headers = ["JOB", "CUSTOMER", "SUMMARY", "METHOD", "MATERIALS", "ARTWORK", "DUE", "STAFF", "STAGE", "ACTION"];
+    const headers = ["JOB", "CUSTOMER", "SUMMARY", "METHOD", "DUE", "STAFF", "STAGE", "ACTION"];
     const emptyText = total ? "NO PRODUCTION JOBS MATCH THESE FILTERS" : "NO RELEASED PRODUCTION JOBS";
     return `<section class="mvp-production-table-wrap"><div class="mvp-production-table" role="table" aria-label="Production dashboard"><div class="mvp-production-table-head" role="row">${headers.map((header) => `<span role="columnheader">${html(header)} <i aria-hidden="true">&#8597;</i></span>`).join("")}</div><div role="rowgroup">${items.length ? items.map(productionDashboardRow).join("") : empty(emptyText)}</div></div>${productionPagination(total, currentPage, pageCount, pageSize)}</section>`;
   }
 
   function productionDashboardRow(item) {
     const dueState = due(item);
-    const dueParts = dueCellParts(dueState, item);
     const stage = productionWorkflowState(item);
-    const materials = productionMaterialsState(item);
     const action = productionDashboardAction(item);
     return `<div class="mvp-production-table-row" data-mvp-open="production" data-mvp-id="${html(item.id)}" role="row" tabindex="0">
       ${productionJobIdentityCell(item)}
-      ${twoLineCell(item.customer || "Unnamed customer", item.contact || "No contact", "customer")}
-      ${twoLineCell(productionSummaryPrimary(item), productionSummarySecondary(item), "summary")}
+      <span class="customer" title="${html(item.customer || "Unnamed customer")}">${html(item.customer || "Unnamed customer")}</span>
+      <span class="summary" title="${html(productionSummaryPrimary(item))}">${html(productionSummaryPrimary(item))}</span>
       <span class="method">${html(productionMethod(item))}</span>
-      <span class="materials ${html(materials.tone)}">${html(materials.label)}</span>
-      <span class="artwork ${html(orderArtworkKey(item))}">${html(productionArtworkLabel(item))}</span>
-      ${twoLineCell(dueParts.primary, dueParts.secondary, `due ${dueState.key}`)}
-      <span class="staff">${html(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item))}</span>
-      ${status(productionDashboardStageLabel(stage), stage.tone)}
+      ${productionDashboardDueCell(dueState, item)}
+      ${productionStaffCell(item)}
+      <span class="stage-cell">${status(productionDashboardStageLabel(stage), stage.tone)}</span>
       <span class="mvp-production-row-action"><button type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}">${html(action)} <i aria-hidden="true">&rsaquo;</i></button><button type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}" aria-label="More actions for ${html(jobReference(item))}">&ctdot;</button></span>
     </div>`;
   }
@@ -1593,8 +1589,21 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function productionJobIdentityCell(item) {
-    const source = sourceInquiryReference(item) !== "Not linked" || item.sourceType === "native" ? "FROM ORDER" : "LEGACY ORDER";
-    return `<span class="job-identity">${copyButton(jobReference(item), jobReference(item), "job reference")}<small>${html(source)}</small></span>`;
+    return `<span class="job-identity">${copyButton(jobReference(item), jobReference(item), "job reference")}</span>`;
+  }
+
+  function productionDashboardDueCell(dueState, item) {
+    const parts = dueCellParts(dueState, item);
+    if (dueState.key === "overdue") return twoLineCell(parts.primary, "OVERDUE", "due overdue");
+    return `<span class="due ${html(dueState.key)}"><strong>${html(parts.primary)}</strong></span>`;
+  }
+
+  function productionStaffCell(item) {
+    const label = assigned(item);
+    if (label === "Not Yet Assigned") return `<span class="staff">Unassigned</span>`;
+    if (label === "Inactive user (historical)") return `<span class="staff">Inactive user</span>`;
+    const [name] = label.split(/\s+-\s+/, 1);
+    return `<span class="staff" title="${html(label)}">${html(name || label)}</span>`;
   }
 
   function productionSummaryPrimary(item) {

@@ -24612,15 +24612,15 @@ body,
 }
 
 .mvp-production-table {
-  min-width: 1360px;
+  min-width: 1280px;
   width: 100%;
 }
 
 .mvp-production-table-head,
 .mvp-production-table-row {
-  column-gap: 4px;
+  column-gap: 8px;
   display: grid;
-  grid-template-columns: 120px 180px 175px 95px 125px 125px 80px 120px 170px 102px;
+  grid-template-columns: 180px 200px minmax(260px, 1fr) 100px 120px 150px 140px 130px;
   padding: 0 16px;
 }
 
@@ -24633,9 +24633,10 @@ body,
 
 .mvp-production-table-head span {
   color: #657084;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 600;
   letter-spacing: 0;
+  line-height: 1.25;
   text-transform: uppercase;
 }
 
@@ -24649,7 +24650,7 @@ body,
   align-items: center;
   border-bottom: 1px solid #ece9e1;
   cursor: pointer;
-  min-height: 70px;
+  min-height: 60px;
 }
 
 .mvp-production-table-row:last-child {
@@ -24673,11 +24674,14 @@ body,
 }
 
 .mvp-production-table-row .mvp-two-line strong,
+.mvp-production-table-row .customer,
+.mvp-production-table-row .summary,
 .mvp-production-table-row .method,
 .mvp-production-table-row .staff {
   color: #171b22;
-  font-size: 13px;
-  font-weight: 750;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -24710,8 +24714,9 @@ body,
 
 .mvp-production-table-row .mvp-copy span {
   color: #171b22;
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -24727,15 +24732,25 @@ body,
   align-items: center;
   border: 1px solid #dedbd2;
   border-radius: 6px;
+  box-sizing: border-box;
   display: inline-flex !important;
-  font-size: 10px;
-  font-weight: 800;
+  font-size: 11px;
+  font-weight: 600;
+  height: 28px;
   justify-content: center;
   line-height: 1;
+  max-height: 28px;
   min-height: 26px;
   padding: 0 8px;
   text-transform: uppercase;
-  white-space: normal;
+  white-space: nowrap;
+  width: max-content;
+}
+
+.mvp-production-table-row .stage-cell {
+  align-items: center;
+  display: flex;
+  min-width: 0;
 }
 
 .mvp-production-table-row .materials.ok,
@@ -24779,16 +24794,20 @@ body,
 }
 
 .mvp-production-table-row .due.overdue strong,
-.mvp-production-table-row .due.overdue small,
-.mvp-production-table-row .due.today strong,
-.mvp-production-table-row .due.today small {
+.mvp-production-table-row .due.overdue small {
   color: #e11919;
+}
+
+.mvp-production-table-row .due small {
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
 }
 
 .mvp-production-row-action {
   align-items: center;
   display: flex;
-  gap: 6px;
+  gap: 8px;
 }
 
 .mvp-production-row-action button {
@@ -24798,9 +24817,9 @@ body,
   border-radius: 7px;
   color: #ffffff;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 750;
-  height: 32px;
+  font-size: 13px;
+  font-weight: 600;
+  height: 36px;
   justify-content: center;
   min-width: 56px;
   padding: 0 10px;
@@ -24810,7 +24829,7 @@ body,
   background: #ffffff;
   border-color: transparent;
   color: #5f6878;
-  min-width: 26px;
+  min-width: 34px;
   padding: 0;
 }
 
@@ -29104,28 +29123,33 @@ pre,
 }
 
 .mvp-production-page .mvp-production-table {
-  min-width: 1136px;
+  min-width: 1280px;
 }
 
 .mvp-production-page .mvp-production-table-head,
 .mvp-production-page .mvp-production-table-row {
   display: grid;
-  grid-template-columns: 116px minmax(128px, 0.78fr) minmax(140px, 0.9fr) 96px 70px 104px minmax(96px, 0.68fr) 86px minmax(184px, 1fr) 86px !important;
+  grid-template-columns: 180px 200px minmax(260px, 1fr) 100px 120px 150px 140px 130px !important;
 }
 
 .mvp-production-page .mvp-production-table-row {
-  align-items: stretch;
-  min-height: 76px;
+  align-items: center;
+  min-height: 60px;
 }
 
 .mvp-production-page .mvp-production-table-row > * {
   align-items: center;
-  min-height: 100%;
+  align-self: center;
+  min-height: 0;
 }
 
 .mvp-production-page .mvp-production-table-row .mvp-two-line,
 .mvp-production-page .mvp-production-table-row .job-identity,
+.mvp-production-page .mvp-production-table-row .customer,
+.mvp-production-page .mvp-production-table-row .summary,
+.mvp-production-page .mvp-production-table-row .method,
 .mvp-production-page .mvp-production-table-row .staff,
+.mvp-production-page .mvp-production-table-row .stage-cell,
 .mvp-production-page .mvp-production-table-row .mvp-status,
 .mvp-production-page .mvp-production-table-row .mvp-production-row-action {
   min-width: 0;
@@ -29133,11 +29157,25 @@ pre,
 }
 
 .mvp-production-page .mvp-production-table-row .mvp-status {
-  justify-self: stretch;
+  align-self: center;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  height: 28px !important;
+  justify-self: start;
+  letter-spacing: 0;
+  line-height: 1;
+  max-height: 28px !important;
+  min-height: 28px !important;
   max-width: 100%;
   padding-left: 6px;
   padding-right: 6px;
   white-space: nowrap;
+  width: max-content;
+}
+
+.mvp-production-page .mvp-production-table-row .stage-cell {
+  align-items: center;
+  display: flex;
   width: 100%;
 }
 
