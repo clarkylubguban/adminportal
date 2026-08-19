@@ -65,6 +65,7 @@ import {
 } from "./services/adminCatalogImages.js";
 import {
   getCurrentAdminAuthSession,
+  refreshAdminAuthSession,
   getSupabaseConfig,
   getAdminPasswordResetRedirectUrl,
   cleanAdminAuthCallbackUrl,
@@ -121,6 +122,7 @@ const lucideIcons = {
   package: '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="m7.5 4.27 9 5.15"></path>',
   "calendar-check": '<path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path>',
   "clipboard-plus": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 14h6"></path><path d="M12 11v6"></path>',
+  "trash-2": '<path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>',
   "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M19 8v6"></path><path d="M22 11h-6"></path>',
   "package-plus": '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 8v8"></path><path d="M8 12h8"></path>',
   "alert-circle": '<circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line>',
@@ -469,6 +471,7 @@ let catalogDraft = null;
 let catalogValidationError = "";
 let catalogSaveState = "idle";
 let catalogSaveError = "";
+let catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
 const CATALOG_PRODUCT_IMAGE_LIMIT = 6;
 let categoryStatusFilter = "active";
 let categoryProductTypeFilter = "all";
@@ -5113,19 +5116,26 @@ function renderCatalogPage() {
       <article class="content-card table-card catalog-table-card">
         <p class="table-helper-text catalog-count-label">${visibleProducts.length} ${visibleProducts.length === 1 ? "CATALOG ITEM" : "CATALOG ITEMS"}</p>
         <table class="products-table catalog-table catalog-products-table">
+          <colgroup>
+            <col class="catalog-product-col">
+            <col class="catalog-brand-col">
+            <col class="catalog-category-col">
+            <col class="catalog-sku-col">
+            <col class="catalog-selling-price-col">
+            <col class="catalog-margin-col">
+            <col class="catalog-status-col">
+            <col class="catalog-expand-col">
+          </colgroup>
           <thead>
             <tr>
-              <th></th>
               <th>Product</th>
               <th>Brand</th>
               <th>Category</th>
               <th>SKU</th>
-              <th>Variants</th>
-              <th>Unit Cost</th>
               <th>Selling Price</th>
               <th>Margin</th>
-              <th>Updated</th>
               <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -5187,6 +5197,17 @@ function renderCatalogCategoriesPage() {
       <article class="content-card table-card catalog-table-card">
         <p class="table-helper-text catalog-count-label">${visibleCategories.length} ${visibleCategories.length === 1 ? "CATEGORY" : "CATEGORIES"}</p>
         <table class="products-table catalog-table category-table">
+          <colgroup>
+            <col class="category-main-col">
+            <col class="category-code-col">
+            <col class="category-product-type-col">
+            <col class="category-parent-col">
+            <col class="category-children-col">
+            <col class="category-products-col">
+            <col class="category-status-col">
+            <col class="category-updated-col">
+            <col class="category-action-col">
+          </colgroup>
           <thead>
             <tr>
               <th>Category</th>
@@ -5971,22 +5992,18 @@ function renderCatalogProductRow(item) {
   const secondary = item.slug ? item.slug : sourceProduct?.code ? `Source: ${sourceProduct.code}` : "No source product linked";
   const expanded = item.id === catalogExpandedProductId;
   const sku = getCatalogEditorSku(item);
-  const variantCount = getCatalogVariantCount(item);
   const margin = getCatalogEditorMargin(item);
 
   return `
     <tr class="${expanded ? "selected" : ""}" data-catalog-toggle-product="${item.id}" role="button" tabindex="0" aria-expanded="${expanded ? "true" : "false"}" aria-label="Open ${escapeHtml(item.name)} product quick controls">
-      <td class="catalog-expand-cell" data-mobile-label="Quick">${renderIcon(expanded ? "chevron-down" : "chevron-right", "catalog-expand-icon")}</td>
       <td class="catalog-name-cell"><div class="client-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : "empty"}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')" aria-label="Catalog image"` : `role="img" aria-label="No catalog image"`}>${item.imageUrl ? "" : renderIcon("package", "catalog-placeholder-icon")}</span><div><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span title="${escapeHtml(secondary)}">${escapeHtml(secondary)}</span></div></div></td>
       <td class="catalog-category-cell" data-mobile-label="Brand">${escapeHtml(item.brandName || item.brand || "-")}</td>
       <td class="catalog-category-cell" data-mobile-label="Category">${escapeHtml(item.category || "-")}</td>
       <td class="mono-value catalog-sku-cell" data-mobile-label="SKU"><span title="${escapeHtml(sku)}">${escapeHtml(sku)}</span><button class="catalog-copy-sku-button" data-catalog-copy-sku="${escapeHtml(sku)}" type="button" aria-label="Copy SKU">Copy</button></td>
-      <td class="catalog-moq-cell" data-mobile-label="Variants">${variantCount}</td>
-      <td class="catalog-price-cell" data-mobile-label="Unit Cost">${escapeHtml(formatCatalogMoney(item.unitCost || ""))}</td>
       <td class="catalog-price-cell" data-mobile-label="Selling Price">${escapeHtml(formatCatalogPrice(item))}</td>
       <td class="catalog-price-cell" data-mobile-label="Margin">${escapeHtml(margin.label)}</td>
-      <td class="catalog-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(item.updatedAt))}</span></td>
       <td class="catalog-status-cell" data-mobile-label="Status">${renderStatusPill(item.status)}</td>
+      <td class="catalog-expand-cell" data-mobile-label="Quick"><span class="catalog-expand-button">${renderIcon(expanded ? "chevron-down" : "chevron-right", "catalog-expand-icon")}</span></td>
     </tr>
     ${expanded ? renderCatalogProductQuickControl(item) : ""}
   `;
@@ -6171,7 +6188,6 @@ function renderCatalogProductEditorPage(editorRoute) {
             ${renderCatalogEditorImages(draft, canWrite, isSaving)}
             ${renderCatalogEditorPricing(draft, isSaving || !canWrite)}
             ${renderCatalogEditorProduction(draft, isSaving || !canWrite)}
-            ${renderCatalogEditorVariants(draft, isSaving || !canWrite)}
           </div>
           <aside class="catalog-editor-side-column">
             ${renderCatalogEditorStatusCard(draft, isSaving || !canWrite)}
@@ -6179,6 +6195,7 @@ function renderCatalogProductEditorPage(editorRoute) {
             ${renderCatalogEditorReadinessCard(readiness)}
             ${renderCatalogEditorAvailabilityCard(draft)}
           </aside>
+          ${renderCatalogEditorVariants(draft, isSaving || !canWrite)}
         </section>
       </form>
 
@@ -6280,36 +6297,322 @@ function renderCatalogEditorProduction(draft, disabled = false) {
 }
 
 function renderCatalogEditorVariants(draft, disabled = false) {
-  const sizes = splitCatalogList(draft.availableSizesText);
-  const colors = splitCatalogList(draft.availableColorsText);
-  const variants = sizes.length || colors.length
-    ? (sizes.length ? sizes : ["Default"]).flatMap((size) => (colors.length ? colors : ["Default"]).map((color) => ({ size, color }))).slice(0, 6)
-    : [];
-  const rows = variants.map((variant, index) => `
-    <tr>
-      <td>${escapeHtml(variant.color)}</td>
-      <td>${escapeHtml(variant.size)}</td>
-      <td class="mono-value">${escapeHtml(`${getCatalogEditorSku(draft)}-${index + 1}`)}</td>
-      <td>${escapeHtml(formatCatalogPrice(draft))}</td>
-      <td>${renderStatusPill("draft")}</td>
-    </tr>
-  `).join("");
+  const variants = getCatalogDraftVariantRows(draft);
+  const sizes = uniqueList(variants.map((variant) => variant.size).filter(Boolean));
+  const colors = uniqueList(variants.map((variant) => variant.color).filter(Boolean));
+  const canWrite = canWriteCatalogProducts();
+  const canAddVariant = canWrite && !disabled && Boolean(draft.id);
+  const addVariantMessage = !canWrite
+    ? "Catalog variants are read-only for this role."
+    : disabled
+      ? "Wait for the current Product save to finish before adding variants."
+      : !draft.id
+        ? "Save this Product before adding variants."
+        : "Use Add Variant to add the next size or color option, then save.";
 
   return `
     <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
-      <header>
+      <header class="catalog-variants-header">
         <div><h2>Variants</h2><p>Size and color combinations for this catalog product.</p></div>
-        <button class="note-button" type="button" disabled>Add Variant</button>
+        <button class="note-button catalog-add-variant-button" type="button" data-catalog-add-variant ${canAddVariant ? "" : "disabled"} title="${escapeHtml(addVariantMessage)}">${variants.length ? "Add Variant" : "Add First Variant"}</button>
       </header>
-      <div class="catalog-editor-field-grid">
-        ${renderCatalogInput("availableSizesText", "Available Sizes", draft.availableSizesText, "text", false, disabled)}
-        ${renderCatalogInput("availableColorsText", "Available Colors", draft.availableColorsText, "text", false, disabled)}
+      <p class="catalog-editor-helper">${escapeHtml(addVariantMessage)}</p>
+      <div class="catalog-variant-attributes">
+        <div>
+          <span>Available Sizes</span>
+          <div class="catalog-chip-list">${sizes.length ? sizes.map((size) => `<span class="catalog-attribute-chip">${escapeHtml(size)}</span>`).join("") : `<span class="catalog-muted-chip">No sizes yet</span>`}</div>
+        </div>
+        <div>
+          <span>Available Colors</span>
+          <div class="catalog-chip-list">${colors.length ? colors.map((color) => `<span class="catalog-attribute-chip color-chip"><i></i>${escapeHtml(color)}</span>`).join("") : `<span class="catalog-muted-chip">No colors yet</span>`}</div>
+        </div>
       </div>
-      ${rows
-        ? `<table class="catalog-editor-variant-table"><thead><tr><th>Color</th><th>Size</th><th>Variant SKU</th><th>Price</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`
-        : `<div class="catalog-editor-empty"><strong>No variants yet</strong><span>Add size and color combinations when this product needs variants.</span></div>`}
+      ${(catalogVariantPanel.mode || variants.length)
+        ? `<div class="catalog-variant-row-stack">
+            <div class="catalog-variant-row-labels" aria-hidden="true"><span>Color</span><span>Size</span><span>SKU</span><span>Price</span><span>Action</span></div>
+            ${catalogVariantPanel.mode ? renderCatalogVariantPanel(draft, variants, disabled) : ""}
+            ${variants.map((variant, index) => renderCatalogVariantRow(draft, variant, index, disabled)).join("")}
+          </div>`
+        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Add size and color combinations for this product.</span></div>`}
     </article>
   `;
+}
+
+function addCatalogVariantDraft() {
+  if (!catalogDraft || !canWriteCatalogProducts() || !catalogDraft.id || catalogSaveState === "saving" || catalogSaveState === "uploading") return;
+  catalogVariantPanel = { mode: "add", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
+}
+
+function renderCatalogVariantPanel(draft, variants, disabled = false) {
+  const sizeOptions = uniqueList(variants.map((variant) => variant.size).filter(Boolean));
+  const colorOptions = uniqueList(variants.map((variant) => variant.color).filter(Boolean));
+  const saveDisabled = disabled || !String(catalogVariantPanel.size || "").trim() || !String(catalogVariantPanel.color || "").trim() || catalogVariantPanel.sellingPrice === "" || Number(catalogVariantPanel.sellingPrice) < 0;
+
+  return `
+    <div class="catalog-variant-inline-row is-new" data-catalog-variant-panel>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <span>Color</span>
+          <input type="text" list="catalog-variant-color-options" data-catalog-variant-field="color" value="${escapeHtml(catalogVariantPanel.color)}" ${disabled ? "disabled" : ""} placeholder="Black, White">
+          <datalist id="catalog-variant-color-options">${colorOptions.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
+        </label>
+      </div>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <span>Size</span>
+          <input type="text" list="catalog-variant-size-options" data-catalog-variant-field="size" value="${escapeHtml(catalogVariantPanel.size)}" ${disabled ? "disabled" : ""} placeholder="S, M, XL, XXL">
+          <datalist id="catalog-variant-size-options">${sizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
+        </label>
+      </div>
+      <div class="catalog-variant-sku-note locked"><span>SKU</span><strong>Auto-generated on save</strong></div>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <span>Price</span>
+          <input type="number" min="0" step="0.01" data-catalog-variant-field="sellingPrice" value="${escapeHtml(catalogVariantPanel.sellingPrice)}" ${disabled ? "disabled" : ""} placeholder="₱">
+        </label>
+      </div>
+      <div class="catalog-variant-row-actions">
+        <button class="primary-button" type="button" data-catalog-submit-variant ${saveDisabled ? "disabled" : ""}>Save</button>
+        <button class="icon-button" type="button" data-catalog-cancel-variant aria-label="Cancel new Variant">X</button>
+      </div>
+      ${catalogVariantPanel.error ? `<p class="catalog-form-error">${escapeHtml(catalogVariantPanel.error)}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderCatalogVariantRow(draft, variant, index, disabled = false) {
+  const sizeOptions = uniqueList(getCatalogDraftVariantRows(draft).map((item) => item.size).filter(Boolean));
+  const colorOptions = uniqueList(getCatalogDraftVariantRows(draft).map((item) => item.color).filter(Boolean));
+  return `
+    <div class="catalog-variant-inline-row" data-catalog-variant-row="${index}">
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <span>Color</span>
+          <input type="text" list="catalog-existing-variant-color-options-${index}" data-catalog-existing-variant-field="color" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.color || "")}" ${disabled ? "disabled" : ""}>
+          <datalist id="catalog-existing-variant-color-options-${index}">${colorOptions.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
+        </label>
+      </div>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <span>Size</span>
+          <input type="text" list="catalog-existing-variant-size-options-${index}" data-catalog-existing-variant-field="size" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.size || "")}" ${disabled ? "disabled" : ""}>
+          <datalist id="catalog-existing-variant-size-options-${index}">${sizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
+        </label>
+      </div>
+      <div class="catalog-variant-sku-note locked"><span>SKU</span><strong>${escapeHtml(getCatalogVariantSku(draft, variant, index))}</strong></div>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <span>Price</span>
+          <input type="number" min="0" step="0.01" data-catalog-existing-variant-field="sellingPrice" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.sellingPrice ?? "")}" ${disabled ? "disabled" : ""}>
+        </label>
+      </div>
+      <div class="catalog-variant-row-actions">
+        <button class="primary-button" type="button" data-catalog-save-existing-variant="${index}" ${disabled ? "disabled" : ""}>Save</button>
+        <button class="icon-button danger" type="button" data-catalog-delete-variant="${index}" ${disabled ? "disabled" : ""} aria-label="Delete Variant">${renderIcon("trash-2")}</button>
+      </div>
+    </div>
+  `;
+}
+
+function openCatalogVariantEditor(index) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variant = getCatalogDraftVariantRows(catalogDraft)[index];
+  if (!variant) return;
+  catalogVariantPanel = {
+    mode: "edit",
+    index,
+    size: variant.size || "",
+    color: variant.color || "",
+    sellingPrice: variant.sellingPrice ?? catalogDraft.startingPrice ?? "",
+    error: "",
+  };
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
+}
+
+function updateCatalogVariantPanelField(field, value) {
+  catalogVariantPanel = { ...catalogVariantPanel, [field]: value, error: "" };
+  render();
+}
+
+function cancelCatalogVariantPanel() {
+  catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+  render();
+}
+
+function submitCatalogVariantPanel() {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  const size = String(catalogVariantPanel.size || "").trim();
+  const color = String(catalogVariantPanel.color || "").trim();
+  const sellingPrice = catalogVariantPanel.sellingPrice === "" ? catalogDraft.startingPrice || 0 : Number(catalogVariantPanel.sellingPrice);
+  const editingIndex = catalogVariantPanel.mode === "edit" ? catalogVariantPanel.index : -1;
+
+  if (!size || !color) {
+    catalogVariantPanel = { ...catalogVariantPanel, error: "Enter a real size and color before adding a Variant." };
+    render();
+    return;
+  }
+
+  if (!Number.isFinite(Number(sellingPrice)) || Number(sellingPrice) < 0) {
+    catalogVariantPanel = { ...catalogVariantPanel, error: "Selling price cannot be negative." };
+    render();
+    return;
+  }
+
+  const duplicate = variants.some((variant, index) => index !== editingIndex && normalizeVariantToken(variant.size) === normalizeVariantToken(size) && normalizeVariantToken(variant.color) === normalizeVariantToken(color));
+  if (duplicate) {
+    catalogVariantPanel = { ...catalogVariantPanel, error: "This size and color combination already exists." };
+    render();
+    return;
+  }
+
+  const nextVariant = {
+    ...(editingIndex >= 0 ? variants[editingIndex] : {}),
+    size,
+    color,
+    sellingPrice: String(sellingPrice),
+    unitCost: editingIndex >= 0 ? variants[editingIndex].unitCost ?? catalogDraft.unitCost ?? "" : catalogDraft.unitCost ?? "",
+    variantType: getCatalogVariantType(catalogDraft.productType),
+    active: true,
+  };
+  const nextVariants = editingIndex >= 0
+    ? variants.map((variant, index) => index === editingIndex ? nextVariant : variant)
+    : [...variants, nextVariant].slice(0, 6);
+  catalogDraft = {
+    ...catalogDraft,
+    variants: nextVariants,
+    availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
+    availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
+  };
+  catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+  catalogValidationError = "";
+  catalogSaveError = "";
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
+}
+
+function updateCatalogExistingVariantField(index, field, value) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  const current = variants[index];
+  if (!current) return;
+  const nextVariant = {
+    ...current,
+    [field]: field === "sellingPrice" ? value : String(value || "").trim(),
+  };
+  const nextVariants = variants.map((variant, variantIndex) => variantIndex === index ? nextVariant : variant);
+  catalogDraft = {
+    ...catalogDraft,
+    variants: nextVariants,
+    availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
+    availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
+  };
+  catalogSaveError = "";
+  catalogValidationError = "";
+}
+
+function saveCatalogExistingVariant(index) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  const variant = variants[index];
+  if (!variant) return;
+  const size = String(variant.size || "").trim();
+  const color = String(variant.color || "").trim();
+  const price = variant.sellingPrice === "" ? 0 : Number(variant.sellingPrice);
+  if (!size || !color) {
+    catalogSaveError = "Enter a real size and color before saving a Variant.";
+    render();
+    return;
+  }
+  if (!Number.isFinite(price) || price < 0) {
+    catalogSaveError = "Selling price cannot be negative.";
+    render();
+    return;
+  }
+  const duplicate = variants.some((item, variantIndex) => variantIndex !== index && normalizeVariantToken(item.size) === normalizeVariantToken(size) && normalizeVariantToken(item.color) === normalizeVariantToken(color));
+  if (duplicate) {
+    catalogSaveError = "This size and color combination already exists.";
+    render();
+    return;
+  }
+  catalogSaveError = "Variant saved in draft. Use Save Changes to persist it.";
+  render();
+}
+
+function deleteCatalogVariantDraft(index) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  if (!variants[index]) return;
+  const nextVariants = variants.filter((_, variantIndex) => variantIndex !== index);
+  catalogDraft = {
+    ...catalogDraft,
+    variants: nextVariants,
+    availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
+    availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
+  };
+  catalogSaveError = "Variant removed in draft. Use Save Changes to persist the safe archive.";
+  render();
+}
+
+function getCatalogDraftVariantRows(draft) {
+  const supplied = Array.isArray(draft.variants) ? draft.variants.filter((variant) => variant?.active !== false) : [];
+  if (supplied.length) {
+    return supplied.map((variant) => ({
+      ...variant,
+      size: variant.size || "",
+      color: variant.color || "",
+      sellingPrice: variant.sellingPrice ?? draft.startingPrice ?? 0,
+      unitCost: variant.unitCost ?? draft.unitCost ?? 0,
+      variantType: variant.variantType || getCatalogVariantType(draft.productType),
+      active: true,
+    })).slice(0, 6);
+  }
+
+  const sizes = splitCatalogList(draft.availableSizesText);
+  const colors = splitCatalogList(draft.availableColorsText);
+  if (!sizes.length && !colors.length) return [];
+  return (sizes.length ? sizes : [""]).flatMap((size) => (colors.length ? colors : [""]).map((color) => ({
+    size,
+    color,
+    sellingPrice: draft.startingPrice || 0,
+    unitCost: draft.unitCost || 0,
+    variantType: getCatalogVariantType(draft.productType),
+    active: true,
+  }))).slice(0, 6);
+}
+
+function groupCatalogVariantsByColor(variants) {
+  const groups = new Map();
+  variants.forEach((variant, index) => {
+    const color = variant.color || "Unassigned color";
+    const group = groups.get(color) ?? { color, variants: [] };
+    group.variants.push({ variant, index });
+    groups.set(color, group);
+  });
+  return [...groups.values()];
+}
+
+function getCatalogVariantSku(draft, variant, index) {
+  return variant?.sku || variant?.globalSku || variant?.masterVariantId || `${getCatalogEditorSku(draft)}-${index + 1}`;
+}
+
+function formatCatalogVariantPrice(variant, draft) {
+  const value = variant?.sellingPrice ?? draft.startingPrice ?? 0;
+  const numeric = Number(value || 0);
+  return `₱${Number.isFinite(numeric) ? numeric.toLocaleString("en-US") : "0"}`;
+}
+
+function getCatalogVariantType(productType) {
+  if (productType === "SERVICE") return "SERVICE_TIER";
+  if (productType === "MATERIAL_SUPPLY") return "SUPPLY_OPTION";
+  return "STANDARD";
+}
+
+function normalizeVariantToken(value) {
+  return String(value || "").trim().toLowerCase();
 }
 
 function renderCatalogEditorStatusCard(draft, disabled = false) {
@@ -6338,7 +6641,7 @@ function renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCou
         ${renderCatalogDetailRow("Brand", getCatalogEditorBrandLabel(draft) || "Not selected")}
         ${renderCatalogDetailRow("Type", formatProductType(draft.productType) || "Not selected")}
         ${renderCatalogDetailRow("Category", categoryValue || "Not selected")}
-        ${renderCatalogDetailRow("Variants", String(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length || 0))}
+        ${renderCatalogDetailRow("Variants", String(getCatalogDraftVariantRows(draft).length))}
         ${renderCatalogDetailRow("Last updated", draft.updatedAt ? formatCatalogUpdated(draft.updatedAt) : "Not saved")}
         ${renderCatalogDetailRow("Images", `${imageCount} of ${CATALOG_PRODUCT_IMAGE_LIMIT}`)}
         ${renderCatalogDetailRow("Production info", draft.productionUse ? "Complete" : "Incomplete")}
@@ -6396,6 +6699,7 @@ function prepareCatalogEditorDraft(editorRoute, selectedProduct) {
     catalogEditorMode = editorRoute.mode;
     catalogEditorRouteKey = routeKey;
     catalogDraft = createCatalogDraft(selectedProduct);
+    catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
     catalogValidationError = "";
     catalogSaveError = "";
     catalogSaveState = "idle";
@@ -6416,6 +6720,7 @@ function closeCatalogProductEditor() {
   catalogEditorMode = "";
   catalogEditorRouteKey = "";
   catalogDraft = null;
+  catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
   catalogValidationError = "";
   catalogSaveError = "";
   catalogSaveState = "idle";
@@ -8092,7 +8397,7 @@ async function saveCatalogQuickProduct(productId, updates) {
   render();
 
   try {
-    const savedProduct = await updateAdminProduct(productId, { ...product, ...updates }, adminAuthSession);
+    const savedProduct = await runCatalogAuthenticatedWrite(() => updateAdminProduct(productId, { ...product, ...updates }, adminAuthSession));
     if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
     catalogQuickSaveState = "idle";
     catalogSaveState = "success";
@@ -8129,6 +8434,7 @@ async function updateCatalogQuickImage(productId, file) {
   render();
 
   try {
+    adminAuthSession = await getFreshCatalogAuthSession();
     uploadedImage = await uploadCatalogImage(file, product, adminAuthSession);
     const nextImages = normalizeCatalogDraftImages([
       {
@@ -8143,7 +8449,7 @@ async function updateCatalogQuickImage(productId, file) {
         .slice(0, CATALOG_PRODUCT_IMAGE_LIMIT - 1)
         .map((image) => ({ ...image, isPrimary: false })),
     ]);
-    const savedProduct = await updateAdminProduct(productId, { ...product, images: nextImages }, adminAuthSession);
+    const savedProduct = await runCatalogAuthenticatedWrite(() => updateAdminProduct(productId, { ...product, images: nextImages }, adminAuthSession));
     if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
     catalogQuickSaveState = "idle";
     catalogSaveState = "success";
@@ -8169,7 +8475,7 @@ async function duplicateCatalogProduct(productId) {
   render();
 
   try {
-    const savedProduct = await duplicateAdminProduct(product, adminAuthSession);
+    const savedProduct = await runCatalogAuthenticatedWrite(() => duplicateAdminProduct(product, adminAuthSession));
     if (savedProduct) {
       catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
       catalogExpandedProductId = savedProduct.id;
@@ -8189,6 +8495,46 @@ function cssEscape(value) {
   if (window.CSS?.escape) return window.CSS.escape(value);
   return String(value).replace(/["\\]/g, "\\$&");
 }
+
+async function runCatalogAuthenticatedWrite(operation) {
+  adminAuthSession = await getFreshCatalogAuthSession();
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isCatalogSessionExpiryError(error)) throw error;
+    adminAuthSession = await getFreshCatalogAuthSession({ forceRefresh: true });
+    return operation();
+  }
+}
+
+async function getFreshCatalogAuthSession({ forceRefresh = false } = {}) {
+  try {
+    if (forceRefresh) {
+      const refreshToken = adminAuthSession?.refresh_token;
+      if (!refreshToken) throw new Error("Admin session expired.");
+      const refreshedSession = await refreshAdminAuthSession(refreshToken);
+      if (refreshedSession?.access_token) return refreshedSession;
+    }
+
+    const currentSession = await getCurrentAdminAuthSession();
+    if (currentSession?.access_token) return currentSession;
+  } catch (error) {
+    console.warn("Unable to refresh Admin Catalog session.", error);
+  }
+
+  throw new Error("Your session expired. Sign in again to continue. Your unsaved form remains open.");
+}
+
+function isCatalogSessionExpiryError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return message.includes("pgrst303")
+    || message.includes("jwt expired")
+    || message.includes("token expired")
+    || message.includes("admin session expired")
+    || message.includes("auth session is missing")
+    || message.includes("supabase auth session is required");
+}
+
 function updateCatalogDraftField(field, value, inputType = "text") {
   if (!catalogDraft) return;
   const nextValue = inputType === "checkbox" ? Boolean(value) : value;
@@ -8267,11 +8613,12 @@ async function saveCatalogDraft() {
   render();
 
   try {
+    adminAuthSession = await getFreshCatalogAuthSession();
     const baseProduct = { ...product };
     delete baseProduct.images;
     let savedProduct = isEdit
-      ? await updateAdminProduct(draft.id, baseProduct, adminAuthSession)
-      : await createAdminProduct(baseProduct, adminAuthSession);
+      ? await runCatalogAuthenticatedWrite(() => updateAdminProduct(draft.id, baseProduct, adminAuthSession))
+      : await runCatalogAuthenticatedWrite(() => createAdminProduct(baseProduct, adminAuthSession));
 
     const finalImages = [];
     for (const image of draftImages) {
@@ -8294,7 +8641,7 @@ async function saveCatalogDraft() {
 
     catalogSaveState = "saving";
     render();
-    savedProduct = await updateAdminProduct(savedProduct.id, { ...savedProduct, images: normalizeCatalogDraftImages(finalImages) }, adminAuthSession);
+    savedProduct = await runCatalogAuthenticatedWrite(() => updateAdminProduct(savedProduct.id, { ...savedProduct, images: normalizeCatalogDraftImages(finalImages) }, adminAuthSession));
 
     if (savedProduct) {
       catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
@@ -8359,8 +8706,9 @@ function normalizeCatalogDraft(draft) {
     startingPrice: draft.startingPrice === "" ? "" : Number(draft.startingPrice),
     priceLabel: String(draft.priceLabel || "").trim(),
     minimumQuantity: Number(draft.minimumQuantity || 1),
-    availableSizes: splitCatalogList(draft.availableSizesText),
-    availableColors: splitCatalogList(draft.availableColorsText),
+    availableSizes: uniqueList(getCatalogDraftVariantRows(draft).map((variant) => variant.size).filter(Boolean)),
+    availableColors: uniqueList(getCatalogDraftVariantRows(draft).map((variant) => variant.color).filter(Boolean)),
+    variants: getCatalogDraftVariantRows(draft),
     printMethods: splitCatalogList(draft.printMethodsText),
     sortOrder: Number(draft.sortOrder || 0),
     isFeatured: draft.isFeatured === true,
@@ -8392,6 +8740,10 @@ function splitCatalogList(value) {
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function uniqueList(values) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
 }
 
 function slugify(value) {
@@ -9014,6 +9366,47 @@ function bindEvents() {
     field.addEventListener(eventName, (event) => {
       updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
       if (field.dataset.catalogField === "productType") render();
+    });
+  });
+
+  document.querySelector("[data-catalog-add-variant]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    addCatalogVariantDraft();
+  });
+
+  document.querySelectorAll("[data-catalog-variant-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      updateCatalogVariantPanelField(field.dataset.catalogVariantField, event.target.value);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-existing-variant-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      updateCatalogExistingVariantField(Number(field.dataset.catalogExistingVariantIndex || -1), field.dataset.catalogExistingVariantField, event.target.value);
+    });
+  });
+
+  document.querySelector("[data-catalog-cancel-variant]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    cancelCatalogVariantPanel();
+  });
+
+  document.querySelector("[data-catalog-submit-variant]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    submitCatalogVariantPanel();
+  });
+
+  document.querySelectorAll("[data-catalog-save-existing-variant]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      saveCatalogExistingVariant(Number(button.dataset.catalogSaveExistingVariant || -1));
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-delete-variant]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      deleteCatalogVariantDraft(Number(button.dataset.catalogDeleteVariant || -1));
     });
   });
 

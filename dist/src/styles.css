@@ -13160,6 +13160,14 @@ body,
   text-transform: uppercase;
 }
 
+.catalog-editor-helper {
+  color: var(--saas-muted);
+  font-family: var(--saas-font);
+  font-size: 12px;
+  line-height: 1.4;
+  margin: -8px 0 0;
+}
+
 .catalog-editor-grid {
   align-items: start;
   display: grid;
@@ -13327,16 +13335,6 @@ body,
   font-size: 20px;
 }
 
-.catalog-editor-variant-table {
-  min-width: 0;
-}
-
-.catalog-editor-variant-table th,
-.catalog-editor-variant-table td {
-  height: 42px;
-  padding: 0 10px;
-}
-
 .catalog-editor-empty {
   background: var(--saas-surface-soft);
   border: 1px solid var(--saas-border);
@@ -13344,6 +13342,217 @@ body,
   display: grid;
   gap: 4px;
   padding: 16px;
+}
+
+.catalog-variants-header {
+  align-items: flex-start;
+  flex-wrap: wrap;
+}
+
+#catalog-section-variants {
+  grid-column: 1 / -1;
+}
+
+.catalog-add-variant-button {
+  flex: 0 0 auto;
+  white-space: nowrap;
+}
+
+.catalog-variant-attributes,
+.catalog-variant-row-stack {
+  display: grid;
+  gap: 12px;
+}
+
+.catalog-variant-attributes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.catalog-variant-attributes > div,
+.catalog-variant-inline-row {
+  background: var(--saas-surface-soft);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  padding: 12px;
+}
+
+.catalog-variant-attributes span,
+.catalog-variant-sku-note span {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.catalog-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.catalog-attribute-chip,
+.catalog-muted-chip {
+  align-items: center;
+  border: 1px solid var(--saas-border);
+  border-radius: 999px;
+  display: inline-flex;
+  font-family: var(--saas-font);
+  font-size: 12px;
+  gap: 6px;
+  min-height: 28px;
+  padding: 5px 9px;
+}
+
+.catalog-attribute-chip {
+  background: var(--saas-surface);
+  color: var(--saas-ink);
+  font-weight: 700;
+}
+
+.catalog-muted-chip {
+  color: var(--saas-muted);
+}
+
+.catalog-attribute-chip i {
+  background: var(--saas-ink);
+  border-radius: 999px;
+  display: inline-block;
+  height: 9px;
+  width: 9px;
+}
+
+.catalog-variant-sku-note {
+  align-content: center;
+  background: var(--saas-surface);
+  border: 1px dashed var(--saas-border);
+  border-radius: var(--saas-radius);
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 9px 10px;
+}
+
+.catalog-variant-sku-note.locked strong::after {
+  content: " LOCKED";
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 9px;
+  font-weight: 800;
+  margin-left: 5px;
+}
+
+.catalog-variant-sku-note strong {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.catalog-variant-row-labels,
+.catalog-variant-inline-row {
+  align-items: end;
+  box-sizing: border-box;
+  display: grid;
+  column-gap: 16px;
+  grid-template-columns: 220px 90px minmax(300px, 1fr) 140px 120px;
+  row-gap: 10px;
+}
+
+.catalog-variant-row-labels {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 800;
+  padding: 0 13px;
+  text-transform: uppercase;
+}
+
+.catalog-variant-inline-row {
+  background: var(--saas-surface-soft);
+}
+
+.catalog-variant-inline-row.is-new {
+  background: var(--saas-surface);
+  border-color: var(--saas-lime);
+}
+
+.catalog-variant-field-cell {
+  min-width: 0;
+}
+
+.catalog-variant-field-cell input,
+.catalog-variant-field-cell select {
+  min-width: 0;
+  width: 100%;
+}
+
+.catalog-variant-row-actions {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.catalog-variant-row-actions .primary-button {
+  flex: 0 0 auto;
+  height: 40px;
+  min-height: 40px;
+  min-width: 72px;
+  padding: 0 18px;
+  width: auto;
+  white-space: nowrap;
+}
+
+.catalog-variant-row-actions .primary-button:disabled {
+  background: var(--saas-surface-soft);
+  border-color: var(--saas-border);
+  color: var(--saas-muted);
+  cursor: not-allowed;
+  opacity: 1;
+}
+
+.catalog-variant-row-actions .icon-button {
+  align-items: center;
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  box-sizing: border-box;
+  color: var(--saas-ink);
+  flex: 0 0 40px;
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0;
+  width: 40px;
+}
+
+.catalog-variant-row-actions .icon-button .lucide-icon,
+.catalog-variant-row-actions .icon-button .lucide-icon svg {
+  flex: 0 0 18px;
+  height: 18px !important;
+  max-height: 18px;
+  max-width: 18px;
+  width: 18px !important;
+}
+
+.catalog-variant-row-actions .icon-button.danger {
+  color: var(--saas-ink);
+}
+
+.catalog-variant-row-actions .icon-button.danger:hover {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.catalog-variant-inline-row .catalog-form-error {
+  grid-column: 1 / -1;
+  margin: 0;
 }
 
 .catalog-editor-status-options {
@@ -13509,6 +13718,16 @@ body,
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
+  .catalog-variant-row-labels,
+  .catalog-variant-inline-row {
+    column-gap: 14px;
+    grid-template-columns: 180px 82px minmax(220px, 1fr) 120px 120px;
+  }
+
+  .catalog-variant-row-actions {
+    justify-content: flex-start;
+  }
+
   .catalog-product-editor-page {
     box-sizing: border-box;
     max-width: calc(100vw - 196px);
@@ -13536,8 +13755,30 @@ body,
 
   .admin-saas-page .status-grid,
   .admin-saas-page .compact-grid,
-  .catalog-form-grid {
+  .catalog-form-grid,
+  .catalog-variant-attributes,
+  .catalog-variant-inline-row {
     grid-template-columns: 1fr;
+  }
+
+  .catalog-variants-header {
+    align-items: stretch;
+    display: grid;
+  }
+
+  .catalog-add-variant-button,
+  .catalog-variant-row-actions .primary-button,
+  .catalog-variant-row-actions .icon-button {
+    width: 100%;
+  }
+
+  .catalog-variant-row-labels {
+    display: none;
+  }
+
+  .catalog-variant-row-actions {
+    display: grid;
+    grid-template-columns: 1fr 44px;
   }
 
   .clients-page .detail-panel:not(.empty-panel),
@@ -15092,56 +15333,72 @@ body,
 }
 
 .catalog-products-table {
-  min-width: 1240px;
+  min-width: 0;
 }
 
+.app-shell.admin-saas-shell .catalog-products-table .catalog-product-col,
 .app-shell.admin-saas-shell .catalog-products-table th:nth-child(1),
 .app-shell.admin-saas-shell .catalog-products-table td:nth-child(1) {
-  text-align: center;
-  width: 46px;
+  width: 320px;
 }
 
+.app-shell.admin-saas-shell .catalog-products-table .catalog-brand-col,
+.app-shell.admin-saas-shell .catalog-products-table .catalog-category-col,
 .app-shell.admin-saas-shell .catalog-products-table th:nth-child(2),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(2) {
-  width: 280px;
+.app-shell.admin-saas-shell .catalog-products-table td:nth-child(2),
+.app-shell.admin-saas-shell .catalog-products-table th:nth-child(3),
+.app-shell.admin-saas-shell .catalog-products-table td:nth-child(3) {
+  width: 155px;
 }
 
-.app-shell.admin-saas-shell .catalog-products-table th:nth-child(3),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(3),
+.app-shell.admin-saas-shell .catalog-products-table .catalog-sku-col,
 .app-shell.admin-saas-shell .catalog-products-table th:nth-child(4),
 .app-shell.admin-saas-shell .catalog-products-table td:nth-child(4) {
-  width: 150px;
-}
-
-.app-shell.admin-saas-shell .catalog-products-table th:nth-child(5),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(5),
-.app-shell.admin-saas-shell .catalog-products-table th:nth-child(8),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(8) {
-  text-align: center;
-  width: 92px;
-}
-
-.app-shell.admin-saas-shell .catalog-products-table th:nth-child(6),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(6),
-.app-shell.admin-saas-shell .catalog-products-table th:nth-child(7),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(7) {
   width: 130px;
 }
 
-.app-shell.admin-saas-shell .catalog-products-table th:nth-child(9),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(9),
-.app-shell.admin-saas-shell .catalog-products-table th:nth-child(10),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(10),
-.app-shell.admin-saas-shell .catalog-products-table th:nth-child(11),
-.app-shell.admin-saas-shell .catalog-products-table td:nth-child(11) {
-  width: 118px;
+.app-shell.admin-saas-shell .catalog-products-table .catalog-selling-price-col,
+.app-shell.admin-saas-shell .catalog-products-table th:nth-child(5),
+.app-shell.admin-saas-shell .catalog-products-table td:nth-child(5) {
+  width: 115px;
+}
+
+.app-shell.admin-saas-shell .catalog-products-table .catalog-margin-col,
+.app-shell.admin-saas-shell .catalog-products-table th:nth-child(6),
+.app-shell.admin-saas-shell .catalog-products-table td:nth-child(6) {
+  text-align: center;
+  width: 80px;
+}
+
+.app-shell.admin-saas-shell .catalog-products-table .catalog-status-col,
+.app-shell.admin-saas-shell .catalog-products-table th:nth-child(7),
+.app-shell.admin-saas-shell .catalog-products-table td:nth-child(7) {
+  width: 95px;
+}
+
+.app-shell.admin-saas-shell .catalog-products-table .catalog-expand-col,
+.app-shell.admin-saas-shell .catalog-products-table th:nth-child(8),
+.app-shell.admin-saas-shell .catalog-products-table td:nth-child(8) {
+  text-align: center;
+  width: 60px;
 }
 
 .catalog-expand-cell {
   color: #4f4f4f;
+  text-align: center;
+}
+
+.catalog-expand-button {
+  align-items: center;
+  box-sizing: border-box;
+  display: inline-flex;
+  height: 40px;
+  justify-content: center;
+  width: 40px;
 }
 
 .catalog-expand-icon svg {
+  display: block;
   height: 16px;
   width: 16px;
 }
@@ -15908,11 +16165,13 @@ body,
 .app-shell.admin-saas-shell .catalog-table td:nth-child(8) { width: 110px !important; }
 
 .app-shell.admin-saas-shell .catalog-table-card:has(.category-table) {
-  overflow-x: hidden !important;
+  overflow-x: auto !important;
 }
 
 .app-shell.admin-saas-shell .category-table {
-  min-width: 0 !important;
+  border-collapse: separate !important;
+  border-spacing: 10px 0 !important;
+  min-width: 1180px !important;
   table-layout: fixed !important;
   width: 100% !important;
 }
@@ -15931,14 +16190,33 @@ body,
   white-space: nowrap;
 }
 
-.app-shell.admin-saas-shell .category-table .category-main-cell { width: auto !important; }
-.app-shell.admin-saas-shell .category-table .category-code-cell { width: 104px !important; }
-.app-shell.admin-saas-shell .category-table .category-product-type-cell { width: 112px !important; }
-.app-shell.admin-saas-shell .category-table .category-parent-cell { width: 128px !important; }
-.app-shell.admin-saas-shell .category-table .category-count-cell { text-align: center; width: 64px !important; }
-.app-shell.admin-saas-shell .category-table .category-status-cell { width: 86px !important; }
-.app-shell.admin-saas-shell .category-table .category-updated-cell { width: 104px !important; }
-.app-shell.admin-saas-shell .category-table .category-action-cell { width: 72px !important; }
+.app-shell.admin-saas-shell .category-table .category-main-col,
+.app-shell.admin-saas-shell .category-table .category-main-cell { width: 250px !important; }
+.app-shell.admin-saas-shell .category-table .category-code-col,
+.app-shell.admin-saas-shell .category-table .category-code-cell { width: 145px !important; }
+.app-shell.admin-saas-shell .category-table .category-product-type-col,
+.app-shell.admin-saas-shell .category-table .category-product-type-cell { width: 145px !important; }
+.app-shell.admin-saas-shell .category-table .category-parent-col,
+.app-shell.admin-saas-shell .category-table .category-parent-cell { width: 105px !important; }
+.app-shell.admin-saas-shell .category-table .category-children-col,
+.app-shell.admin-saas-shell .category-table .category-products-col,
+.app-shell.admin-saas-shell .category-table .category-count-cell { text-align: center; width: 90px !important; }
+.app-shell.admin-saas-shell .category-table .category-status-col,
+.app-shell.admin-saas-shell .category-table .category-status-cell { width: 105px !important; }
+.app-shell.admin-saas-shell .category-table .category-updated-col,
+.app-shell.admin-saas-shell .category-table .category-updated-cell { width: 120px !important; }
+.app-shell.admin-saas-shell .category-table .category-action-col,
+.app-shell.admin-saas-shell .category-table .category-action-cell { text-align: right; width: 105px !important; }
+
+.app-shell.admin-saas-shell .category-table .category-action-cell .compact-action {
+  box-sizing: border-box;
+  height: 40px;
+  min-height: 40px;
+  min-width: 64px;
+  padding: 0 16px;
+  width: auto;
+  white-space: nowrap;
+}
 
 @media (max-width: 860px) {
   .app-shell.admin-saas-shell .catalog-table-card:has(.category-table) {
@@ -28609,7 +28887,6 @@ pre,
       "product product"
       "brand category"
       "price margin"
-      "variants updated"
       "status status";
     grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     min-height: 0 !important;
@@ -28635,8 +28912,7 @@ pre,
   }
 
   .app-shell.admin-saas-shell .catalog-products-table .catalog-expand-cell,
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(5),
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(7) {
+  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(4) {
     display: none !important;
   }
 
@@ -28667,33 +28943,25 @@ pre,
     white-space: nowrap;
   }
 
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(3) {
+  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(2) {
     display: grid !important;
     grid-area: brand;
   }
 
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(4) {
+  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(3) {
     grid-area: category;
   }
 
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(6) {
-    grid-area: variants;
-  }
-
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(8) {
+  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(5) {
     display: grid !important;
     grid-area: price;
   }
 
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(9) {
+  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(6) {
     grid-area: margin;
   }
 
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(10) {
-    grid-area: updated;
-  }
-
-  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(11) {
+  .app-shell.admin-saas-shell .catalog-products-table td:nth-child(7) {
     grid-area: status;
   }
 

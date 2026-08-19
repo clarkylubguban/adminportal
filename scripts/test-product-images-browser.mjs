@@ -18,6 +18,7 @@ const productId = "10000000-0000-4000-8000-000000000001";
 const categoryId = "20000000-0000-4000-8000-000000000001";
 const brandId = "30000000-0000-4000-8000-000000000001";
 const productImagePath = join(tmpdir(), "trry-product-image-qa-800.png");
+const browserConsole = [];
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",
@@ -75,6 +76,8 @@ let variants = [{
 }];
 
 let images = [1, 2, 3, 4].map((number, index) => imageRow(number, index, index === 0));
+let expiredProductWriteFailures = 0;
+let authRefreshCount = 0;
 
 const categories = [{
   id: categoryId,
@@ -128,12 +131,17 @@ try {
   await navigate(cdp, "/catalog");
   await waitFor(cdp, `document.body.innerText.includes("Image QA Tee")`);
   await verifyCanonicalProductVisibleWithoutChannel(cdp);
+  await verifyCatalogProductsExpandColumn(cdp);
+  await verifyUnsavedProductVariantGate(cdp);
+  await navigate(cdp, "/catalog");
+  await waitFor(cdp, `document.body.innerText.includes("Image QA Tee")`);
   await captureReview(cdp, "01-products-compact-filters.png");
   await evaluate(cdp, `document.querySelector("[data-catalog-toggle-product]")?.click()`);
   await waitFor(cdp, `Boolean(document.querySelector(".catalog-product-quick-control"))`);
   await captureReview(cdp, "02-products-quick-control.png");
   await navigate(cdp, "/catalog/categories");
   await waitFor(cdp, `document.body.innerText.includes("Shirts")`);
+  await verifyCategoryTableGeometry(cdp);
   await captureReview(cdp, "06-categories-compact-filters.png");
   await navigate(cdp, "/catalog/brands");
   await waitFor(cdp, `document.body.innerText.includes("TRRY Apparel")`);
@@ -141,6 +149,7 @@ try {
   await navigate(cdp, `/catalog?product=${productId}`);
   await waitFor(cdp, `document.querySelector("#catalog-section-images") && document.body.innerText.includes("Image QA Tee")`);
   await verifyNoHorizontalOverflow(cdp, "desktop product editor");
+  await verifyVariantAddAndSessionRefresh(cdp);
   await assertImageState(cdp, { count: 4, primaryAlt: "Image 1" });
   await assertPrimaryMarkerOnly(cdp);
 
@@ -251,6 +260,19 @@ async function handleRequest(request, response) {
       });
       return;
     }
+    if (pathname === "/auth/v1/token") {
+      const body = await readJson(request);
+      if (url.searchParams.get("grant_type") !== "refresh_token" || body.refresh_token !== "owner-refresh-token") {
+        return json(response, { message: "invalid refresh token" }, 401);
+      }
+      authRefreshCount += 1;
+      return json(response, {
+        access_token: "owner-token",
+        refresh_token: "owner-refresh-token",
+        expires_in: 3600,
+        user: { id: ownerUserId, email: "owner@trry.invalid" },
+      });
+    }
     if (pathname.startsWith("/rest/v1/")) {
       await handleRest(url, request, response);
       return;
@@ -317,6 +339,10 @@ async function handleRest(url, request, response) {
   if (request.method === "PATCH") {
     const body = await readJson(request);
     if (table === "products") {
+      if (request.headers.authorization?.includes("expired-owner-token") && expiredProductWriteFailures === 0) {
+        expiredProductWriteFailures += 1;
+        return json(response, { code: "PGRST303", message: "JWT expired", details: null, hint: null }, 401);
+      }
       const id = getEq(url, "id");
       products = products.map((row) => row.id === id ? { ...row, ...body } : row);
       return json(response, products.filter((row) => row.id === id));
@@ -389,6 +415,187 @@ async function saveProduct(cdp) {
   await waitFor(cdp, `document.body.innerText.includes("Changes saved successfully")`);
 }
 
+async function verifyUnsavedProductVariantGate(cdp) {
+  await navigate(cdp, "/catalog?product=new");
+  await waitFor(cdp, `document.querySelector("#catalog-section-variants")`);
+  const state = await evaluate(cdp, `(() => {
+    const addButton = document.querySelector("[data-catalog-add-variant]");
+    return {
+      addDisabled: Boolean(addButton?.disabled),
+      helper: document.querySelector(".catalog-editor-helper")?.textContent.trim() || "",
+      hasPanel: Boolean(document.querySelector("[data-catalog-variant-panel]")),
+      hasTable: Boolean(document.querySelector(".catalog-editor-variant-table")),
+      emptyCopy: document.body.innerText.includes("No variants yet") && document.body.innerText.includes("Add size and color combinations for this product."),
+    };
+  })()`);
+  assert.deepEqual(state, {
+    addDisabled: true,
+    helper: "Save this Product before adding variants.",
+    hasPanel: false,
+    hasTable: false,
+    emptyCopy: true,
+  }, "unsaved Product explains why Add Variant is disabled without rendering a spreadsheet table");
+}
+
+async function verifyVariantAddAndSessionRefresh(cdp) {
+  const initialState = await evaluate(cdp, `(() => {
+    const addButton = document.querySelector("[data-catalog-add-variant]");
+    const addRect = addButton?.getBoundingClientRect();
+    const cardRect = document.querySelector("#catalog-section-variants")?.getBoundingClientRect();
+    const cards = [...document.querySelectorAll(".catalog-variant-card")];
+    return {
+      addButtonText: addButton?.textContent.trim() || "",
+      addDisabled: Boolean(addButton?.disabled),
+      helper: document.querySelector(".catalog-editor-helper")?.textContent.trim() || "",
+      variantRows: document.querySelectorAll("[data-catalog-variant-row]").length,
+      hasTable: Boolean(document.querySelector(".catalog-editor-variant-table")),
+      sizeChips: [...document.querySelectorAll(".catalog-attribute-chip")].map((chip) => chip.textContent.trim()),
+      skuReadonly: [...document.querySelectorAll(".catalog-variant-sku-note")].every((node) => !node.querySelector("input")),
+      addContained: Boolean(addRect && cardRect && addRect.right <= cardRect.right + 1),
+      hasManualSkuField: Boolean(document.querySelector('[data-catalog-field="sku"], [data-catalog-field="globalSku"]')),
+      savedDelete: Boolean(document.querySelector("[data-catalog-delete-variant]")),
+    };
+  })()`);
+  assert.equal(initialState.addButtonText, "Add Variant", "saved Product Add Variant label");
+  assert.equal(initialState.addDisabled, false, "saved Product Add Variant enabled");
+  assert.equal(initialState.helper, "Use Add Variant to add the next size or color option, then save.", "saved Product Add Variant helper");
+  assert.equal(initialState.variantRows, 1, "compact Variant rows replace table/card workflow");
+  assert.equal(initialState.hasTable, false, "spreadsheet Variant table removed");
+  assert.deepEqual(initialState.sizeChips, ["M", "Black"], "size/color chips render current attributes");
+  assert.equal(initialState.skuReadonly, true, "SKU renders as read-only metadata");
+  assert.equal(initialState.addContained, true, "Add Variant button is contained in the Variants card");
+  assert.equal(initialState.hasManualSkuField, false, "generated SKU is not exposed as a primary manual field");
+  assert.equal(initialState.savedDelete, true, "saved Variant row exposes safe Delete/Archive action");
+  await verifyVariantInlineGeometry(cdp, "desktop");
+
+  await forceExpiredOwnerSession(cdp);
+  await evaluate(cdp, `document.querySelector("[data-catalog-add-variant]")?.click()`);
+  await waitFor(cdp, `Boolean(document.querySelector("[data-catalog-variant-panel]"))`);
+  const blankRowState = await evaluate(cdp, `(() => ({
+    color: document.querySelector('[data-catalog-variant-field="color"]')?.value || "",
+    size: document.querySelector('[data-catalog-variant-field="size"]')?.value || "",
+    price: document.querySelector('[data-catalog-variant-field="sellingPrice"]')?.value || "",
+    sku: document.querySelector("[data-catalog-variant-panel] .catalog-variant-sku-note strong")?.textContent.trim() || "",
+    saveDisabled: Boolean(document.querySelector("[data-catalog-submit-variant]")?.disabled),
+    hasTrash: Boolean(document.querySelector("[data-catalog-variant-panel] [data-catalog-delete-variant]")),
+    hasCancel: Boolean(document.querySelector("[data-catalog-cancel-variant]")),
+  }))()`);
+  assert.deepEqual(blankRowState, {
+    color: "",
+    size: "",
+    price: "",
+    sku: "Auto-generated on save",
+    saveDisabled: true,
+    hasTrash: false,
+    hasCancel: true,
+  }, "Add Variant inserts one blank editable row with locked generated SKU and Cancel");
+  await setVariantPanelValue(cdp, "size", "M");
+  await setVariantPanelValue(cdp, "color", "Black");
+  await setVariantPanelValue(cdp, "sellingPrice", "499");
+  await evaluate(cdp, `document.querySelector("[data-catalog-submit-variant]")?.click()`);
+  await waitFor(cdp, `document.body.innerText.toLowerCase().includes("this size and color combination already exists.")`);
+  await setVariantPanelValue(cdp, "size", "XL");
+  await evaluate(cdp, `document.querySelector("[data-catalog-submit-variant]")?.click()`);
+  await waitFor(cdp, `document.querySelectorAll("[data-catalog-variant-row]").length === 2`);
+  const draftState = await evaluate(cdp, `(() => ({
+    hasSpreadsheetInputs: Boolean(document.querySelector('[data-catalog-field="availableSizesText"], [data-catalog-field="availableColorsText"]')),
+    rows: [...document.querySelectorAll("[data-catalog-variant-row]")].map((row) => row.textContent.trim()),
+    sizeChips: [...document.querySelectorAll(".catalog-attribute-chip")].map((chip) => chip.textContent.trim()),
+    hasOptionGenerated: document.body.innerText.includes("Option 2") || document.body.innerText.includes("Option 5"),
+    skuReadonly: [...document.querySelectorAll(".catalog-variant-sku-note")].every((node) => !node.querySelector("input")),
+  }))()`);
+  assert.equal(draftState.hasSpreadsheetInputs, false, "comma-separated Variant attribute inputs are not displayed");
+  assert.equal(draftState.rows.length, 2, "Variant preview adds one new inline row");
+  assert.ok(draftState.sizeChips.includes("M") && draftState.sizeChips.includes("XL") && draftState.sizeChips.includes("Black"), "chips reflect real size/color values");
+  assert.equal(draftState.hasOptionGenerated, false, "Add Variant does not generate Option N placeholders");
+  assert.equal(draftState.skuReadonly, true, "saved and unsaved Variant SKU displays remain read-only");
+
+  await saveProduct(cdp);
+  assert.equal(expiredProductWriteFailures, 1, "expired Product write was detected once");
+  assert.equal(authRefreshCount, 1, "auth refresh was performed once");
+  assert.equal(variants.filter((variant) => variant.product_id === productId && variant.active !== false && !variant.archived_at).length, 2, "one QA Variant persisted without duplicates");
+  assert.equal(new Set(variants.filter((variant) => variant.product_id === productId).map((variant) => variant.id)).size, variants.filter((variant) => variant.product_id === productId).length, "variant IDs remain unique");
+
+  await navigate(cdp, "/catalog");
+  await navigate(cdp, `/catalog?product=${productId}`);
+  await waitFor(cdp, `document.querySelector("#catalog-section-variants") && document.querySelectorAll("[data-catalog-variant-row]").length === 2`);
+  await cdp.send("Page.reload", { ignoreCache: true });
+  await waitFor(cdp, `document.querySelector("#catalog-section-variants") && document.querySelectorAll("[data-catalog-variant-row]").length === 2`);
+  await setViewport(cdp, { width: 390, height: 844 });
+  await waitFor(cdp, `document.querySelector("#catalog-section-variants")`);
+  await verifyNoHorizontalOverflow(cdp, "mobile variants");
+  const mobileState = await evaluate(cdp, `(() => {
+    const rows = [...document.querySelectorAll("[data-catalog-variant-row]")];
+    return {
+      rows: rows.length,
+      rowFits: rows.every((row) => row.getBoundingClientRect().left >= -1 && row.getBoundingClientRect().right <= window.innerWidth + 1),
+      addContained: document.querySelector("[data-catalog-add-variant]")?.getBoundingClientRect().right <= document.querySelector("#catalog-section-variants")?.getBoundingClientRect().right + 1,
+    };
+  })()`);
+  assert.equal(mobileState.rows, 2, "mobile Variant rows remain visible");
+  assert.equal(mobileState.rowFits, true, "mobile Variant rows fit viewport");
+  assert.equal(mobileState.addContained, true, "mobile Add Variant button does not clip");
+  await setViewport(cdp, { width: 1440, height: 900 });
+}
+
+async function verifyVariantInlineGeometry(cdp, label) {
+  const geometry = await evaluate(cdp, `(() => {
+    const color = document.querySelector('[data-catalog-existing-variant-field="color"]')?.getBoundingClientRect();
+    const size = document.querySelector('[data-catalog-existing-variant-field="size"]')?.getBoundingClientRect();
+    const sku = document.querySelector('.catalog-variant-sku-note')?.getBoundingClientRect();
+    const price = document.querySelector('[data-catalog-existing-variant-field="sellingPrice"]')?.getBoundingClientRect();
+    const save = document.querySelector('[data-catalog-save-existing-variant]')?.getBoundingClientRect();
+    const trash = document.querySelector('[data-catalog-delete-variant]')?.getBoundingClientRect();
+    const headerCells = [...document.querySelectorAll('.catalog-variant-row-labels span')].map((item) => item.getBoundingClientRect());
+    const rowCells = [...document.querySelector('[data-catalog-variant-row]')?.children || []].slice(0, 5).map((item) => item.getBoundingClientRect());
+    return {
+      colorWidth: Math.round(color?.width || 0),
+      sizeWidth: Math.round(size?.width || 0),
+      colorRight: Math.round(color?.right || 0),
+      sizeLeft: Math.round(size?.left || 0),
+      colorSizeGap: Math.round((size?.left || 0) - (color?.right || 0)),
+      skuWidth: Math.round(sku?.width || 0),
+      priceWidth: Math.round(price?.width || 0),
+      saveWidth: Math.round(save?.width || 0),
+      saveHeight: Math.round(save?.height || 0),
+      trashWidth: Math.round(trash?.width || 0),
+      trashHeight: Math.round(trash?.height || 0),
+      headerLefts: headerCells.map((cell) => Math.round(cell.left)),
+      rowLefts: rowCells.map((cell) => Math.round(cell.left)),
+      headerAligned: headerCells.length === 5 && rowCells.length === 5 && headerCells.every((cell, index) => Math.abs(Math.round(cell.left) - Math.round(rowCells[index].left)) <= 2),
+      horizontalOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > document.documentElement.clientWidth + 1,
+    };
+  })()`);
+  assert.ok(geometry.colorWidth >= 200 && geometry.colorWidth <= 240, `${label} Color width: ${JSON.stringify(geometry)}`);
+  assert.ok(geometry.sizeWidth >= 80 && geometry.sizeWidth <= 100, `${label} Size width: ${JSON.stringify(geometry)}`);
+  assert.ok(geometry.colorSizeGap >= 12 && geometry.colorSizeGap <= 20, `${label} Color-to-Size gap: ${JSON.stringify(geometry)}`);
+  assert.ok(geometry.skuWidth >= 300, `${label} SKU receives remaining width: ${JSON.stringify(geometry)}`);
+  assert.ok(geometry.priceWidth >= 120 && geometry.priceWidth <= 150, `${label} Price width: ${JSON.stringify(geometry)}`);
+  assert.ok(geometry.saveWidth >= 72 && geometry.saveWidth <= 84 && geometry.saveHeight === 40, `${label} Save size: ${JSON.stringify(geometry)}`);
+  assert.deepEqual({ width: geometry.trashWidth, height: geometry.trashHeight }, { width: 40, height: 40 }, `${label} Trash size`);
+  assert.equal(geometry.headerAligned, true, `${label} header and row alignment: ${JSON.stringify(geometry)}`);
+  assert.equal(geometry.horizontalOverflow, false, `${label} no horizontal overflow`);
+  console.log(`Variant ${label} geometry: ${JSON.stringify(geometry)}`);
+  return geometry;
+}
+
+async function setVariantPanelValue(cdp, field, value) {
+  await evaluate(cdp, `(() => {
+    const input = document.querySelector('[data-catalog-variant-field="${field}"]');
+    input.value = ${JSON.stringify(value)};
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  })()`);
+}
+
+async function forceExpiredOwnerSession(cdp) {
+  await evaluate(cdp, `localStorage.setItem("trry_admin_supabase_auth_session_v1", ${JSON.stringify(JSON.stringify({
+    access_token: "expired-owner-token",
+    refresh_token: "owner-refresh-token",
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    user: { id: ownerUserId, email: "owner@trry.invalid" },
+  }))})`);
+}
+
 async function verifyMaxLimit(cdp) {
   const state = await evaluate(cdp, `(() => ({
     count: document.querySelectorAll(".catalog-editor-image-slot.has-image").length,
@@ -413,6 +620,147 @@ async function verifyCanonicalProductVisibleWithoutChannel(cdp) {
   assert.equal(result.rowCount > 0, true, "default Products table renders canonical rows without channel filtering");
   assert.match(result.countLabel, /^[1-9]/, "visible Products count derives from canonical rows");
   assert.equal(result.hasEmptyState, false, "canonical Products are not replaced by an empty state");
+}
+
+async function verifyCatalogProductsExpandColumn(cdp) {
+  await setViewport(cdp, { width: 1440, height: 900 });
+  const desktop = await getCatalogProductsTableGeometry(cdp);
+  assert.deepEqual(desktop.headers, ["Product", "Brand", "Category", "SKU", "Selling Price", "Margin", "Status", ""], `desktop Products column order: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.cellCount, 8, `desktop Products rows have no stale columns: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.removedHeadersPresent, false, `desktop secondary Products columns removed: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.firstCellIsProduct, true, `desktop Product starts in first cell: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.firstCellHasExpand, false, `desktop first expand column removed: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.lastCellHasExpand, true, `desktop expand control is last column: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.expandColumnWidth >= 56 && desktop.expandColumnWidth <= 64, `desktop expand column width: ${JSON.stringify(desktop)}`);
+  assert.deepEqual({ width: desktop.expandButtonWidth, height: desktop.expandButtonHeight }, { width: 40, height: 40 }, `desktop expand control size: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.productWidth >= 315, `desktop Product width uses reclaimed space: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.brandWidth >= 150, `desktop Brand remains readable: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.categoryWidth >= 150, `desktop Category remains readable: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.skuWidth >= 125, `desktop SKU remains usable with Copy control: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.priceWidth >= 110, `desktop Selling Price remains readable: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.marginWidth >= 76, `desktop Margin remains compact: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.statusWidth >= 90, `desktop Status remains compact: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.headerAligned, true, `desktop Products header/body alignment: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.pageOverflow, false, `desktop Products page has no horizontal overflow: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.cardScrolls, false, `desktop Products table does not need horizontal table scroll: ${JSON.stringify(desktop)}`);
+
+  await evaluate(cdp, `document.querySelector("[data-catalog-toggle-product]")?.click()`);
+  await waitFor(cdp, `Boolean(document.querySelector(".catalog-product-quick-control"))`);
+  const expanded = await getCatalogProductsTableGeometry(cdp);
+  assert.equal(expanded.chevronPath, "m6 9 6 6 6-6", `expanded row keeps existing down chevron behavior: ${JSON.stringify(expanded)}`);
+  await evaluate(cdp, `document.querySelector("[data-catalog-toggle-product]")?.click()`);
+  await waitFor(cdp, `!document.querySelector(".catalog-product-quick-control")`);
+  const collapsed = await getCatalogProductsTableGeometry(cdp);
+  assert.equal(collapsed.chevronPath, "m9 18 6-6-6-6", `collapsed row keeps existing right chevron behavior: ${JSON.stringify(collapsed)}`);
+
+  await setViewport(cdp, { width: 390, height: 844 });
+  const mobile = await getCatalogProductsTableGeometry(cdp);
+  assert.equal(mobile.pageOverflow, false, `mobile Products table has no page overflow: ${JSON.stringify(mobile)}`);
+  await setViewport(cdp, { width: 1440, height: 900 });
+  console.log(`Products desktop expand geometry: ${JSON.stringify(desktop)}`);
+  console.log(`Products mobile expand geometry: ${JSON.stringify(mobile)}`);
+}
+
+async function getCatalogProductsTableGeometry(cdp) {
+  return evaluate(cdp, `(() => {
+    const table = document.querySelector(".catalog-products-table");
+    const card = document.querySelector(".catalog-table-card:has(.catalog-products-table)");
+    const headers = [...document.querySelectorAll(".catalog-products-table thead th")].map((cell) => cell.textContent.trim());
+    const row = document.querySelector(".catalog-products-table tbody tr[data-catalog-toggle-product]");
+    const cells = [...row?.children || []].map((cell) => cell.getBoundingClientRect());
+    const headerCells = [...document.querySelectorAll(".catalog-products-table thead th")].map((cell) => cell.getBoundingClientRect());
+    const firstCell = row?.children?.[0];
+    const lastCell = row?.children?.[row.children.length - 1];
+    const expandButton = lastCell?.querySelector(".catalog-expand-button")?.getBoundingClientRect();
+    const tableRect = table?.getBoundingClientRect();
+    const cardRect = card?.getBoundingClientRect();
+    const lastIndex = Math.max(0, (row?.children?.length || 1) - 1);
+    return {
+      headers,
+      cellCount: row?.children?.length || 0,
+      removedHeadersPresent: headers.some((header) => ["Variants", "Unit Cost", "Updated"].includes(header)),
+      firstCellIsProduct: Boolean(firstCell?.classList.contains("catalog-name-cell")),
+      firstCellHasExpand: Boolean(firstCell?.classList.contains("catalog-expand-cell")),
+      lastCellHasExpand: Boolean(lastCell?.classList.contains("catalog-expand-cell")),
+      firstCellLeft: Math.round(cells[0]?.left || 0),
+      tableLeft: Math.round(tableRect?.left || 0),
+      productWidth: Math.round(cells[0]?.width || 0),
+      brandWidth: Math.round(cells[1]?.width || 0),
+      categoryWidth: Math.round(cells[2]?.width || 0),
+      skuWidth: Math.round(cells[3]?.width || 0),
+      priceWidth: Math.round(cells[4]?.width || 0),
+      marginWidth: Math.round(cells[5]?.width || 0),
+      statusWidth: Math.round(cells[6]?.width || 0),
+      expandColumnWidth: Math.round(cells[lastIndex]?.width || 0),
+      expandButtonWidth: Math.round(expandButton?.width || 0),
+      expandButtonHeight: Math.round(expandButton?.height || 0),
+      expandRight: Math.round(cells[lastIndex]?.right || 0),
+      tableRight: Math.round(tableRect?.right || 0),
+      cardRight: Math.round(cardRect?.right || 0),
+      chevronPath: lastCell?.querySelector("svg path")?.getAttribute("d") || "",
+      headerAligned: headerCells.length === cells.length && headerCells.every((cell, index) => Math.abs(Math.round(cell.left) - Math.round(cells[index].left)) <= 2 && Math.abs(Math.round(cell.width) - Math.round(cells[index].width)) <= 2),
+      pageOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > document.documentElement.clientWidth + 1,
+      cardScrolls: Boolean(card && card.scrollWidth > card.clientWidth + 1),
+    };
+  })()`);
+}
+
+async function verifyCategoryTableGeometry(cdp) {
+  await setViewport(cdp, { width: 1440, height: 900 });
+  const desktop = await getCategoryTableGeometry(cdp);
+  assert.ok(desktop.categoryWidth >= 240 && desktop.categoryWidth <= 290, `desktop Category width balanced: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.codeWidth >= 140 && desktop.codeWidth <= 180, `desktop Code width: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.actionWidth >= 100 && desktop.actionWidth <= 125, `desktop Action width: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.editWidth >= 64 && desktop.editWidth <= 80 && desktop.editHeight === 40, `desktop Edit button size: ${JSON.stringify(desktop)}`);
+  assert.ok(desktop.codeGap >= 8 && desktop.codeGap <= 28, `desktop Category-to-Code gap: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.editContained, true, `desktop Edit button contained: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.headerAligned, true, `desktop category headers align with row cells: ${JSON.stringify(desktop)}`);
+  assert.equal(desktop.pageOverflow, false, `desktop page has no horizontal overflow: ${JSON.stringify(desktop)}`);
+
+  await setViewport(cdp, { width: 1024, height: 820 });
+  const tablet = await getCategoryTableGeometry(cdp);
+  assert.equal(tablet.editContained, true, `tablet Edit button contained: ${JSON.stringify(tablet)}`);
+  assert.equal(tablet.pageOverflow, false, `tablet uses contained table scroll, not page overflow: ${JSON.stringify(tablet)}`);
+  assert.equal(tablet.cardScrolls, true, `tablet category table scrolls inside card when needed: ${JSON.stringify(tablet)}`);
+  await setViewport(cdp, { width: 390, height: 844 });
+  const mobile = await getCategoryTableGeometry(cdp);
+  assert.equal(mobile.pageOverflow, false, `mobile keeps category table overflow inside the card: ${JSON.stringify(mobile)}`);
+  assert.equal(mobile.cardScrolls, true, `mobile category table preserves contained responsive scrolling: ${JSON.stringify(mobile)}`);
+  await setViewport(cdp, { width: 1440, height: 900 });
+  console.log(`Category desktop geometry: ${JSON.stringify(desktop)}`);
+  console.log(`Category tablet geometry: ${JSON.stringify(tablet)}`);
+  console.log(`Category mobile geometry: ${JSON.stringify(mobile)}`);
+}
+
+async function getCategoryTableGeometry(cdp) {
+  return evaluate(cdp, `(() => {
+    const card = document.querySelector(".catalog-table-card:has(.category-table)");
+    const table = document.querySelector(".category-table");
+    const headers = [...document.querySelectorAll(".category-table thead th")].map((cell) => cell.getBoundingClientRect());
+    const cells = [...document.querySelectorAll(".category-table tbody tr:first-child td")].map((cell) => cell.getBoundingClientRect());
+    const edit = document.querySelector(".category-action-cell .compact-action")?.getBoundingClientRect();
+    const cardRect = card?.getBoundingClientRect();
+    return {
+      categoryWidth: Math.round(cells[0]?.width || 0),
+      codeWidth: Math.round(cells[1]?.width || 0),
+      actionWidth: Math.round(cells[8]?.width || 0),
+      editWidth: Math.round(edit?.width || 0),
+      editHeight: Math.round(edit?.height || 0),
+      categoryRight: Math.round(cells[0]?.right || 0),
+      codeLeft: Math.round(cells[1]?.left || 0),
+      codeGap: Math.round((cells[1]?.left || 0) - (cells[0]?.right || 0)),
+      editRight: Math.round(edit?.right || 0),
+      actionRight: Math.round(cells[8]?.right || 0),
+      tableRight: Math.round(table?.getBoundingClientRect().right || 0),
+      cardRight: Math.round(cardRect?.right || 0),
+      editContained: Boolean(edit && cells[8] && edit.right <= cells[8].right + 1 && edit.left >= cells[8].left - 1),
+      headerAligned: headers.length === cells.length && headers.every((cell, index) => Math.abs(Math.round(cell.left) - Math.round(cells[index].left)) <= 2 && Math.abs(Math.round(cell.width) - Math.round(cells[index].width)) <= 2),
+      pageOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > document.documentElement.clientWidth + 1,
+      cardScrolls: Boolean(card && card.scrollWidth > card.clientWidth + 1),
+      cardClientWidth: Math.round(card?.clientWidth || 0),
+      cardScrollWidth: Math.round(card?.scrollWidth || 0),
+    };
+  })()`);
 }
 
 async function assertImageState(cdp, { count, primaryAlt }) {
@@ -582,7 +930,7 @@ async function verifyLowerEditorLayout(cdp, label) {
       .find((card) => card.offsetParent !== null && card.querySelector("h2")?.textContent.trim().toUpperCase() === text);
     const pricing = cardByHeading(main, "PRICING");
     const production = cardByHeading(main, "PRODUCTION INFORMATION");
-    const variants = cardByHeading(main, "VARIANTS");
+    const variants = cardByHeading(grid, "VARIANTS");
     const sideCards = [...document.querySelectorAll(".catalog-editor-side-column .catalog-editor-card")]
       .filter((card) => card.offsetParent !== null);
     const pricingRect = pricing?.getBoundingClientRect();
@@ -757,7 +1105,7 @@ async function waitFor(cdp, expression, timeout = 8000) {
     await delay(100);
   }
   const bodyText = await evaluate(cdp, `document.body?.innerText?.slice(0, 2200) || ""`).catch(() => "");
-  throw new Error(`Timed out waiting for: ${expression}\nVisible text: ${bodyText}`);
+  throw new Error(`Timed out waiting for: ${expression}\nVisible text: ${bodyText}\nConsole: ${browserConsole.slice(-8).join(" | ")}`);
 }
 
 async function getNodeId(cdp, selector) {
@@ -803,6 +1151,9 @@ async function createCdp(wsUrl) {
   const pending = new Map();
   ws.addEventListener("message", (event) => {
     const message = JSON.parse(event.data);
+    if (message.method === "Runtime.consoleAPICalled") {
+      browserConsole.push(message.params.args.map((arg) => arg.value || arg.description || "").join(" "));
+    }
     if (message.id && pending.has(message.id)) {
       const { resolve, reject } = pending.get(message.id);
       pending.delete(message.id);
