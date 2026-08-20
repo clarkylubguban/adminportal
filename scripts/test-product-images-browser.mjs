@@ -149,6 +149,7 @@ try {
   await navigate(cdp, `/catalog?product=${productId}`);
   await waitFor(cdp, `document.querySelector("#catalog-section-images") && document.body.innerText.includes("Image QA Tee")`);
   await verifyNoHorizontalOverflow(cdp, "desktop product editor");
+  await verifyProductEditorMicroSpacing(cdp, "desktop");
   await verifyVariantAddAndSessionRefresh(cdp);
   await assertImageState(cdp, { count: 4, primaryAlt: "Image 1" });
   await assertPrimaryMarkerOnly(cdp);
@@ -203,6 +204,7 @@ try {
   await navigate(cdp, `/catalog?product=${productId}`);
   await waitFor(cdp, `document.querySelector("#catalog-section-images") && document.body.innerText.includes("Image QA Tee")`);
   await verifyNoHorizontalOverflow(cdp, "mobile product images");
+  await verifyProductEditorMicroSpacing(cdp, "mobile");
   await waitFor(cdp, `document.querySelector("#catalog-section-images")`);
   await scrollImagesIntoView(cdp);
   await verifyMobileCompactImageLayout(cdp);
@@ -458,7 +460,7 @@ async function verifyVariantAddAndSessionRefresh(cdp) {
   })()`);
   assert.equal(initialState.addButtonText, "Add Variant", "saved Product Add Variant label");
   assert.equal(initialState.addDisabled, false, "saved Product Add Variant enabled");
-  assert.equal(initialState.helper, "Use Add Variant to add the next size or color option, then save.", "saved Product Add Variant helper");
+  assert.equal(initialState.helper, "", "saved Product omits redundant Add Variant helper");
   assert.equal(initialState.variantRows, 1, "compact Variant rows replace table/card workflow");
   assert.equal(initialState.hasTable, false, "spreadsheet Variant table removed");
   assert.deepEqual(initialState.sizeChips, ["M", "Black"], "size/color chips render current attributes");
@@ -471,6 +473,7 @@ async function verifyVariantAddAndSessionRefresh(cdp) {
   await forceExpiredOwnerSession(cdp);
   await evaluate(cdp, `document.querySelector("[data-catalog-add-variant]")?.click()`);
   await waitFor(cdp, `Boolean(document.querySelector("[data-catalog-variant-panel]"))`);
+  await verifyVariantStackedList(cdp, { label: "draft inserted", expectDraft: true });
   const blankRowState = await evaluate(cdp, `(() => ({
     color: document.querySelector('[data-catalog-variant-field="color"]')?.value || "",
     size: document.querySelector('[data-catalog-variant-field="size"]')?.value || "",
@@ -489,6 +492,11 @@ async function verifyVariantAddAndSessionRefresh(cdp) {
     hasTrash: false,
     hasCancel: true,
   }, "Add Variant inserts one blank editable row with locked generated SKU and Cancel");
+  const writesBeforeTyping = expiredProductWriteFailures;
+  const variantsBeforeTyping = variants.length;
+  await verifyVariantInputCleanup(cdp);
+  assert.equal(expiredProductWriteFailures, writesBeforeTyping, "typing a new Variant does not attempt a Product write");
+  assert.equal(variants.length, variantsBeforeTyping, "typing a new Variant does not create Variant records before Save");
   await setVariantPanelValue(cdp, "size", "M");
   await setVariantPanelValue(cdp, "color", "Black");
   await setVariantPanelValue(cdp, "sellingPrice", "499");
@@ -497,6 +505,7 @@ async function verifyVariantAddAndSessionRefresh(cdp) {
   await setVariantPanelValue(cdp, "size", "XL");
   await evaluate(cdp, `document.querySelector("[data-catalog-submit-variant]")?.click()`);
   await waitFor(cdp, `document.querySelectorAll("[data-catalog-variant-row]").length === 2`);
+  await verifyVariantStackedList(cdp, { label: "two saved variants", expectDraft: false });
   const draftState = await evaluate(cdp, `(() => ({
     hasSpreadsheetInputs: Boolean(document.querySelector('[data-catalog-field="availableSizesText"], [data-catalog-field="availableColorsText"]')),
     rows: [...document.querySelectorAll("[data-catalog-variant-row]")].map((row) => row.textContent.trim()),
@@ -579,12 +588,193 @@ async function verifyVariantInlineGeometry(cdp, label) {
   return geometry;
 }
 
+async function verifyProductEditorMicroSpacing(cdp, label) {
+  const state = await evaluate(cdp, `(() => {
+    const getFieldState = (selector) => {
+      const field = document.querySelector(selector);
+      const label = field?.querySelector(":scope > span");
+      const control = field?.querySelector("input, select, textarea");
+      const helper = field?.querySelector(":scope > small");
+      const labelRect = label?.getBoundingClientRect();
+      const controlRect = control?.getBoundingClientRect();
+      return {
+        gap: labelRect && controlRect ? Math.round(controlRect.top - labelRect.bottom) : null,
+        hasHelper: Boolean(helper),
+        helperText: helper?.textContent.trim() || "",
+      };
+    };
+    const bodyText = document.body.innerText;
+    const variantHeader = document.querySelector("#catalog-section-variants .catalog-variants-header");
+    const sectionDescription = document.querySelector("#catalog-section-product-identity header p")?.textContent.trim() || "";
+    return {
+      subcategory: getFieldState(".catalog-field-subcategory"),
+      compatibleMethods: getFieldState(".catalog-field-printMethodsText"),
+      brand: getFieldState(".catalog-field-brandId"),
+      productType: getFieldState(".catalog-field-productType"),
+      category: getFieldState(".catalog-field-category"),
+      productCode: getFieldState(".catalog-field-productCode"),
+      redundantVariantHelper: bodyText.includes("Use Add Variant to add the next size or color option, then save."),
+      variantsDescription: variantHeader?.innerText.includes("Size and color combinations for this catalog product.") || false,
+      productInfoDescriptionPreserved: sectionDescription === "Customer-facing identity and category binding.",
+      addVariantButton: Boolean(document.querySelector("[data-catalog-add-variant]")),
+      brandStaticHelperRemoved: !bodyText.includes("Required. Only active Brands can be assigned."),
+      productTypeStaticHelperRemoved: !bodyText.includes("Required before choosing a parent category."),
+      categoryStaticHelperRemoved: !bodyText.includes("Only categories with the same product type are available."),
+      productCodeStaticHelperRemoved: !bodyText.includes("Generated canonical Product Code."),
+      horizontalOverflow: Math.max(document.documentElement.scrollWidth, document.body.scrollWidth) > document.documentElement.clientWidth + 1,
+    };
+  })()`);
+  assert.ok(state.subcategory.gap >= 14 && state.subcategory.gap <= 18, `${label} Subcategory follows standard label/control rhythm: ${JSON.stringify(state)}`);
+  assert.ok(state.compatibleMethods.gap >= 14 && state.compatibleMethods.gap <= 18, `${label} Compatible Methods follows standard label/control rhythm: ${JSON.stringify(state)}`);
+  assert.equal(state.brand.hasHelper, false, `${label} Brand has no empty helper placeholder: ${JSON.stringify(state)}`);
+  assert.equal(state.productType.hasHelper, false, `${label} Product Type has no empty helper placeholder: ${JSON.stringify(state)}`);
+  assert.equal(state.categoryStaticHelperRemoved, true, `${label} Category static helper removed: ${JSON.stringify(state)}`);
+  assert.equal(state.productCodeStaticHelperRemoved, true, `${label} Product Code static helper removed: ${JSON.stringify(state)}`);
+  assert.equal(state.redundantVariantHelper, false, `${label} redundant Variant helper removed: ${JSON.stringify(state)}`);
+  assert.equal(state.variantsDescription, true, `${label} main Variants description preserved: ${JSON.stringify(state)}`);
+  assert.equal(state.productInfoDescriptionPreserved, true, `${label} Product Information description preserved: ${JSON.stringify(state)}`);
+  assert.equal(state.addVariantButton, true, `${label} Add Variant button preserved: ${JSON.stringify(state)}`);
+  assert.equal(state.brandStaticHelperRemoved, true, `${label} Brand static helper removed: ${JSON.stringify(state)}`);
+  assert.equal(state.productTypeStaticHelperRemoved, true, `${label} Product Type static helper removed: ${JSON.stringify(state)}`);
+  assert.equal(state.horizontalOverflow, false, `${label} no horizontal overflow after micro-spacing cleanup`);
+  return state;
+}
+
+async function verifyVariantStackedList(cdp, { label, expectDraft }) {
+  const state = await evaluate(cdp, `(() => {
+    const stack = document.querySelector(".catalog-variant-row-stack");
+    const rows = [...document.querySelectorAll("[data-catalog-variant-row]")];
+    const draft = document.querySelector("[data-catalog-variant-panel]");
+    const rowRects = rows.map((row) => row.getBoundingClientRect());
+    const stackStyle = stack ? getComputedStyle(stack) : null;
+    const rowStyles = rows.map((row) => getComputedStyle(row));
+    const draftStyle = draft ? getComputedStyle(draft) : null;
+    const lastSaved = rowRects[rowRects.length - 1];
+    const draftRect = draft?.getBoundingClientRect();
+    return {
+      rowCount: rows.length,
+      hasDraft: Boolean(draft),
+      rowHeights: rowRects.map((rect) => Math.round(rect.height)),
+      savedGap: rowRects.length > 1 ? Math.round(rowRects[1].top - rowRects[0].bottom) : null,
+      draftGap: lastSaved && draftRect ? Math.round(draftRect.top - lastSaved.bottom) : null,
+      draftHeight: draftRect ? Math.round(draftRect.height) : null,
+      rowRadii: rowStyles.map((style) => style.borderTopLeftRadius),
+      rowMargins: rowStyles.map((style) => ({ top: style.marginTop, bottom: style.marginBottom })),
+      rowBorders: rowStyles.map((style) => ({ bottom: style.borderBottomWidth, top: style.borderTopWidth })),
+      stackBorder: stackStyle?.borderTopWidth || "",
+      stackRadius: stackStyle?.borderTopLeftRadius || "",
+      stackGap: stackStyle?.gap || "",
+      draftRadius: draftStyle?.borderTopLeftRadius || "",
+      draftAccent: draftStyle?.boxShadow || "",
+      headerLefts: [...document.querySelectorAll(".catalog-variant-row-labels span")].map((item) => Math.round(item.getBoundingClientRect().left)),
+      firstRowLefts: [...(rows[0]?.children || [])].slice(0, 5).map((item) => Math.round(item.getBoundingClientRect().left)),
+    };
+  })()`);
+  assert.equal(state.stackBorder, "1px", `${label} uses one shared outer list border: ${JSON.stringify(state)}`);
+  assert.equal(state.stackGap, "0px", `${label} stack has no row gap: ${JSON.stringify(state)}`);
+  assert.ok(Number.parseFloat(state.stackRadius) > 0, `${label} shared list keeps one outer radius: ${JSON.stringify(state)}`);
+  state.rowHeights.forEach((height) => {
+    assert.ok(height >= 52 && height <= 60, `${label} saved row height is compact: ${JSON.stringify(state)}`);
+  });
+  if (state.savedGap !== null) {
+    assert.ok(state.savedGap >= 0 && state.savedGap <= 4, `${label} saved rows stack without card gap: ${JSON.stringify(state)}`);
+  }
+  state.rowRadii.forEach((radius) => assert.equal(radius, "0px", `${label} per-row large card radius removed: ${JSON.stringify(state)}`));
+  state.rowMargins.forEach((margin) => assert.deepEqual(margin, { top: "0px", bottom: "0px" }, `${label} per-row margins removed: ${JSON.stringify(state)}`));
+  state.rowBorders.forEach((border, index) => {
+    assert.equal(border.top, "0px", `${label} row ${index + 1} has no card top border: ${JSON.stringify(state)}`);
+  });
+  assert.equal(state.headerLefts.length === 5 && state.firstRowLefts.length === 5 && state.headerLefts.every((left, index) => Math.abs(left - state.firstRowLefts[index]) <= 2), true, `${label} headers align to rows: ${JSON.stringify(state)}`);
+  if (expectDraft) {
+    assert.equal(state.hasDraft, true, `${label} draft row exists: ${JSON.stringify(state)}`);
+    assert.ok(state.draftGap >= 0 && state.draftGap <= 4, `${label} draft inserts immediately below last saved row: ${JSON.stringify(state)}`);
+    assert.ok(state.draftHeight >= 52 && state.draftHeight <= 60, `${label} draft row height stays compact: ${JSON.stringify(state)}`);
+    assert.equal(state.draftRadius, "0px", `${label} draft is not a large card: ${JSON.stringify(state)}`);
+    assert.ok(state.draftAccent.includes("inset"), `${label} draft keeps subtle inline accent: ${JSON.stringify(state)}`);
+  }
+}
+
 async function setVariantPanelValue(cdp, field, value) {
   await evaluate(cdp, `(() => {
     const input = document.querySelector('[data-catalog-variant-field="${field}"]');
     input.value = ${JSON.stringify(value)};
     input.dispatchEvent(new Event("input", { bubbles: true }));
   })()`);
+}
+
+async function verifyVariantInputCleanup(cdp) {
+  const result = await evaluate(cdp, `(() => {
+    const panel = document.querySelector("[data-catalog-variant-panel]");
+    const headers = [...document.querySelectorAll(".catalog-variant-row-labels span")].map((item) => item.textContent.trim());
+    const innerLabelCount = panel ? panel.querySelectorAll(".catalog-variant-field-cell span, .catalog-variant-sku-note span").length : -1;
+    const visibleTextBefore = panel?.innerText || "";
+    const typeInto = (field, text) => {
+      const selector = '[data-catalog-variant-field="' + field + '"]';
+      const input = document.querySelector(selector);
+      const row = document.querySelector("[data-catalog-variant-panel]");
+      input.value = "";
+      input.focus();
+      const sameNodePerKey = [];
+      const focusPerKey = [];
+      const caretPerKey = [];
+      for (const char of text) {
+        input.value += char;
+        input.dispatchEvent(new InputEvent("input", { bubbles: true, data: char, inputType: "insertText" }));
+        sameNodePerKey.push(document.querySelector(selector) === input);
+        focusPerKey.push(document.activeElement === input);
+        caretPerKey.push(typeof input.selectionStart === "number" ? input.selectionStart === input.value.length : true);
+      }
+      return {
+        value: input.value,
+        sameNode: sameNodePerKey.every(Boolean),
+        focus: focusPerKey.every(Boolean),
+        caret: caretPerKey.every(Boolean),
+        rowSame: document.querySelector("[data-catalog-variant-panel]") === row,
+      };
+    };
+    const color = typeInto("color", "Black");
+    const size = typeInto("size", "XL");
+    const price = typeInto("sellingPrice", "240");
+    const priceInput = document.querySelector('[data-catalog-variant-field="sellingPrice"]');
+    priceInput.focus();
+    const focused = getComputedStyle(priceInput);
+    const focusedBorderWidth = focused.borderTopWidth;
+    const focusedBoxShadow = focused.boxShadow;
+    const focusedOutlineStyle = focused.outlineStyle;
+    priceInput.blur();
+    const normal = getComputedStyle(priceInput);
+    const submitButton = document.querySelector("[data-catalog-submit-variant]");
+    return {
+      headers,
+      innerLabelCount,
+      visibleTextBefore,
+      color,
+      size,
+      price,
+      saveEnabled: submitButton && !submitButton.disabled,
+      normalBorderWidth: normal.borderTopWidth,
+      normalBoxShadow: normal.boxShadow,
+      normalOutlineStyle: normal.outlineStyle,
+      focusedBorderWidth,
+      focusedBoxShadow,
+      focusedOutlineStyle,
+    };
+  })()`);
+  assert.deepEqual(result.headers, ["Color", "Size", "SKU", "Price", "Action"], "Variant column headers remain visible");
+  assert.equal(result.innerLabelCount, 0, `visible inner Variant labels removed: ${JSON.stringify(result)}`);
+  assert.equal(result.visibleTextBefore.includes("Color\\nColor"), false, "duplicate visible Color label removed");
+  assert.equal(result.visibleTextBefore.includes("Size\\nSize"), false, "duplicate visible Size label removed");
+  assert.equal(result.visibleTextBefore.includes("SKU\\nAuto-generated"), false, "duplicate visible SKU title removed");
+  assert.equal(result.visibleTextBefore.includes("Price\\n"), false, "duplicate visible Price label removed");
+  assert.deepEqual(result.color, { value: "Black", sameNode: true, focus: true, caret: true, rowSame: true }, `Color typing stability: ${JSON.stringify(result.color)}`);
+  assert.deepEqual(result.size, { value: "XL", sameNode: true, focus: true, caret: true, rowSame: true }, `Size typing stability: ${JSON.stringify(result.size)}`);
+  assert.deepEqual(result.price, { value: "240", sameNode: true, focus: true, caret: true, rowSame: true }, `Price typing stability: ${JSON.stringify(result.price)}`);
+  assert.equal(result.saveEnabled, true, "Save enables in place after valid Variant fields are typed");
+  assert.equal(result.normalBorderWidth, "1px", `Variant input default border is single stroke: ${JSON.stringify(result)}`);
+  assert.equal(result.normalBoxShadow, "none", `Variant input default has no duplicate shadow stroke: ${JSON.stringify(result)}`);
+  assert.ok(["1px", "1.5px", "2px"].includes(result.focusedBorderWidth), `Variant input focus uses a single border width: ${JSON.stringify(result)}`);
+  assert.equal(result.focusedBoxShadow, "none", `Variant input focus has no duplicate shadow stroke: ${JSON.stringify(result)}`);
+  assert.ok(result.focusedOutlineStyle === "none" || result.focusedOutlineStyle === "auto", `Variant input focus outline is not stacked with custom rings: ${JSON.stringify(result)}`);
 }
 
 async function forceExpiredOwnerSession(cdp) {

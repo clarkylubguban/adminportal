@@ -471,7 +471,7 @@ let catalogDraft = null;
 let catalogValidationError = "";
 let catalogSaveState = "idle";
 let catalogSaveError = "";
-let catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+let catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
 const CATALOG_PRODUCT_IMAGE_LIMIT = 6;
 let categoryStatusFilter = "active";
 let categoryProductTypeFilter = "all";
@@ -6216,11 +6216,11 @@ function renderCatalogEditorProductInformation(draft, disabled = false) {
       <header><h2>Product Information</h2><p>Customer-facing identity and category binding.</p></header>
       <div class="catalog-editor-field-grid">
         ${renderCatalogInput("name", "Product Name", draft.name, "text", true, disabled, "Enter product name")}
-        ${renderCatalogField("brandId", "Brand", renderCatalogBrandSelect(draft, disabled), "Required. Only active Brands can be assigned.")}
-        ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled), "Required before choosing a parent category.")}
-        ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "Only categories with the same product type are available." : "Select Product Type first.")}
+        ${renderCatalogField("brandId", "Brand", renderCatalogBrandSelect(draft, disabled))}
+        ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled))}
+        ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "" : "Select Product Type first.")}
         ${renderCatalogInput("subcategory", "Subcategory", draft.subcategory || "", "text", false, disabled, "Select subcategory")}
-        ${renderCatalogField("productCode", "Product Code", `<input id="catalog-productCode" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, draft.productCode ? "Generated canonical Product Code." : "Generated on save.")}
+        ${renderCatalogField("productCode", "Product Code", `<input id="catalog-productCode" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, draft.productCode ? "" : "Generated on save.")}
         ${renderCatalogField("catalog", "Destination", renderCatalogSelect(draft, disabled))}
       </div>
     </article>
@@ -6316,7 +6316,7 @@ function renderCatalogEditorVariants(draft, disabled = false) {
         <div><h2>Variants</h2><p>Size and color combinations for this catalog product.</p></div>
         <button class="note-button catalog-add-variant-button" type="button" data-catalog-add-variant ${canAddVariant ? "" : "disabled"} title="${escapeHtml(addVariantMessage)}">${variants.length ? "Add Variant" : "Add First Variant"}</button>
       </header>
-      <p class="catalog-editor-helper">${escapeHtml(addVariantMessage)}</p>
+      ${canAddVariant ? "" : `<p class="catalog-editor-helper">${escapeHtml(addVariantMessage)}</p>`}
       <div class="catalog-variant-attributes">
         <div>
           <span>Available Sizes</span>
@@ -6330,8 +6330,8 @@ function renderCatalogEditorVariants(draft, disabled = false) {
       ${(catalogVariantPanel.mode || variants.length)
         ? `<div class="catalog-variant-row-stack">
             <div class="catalog-variant-row-labels" aria-hidden="true"><span>Color</span><span>Size</span><span>SKU</span><span>Price</span><span>Action</span></div>
-            ${catalogVariantPanel.mode ? renderCatalogVariantPanel(draft, variants, disabled) : ""}
             ${variants.map((variant, index) => renderCatalogVariantRow(draft, variant, index, disabled)).join("")}
+            ${catalogVariantPanel.mode ? renderCatalogVariantPanel(draft, variants, disabled) : ""}
           </div>`
         : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Add size and color combinations for this product.</span></div>`}
     </article>
@@ -6340,7 +6340,7 @@ function renderCatalogEditorVariants(draft, disabled = false) {
 
 function addCatalogVariantDraft() {
   if (!catalogDraft || !canWriteCatalogProducts() || !catalogDraft.id || catalogSaveState === "saving" || catalogSaveState === "uploading") return;
-  catalogVariantPanel = { mode: "add", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+  catalogVariantPanel = { mode: "add", index: -1, draftId: `variant-draft-${Date.now()}`, size: "", color: "", sellingPrice: "", error: "" };
   render();
   focusCatalogEditorSection("catalog-section-variants");
 }
@@ -6351,26 +6351,23 @@ function renderCatalogVariantPanel(draft, variants, disabled = false) {
   const saveDisabled = disabled || !String(catalogVariantPanel.size || "").trim() || !String(catalogVariantPanel.color || "").trim() || catalogVariantPanel.sellingPrice === "" || Number(catalogVariantPanel.sellingPrice) < 0;
 
   return `
-    <div class="catalog-variant-inline-row is-new" data-catalog-variant-panel>
+    <div class="catalog-variant-inline-row is-new" data-catalog-variant-panel data-catalog-variant-draft-id="${escapeHtml(catalogVariantPanel.draftId || "variant-draft")}">
       <div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
-          <span>Color</span>
-          <input type="text" list="catalog-variant-color-options" data-catalog-variant-field="color" value="${escapeHtml(catalogVariantPanel.color)}" ${disabled ? "disabled" : ""} placeholder="Black, White">
+          <input type="text" list="catalog-variant-color-options" data-catalog-variant-field="color" value="${escapeHtml(catalogVariantPanel.color)}" ${disabled ? "disabled" : ""} placeholder="Black, White" aria-label="Variant color">
           <datalist id="catalog-variant-color-options">${colorOptions.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
         </label>
       </div>
       <div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
-          <span>Size</span>
-          <input type="text" list="catalog-variant-size-options" data-catalog-variant-field="size" value="${escapeHtml(catalogVariantPanel.size)}" ${disabled ? "disabled" : ""} placeholder="S, M, XL, XXL">
+          <input type="text" list="catalog-variant-size-options" data-catalog-variant-field="size" value="${escapeHtml(catalogVariantPanel.size)}" ${disabled ? "disabled" : ""} placeholder="S, M, XL, XXL" aria-label="Variant size">
           <datalist id="catalog-variant-size-options">${sizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
         </label>
       </div>
-      <div class="catalog-variant-sku-note locked"><span>SKU</span><strong>Auto-generated on save</strong></div>
+      <div class="catalog-variant-sku-note locked" aria-label="Variant SKU is auto-generated on save"><strong>Auto-generated on save</strong></div>
       <div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
-          <span>Price</span>
-          <input type="number" min="0" step="0.01" data-catalog-variant-field="sellingPrice" value="${escapeHtml(catalogVariantPanel.sellingPrice)}" ${disabled ? "disabled" : ""} placeholder="₱">
+          <input type="number" min="0" step="0.01" data-catalog-variant-field="sellingPrice" value="${escapeHtml(catalogVariantPanel.sellingPrice)}" ${disabled ? "disabled" : ""} placeholder="₱" aria-label="Variant price">
         </label>
       </div>
       <div class="catalog-variant-row-actions">
@@ -6386,26 +6383,23 @@ function renderCatalogVariantRow(draft, variant, index, disabled = false) {
   const sizeOptions = uniqueList(getCatalogDraftVariantRows(draft).map((item) => item.size).filter(Boolean));
   const colorOptions = uniqueList(getCatalogDraftVariantRows(draft).map((item) => item.color).filter(Boolean));
   return `
-    <div class="catalog-variant-inline-row" data-catalog-variant-row="${index}">
+    <div class="catalog-variant-inline-row" data-catalog-variant-row="${index}" data-catalog-variant-id="${escapeHtml(variant.id || variant.masterVariantId || `variant-${index}`)}">
       <div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
-          <span>Color</span>
-          <input type="text" list="catalog-existing-variant-color-options-${index}" data-catalog-existing-variant-field="color" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.color || "")}" ${disabled ? "disabled" : ""}>
+          <input type="text" list="catalog-existing-variant-color-options-${index}" data-catalog-existing-variant-field="color" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.color || "")}" ${disabled ? "disabled" : ""} aria-label="Variant color">
           <datalist id="catalog-existing-variant-color-options-${index}">${colorOptions.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
         </label>
       </div>
       <div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
-          <span>Size</span>
-          <input type="text" list="catalog-existing-variant-size-options-${index}" data-catalog-existing-variant-field="size" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.size || "")}" ${disabled ? "disabled" : ""}>
+          <input type="text" list="catalog-existing-variant-size-options-${index}" data-catalog-existing-variant-field="size" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.size || "")}" ${disabled ? "disabled" : ""} aria-label="Variant size">
           <datalist id="catalog-existing-variant-size-options-${index}">${sizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
         </label>
       </div>
-      <div class="catalog-variant-sku-note locked"><span>SKU</span><strong>${escapeHtml(getCatalogVariantSku(draft, variant, index))}</strong></div>
+      <div class="catalog-variant-sku-note locked" aria-label="Variant SKU ${escapeHtml(getCatalogVariantSku(draft, variant, index))}"><strong>${escapeHtml(getCatalogVariantSku(draft, variant, index))}</strong></div>
       <div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
-          <span>Price</span>
-          <input type="number" min="0" step="0.01" data-catalog-existing-variant-field="sellingPrice" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.sellingPrice ?? "")}" ${disabled ? "disabled" : ""}>
+          <input type="number" min="0" step="0.01" data-catalog-existing-variant-field="sellingPrice" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.sellingPrice ?? "")}" ${disabled ? "disabled" : ""} aria-label="Variant price">
         </label>
       </div>
       <div class="catalog-variant-row-actions">
@@ -6423,6 +6417,7 @@ function openCatalogVariantEditor(index) {
   catalogVariantPanel = {
     mode: "edit",
     index,
+    draftId: variant.id || variant.masterVariantId || `variant-edit-${index}`,
     size: variant.size || "",
     color: variant.color || "",
     sellingPrice: variant.sellingPrice ?? catalogDraft.startingPrice ?? "",
@@ -6434,11 +6429,22 @@ function openCatalogVariantEditor(index) {
 
 function updateCatalogVariantPanelField(field, value) {
   catalogVariantPanel = { ...catalogVariantPanel, [field]: value, error: "" };
-  render();
+  syncCatalogVariantPanelControls();
+}
+
+function syncCatalogVariantPanelControls() {
+  const submitButton = document.querySelector("[data-catalog-submit-variant]");
+  if (submitButton) {
+    submitButton.disabled = !String(catalogVariantPanel.size || "").trim()
+      || !String(catalogVariantPanel.color || "").trim()
+      || catalogVariantPanel.sellingPrice === ""
+      || Number(catalogVariantPanel.sellingPrice) < 0;
+  }
+  document.querySelector("[data-catalog-variant-panel] .catalog-form-error")?.remove();
 }
 
 function cancelCatalogVariantPanel() {
-  catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
   render();
 }
 
@@ -6487,7 +6493,7 @@ function submitCatalogVariantPanel() {
     availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
     availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
   };
-  catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
   catalogValidationError = "";
   catalogSaveError = "";
   render();
@@ -6501,7 +6507,7 @@ function updateCatalogExistingVariantField(index, field, value) {
   if (!current) return;
   const nextVariant = {
     ...current,
-    [field]: field === "sellingPrice" ? value : String(value || "").trim(),
+    [field]: field === "sellingPrice" ? value : String(value || ""),
   };
   const nextVariants = variants.map((variant, variantIndex) => variantIndex === index ? nextVariant : variant);
   catalogDraft = {
@@ -6699,7 +6705,7 @@ function prepareCatalogEditorDraft(editorRoute, selectedProduct) {
     catalogEditorMode = editorRoute.mode;
     catalogEditorRouteKey = routeKey;
     catalogDraft = createCatalogDraft(selectedProduct);
-    catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+    catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
     catalogValidationError = "";
     catalogSaveError = "";
     catalogSaveState = "idle";
@@ -6720,7 +6726,7 @@ function closeCatalogProductEditor() {
   catalogEditorMode = "";
   catalogEditorRouteKey = "";
   catalogDraft = null;
-  catalogVariantPanel = { mode: "", index: -1, size: "", color: "", sellingPrice: "", error: "" };
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
   catalogValidationError = "";
   catalogSaveError = "";
   catalogSaveState = "idle";
@@ -6963,7 +6969,7 @@ function renderCatalogStatusSelect(draft, disabled = false) {
 }
 
 function renderCatalogField(id, label, control, helperText = "") {
-  return `<label class="catalog-field" for="catalog-${id}"><span>${label}</span>${control}${helperText ? `<small>${escapeHtml(helperText)}</small>` : ""}</label>`;
+  return `<label class="catalog-field catalog-field-${id}" for="catalog-${id}"><span>${label}</span>${control}${helperText ? `<small>${escapeHtml(helperText)}</small>` : ""}</label>`;
 }
 
 function renderCatalogInput(field, label, value, type = "text", required = false, disabled = false, placeholder = "") {
