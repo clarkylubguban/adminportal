@@ -2601,6 +2601,7 @@ td:nth-child(9) {
 
 .inventory-movement-table {
   min-width: 1180px;
+  table-layout: fixed;
 }
 
 .inventory-table th,
@@ -2614,6 +2615,75 @@ td:nth-child(9) {
 .inventory-table td {
   overflow: visible;
   text-overflow: clip;
+}
+
+.inventory-movement-table th,
+.inventory-movement-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-movement-table .status-pill {
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.movement-date-col {
+  width: 12%;
+}
+
+.movement-product-col {
+  width: 21%;
+}
+
+.movement-type-col {
+  width: 9%;
+}
+
+.movement-qty-col {
+  width: 8%;
+}
+
+.movement-balance-col {
+  width: 9%;
+}
+
+.movement-source-col {
+  width: 10%;
+}
+
+.movement-reference-col {
+  width: 12%;
+}
+
+.movement-reason-col {
+  width: 12%;
+}
+
+.movement-operator-col {
+  width: 7%;
+}
+
+.movement-date-col,
+.movement-type-col,
+.movement-qty-col,
+.movement-balance-col,
+.movement-source-col,
+.movement-operator-col {
+  white-space: nowrap;
+}
+
+.movement-product-stack {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.movement-product-stack strong,
+.movement-product-stack span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .inventory-product-col {

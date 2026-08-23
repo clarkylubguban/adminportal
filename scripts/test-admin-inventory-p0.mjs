@@ -14,6 +14,10 @@ const stockTableStart = main.indexOf("function renderInventoryStockTable");
 const stockTableEnd = main.indexOf("function renderInventoryMovementTable");
 assert.ok(stockTableStart > -1 && stockTableEnd > stockTableStart, "Inventory stock table renderer missing");
 const stockTable = main.slice(stockTableStart, stockTableEnd);
+const movementTableStart = main.indexOf("function renderInventoryMovementTable");
+const movementTableEnd = main.indexOf("function renderInventoryReceiveDrawer");
+assert.ok(movementTableStart > -1 && movementTableEnd > movementTableStart, "Inventory movement table renderer missing");
+const movementTable = main.slice(movementTableStart, movementTableEnd);
 
 assert.ok(main.includes('"/catalog/inventory": "Catalog"'), "Inventory route must be registered under Catalog");
 assert.ok(localDev.includes('"/catalog/inventory"'), "Local dev server must serve direct Inventory route");
@@ -78,5 +82,22 @@ assert.ok(/\.inventory-table th,\s*\.inventory-table td\s*\{\s*overflow:\s*visib
 assert.ok(styles.includes(".app-shell.admin-saas-shell .inventory-receive-drawer header"), "Inventory receive drawer spacing override missing");
 assert.ok(styles.includes("padding: 16px 22px 14px !important"), "Inventory receive drawer header must be vertically tighter");
 assert.ok(styles.includes(".app-shell.admin-saas-shell .inventory-receive-drawer .catalog-form"), "Inventory receive drawer form spacing override missing");
+
+for (const header of ["Date / Time", "Product / SKU", "Type", "Qty Change", "Balance After", "Source", "Reference", "Reason / Note", "Done By"]) {
+  assert.ok(movementTable.includes(`>${header}</th>`), `Inventory movement table header missing: ${header}`);
+}
+
+for (const removedHeader of ["Location", "Before"]) {
+  assert.equal(movementTable.includes(`>${removedHeader}</th>`), false, `Removed inventory movement table header still present: ${removedHeader}`);
+}
+
+assert.equal(movementTable.includes('data-mobile-label="Location"'), false, "Inventory movement Location primary cell still present");
+assert.equal(movementTable.includes('data-mobile-label="Before"'), false, "Inventory movement Before primary cell still present");
+assert.ok(movementTable.includes("movement-product-stack"), "Inventory movement product/SKU stack missing");
+assert.ok(movementTable.includes("formatMovementQuantityDelta(row.quantityDelta)"), "Inventory movement Qty Change must omit pcs suffix");
+assert.ok(styles.includes(".movement-product-col"), "Inventory movement Product / SKU width missing");
+assert.ok(styles.includes(".movement-reason-col"), "Inventory movement Reason / Note width missing");
+assert.ok(styles.includes(".movement-reference-col"), "Inventory movement Reference width missing");
+assert.ok(styles.includes(".inventory-movement-table .status-pill"), "Inventory movement type chip readability rule missing");
 
 process.stdout.write("PASS Admin Inventory P0 route, canonical bindings, RPC payload, permissions, idempotency, and parked purchasing\n");

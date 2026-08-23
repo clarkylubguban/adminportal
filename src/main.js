@@ -5542,17 +5542,15 @@ function renderInventoryMovementTable(rows) {
       <table class="products-table catalog-table inventory-movement-table">
         <thead>
           <tr>
-            <th>Date / Time</th>
-            <th>Product / SKU</th>
-            <th>Location</th>
-            <th>Type</th>
-            <th>Qty Delta</th>
-            <th>Before</th>
-            <th>Balance After</th>
-            <th>Source</th>
-            <th>Reference</th>
-            <th>Reason / Note</th>
-            <th>Done By</th>
+            <th class="movement-date-col">Date / Time</th>
+            <th class="movement-product-col">Product / SKU</th>
+            <th class="movement-type-col">Type</th>
+            <th class="movement-qty-col">Qty Change</th>
+            <th class="movement-balance-col">Balance After</th>
+            <th class="movement-source-col">Source</th>
+            <th class="movement-reference-col">Reference</th>
+            <th class="movement-reason-col">Reason / Note</th>
+            <th class="movement-operator-col">Done By</th>
           </tr>
         </thead>
         <tbody>${rows.map(renderInventoryMovementRow).join("")}</tbody>
@@ -5565,17 +5563,15 @@ function renderInventoryMovementTable(rows) {
 function renderInventoryMovementRow(row) {
   return `
     <tr>
-      <td data-mobile-label="Date / Time">${escapeHtml(formatInventoryDateTime(row.createdAt))}</td>
-      <td data-mobile-label="Product / SKU"><div class="catalog-name-stack"><strong>${escapeHtml([row.productName, row.variantLabel].filter(Boolean).join(" · ") || "-")}</strong><span>${escapeHtml(row.sku || "-")}</span></div></td>
-      <td data-mobile-label="Location">${escapeHtml(row.locationName || "-")}</td>
-      <td data-mobile-label="Type">${renderInventoryMovementPill(row.movementType)}</td>
-      <td data-mobile-label="Qty Delta"><strong class="${row.quantityDelta < 0 ? "inventory-negative" : "inventory-positive"}">${escapeHtml(formatSignedQuantity(row.quantityDelta))}</strong></td>
-      <td data-mobile-label="Before">${row.balanceBefore ?? "-"}</td>
-      <td data-mobile-label="Balance After"><strong>${row.balanceAfter ?? "-"}</strong></td>
-      <td data-mobile-label="Source">${escapeHtml(row.source || "-")}</td>
-      <td data-mobile-label="Reference">${escapeHtml(row.reference || "-")}</td>
-      <td data-mobile-label="Reason / Note">${escapeHtml(row.reason || "-")}</td>
-      <td data-mobile-label="Done By">${escapeHtml(row.operator || "-")}</td>
+      <td class="movement-date-col" data-mobile-label="Date / Time">${escapeHtml(formatInventoryDateTime(row.createdAt))}</td>
+      <td class="movement-product-col" data-mobile-label="Product / SKU"><div class="catalog-name-stack movement-product-stack"><strong>${escapeHtml([row.productName, row.variantLabel].filter(Boolean).join(" · ") || "-")}</strong><span>${escapeHtml(row.sku || "-")}</span></div></td>
+      <td class="movement-type-col" data-mobile-label="Type">${renderInventoryMovementPill(row.movementType)}</td>
+      <td class="movement-qty-col" data-mobile-label="Qty Change"><strong class="${row.quantityDelta < 0 ? "inventory-negative" : "inventory-positive"}">${escapeHtml(formatMovementQuantityDelta(row.quantityDelta))}</strong></td>
+      <td class="movement-balance-col" data-mobile-label="Balance After"><strong>${row.balanceAfter ?? "-"}</strong></td>
+      <td class="movement-source-col" data-mobile-label="Source">${escapeHtml(row.source || "-")}</td>
+      <td class="movement-reference-col" data-mobile-label="Reference">${escapeHtml(row.reference || "-")}</td>
+      <td class="movement-reason-col" data-mobile-label="Reason / Note">${escapeHtml(row.reason || "-")}</td>
+      <td class="movement-operator-col" data-mobile-label="Done By">${escapeHtml(row.operator || "-")}</td>
     </tr>
   `;
 }
@@ -5705,6 +5701,11 @@ function isPositiveMovement(item) {
 function formatSignedQuantity(value) {
   const number = Number(value || 0);
   return `${number > 0 ? "+" : ""}${number} pcs`;
+}
+
+function formatMovementQuantityDelta(value) {
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${number}`;
 }
 
 function formatInventoryMoney(value) {
