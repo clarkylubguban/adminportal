@@ -13,13 +13,26 @@ const searchRouteBlock = matchBlock(/function getSearchRoute\(value\) \{([\s\S]*
 const getRoutePathBlock = matchBlock(/function getRoutePath\(\) \{([\s\S]*?)\n\}/, "route guard");
 const normalizeRoutePathBlock = matchBlock(/function normalizeRoutePath\(path\) \{([\s\S]*?)\n\}/, "route normalizer");
 
-for (const route of ["/", "/overview", "/inquiries", "/orders", "/order-dashboard", "/production", "/workboard", "/calendar"]) {
+for (const route of ["/", "/overview", "/inquiries", "/orders", "/production", "/workboard", "/calendar", "/catalog", "/catalog/brands", "/catalog/categories", "/catalog/inventory"]) {
   assert.ok(routeBlock.includes(`"${route}"`), `approved route missing: ${route}`);
 }
+
+assert.ok(main.includes('const legacyOrderDashboardPath = "/order-dashboard"'), "legacy order dashboard redirect path missing");
 
 for (const label of ["Overview", "Inquiries", "Orders", "Production"]) {
   assert.ok(sidebarBlock.includes(`label: "${label}"`), `approved desktop nav missing: ${label}`);
   assert.ok(mobileNavBlock.includes(`label: "${label}"`), `approved mobile nav missing: ${label}`);
+}
+
+for (const label of ["Products", "Brands", "Categories", "Inventory"]) {
+  assert.ok(sidebarBlock.includes(`label: "${label}"`), `approved catalog desktop nav missing: ${label}`);
+}
+
+for (const parkedSupply of [
+  '{ label: "Suppliers", path: "/catalog/suppliers", icon: "truck", disabled: true }',
+  '{ label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", disabled: true }',
+]) {
+  assert.ok(sidebarBlock.includes(parkedSupply), `parked supply desktop disabled nav missing: ${parkedSupply}`);
 }
 
 assert.ok(sidebarBlock.includes("canViewWorkboardRoute() ?"), "Workboard desktop nav must be feature gated");
@@ -27,8 +40,13 @@ assert.ok(mobileNavBlock.includes("canViewWorkboardRoute() ?"), "Workboard mobil
 assert.ok(sidebarBlock.includes("canViewCalendarRoute() ?"), "Calendar desktop nav must be feature gated");
 assert.ok(mobileNavBlock.includes("canViewCalendarRoute() ?"), "Calendar mobile nav must be feature gated");
 
-for (const parked of ["Clients", "Products", "Catalog", "Staff", "Settings", "Reports"]) {
-  assert.equal(sidebarBlock.includes(parked), false, `parked desktop nav leaked: ${parked}`);
+for (const parked of ["Clients", "Staff", "Settings", "Reports"]) {
+  assert.equal(sidebarBlock.includes(`label: "${parked}"`), false, `parked desktop nav leaked: ${parked}`);
+  assert.equal(mobileNavBlock.includes(parked), false, `parked mobile nav leaked: ${parked}`);
+  assert.equal(searchHintBlock.includes(parked), false, `parked search hint leaked: ${parked}`);
+}
+
+for (const parked of ["Suppliers", "Purchasing"]) {
   assert.equal(mobileNavBlock.includes(parked), false, `parked mobile nav leaked: ${parked}`);
   assert.equal(searchHintBlock.includes(parked), false, `parked search hint leaked: ${parked}`);
 }
@@ -38,7 +56,7 @@ for (const parkedSearchCopy of ["Search orders, clients, products", "clients, pr
   assert.equal(sidebarBlock.includes(parkedSearchCopy), false, `parked global search copy leaked: ${parkedSearchCopy}`);
 }
 
-for (const parkedPath of ["/clients", "/products", "/catalog", "/staff", "/settings", "/reorders"]) {
+for (const parkedPath of ["/clients", "/staff", "/settings", "/reorders", "/catalog/suppliers", "/catalog/purchasing"]) {
   assert.equal(routeBlock.includes(`"${parkedPath}"`), false, `parked route registered: ${parkedPath}`);
   assert.equal(localDev.includes(`"${parkedPath}"`), false, `parked local route registered: ${parkedPath}`);
   assert.equal(searchHintBlock.includes(parkedPath), false, `parked search hint path leaked: ${parkedPath}`);
