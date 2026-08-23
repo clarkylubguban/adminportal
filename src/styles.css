@@ -2593,7 +2593,12 @@ td:nth-child(9) {
   overflow-x: auto;
 }
 
-.inventory-table,
+.inventory-table {
+  min-width: 1060px;
+  table-layout: fixed;
+  width: 100%;
+}
+
 .inventory-movement-table {
   min-width: 1180px;
 }
@@ -2602,6 +2607,90 @@ td:nth-child(9) {
 .inventory-table td,
 .inventory-movement-table th,
 .inventory-movement-table td {
+  white-space: nowrap;
+}
+
+.inventory-table th,
+.inventory-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-product-col {
+  width: 27%;
+}
+
+.inventory-sku-col {
+  width: 14%;
+}
+
+.inventory-on-hand-col {
+  width: 12%;
+}
+
+.inventory-reorder-col,
+.inventory-incoming-col {
+  width: 8%;
+}
+
+.inventory-stock-col {
+  width: 12%;
+}
+
+.inventory-last-cost-col {
+  width: 9%;
+}
+
+.inventory-stock-value-col {
+  width: 10%;
+}
+
+.inventory-action-col {
+  width: 9%;
+}
+
+.inventory-product-stack {
+  max-width: 100%;
+}
+
+.inventory-product-stack strong,
+.inventory-product-stack span,
+.inventory-table .mono-value {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-on-hand-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.inventory-on-hand-cell strong {
+  color: #0e1116;
+  display: block;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.inventory-on-hand-cell strong.inventory-negative {
+  color: #e52930;
+}
+
+.inventory-on-hand-cell span {
+  color: #7a8496;
+  display: block;
+  font-size: 9px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-table .status-pill {
+  max-width: 100%;
+  min-width: max-content;
   white-space: nowrap;
 }
 
@@ -2729,6 +2818,7 @@ td:nth-child(9) {
   .inventory-table,
   .inventory-movement-table {
     min-width: 0;
+    table-layout: auto;
   }
 
   .inventory-table thead,
@@ -2760,6 +2850,19 @@ td:nth-child(9) {
     justify-content: space-between;
     min-height: 34px;
     padding: 7px 14px;
+    white-space: normal;
+  }
+
+  .inventory-table th,
+  .inventory-table td {
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .inventory-product-stack strong,
+  .inventory-product-stack span,
+  .inventory-table .mono-value,
+  .inventory-on-hand-cell span {
     white-space: normal;
   }
 

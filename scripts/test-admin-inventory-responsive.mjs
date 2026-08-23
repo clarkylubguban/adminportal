@@ -52,10 +52,19 @@ try {
       expression: `(() => {
         const text = document.body.innerText;
         const root = document.documentElement;
+        const headers = [...document.querySelectorAll(".inventory-table thead th")].map((item) => item.textContent.trim());
+        const stockHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "Stock");
+        const actionHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "Action");
+        const productHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "Product / Variant");
         return {
           title: document.querySelector("h1")?.textContent || "",
           hasInventory: text.includes("Inventory"),
           hasStockRule: text.includes("On Hand is never edited directly"),
+          headers,
+          hasFigmaStockHeaders: JSON.stringify(headers) === JSON.stringify(["Product / Variant", "SKU", "On Hand", "Reorder", "Incoming", "Stock", "Last Cost", "Stock Value", "Action"]),
+          stockHeaderWidth: stockHeader?.getBoundingClientRect().width || 0,
+          actionHeaderWidth: actionHeader?.getBoundingClientRect().width || 0,
+          productHeaderWidth: productHeader?.getBoundingClientRect().width || 0,
           hasNoPageOverflow: root.scrollWidth <= window.innerWidth + 1,
           scrollWidth: root.scrollWidth,
           innerWidth: window.innerWidth,
@@ -66,6 +75,12 @@ try {
     const value = result.result.result.value;
     assert.ok(value.hasInventory, `${viewport.label}: Inventory content missing`);
     assert.ok(value.hasStockRule, `${viewport.label}: Stock rule missing`);
+    assert.ok(value.hasFigmaStockHeaders, `${viewport.label}: Inventory headers mismatch: ${value.headers.join(", ")}`);
+    if (viewport.width >= 1200) {
+      assert.ok(value.stockHeaderWidth >= 96, `${viewport.label}: Stock column too narrow (${value.stockHeaderWidth})`);
+      assert.ok(value.actionHeaderWidth >= 72, `${viewport.label}: Action column too narrow (${value.actionHeaderWidth})`);
+      assert.ok(value.productHeaderWidth > value.stockHeaderWidth, `${viewport.label}: Product / Variant should be the widest primary descriptor`);
+    }
     assert.ok(value.hasNoPageOverflow, `${viewport.label}: page overflow ${value.scrollWidth} > ${value.innerWidth}`);
     assert.ok(value.drawerUsableWidth, `${viewport.label}: receive drawer width unusable`);
   }

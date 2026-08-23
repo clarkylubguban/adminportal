@@ -5485,16 +5485,24 @@ function renderInventoryNotice(canReceive) {
 function renderInventoryStockTable(rows, canReceive) {
   return `
     <article class="content-card table-card catalog-table-card inventory-table-card">
-      <p class="table-helper-text catalog-count-label">${rows.length} ${rows.length === 1 ? "SKU LOCATION" : "SKU LOCATIONS"}</p>
+      <p class="table-helper-text catalog-count-label">${rows.length} ${rows.length === 1 ? "SKU" : "SKUS"}</p>
       <table class="products-table catalog-table inventory-table">
+        <colgroup>
+          <col class="inventory-product-col">
+          <col class="inventory-sku-col">
+          <col class="inventory-on-hand-col">
+          <col class="inventory-reorder-col">
+          <col class="inventory-incoming-col">
+          <col class="inventory-stock-col">
+          <col class="inventory-last-cost-col">
+          <col class="inventory-stock-value-col">
+          <col class="inventory-action-col">
+        </colgroup>
         <thead>
           <tr>
             <th>Product / Variant</th>
             <th>SKU</th>
-            <th>Location</th>
             <th>On Hand</th>
-            <th>Reserved</th>
-            <th>Sellable</th>
             <th>Reorder</th>
             <th>Incoming</th>
             <th>Stock</th>
@@ -5514,14 +5522,11 @@ function renderInventoryStockRow(row, canReceive) {
   const action = row.onHand <= 0 ? "Receive" : "View";
   return `
     <tr>
-      <td data-mobile-label="Product / Variant"><div class="catalog-name-stack"><strong>${escapeHtml(row.productName)} · ${escapeHtml(row.variantLabel)}</strong><span>Catalog-linked variant</span></div></td>
+      <td data-mobile-label="Product / Variant"><div class="catalog-name-stack inventory-product-stack"><strong>${escapeHtml(row.productName)} · ${escapeHtml(row.variantLabel)}</strong><span>Catalog-linked variant</span></div></td>
       <td data-mobile-label="SKU"><span class="mono-value">${escapeHtml(row.sku)}</span></td>
-      <td data-mobile-label="Location">${escapeHtml(row.locationName)}</td>
-      <td data-mobile-label="On Hand"><strong class="${row.onHand <= 0 ? "inventory-negative" : ""}">${row.onHand}</strong></td>
-      <td data-mobile-label="Reserved">${row.reserved}</td>
-      <td data-mobile-label="Sellable">${row.sellable}</td>
-      <td data-mobile-label="Reorder">${row.reorderPoint || "-"}</td>
-      <td data-mobile-label="Incoming">${row.incoming || "-"}</td>
+      <td data-mobile-label="On Hand"><div class="inventory-on-hand-cell"><strong class="${row.onHand <= 0 ? "inventory-negative" : ""}">${row.onHand}</strong><span>Sellable: ${row.sellable} · Reserved: ${row.reserved}</span></div></td>
+      <td data-mobile-label="Reorder">${formatInventoryOptionalNumber(row.reorderPoint)}</td>
+      <td data-mobile-label="Incoming">${formatInventoryOptionalNumber(row.incoming)}</td>
       <td data-mobile-label="Stock">${renderInventoryStockPill(row.stockState)}</td>
       <td data-mobile-label="Last Cost">${formatInventoryMoney(row.unitCost)}</td>
       <td data-mobile-label="Stock Value">${formatInventoryMoney(row.stockValue)}</td>
@@ -5703,8 +5708,15 @@ function formatSignedQuantity(value) {
 }
 
 function formatInventoryMoney(value) {
-  const number = Number(value || 0);
-  return `PHP ${Number.isFinite(number) ? number.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "0"}`;
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  return Number.isFinite(number) ? `PHP ${number.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
+}
+
+function formatInventoryOptionalNumber(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toLocaleString("en-US") : "—";
 }
 
 function formatInventoryDateTime(value) {

@@ -164,9 +164,9 @@ function mapInventoryRow({ product, variant, balance, location, category, brand 
   const onHand = readNumber(balance, ["on_hand", "on_hand_quantity", "quantity_on_hand", "qty_on_hand"]);
   const reserved = readNumber(balance, ["reserved", "reserved_quantity", "qty_reserved"]);
   const sellable = readNumber(balance, ["sellable", "available", "available_quantity", "qty_available"], onHand - reserved);
-  const reorderPoint = readNumber(balance, ["reorder_point", "reorder_quantity", "reorder_level", "minimum_quantity"], 0);
-  const incoming = readNumber(balance, ["incoming", "incoming_quantity", "qty_incoming"], 0);
-  const unitCost = readNumber(variant, ["unit_cost", "last_cost"], readNumber(balance, ["last_cost", "unit_cost"], 0));
+  const reorderPoint = readNullableNumber(balance, ["reorder_point", "reorder_quantity", "reorder_level", "minimum_quantity"]);
+  const incoming = readNullableNumber(balance, ["incoming", "incoming_quantity", "qty_incoming"]);
+  const unitCost = readNullableNumber(variant, ["unit_cost", "last_cost"]) ?? readNullableNumber(balance, ["last_cost", "unit_cost"]);
 
   return {
     id: `${variant.id}:${location.id}`,
@@ -188,7 +188,7 @@ function mapInventoryRow({ product, variant, balance, location, category, brand 
     incoming,
     unitCost,
     sellingPrice: readNumber(variant, ["selling_price"], 0),
-    stockValue: onHand * unitCost,
+    stockValue: unitCost === null ? null : onHand * unitCost,
     stockState: getStockState(onHand, reorderPoint),
   };
 }
