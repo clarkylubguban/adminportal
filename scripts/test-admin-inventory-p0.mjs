@@ -71,5 +71,12 @@ assert.ok(stockTable.includes("Sellable:") && stockTable.includes("Reserved:"), 
 assert.ok(styles.includes(".inventory-product-col"), "Inventory Product / Variant column width missing");
 assert.ok(styles.includes(".inventory-stock-col"), "Inventory Stock column width missing");
 assert.ok(styles.includes("min-width: max-content"), "Inventory stock chip must keep full label readable");
+assert.ok(/\.inventory-product-col\s*\{\s*width:\s*28%;\s*\}/.test(styles), "Product / Variant must keep final 28% table width");
+assert.ok(/\.inventory-sku-col\s*\{\s*width:\s*16%;\s*\}/.test(styles), "SKU must keep final 16% table width");
+assert.ok(/\.inventory-incoming-col\s*\{\s*width:\s*8%;\s*\}/.test(styles), "Incoming must keep enough width for its header");
+assert.ok(/\.inventory-table th,\s*\.inventory-table td\s*\{\s*overflow:\s*visible;/.test(styles), "Inventory cells must not clip stock chips or headers");
+assert.ok(styles.includes(".app-shell.admin-saas-shell .inventory-receive-drawer header"), "Inventory receive drawer spacing override missing");
+assert.ok(styles.includes("padding: 16px 22px 14px !important"), "Inventory receive drawer header must be vertically tighter");
+assert.ok(styles.includes(".app-shell.admin-saas-shell .inventory-receive-drawer .catalog-form"), "Inventory receive drawer form spacing override missing");
 
 process.stdout.write("PASS Admin Inventory P0 route, canonical bindings, RPC payload, permissions, idempotency, and parked purchasing\n");

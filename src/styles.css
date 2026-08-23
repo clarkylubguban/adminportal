@@ -2594,7 +2594,7 @@ td:nth-child(9) {
 }
 
 .inventory-table {
-  min-width: 1060px;
+  min-width: 1120px;
   table-layout: fixed;
   width: 100%;
 }
@@ -2612,41 +2612,44 @@ td:nth-child(9) {
 
 .inventory-table th,
 .inventory-table td {
-  overflow: hidden;
-  text-overflow: ellipsis;
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .inventory-product-col {
-  width: 27%;
+  width: 28%;
 }
 
 .inventory-sku-col {
-  width: 14%;
+  width: 16%;
 }
 
 .inventory-on-hand-col {
   width: 12%;
 }
 
-.inventory-reorder-col,
+.inventory-reorder-col {
+  width: 6%;
+}
+
 .inventory-incoming-col {
   width: 8%;
 }
 
 .inventory-stock-col {
-  width: 12%;
+  width: 11%;
 }
 
 .inventory-last-cost-col {
-  width: 9%;
+  width: 6%;
 }
 
 .inventory-stock-value-col {
-  width: 10%;
+  width: 6%;
 }
 
 .inventory-action-col {
-  width: 9%;
+  width: 7%;
 }
 
 .inventory-product-stack {
@@ -2691,6 +2694,8 @@ td:nth-child(9) {
 .inventory-table .status-pill {
   max-width: 100%;
   min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
   white-space: nowrap;
 }
 
@@ -29706,4 +29711,47 @@ pre,
   .app-shell.admin-saas-shell .catalog-reset-button {
     min-height: 38px !important;
   }
+}
+
+/* M9E.2C.2 inventory drawer final spacing polish. */
+.app-shell.admin-saas-shell .inventory-receive-drawer header {
+  padding: 16px 22px 14px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer header > div {
+  gap: 5px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer header h2,
+.app-shell.admin-saas-shell .inventory-receive-drawer header p {
+  margin: 0 !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer header .status-pill {
+  margin-top: 4px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .catalog-form {
+  padding-top: 12px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .catalog-drawer-section {
+  gap: 10px !important;
+  padding: 16px 0 !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .catalog-drawer-section:first-of-type {
+  padding-top: 0 !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .catalog-drawer-section h3 {
+  margin: 0 !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .inventory-readonly-grid {
+  gap: 8px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .inventory-readonly-grid div {
+  padding: 8px 10px !important;
 }

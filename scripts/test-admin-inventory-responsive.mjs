@@ -56,6 +56,10 @@ try {
         const stockHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "Stock");
         const actionHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "Action");
         const productHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "Product / Variant");
+        const skuHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "SKU");
+        const onHandHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "On Hand");
+        const incomingHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "Incoming");
+        const reorderHeader = [...document.querySelectorAll(".inventory-table th")].find((item) => item.textContent.trim() === "Reorder");
         return {
           title: document.querySelector("h1")?.textContent || "",
           hasInventory: text.includes("Inventory"),
@@ -65,6 +69,10 @@ try {
           stockHeaderWidth: stockHeader?.getBoundingClientRect().width || 0,
           actionHeaderWidth: actionHeader?.getBoundingClientRect().width || 0,
           productHeaderWidth: productHeader?.getBoundingClientRect().width || 0,
+          skuHeaderWidth: skuHeader?.getBoundingClientRect().width || 0,
+          onHandHeaderWidth: onHandHeader?.getBoundingClientRect().width || 0,
+          incomingHeaderWidth: incomingHeader?.getBoundingClientRect().width || 0,
+          reorderHeaderWidth: reorderHeader?.getBoundingClientRect().width || 0,
           hasNoPageOverflow: root.scrollWidth <= window.innerWidth + 1,
           scrollWidth: root.scrollWidth,
           innerWidth: window.innerWidth,
@@ -80,6 +88,8 @@ try {
       assert.ok(value.stockHeaderWidth >= 96, `${viewport.label}: Stock column too narrow (${value.stockHeaderWidth})`);
       assert.ok(value.actionHeaderWidth >= 72, `${viewport.label}: Action column too narrow (${value.actionHeaderWidth})`);
       assert.ok(value.productHeaderWidth > value.stockHeaderWidth, `${viewport.label}: Product / Variant should be the widest primary descriptor`);
+      assert.ok(value.skuHeaderWidth > value.onHandHeaderWidth || value.skuHeaderWidth >= 150, `${viewport.label}: SKU should be the second widest descriptor`);
+      assert.ok(value.incomingHeaderWidth >= value.reorderHeaderWidth, `${viewport.label}: Incoming header should not be narrower than Reorder`);
     }
     assert.ok(value.hasNoPageOverflow, `${viewport.label}: page overflow ${value.scrollWidth} > ${value.innerWidth}`);
     assert.ok(value.drawerUsableWidth, `${viewport.label}: receive drawer width unusable`);
