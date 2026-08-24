@@ -18,7 +18,7 @@ create table if not exists public.purchase_orders (
   archived_at timestamptz,
   constraint purchase_orders_po_number_format check (po_number ~ '^PO-[0-9]{4}-[0-9]{4,}$'),
   constraint purchase_orders_status_check check (status in ('DRAFT','ORDERED','PARTIALLY_RECEIVED','RECEIVED','CANCELLED')),
-  constraint purchase_orders_m2_status_check check (status in ('DRAFT','ORDERED','CANCELLED')),
+  constraint purchase_orders_m2_status_check check (status in ('DRAFT','ORDERED','PARTIALLY_RECEIVED','RECEIVED','CANCELLED')),
   constraint purchase_orders_freight_cost_nonnegative check (freight_cost >= 0),
   constraint purchase_orders_ordered_at_check check (status <> 'ORDERED' or ordered_at is not null)
 );
@@ -97,17 +97,17 @@ create or replace function public.create_purchase_order(
 returns jsonb
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   v_actor uuid := auth.uid();
   v_status text := upper(coalesce(p_status, 'DRAFT'));
-  v_po purchase_orders%rowtype;
-  v_supplier suppliers%rowtype;
+  v_po public.purchase_orders%rowtype;
+  v_supplier public.suppliers%rowtype;
   v_line jsonb;
-  v_saved_line purchase_order_lines%rowtype;
-  v_product products%rowtype;
-  v_variant product_variants%rowtype;
+  v_saved_line public.purchase_order_lines%rowtype;
+  v_product public.products%rowtype;
+  v_variant public.product_variants%rowtype;
   v_lines jsonb := '[]'::jsonb;
   v_ordered_quantity integer;
   v_unit_cost numeric;
@@ -231,6 +231,65 @@ begin
 end;
 $$;
 
+create or replace function public.mark_purchase_order_ordered(
+  p_purchase_order_id uuid
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_actor uuid := auth.uid();
+  v_po public.purchase_orders%rowtype;
+  v_supplier public.suppliers%rowtype;
+  v_lines jsonb := '[]'::jsonb;
+begin
+  if v_actor is null then
+    raise exception 'Authentication is required.';
+  end if;
+
+  if not public.is_active_admin_user(array['owner','admin']) then
+    raise exception 'Only Owner and Admin roles can mark purchase orders Ordered.';
+  end if;
+
+  select * into v_po
+  from public.purchase_orders
+  where id = p_purchase_order_id
+    and archived_at is null
+  for update;
+
+  if not found then
+    raise exception 'Purchase order is required.';
+  end if;
+
+  if v_po.status <> 'DRAFT' then
+    raise exception 'Only Draft purchase orders can be marked Ordered.';
+  end if;
+
+  update public.purchase_orders
+  set status = 'ORDERED',
+      ordered_at = now()
+  where id = v_po.id
+  returning * into v_po;
+
+  select * into v_supplier
+  from public.suppliers
+  where id = v_po.supplier_id;
+
+  select coalesce(jsonb_agg(to_jsonb(line_row) order by line_row.created_at asc), '[]'::jsonb)
+  into v_lines
+  from public.purchase_order_lines line_row
+  where line_row.purchase_order_id = v_po.id;
+
+  return jsonb_build_object(
+    'purchase_order', to_jsonb(v_po),
+    'supplier', to_jsonb(v_supplier),
+    'lines', v_lines
+  );
+end;
+$$;
+
 alter table public.purchase_orders enable row level security;
 alter table public.purchase_order_lines enable row level security;
 
@@ -241,7 +300,12 @@ grant select, insert, update on table public.purchase_order_lines to authenticat
 grant all on table public.purchase_orders to service_role;
 grant all on table public.purchase_order_lines to service_role;
 grant usage, select on sequence public.purchase_order_number_sequence to authenticated;
+revoke execute on function public.create_purchase_order(uuid,date,text,numeric,text,text,jsonb) from public;
+revoke execute on function public.create_purchase_order(uuid,date,text,numeric,text,text,jsonb) from anon;
 grant execute on function public.create_purchase_order(uuid,date,text,numeric,text,text,jsonb) to authenticated;
+revoke execute on function public.mark_purchase_order_ordered(uuid) from public;
+revoke execute on function public.mark_purchase_order_ordered(uuid) from anon;
+grant execute on function public.mark_purchase_order_ordered(uuid) to authenticated;
 
 drop policy if exists "purchase orders read active admin" on public.purchase_orders;
 create policy "purchase orders read active admin"

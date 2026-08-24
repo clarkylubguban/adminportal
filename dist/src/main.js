@@ -5409,15 +5409,17 @@ function renderPurchaseOrderListPage() {
 }
 
 function renderPurchaseOrderRow(order) {
+  const lineCount = Number(order.lineCount || 0);
+  const orderedUnits = Number(order.orderedUnits || 0);
   return `
     <tr data-purchase-order-row="${escapeHtml(order.id)}" tabindex="0">
       <td data-mobile-label="PO Number"><span class="mono-value">${escapeHtml(order.poNumber || "-")}</span></td>
       <td data-mobile-label="Supplier"><div class="catalog-name-stack"><strong>${escapeHtml(order.supplierName || "-")}</strong><span>${escapeHtml(order.supplierReference || "-")}</span></div></td>
       <td data-mobile-label="Ordered">${escapeHtml(formatPurchaseDate(order.orderedAt || order.orderDate))}</td>
       <td data-mobile-label="Expected">${escapeHtml(formatPurchaseDate(order.expectedDate))}</td>
-      <td data-mobile-label="Items">${escapeHtml(String(order.itemCount || 0))}</td>
+      <td data-mobile-label="Items">${escapeHtml(`${lineCount} ${lineCount === 1 ? "SKU" : "SKUs"}`)}</td>
       <td data-mobile-label="Total Cost">${formatPurchaseMoney(order.totalCost)}</td>
-      <td data-mobile-label="Receiving">${order.status === "ORDERED" ? `0 / ${escapeHtml(String(order.itemCount || 0))}` : "—"}</td>
+      <td data-mobile-label="Receiving">${order.status === "ORDERED" ? `0 / ${escapeHtml(String(orderedUnits))} pcs` : "—"}</td>
       <td data-mobile-label="Status">${renderPurchaseOrderStatusPill(order.status)}</td>
       <td data-mobile-label="Action"><button class="note-button compact-action" data-purchase-order-view="${escapeHtml(order.id)}" type="button">View</button></td>
     </tr>
@@ -5430,6 +5432,7 @@ function renderPurchaseOrderDetailPage() {
     selectedPurchaseOrderId = null;
     return renderPurchaseOrderListPage();
   }
+  const canMarkOrdered = canWritePurchaseOrdersForRole(adminUser?.role) && order.status === "DRAFT";
 
   return `
     <main class="orders-page catalog-page purchasing-page po-detail-page admin-saas-page">
@@ -5441,6 +5444,7 @@ function renderPurchaseOrderDetailPage() {
         </div>
         <div class="purchasing-heading-actions">
           <button class="note-button" data-purchase-order-back type="button">Back to POs</button>
+          ${canMarkOrdered ? `<button class="primary-button catalog-save-button" data-purchase-order-mark-ordered="${escapeHtml(order.id)}" type="button">MARK ORDERED</button>` : ""}
           <button class="primary-button catalog-save-button" data-receive-stock-parked type="button" disabled>Receive Stock</button>
         </div>
       </div>
@@ -5909,9 +5913,7 @@ async function savePurchaseOrder(status) {
   render();
 
   try {
-    const savedOrder = status === "ORDERED"
-      ? await markPurchaseOrderOrdered(draft, adminAuthSession)
-      : await createPurchaseOrder(draft, "DRAFT", adminAuthSession);
+    const savedOrder = await createPurchaseOrder(draft, status === "ORDERED" ? "ORDERED" : "DRAFT", adminAuthSession);
     if (savedOrder) {
       purchaseOrders = [savedOrder, ...purchaseOrders.filter((order) => order.id !== savedOrder.id)];
       selectedPurchaseOrderId = savedOrder.id;
@@ -5923,6 +5925,33 @@ async function savePurchaseOrder(status) {
     console.error("Unable to save purchase order.", error);
     purchasingSaveState = "idle";
     purchasingSaveError = error.message || "Purchase order save failed.";
+  }
+  render();
+}
+
+async function markSelectedPurchaseOrderOrdered(purchaseOrderId) {
+  if (!purchaseOrderId || purchasingSaveState === "saving") return;
+  if (!canWritePurchaseOrdersForRole(adminUser?.role)) {
+    purchasingSaveError = "Only Owner and Admin can mark purchase orders Ordered.";
+    render();
+    return;
+  }
+
+  purchasingSaveState = "saving";
+  purchasingSaveError = "";
+  render();
+
+  try {
+    const savedOrder = await markPurchaseOrderOrdered(purchaseOrderId, adminAuthSession);
+    if (savedOrder) {
+      purchaseOrders = purchaseOrders.map((order) => order.id === savedOrder.id ? savedOrder : order);
+      selectedPurchaseOrderId = savedOrder.id;
+    }
+    purchasingSaveState = "success";
+  } catch (error) {
+    console.error("Unable to mark purchase order Ordered.", error);
+    purchasingSaveState = "idle";
+    purchasingSaveError = error.message || "Purchase order transition failed.";
   }
   render();
 }
@@ -10988,6 +11017,11 @@ function bindEvents() {
   document.querySelector("[data-purchase-order-supplier]")?.addEventListener("click", (event) => {
     navigateTo("/catalog/suppliers");
     openSupplierDrawer("view", event.currentTarget.dataset.purchaseOrderSupplier);
+  });
+
+  document.querySelector("[data-purchase-order-mark-ordered]")?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    await markSelectedPurchaseOrderOrdered(event.currentTarget.dataset.purchaseOrderMarkOrdered);
   });
 
   document.querySelectorAll("[data-purchase-order-close]").forEach((button) => {

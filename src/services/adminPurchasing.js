@@ -7,6 +7,7 @@ import {
 export const PURCHASE_ORDERS_TABLE = "purchase_orders";
 export const PURCHASE_ORDER_LINES_TABLE = "purchase_order_lines";
 export const CREATE_PURCHASE_ORDER_RPC = "create_purchase_order";
+export const MARK_PURCHASE_ORDER_ORDERED_RPC = "mark_purchase_order_ordered";
 export const PO_NUMBER_PREVIEW = "Auto-generated on save";
 export const PURCHASE_ORDER_STATUSES = ["DRAFT", "ORDERED", "PARTIALLY_RECEIVED", "RECEIVED", "CANCELLED"];
 export const M2_WRITABLE_PURCHASE_ORDER_STATUSES = ["DRAFT", "ORDERED"];
@@ -63,8 +64,16 @@ export async function createPurchaseOrder(draft, status = "DRAFT", authSession) 
   return mapPurchaseOrderRpcResponse(response);
 }
 
-export function markPurchaseOrderOrdered(draft, authSession) {
-  return createPurchaseOrder(draft, "ORDERED", authSession);
+export async function markPurchaseOrderOrdered(purchaseOrderId, authSession) {
+  const normalizedId = String(purchaseOrderId || "").trim();
+  if (!normalizedId) throw new Error("Purchase order is required.");
+
+  const response = await executeSupabaseRpcWithAuth(
+    MARK_PURCHASE_ORDER_ORDERED_RPC,
+    { p_purchase_order_id: normalizedId },
+    getAccessToken(authSession)
+  );
+  return mapPurchaseOrderRpcResponse(response);
 }
 
 export function canWritePurchaseOrdersForRole(role) {
@@ -165,7 +174,8 @@ function mapPurchaseOrderRow(row, supplier, lines = []) {
     lines: mappedLines,
     itemSubtotal,
     totalCost: itemSubtotal + freightCost,
-    itemCount: mappedLines.reduce((sum, line) => sum + line.orderedQuantity, 0),
+    lineCount: mappedLines.length,
+    orderedUnits: mappedLines.reduce((sum, line) => sum + line.orderedQuantity, 0),
   };
 }
 
