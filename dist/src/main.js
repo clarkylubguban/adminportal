@@ -68,6 +68,14 @@ import {
   receiveAdminInventoryStock,
 } from "./services/adminInventory.js";
 import {
+  canWriteSuppliersForRole,
+  createAdminSupplier,
+  getAdminSuppliers,
+  getSupplierReferencePreview,
+  updateAdminSupplier,
+  validateSupplierDraft,
+} from "./services/adminSuppliers.js";
+import {
   deleteCatalogImagePath,
   uploadCatalogImage,
   validateCatalogImageFileWithDimensions,
@@ -498,6 +506,18 @@ let inventoryStockStateFilter = "all";
 let inventoryMovementTypeFilter = "all";
 let inventoryMovementSourceFilter = "all";
 let inventoryReceiveDrawer = { open: false, rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
+let suppliers = [];
+let supplierLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
+let supplierLoadError = "";
+let hasLoadedSuppliers = false;
+let supplierQuery = "";
+let supplierStatusFilter = "active";
+let supplierSupplyTypeFilter = "all";
+let supplierDrawerMode = "";
+let selectedSupplierId = null;
+let supplierDraft = null;
+let supplierSaveState = "idle";
+let supplierSaveError = "";
 const CATALOG_PRODUCT_IMAGE_LIMIT = 6;
 let categoryStatusFilter = "active";
 let categoryProductTypeFilter = "all";
@@ -587,6 +607,7 @@ const routes = {
   "/production": "Production",
   "/catalog": "Catalog",
   "/catalog/inventory": "Catalog",
+  "/catalog/suppliers": "Catalog",
   "/my-tasks": "My Tasks",
   "/calendar": "Calendar",
   "/workboard": "Workboard",
@@ -595,6 +616,7 @@ const routes = {
   "/catalog/brands": "Catalog",
   "/catalog/categories": "Catalog",
   "/catalog/inventory": "Catalog",
+  "/catalog/suppliers": "Catalog",
 };
 
 const defaultRoutePath = "/";
@@ -668,6 +690,7 @@ function render() {
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
   if (getRoutePath() === "/catalog/inventory" && inventoryLoadState === "idle") window.setTimeout(loadInventory, 0);
+  if (getRoutePath() === "/catalog/suppliers" && supplierLoadState === "idle") window.setTimeout(loadSuppliers, 0);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -1334,6 +1357,7 @@ function startAdminDataLoading() {
   loadProductCategories();
   loadBrands();
   loadInventory();
+  loadSuppliers();
   if (isTaskFeatureUiEnabled()) loadMyTasks();
 }
 
@@ -1482,6 +1506,32 @@ async function loadInventory({ force = false } = {}) {
     inventoryMovements = [];
     inventoryLoadState = "error";
     inventoryLoadError = error.message || "Unable to load inventory records.";
+  } finally {
+    render();
+  }
+}
+
+async function loadSuppliers({ force = false } = {}) {
+  if (!force && hasLoadedSuppliers && supplierLoadState !== "loading") return;
+  hasLoadedSuppliers = true;
+  supplierLoadState = "loading";
+  supplierLoadError = "";
+
+  try {
+    const result = await getAdminSuppliers(adminAuthSession);
+    const nextSuppliers = Array.isArray(result?.suppliers) ? result.suppliers : [];
+    suppliers = nextSuppliers;
+    supplierLoadState = result?.status === "error" ? "error" : nextSuppliers.length ? "success" : "empty";
+    supplierLoadError = result?.error?.message ?? "";
+
+    if (!suppliers.some((item) => item.id === selectedSupplierId)) {
+      selectedSupplierId = suppliers[0]?.id ?? null;
+    }
+  } catch (error) {
+    console.error("Unable to apply suppliers.", error);
+    suppliers = [];
+    supplierLoadState = "error";
+    supplierLoadError = error.message || "Unable to load supplier records.";
   } finally {
     render();
   }
@@ -5121,6 +5171,9 @@ function renderCatalogPage() {
   if (getRoutePath() === "/catalog/categories") {
     return renderCatalogCategoriesPage();
   }
+  if (getRoutePath() === "/catalog/suppliers") {
+    return renderSuppliersPage();
+  }
   if (getRoutePath() === "/catalog/inventory") {
     return renderInventoryPage();
   }
@@ -5354,6 +5407,366 @@ function renderCatalogBrandsPage() {
       ${brandDrawerMode ? renderBrandDrawer(selectedBrand) : ""}
     </main>
   `;
+}
+
+function renderSuppliersPage() {
+  const visibleSuppliers = getVisibleSuppliers();
+  const selectedSupplier = suppliers.find((item) => item.id === selectedSupplierId) ?? null;
+  const canWriteSuppliers = canWriteSuppliersForRole(adminUser?.role);
+  const summaryCards = getSupplierSummaryCards();
+
+  return `
+    <main class="orders-page catalog-page suppliers-page admin-saas-page">
+      <div class="page-heading catalog-heading suppliers-heading">
+        <div>
+          <span class="breadcrumb">Home  &rsaquo;  Purchasing  &rsaquo;  Suppliers</span>
+          <h1>Suppliers</h1>
+          <p class="subtitle">Manage supplier records used by purchase orders and receiving.</p>
+        </div>
+        ${canWriteSuppliers ? `<button class="catalog-add-button" data-supplier-add type="button">+ Add Supplier</button>` : ""}
+      </div>
+
+      <section class="catalog-summary-grid supplier-summary-grid" aria-label="Supplier summary">
+        ${summaryCards.map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="supplier-tabs" aria-label="Purchasing setup tabs">
+        <button type="button" disabled>Purchase Orders</button>
+        <button class="active" type="button">Suppliers</button>
+        <button type="button" disabled>Receiving History</button>
+      </section>
+
+      <section class="catalog-controls supplier-controls" aria-label="Supplier controls">
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="supplier-search" value="${escapeHtml(supplierQuery)}" placeholder="Search supplier, supply type..." type="search" />
+          </label>
+          <select id="supplier-status-filter" aria-label="Supplier status filter">
+            <option value="active" ${supplierStatusFilter === "active" ? "selected" : ""}>Active suppliers</option>
+            <option value="inactive" ${supplierStatusFilter === "inactive" ? "selected" : ""}>Inactive suppliers</option>
+            <option value="all" ${supplierStatusFilter === "all" ? "selected" : ""}>All statuses</option>
+          </select>
+          <select id="supplier-supply-type-filter" aria-label="Supply type filter">
+            <option value="all" ${supplierSupplyTypeFilter === "all" ? "selected" : ""}>All Supply Types</option>
+            ${getSupplierSupplyTypeOptions().map((type) => `<option value="${escapeHtml(type)}" ${supplierSupplyTypeFilter === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
+          </select>
+          <button class="note-button supplier-disabled-filter" type="button" disabled>Last Purchase</button>
+          <button class="note-button catalog-reset-button" data-supplier-reset-filters type="button">Reset</button>
+        </div>
+      </section>
+
+      ${renderSupplierNotice(canWriteSuppliers)}
+
+      <article class="content-card table-card catalog-table-card supplier-table-card">
+        <p class="table-helper-text catalog-count-label">${visibleSuppliers.length} ${visibleSuppliers.length === 1 ? "SUPPLIER" : "SUPPLIERS"}</p>
+        <table class="products-table catalog-table supplier-table">
+          <thead>
+            <tr>
+              <th>Supplier Ref</th>
+              <th>Supplier</th>
+              <th>Open POs</th>
+              <th>Open PO Value</th>
+              <th>Last Purchase</th>
+              <th>Last Receipt</th>
+              <th>Notes</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>${visibleSuppliers.map(renderSupplierRow).join("")}</tbody>
+        </table>
+        ${renderSupplierEmptyState(visibleSuppliers)}
+      </article>
+      <div class="supplier-rule-note"><strong>SUPPLIER RULE</strong><span>Supplier records create no stock movement. Inventory changes only through confirmed receiving.</span></div>
+      ${supplierDrawerMode ? renderSupplierDrawer(selectedSupplier, canWriteSuppliers) : ""}
+    </main>
+  `;
+}
+
+function renderSupplierRow(supplier) {
+  const selected = supplier.id === selectedSupplierId;
+  return `
+    <tr class="${selected ? "selected" : ""}" data-supplier-row="${escapeHtml(supplier.id)}" tabindex="0">
+      <td data-mobile-label="Supplier Ref"><span class="mono-value">${escapeHtml(supplier.supplierReference || "-")}</span></td>
+      <td data-mobile-label="Supplier"><div class="catalog-name-stack"><strong>${escapeHtml(supplier.name)}</strong><span>${escapeHtml([supplier.countryRegion || "-", supplier.supplyType || "-"].join(" · "))}</span></div></td>
+      <td data-mobile-label="Open POs">0</td>
+      <td data-mobile-label="Open PO Value">₱0</td>
+      <td data-mobile-label="Last Purchase">—</td>
+      <td data-mobile-label="Last Receipt">—</td>
+      <td data-mobile-label="Notes">${escapeHtml(supplier.internalNotes || "-")}</td>
+      <td data-mobile-label="Status">${renderSupplierStatusPill(supplier.active)}</td>
+      <td data-mobile-label="Action"><button class="note-button compact-action" data-supplier-view="${escapeHtml(supplier.id)}" type="button">View</button></td>
+    </tr>
+  `;
+}
+
+function renderSupplierDrawer(supplier, canWriteSuppliers) {
+  const isEditing = supplierDrawerMode === "add" || supplierDrawerMode === "edit";
+  const draft = supplierDraft ?? createSupplierDraft(supplier);
+  const title = supplierDrawerMode === "add" ? "Add Supplier" : isEditing ? "Edit Supplier" : supplier?.name || "Supplier";
+  const subtitle = supplierDrawerMode === "add"
+    ? "Create one reusable supplier record for purchase orders and receiving."
+    : `${supplier?.supplierReference || "-"} · ${supplier?.countryRegion || "-"} · ${supplier?.supplyType || "-"}`;
+  const disabled = supplierSaveState === "saving" || !canWriteSuppliers;
+
+  return `
+    <div class="catalog-drawer-backdrop" data-supplier-close></div>
+    <aside class="catalog-drawer supplier-drawer" aria-label="${escapeHtml(title)} drawer">
+      <header>
+        <div>
+          ${supplierDrawerMode === "add" || isEditing ? `<span class="info-chip">PURCHASING · SUPPLIER</span>` : renderSupplierStatusPill(supplier?.active)}
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(subtitle)}</p>
+        </div>
+        <button class="catalog-drawer-close" data-supplier-close type="button" aria-label="Close supplier drawer">X</button>
+      </header>
+      ${
+        isEditing
+          ? renderSupplierForm(draft, disabled)
+          : renderSupplierDetail(supplier)
+      }
+    </aside>
+  `;
+}
+
+function renderSupplierForm(draft, disabled) {
+  return `
+    <form class="catalog-form supplier-form" id="supplier-form">
+      ${supplierSaveError ? `<p class="catalog-form-error">${escapeHtml(supplierSaveError)}</p>` : ""}
+      <section class="catalog-drawer-section">
+        <h3>Supplier Identity</h3>
+        <label class="catalog-field"><span>Supplier Reference</span><input class="locked-field" value="${escapeHtml(draft.supplierReference || getSupplierReferencePreview())}" readonly></label>
+        <label class="catalog-field"><span>Supplier Name</span><input data-supplier-field="name" value="${escapeHtml(draft.name)}" placeholder="e.g. Metro Textile Supply" ${disabled ? "disabled" : ""} required></label>
+        <div class="supplier-field-row">
+          <label class="catalog-field"><span>Supply Type</span><input data-supplier-field="supplyType" value="${escapeHtml(draft.supplyType)}" placeholder="Garments / Fabrics / Packaging" ${disabled ? "disabled" : ""}></label>
+          <label class="catalog-field"><span>Country / Region</span><input data-supplier-field="countryRegion" value="${escapeHtml(draft.countryRegion)}" placeholder="Philippines" ${disabled ? "disabled" : ""}></label>
+        </div>
+      </section>
+      <section class="catalog-drawer-section">
+        <h3>Contact Details</h3>
+        <div class="supplier-field-row">
+          <label class="catalog-field"><span>Contact Person</span><input data-supplier-field="contactPerson" value="${escapeHtml(draft.contactPerson)}" placeholder="Name" ${disabled ? "disabled" : ""}></label>
+          <label class="catalog-field"><span>Phone</span><input data-supplier-field="phone" value="${escapeHtml(draft.phone)}" placeholder="+63" ${disabled ? "disabled" : ""}></label>
+        </div>
+        <div class="supplier-field-row">
+          <label class="catalog-field"><span>Email</span><input data-supplier-field="email" value="${escapeHtml(draft.email)}" placeholder="email@example.com" type="email" ${disabled ? "disabled" : ""}></label>
+          <label class="catalog-field"><span>Address / Location</span><input data-supplier-field="addressLocation" value="${escapeHtml(draft.addressLocation)}" placeholder="City / warehouse" ${disabled ? "disabled" : ""}></label>
+        </div>
+      </section>
+      <section class="catalog-drawer-section">
+        <h3>Purchasing Terms</h3>
+        <div class="supplier-field-row three">
+          <label class="catalog-field"><span>Currency</span><input data-supplier-field="currency" value="${escapeHtml(draft.currency || "PHP")}" placeholder="PHP" ${disabled ? "disabled" : ""} required></label>
+          <label class="catalog-field"><span>Payment Terms</span><input data-supplier-field="paymentTerms" value="${escapeHtml(draft.paymentTerms)}" placeholder="Cash / Prepaid" ${disabled ? "disabled" : ""}></label>
+          <label class="catalog-field"><span>Lead Time</span><input data-supplier-field="leadTimeDays" min="0" step="1" inputmode="numeric" type="number" value="${escapeHtml(draft.leadTimeDays)}" placeholder="7" ${disabled ? "disabled" : ""}></label>
+        </div>
+        <label class="catalog-field"><span>Internal Notes</span><textarea data-supplier-field="internalNotes" rows="3" placeholder="What this supplier normally provides" ${disabled ? "disabled" : ""}>${escapeHtml(draft.internalNotes)}</textarea></label>
+        ${supplierDrawerMode === "edit" ? `<label class="catalog-field supplier-active-toggle"><span>Status</span><select data-supplier-field="active" ${disabled ? "disabled" : ""}><option value="true" ${draft.active !== false ? "selected" : ""}>Active</option><option value="false" ${draft.active === false ? "selected" : ""}>Inactive</option></select></label>` : ""}
+      </section>
+      <div class="supplier-rule-note drawer"><strong>SUPPLIER RULE</strong><span>Supplier setup creates no stock movement. Inventory changes only through confirmed receiving.</span></div>
+      <footer class="catalog-drawer-footer">
+        <span>${supplierDrawerMode === "add" ? "Supplier Reference is generated when saved." : "Supplier Master edits do not affect inventory."}</span>
+        <div>
+          <button class="note-button" data-supplier-close type="button" ${supplierSaveState === "saving" ? "disabled" : ""}>Cancel</button>
+          <button class="primary-button catalog-save-button" type="submit" ${disabled ? "disabled" : ""}>${supplierSaveState === "saving" ? "Saving..." : "Save Supplier"}</button>
+        </div>
+      </footer>
+    </form>
+  `;
+}
+
+function renderSupplierDetail(supplier) {
+  if (!supplier) return `<div class="catalog-form"><section class="catalog-drawer-section"><p>No supplier selected.</p></section></div>`;
+  return `
+    <div class="catalog-form supplier-detail">
+      <section class="supplier-kpi-strip" aria-label="Supplier KPIs">
+        ${renderSupplierKpi("Open POs", "0", "₱0")}
+        ${renderSupplierKpi("Last Purchase", "—", "Purchasing M2")}
+        ${renderSupplierKpi("Last Receipt", "—", "Receiving M2")}
+      </section>
+      <section class="catalog-drawer-section">
+        <h3>Supplier Profile</h3>
+        <div class="supplier-field-row">
+          ${renderSupplierReadonlyFact("Contact Person", supplier.contactPerson)}
+          ${renderSupplierReadonlyFact("Phone", supplier.phone)}
+        </div>
+        <div class="supplier-field-row">
+          ${renderSupplierReadonlyFact("Email", supplier.email)}
+          ${renderSupplierReadonlyFact("Location", supplier.addressLocation)}
+        </div>
+      </section>
+      <section class="catalog-drawer-section">
+        <h3>Procurement Settings</h3>
+        <div class="supplier-field-row three">
+          ${renderSupplierReadonlyFact("Currency", supplier.currency)}
+          ${renderSupplierReadonlyFact("Payment Terms", supplier.paymentTerms)}
+          ${renderSupplierReadonlyFact("Lead Time", supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : "")}
+        </div>
+        ${renderSupplierReadonlyFact("Notes", supplier.internalNotes)}
+      </section>
+      <div class="supplier-rule-note drawer"><strong>BOUNDARY</strong><span>Supplier stores vendor identity and purchasing terms. Purchase Orders and confirmed receiving own transactions and stock effects.</span></div>
+      <footer class="catalog-drawer-footer">
+        <span>CREATE PO is parked for Purchasing M2.</span>
+        <div>
+          <button class="note-button" data-supplier-edit="${escapeHtml(supplier.id)}" type="button" ${canWriteSuppliersForRole(adminUser?.role) ? "" : "disabled"}>Edit Supplier</button>
+          <button class="primary-button catalog-save-button" data-supplier-create-po-hook="${escapeHtml(supplier.id)}" type="button" disabled>Create PO</button>
+        </div>
+      </footer>
+    </div>
+  `;
+}
+
+function renderSupplierKpi(label, value, helper) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(helper)}</small></div>`;
+}
+
+function renderSupplierReadonlyFact(label, value) {
+  return `<label class="catalog-field readonly-field"><span>${escapeHtml(label)}</span><input value="${escapeHtml(value || "-")}" readonly></label>`;
+}
+
+function renderSupplierStatusPill(active) {
+  return `<span class="status-pill supplier-status ${active === false ? "inactive" : "active"}">${active === false ? "INACTIVE" : "ACTIVE"}</span>`;
+}
+
+function renderSupplierNotice(canWriteSuppliers) {
+  if (supplierLoadState === "loading") return `<div class="catalog-notice">Loading supplier records...</div>`;
+  if (supplierLoadState === "error") return `<div class="catalog-notice error">Unable to load suppliers. ${escapeHtml(supplierLoadError || "Check Supabase access and supplier RLS policies.")}</div>`;
+  if (supplierSaveState === "success") return `<div class="catalog-notice success">Supplier record saved.</div>`;
+  if (!canWriteSuppliers) return `<div class="catalog-notice">Supplier writes are restricted to Owner and Admin roles. Current role is read-only.</div>`;
+  return "";
+}
+
+function renderSupplierEmptyState(rows) {
+  if (rows.length) return "";
+  if (supplierLoadState === "loading") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading suppliers...</strong><span>Checking canonical Supplier Master records.</span></div>`;
+  if (supplierLoadState === "error") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Suppliers unavailable</strong><span>${escapeHtml(supplierLoadError || "Canonical supplier data could not be loaded.")}</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No suppliers found</strong><span>Add a supplier record or adjust the current filters.</span></div>`;
+}
+
+function getSupplierSummaryCards() {
+  const activeSuppliers = suppliers.filter((supplier) => supplier.active !== false && !supplier.archivedAt).length;
+  return [
+    { label: "Active Suppliers", value: String(activeSuppliers), helper: "Used in open POs" },
+    { label: "Open PO Value", value: "₱0", helper: "Across suppliers", tone: "warning" },
+    { label: "Due This Week", value: "0", helper: "Expected deliveries", tone: "info" },
+    { label: "Received This Month", value: "₱0", helper: "Supplier receipts", tone: "success" },
+  ];
+}
+
+function getVisibleSuppliers() {
+  const normalizedQuery = supplierQuery.trim().toLowerCase();
+  return suppliers.filter((supplier) => {
+    const matchesQuery = !normalizedQuery || [
+      supplier.supplierReference,
+      supplier.name,
+      supplier.supplyType,
+      supplier.countryRegion,
+      supplier.contactPerson,
+      supplier.email,
+      supplier.phone,
+      supplier.internalNotes,
+    ].join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesStatus = supplierStatusFilter === "all"
+      || (supplierStatusFilter === "active" && supplier.active !== false)
+      || (supplierStatusFilter === "inactive" && supplier.active === false);
+    const matchesSupplyType = supplierSupplyTypeFilter === "all" || supplier.supplyType === supplierSupplyTypeFilter;
+    return matchesQuery && matchesStatus && matchesSupplyType;
+  });
+}
+
+function getSupplierSupplyTypeOptions() {
+  return uniqueList(suppliers.map((supplier) => supplier.supplyType).filter(Boolean));
+}
+
+function createSupplierDraft(supplier = null) {
+  return {
+    supplierReference: supplier?.supplierReference || "",
+    name: supplier?.name || "",
+    supplyType: supplier?.supplyType || "",
+    countryRegion: supplier?.countryRegion || "",
+    contactPerson: supplier?.contactPerson || "",
+    phone: supplier?.phone || "",
+    email: supplier?.email || "",
+    addressLocation: supplier?.addressLocation || "",
+    currency: supplier?.currency || "PHP",
+    paymentTerms: supplier?.paymentTerms || "",
+    leadTimeDays: supplier?.leadTimeDays || "",
+    internalNotes: supplier?.internalNotes || "",
+    active: supplier?.active !== false,
+  };
+}
+
+function openSupplierDrawer(mode, supplierId = "") {
+  if ((mode === "add" || mode === "edit") && !canWriteSuppliersForRole(adminUser?.role)) return;
+  const supplier = suppliers.find((item) => item.id === supplierId) ?? null;
+  supplierDrawerMode = mode;
+  selectedSupplierId = supplier?.id || selectedSupplierId;
+  supplierDraft = mode === "view" ? null : createSupplierDraft(supplier);
+  supplierSaveState = "idle";
+  supplierSaveError = "";
+  render();
+}
+
+function closeSupplierDrawer() {
+  supplierDrawerMode = "";
+  supplierDraft = null;
+  supplierSaveError = "";
+  render();
+}
+
+function updateSupplierDraftField(field, value) {
+  if (!supplierDraft || !canWriteSuppliersForRole(adminUser?.role)) return;
+  supplierDraft = {
+    ...supplierDraft,
+    [field]: field === "active" ? value === "true" : value,
+  };
+  supplierSaveError = "";
+}
+
+async function saveSupplierDraft() {
+  if (!supplierDraft || supplierSaveState === "saving") return;
+  if (!canWriteSuppliersForRole(adminUser?.role)) {
+    supplierSaveError = "Only Owner and Admin can save suppliers.";
+    render();
+    return;
+  }
+
+  const validationError = validateSupplierDraft(supplierDraft);
+  if (validationError) {
+    supplierSaveError = validationError;
+    render();
+    return;
+  }
+
+  supplierSaveState = "saving";
+  supplierSaveError = "";
+  render();
+
+  try {
+    const savedSupplier = supplierDrawerMode === "edit" && selectedSupplierId
+      ? await updateAdminSupplier(selectedSupplierId, supplierDraft, adminAuthSession)
+      : await createAdminSupplier(supplierDraft, adminAuthSession);
+    if (savedSupplier?.id) {
+      suppliers = [
+        savedSupplier,
+        ...suppliers.filter((supplier) => supplier.id !== savedSupplier.id),
+      ].sort(sortSuppliers);
+      selectedSupplierId = savedSupplier.id;
+    }
+    supplierDrawerMode = "";
+    supplierDraft = null;
+    supplierSaveState = "success";
+  } catch (error) {
+    console.error("Unable to save supplier.", error);
+    supplierSaveState = "idle";
+    supplierSaveError = error.message || "Supplier save failed.";
+  }
+  render();
+}
+
+function sortSuppliers(a, b) {
+  return String(a.supplierReference || "").localeCompare(String(b.supplierReference || "")) || String(a.name || "").localeCompare(String(b.name || ""));
 }
 
 function renderInventoryPage() {
@@ -8440,7 +8853,7 @@ function renderSidebar(currentRoute) {
     { label: "Products", path: "/catalog", icon: "package", activePaths: ["/catalog"] },
     { label: "Brands", path: "/catalog/brands", icon: "tag", activePaths: ["/catalog/brands"] },
     { label: "Categories", path: "/catalog/categories", icon: "layers", activePaths: ["/catalog/categories"] },
-    { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", disabled: true },
+    { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"] },
     { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", disabled: true },
     { label: "Inventory", path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"] },
   ];
@@ -9890,6 +10303,72 @@ function bindEvents() {
   document.getElementById("inventory-receive-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await submitInventoryReceive();
+  });
+
+  document.getElementById("supplier-search")?.addEventListener("input", (event) => {
+    supplierQuery = event.target.value;
+    render();
+    focusFieldAtEnd("supplier-search");
+  });
+
+  document.getElementById("supplier-status-filter")?.addEventListener("change", (event) => {
+    supplierStatusFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("supplier-supply-type-filter")?.addEventListener("change", (event) => {
+    supplierSupplyTypeFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-supplier-reset-filters]")?.addEventListener("click", () => {
+    supplierQuery = "";
+    supplierStatusFilter = "active";
+    supplierSupplyTypeFilter = "all";
+    render();
+  });
+
+  document.querySelector("[data-supplier-add]")?.addEventListener("click", () => openSupplierDrawer("add"));
+
+  document.querySelectorAll("[data-supplier-row]").forEach((row) => {
+    const openRow = () => openSupplierDrawer("view", row.dataset.supplierRow);
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea")) return;
+      openRow();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openRow();
+    });
+  });
+
+  document.querySelectorAll("[data-supplier-view]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openSupplierDrawer("view", button.dataset.supplierView);
+    });
+  });
+
+  document.querySelectorAll("[data-supplier-edit]").forEach((button) => {
+    button.addEventListener("click", () => openSupplierDrawer("edit", button.dataset.supplierEdit));
+  });
+
+  document.querySelectorAll("[data-supplier-close]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeSupplierDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-supplier-field]").forEach((field) => {
+    const eventName = field.tagName === "SELECT" ? "change" : "input";
+    field.addEventListener(eventName, (event) => updateSupplierDraftField(field.dataset.supplierField, event.target.value));
+  });
+
+  document.getElementById("supplier-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveSupplierDraft();
   });
 
   document.getElementById("catalog-brand-filter")?.addEventListener("change", (event) => {

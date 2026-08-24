@@ -25,7 +25,7 @@ const movementTable = main.slice(movementTableStart, movementTableEnd);
 assert.ok(main.includes('"/catalog/inventory": "Catalog"'), "Inventory route must be registered under Catalog");
 assert.ok(localDev.includes('"/catalog/inventory"'), "Local dev server must serve direct Inventory route");
 assert.ok(main.includes('path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"]'), "Inventory nav must be enabled");
-assert.ok(main.includes('path: "/catalog/suppliers", icon: "truck", disabled: true'), "Suppliers must remain parked");
+assert.ok(main.includes('path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"]'), "Suppliers must be enabled for Supplier Master M1");
 assert.ok(main.includes('path: "/catalog/purchasing", icon: "shopping-cart", disabled: true'), "Purchasing must remain parked");
 
 for (const table of ["products", "product_variants", "brands", "product_categories", "inventory_locations", "inventory_balances", "stock_movements"]) {
