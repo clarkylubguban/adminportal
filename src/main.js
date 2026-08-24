@@ -6733,9 +6733,9 @@ function renderCatalogEditorProductInformation(draft, disabled = false) {
         ${renderCatalogField("brandId", "Brand", renderCatalogBrandSelect(draft, disabled))}
         ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled))}
         ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "" : "Select Product Type first.")}
-        ${renderCatalogField("salesChannels", "Sales Channels", renderCatalogSalesChannels(draft, disabled), "Choose where this Product is intentionally available. Brand stays separate.")}
         ${renderCatalogInput("subcategory", "Subcategory", draft.subcategory || "", "text", false, disabled, "Select subcategory")}
         ${renderCatalogField("productCode", "Product Code", `<input id="catalog-productCode" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, draft.productCode ? "" : "Generated on save.")}
+        ${renderCatalogField("salesChannels", "Sales Channels", renderCatalogSalesChannels(draft, disabled), "Choose where this Product is intentionally available. Brand stays separate.")}
       </div>
     </article>
   `;

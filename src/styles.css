@@ -13446,6 +13446,11 @@ body,
   gap: 8px;
 }
 
+.catalog-product-editor-page .catalog-field-productCode,
+.catalog-product-editor-page .catalog-field-salesChannels {
+  grid-column: 1 / -1;
+}
+
 .catalog-field input,
 .catalog-field select,
 .catalog-field textarea {
