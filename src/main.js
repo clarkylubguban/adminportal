@@ -44,6 +44,8 @@ import {
   updateInquiryAssignment,
 } from "./services/adminAssignments.js";
 import {
+  canonicalSalesChannelCodes,
+  canonicalSalesChannels,
   catalogOptions,
   catalogStatusOptions,
   createAdminBrand,
@@ -6731,9 +6733,9 @@ function renderCatalogEditorProductInformation(draft, disabled = false) {
         ${renderCatalogField("brandId", "Brand", renderCatalogBrandSelect(draft, disabled))}
         ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled))}
         ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "" : "Select Product Type first.")}
+        ${renderCatalogField("salesChannels", "Sales Channels", renderCatalogSalesChannels(draft, disabled), "Choose where this Product is intentionally available. Brand stays separate.")}
         ${renderCatalogInput("subcategory", "Subcategory", draft.subcategory || "", "text", false, disabled, "Select subcategory")}
         ${renderCatalogField("productCode", "Product Code", `<input id="catalog-productCode" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, draft.productCode ? "" : "Generated on save.")}
-        ${renderCatalogField("catalog", "Destination", renderCatalogSelect(draft, disabled))}
       </div>
     </article>
   `;
@@ -7188,11 +7190,15 @@ function renderCatalogEditorReadinessCard(readiness) {
 function renderCatalogEditorAvailabilityCard(draft) {
   const brand = brands.find((item) => item.id === draft.brandId);
   const websiteLabel = brand?.websiteSlug ? `${brand.name} storefront` : "Admin only";
+  const channelLabels = getCatalogDraftSalesChannelCodes(draft)
+    .map((code) => canonicalSalesChannels.find((channel) => channel.code === code)?.label)
+    .filter(Boolean);
   return `
     <article class="catalog-editor-card compact" aria-label="Sales & Availability">
       <header><h2>Sales & Availability</h2></header>
       <div class="catalog-kv-list">
-        ${renderCatalogDetailRow("POS", "Available")}
+        ${renderCatalogDetailRow("Sales Channels", channelLabels.join(", ") || "Not selected")}
+        ${renderCatalogDetailRow("POS", getCatalogDraftSalesChannelCodes(draft).includes("POS") ? "Available" : "Hidden")}
         ${renderCatalogDetailRow("Website", websiteLabel)}
         ${renderCatalogDetailRow("Inquiry / Quotation", "Available")}
         ${renderCatalogDetailRow("Reorder", "Available")}
@@ -7343,6 +7349,7 @@ function getCatalogEditorMargin(draft) {
 function getCatalogEditorReadiness(draft) {
   return [
     { label: "Brand and product identity", ready: Boolean(draft.name && draft.brandId && draft.productType && draft.category), target: "catalog-section-product-identity", missing: "Add name, Brand, product type, and category." },
+    { label: "Sales Channels", ready: draft.status !== "published" || getCatalogDraftSalesChannelCodes(draft).length > 0, target: "catalog-section-product-identity", missing: "Choose at least one Sales Channel before publishing." },
     { label: "Cost and selling price", ready: Boolean(draft.unitCost && draft.startingPrice), target: "catalog-section-pricing", missing: "Enter unit cost and selling price." },
     { label: "Variants", ready: Boolean(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length), target: "catalog-section-variants", missing: "Add at least one size or color." },
     { label: "At least one product image", ready: getCatalogEditorImageCount(draft) > 0, target: "catalog-section-images", missing: "Upload a product image." },
@@ -7360,6 +7367,9 @@ function validateCatalogProductEditor(draft, product) {
   const category = productCategories.find((item) => item.name === draft.category);
   if (!draft.category) return "Category is required.";
   if (category && category.productType !== draft.productType) return "Category must match the selected Product Type.";
+  const legacyChannels = getCatalogDraftLegacyChannels(draft);
+  if (legacyChannels.length) return `Legacy channel requires correction: ${legacyChannels.join(", ")}`;
+  if (product.status === "published" && getCatalogDraftSalesChannelCodes(draft).length === 0) return "Ready for Sale sellable products require at least one Sales Channel.";
   return "";
 }
 
@@ -7474,6 +7484,61 @@ function formatCatalogUpdated(value) {
 
 function renderCatalogSelect(draft, disabled = false) {
   return `<select data-catalog-field="catalogKey" ${disabled ? "disabled" : ""}>${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
+}
+
+function renderCatalogSalesChannels(draft, disabled = false) {
+  const selectedCodes = new Set(getCatalogDraftSalesChannelCodes(draft));
+  const legacyChannels = getCatalogDraftLegacyChannels(draft);
+  return `
+    <div class="catalog-sales-channel-field" role="group" aria-label="Sales Channels">
+      <div class="catalog-sales-channel-options">
+        ${canonicalSalesChannels.map((channel) => `
+          <label class="catalog-sales-channel-chip ${selectedCodes.has(channel.code) ? "selected" : ""}">
+            <input data-catalog-sales-channel="${escapeHtml(channel.code)}" type="checkbox" ${selectedCodes.has(channel.code) ? "checked" : ""} ${disabled ? "disabled" : ""} />
+            <span>${escapeHtml(channel.label)}</span>
+          </label>
+        `).join("")}
+      </div>
+      ${legacyChannels.length ? `<p class="catalog-form-error">Legacy channel requires correction: ${escapeHtml(legacyChannels.join(", "))}</p>` : ""}
+    </div>
+  `;
+}
+
+function getCatalogDraftSalesChannelCodes(draft) {
+  const keys = Array.isArray(draft?.catalogKeys) ? draft.catalogKeys : [draft?.catalogKey].filter(Boolean);
+  return Array.from(new Set(keys
+    .map((key) => catalogOptions.find((catalog) => catalog.key === key)?.channel || String(key || "").trim().toUpperCase())
+    .filter((channel) => canonicalSalesChannelCodes.has(channel))));
+}
+
+function getCatalogDraftLegacyChannels(draft) {
+  const rawKeys = Array.isArray(draft?.catalogKeys) ? draft.catalogKeys : [draft?.catalogKey].filter(Boolean);
+  return Array.from(new Set(rawKeys
+    .map((key) => {
+      const option = catalogOptions.find((catalog) => catalog.key === key);
+      return option?.channel || String(key || "").trim().toUpperCase();
+    })
+    .filter((channel) => channel && !canonicalSalesChannelCodes.has(channel))));
+}
+
+function channelCodeToCatalogKey(code) {
+  return catalogOptions.find((catalog) => catalog.channel === code)?.key || "";
+}
+
+function setCatalogDraftSalesChannel(channelCode, selected) {
+  if (!catalogDraft || !canonicalSalesChannelCodes.has(channelCode)) return;
+  const canonicalKeys = getCatalogDraftSalesChannelCodes(catalogDraft).map(channelCodeToCatalogKey).filter(Boolean);
+  const key = channelCodeToCatalogKey(channelCode);
+  const nextKeys = selected ? [...canonicalKeys, key] : canonicalKeys.filter((item) => item !== key);
+  const normalizedKeys = Array.from(new Set(nextKeys));
+  catalogDraft = {
+    ...catalogDraft,
+    catalogKey: normalizedKeys[0] || "",
+    catalogKeys: normalizedKeys,
+  };
+  catalogValidationError = "";
+  catalogSaveError = "";
+  render();
 }
 
 function renderCatalogStatusSelect(draft, disabled = false) {
@@ -9208,12 +9273,14 @@ async function saveCatalogDraft() {
 
 function normalizeCatalogDraft(draft) {
   const category = productCategories.find((item) => item.name === draft.category);
+  const catalogKeys = getCatalogDraftSalesChannelCodes(draft).map(channelCodeToCatalogKey).filter(Boolean);
   return {
     ...draft,
     name: String(draft.name || "").trim(),
     productCode: String(draft.productCode || "").trim(),
     slug: String(draft.productCode || draft.slug || "").trim(),
-    catalogKeys: [draft.catalogKey].filter(Boolean),
+    catalogKey: catalogKeys[0] || "",
+    catalogKeys,
     brandId: String(draft.brandId || "").trim(),
     brandName: getCatalogEditorBrandLabel(draft),
     category: String(draft.category || "").trim(),
@@ -9235,7 +9302,8 @@ function normalizeCatalogDraft(draft) {
 }
 
 function validateCatalogProduct(product) {
-  if (!catalogOptions.some((catalog) => catalog.key === product.catalogKey)) return "Choose a valid catalog.";
+  if (product.catalogKeys.some((key) => !catalogOptions.some((catalog) => catalog.key === key))) return "Choose valid Sales Channels.";
+  if (new Set(product.catalogKeys).size !== product.catalogKeys.length) return "Duplicate Sales Channels are not allowed.";
   if (!product.name) return "Product name is required.";
   if (!catalogStatusOptions.includes(product.status)) return "Choose a valid status.";
   if (!Number.isFinite(product.minimumQuantity) || product.minimumQuantity < 1) return "Minimum quantity must be at least 1.";
@@ -9956,6 +10024,12 @@ function bindEvents() {
     field.addEventListener(eventName, (event) => {
       updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
       if (field.dataset.catalogField === "productType") render();
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-sales-channel]").forEach((field) => {
+    field.addEventListener("change", () => {
+      setCatalogDraftSalesChannel(field.dataset.catalogSalesChannel, field.checked);
     });
   });
 

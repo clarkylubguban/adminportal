@@ -44,6 +44,8 @@ import {
   updateInquiryAssignment,
 } from "./services/adminAssignments.js";
 import {
+  canonicalSalesChannelCodes,
+  canonicalSalesChannels,
   catalogOptions,
   catalogStatusOptions,
   createAdminBrand,
@@ -58,6 +60,13 @@ import {
   updateAdminProductCategory,
   updateAdminProduct,
 } from "./services/adminCatalog.js";
+import {
+  INVENTORY_RECEIVE_RPC,
+  canReceiveInventoryForRole,
+  createInventoryIdempotencyKey,
+  getAdminInventory,
+  receiveAdminInventoryStock,
+} from "./services/adminInventory.js";
 import {
   deleteCatalogImagePath,
   uploadCatalogImage,
@@ -122,6 +131,10 @@ const lucideIcons = {
   package: '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="m7.5 4.27 9 5.15"></path>',
   "calendar-check": '<path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path>',
   "clipboard-plus": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 14h6"></path><path d="M12 11v6"></path>',
+  boxes: '<path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L11 19.6a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0z"></path><path d="m7 17-4.74-2.85"></path><path d="m7 17 4.74-2.85"></path><path d="M7 17v5"></path><path d="M12.97 3.92A2 2 0 0 0 12 5.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0l3-1.8A2 2 0 0 0 22 8.87V5.63a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0z"></path><path d="m17 8-4.74-2.85"></path><path d="m17 8 4.74-2.85"></path><path d="M17 8v5"></path>',
+  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"></circle>',
+  layers: '<path d="m12.83 2.18 8.33 4.69a1 1 0 0 1 0 1.74l-8.33 4.69a1.7 1.7 0 0 1-1.66 0L2.84 8.61a1 1 0 0 1 0-1.74l8.33-4.69a1.7 1.7 0 0 1 1.66 0"></path><path d="m22 12.5-9.17 5.16a1.7 1.7 0 0 1-1.66 0L2 12.5"></path><path d="m22 17.5-9.17 5.16a1.7 1.7 0 0 1-1.66 0L2 17.5"></path>',
+  "shopping-cart": '<circle cx="8" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path>',
   "trash-2": '<path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>',
   "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M19 8v6"></path><path d="M22 11h-6"></path>',
   "package-plus": '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 8v8"></path><path d="M8 12h8"></path>',
@@ -472,6 +485,19 @@ let catalogValidationError = "";
 let catalogSaveState = "idle";
 let catalogSaveError = "";
 let catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+let inventoryRows = [];
+let inventoryLocations = [];
+let inventoryMovements = [];
+let inventoryLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
+let inventoryLoadError = "";
+let hasLoadedInventory = false;
+let inventoryView = "stock";
+let inventoryQuery = "";
+let inventoryLocationFilter = "all";
+let inventoryStockStateFilter = "all";
+let inventoryMovementTypeFilter = "all";
+let inventoryMovementSourceFilter = "all";
+let inventoryReceiveDrawer = { open: false, rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
 const CATALOG_PRODUCT_IMAGE_LIMIT = 6;
 let categoryStatusFilter = "active";
 let categoryProductTypeFilter = "all";
@@ -560,6 +586,7 @@ const routes = {
   "/orders": "Orders",
   "/production": "Production",
   "/catalog": "Catalog",
+  "/catalog/inventory": "Catalog",
   "/my-tasks": "My Tasks",
   "/calendar": "Calendar",
   "/workboard": "Workboard",
@@ -567,6 +594,7 @@ const routes = {
   "/catalog": "Catalog",
   "/catalog/brands": "Catalog",
   "/catalog/categories": "Catalog",
+  "/catalog/inventory": "Catalog",
 };
 
 const defaultRoutePath = "/";
@@ -639,6 +667,7 @@ function render() {
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
+  if (getRoutePath() === "/catalog/inventory" && inventoryLoadState === "idle") window.setTimeout(loadInventory, 0);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -1304,6 +1333,7 @@ function startAdminDataLoading() {
   loadCatalogProducts();
   loadProductCategories();
   loadBrands();
+  loadInventory();
   if (isTaskFeatureUiEnabled()) loadMyTasks();
 }
 
@@ -1423,6 +1453,35 @@ async function loadBrands() {
     brands = [];
     brandLoadState = "error";
     brandLoadError = error.message || "Unable to load brands.";
+  } finally {
+    render();
+  }
+}
+
+async function loadInventory({ force = false } = {}) {
+  if (!force && hasLoadedInventory && inventoryLoadState !== "loading") return;
+  hasLoadedInventory = true;
+  inventoryLoadState = "loading";
+  inventoryLoadError = "";
+
+  try {
+    const result = await getAdminInventory(adminAuthSession);
+    inventoryRows = Array.isArray(result?.rows) ? result.rows : [];
+    inventoryLocations = Array.isArray(result?.locations) ? result.locations : [];
+    inventoryMovements = Array.isArray(result?.movements) ? result.movements : [];
+    inventoryLoadState = result?.status === "error" ? "error" : inventoryRows.length || inventoryLocations.length || inventoryMovements.length ? "success" : "empty";
+    inventoryLoadError = result?.error?.message ?? "";
+    if (inventoryLocations.length === 1) inventoryLocationFilter = inventoryLocations[0].id;
+    if (inventoryReceiveDrawer.open && !inventoryRows.some((row) => row.id === inventoryReceiveDrawer.rowId)) {
+      inventoryReceiveDrawer = createClosedInventoryReceiveDrawer();
+    }
+  } catch (error) {
+    console.error("Unable to apply inventory.", error);
+    inventoryRows = [];
+    inventoryLocations = [];
+    inventoryMovements = [];
+    inventoryLoadState = "error";
+    inventoryLoadError = error.message || "Unable to load inventory records.";
   } finally {
     render();
   }
@@ -5062,6 +5121,9 @@ function renderCatalogPage() {
   if (getRoutePath() === "/catalog/categories") {
     return renderCatalogCategoriesPage();
   }
+  if (getRoutePath() === "/catalog/inventory") {
+    return renderInventoryPage();
+  }
 
   const visibleProducts = getVisibleCatalogProducts();
   const canWriteCatalog = canWriteCatalogProducts();
@@ -5292,6 +5354,458 @@ function renderCatalogBrandsPage() {
       ${brandDrawerMode ? renderBrandDrawer(selectedBrand) : ""}
     </main>
   `;
+}
+
+function renderInventoryPage() {
+  const canReceive = canReceiveInventoryForRole(adminUser?.role);
+  const visibleRows = getVisibleInventoryRows();
+  const visibleMovements = getVisibleInventoryMovements();
+  const summary = getInventorySummary();
+  const selectedReceiveRow = inventoryRows.find((row) => row.id === inventoryReceiveDrawer.rowId) ?? null;
+
+  return `
+    <main class="orders-page catalog-page inventory-page admin-saas-page">
+      <div class="page-heading catalog-heading inventory-heading">
+        <div>
+          <span class="breadcrumb">Home  &rsaquo;  Inventory${inventoryView === "movements" ? "  &rsaquo;  Stock Movements" : ""}</span>
+          <h1>${inventoryView === "movements" ? "Stock Movements" : "Inventory"}</h1>
+          <p class="subtitle">${inventoryView === "movements" ? "Complete audit trail of every quantity change across catalog-linked variants." : "Control physical stock without editing quantities directly. Every change creates a stock movement."}</p>
+        </div>
+        <div class="inventory-heading-actions">
+          <button class="note-button" data-inventory-parked="stock-count" type="button" disabled>Stock Count</button>
+          ${inventoryView === "stock" ? `<button class="primary-button" data-inventory-open-receive type="button" ${canReceive && visibleRows.length ? "" : "disabled"}>+ Receive Stock</button>` : `<button class="note-button" data-inventory-export type="button" disabled>Export CSV</button>`}
+        </div>
+      </div>
+
+      ${inventoryView === "movements" ? renderInventoryMovementSummary(visibleMovements) : renderInventoryStockSummary(summary)}
+      ${renderInventoryTabs(summary)}
+      ${inventoryView === "movements" ? renderInventoryMovementFilters() : renderInventoryStockFilters()}
+      ${renderInventoryNotice(canReceive)}
+      ${inventoryView === "movements" ? renderInventoryMovementTable(visibleMovements) : renderInventoryStockTable(visibleRows, canReceive)}
+      <div class="inventory-rule-note"><strong>${inventoryView === "movements" ? "AUDIT TRAIL" : "STOCK RULE"}</strong><span>${inventoryView === "movements" ? "Movements are append-only operational records. Corrections create a new reversing movement; history is never overwritten." : "On Hand is never edited directly. Receive, Sale, Return, Stock Count, and Adjustment create ledger movements."}</span></div>
+      ${inventoryReceiveDrawer.open ? renderInventoryReceiveDrawer(selectedReceiveRow, canReceive) : ""}
+    </main>
+  `;
+}
+
+function renderInventoryStockSummary(summary) {
+  const cards = [
+    { label: "Total On Hand", value: `${summary.onHand} pcs`, helper: "Across active SKUs" },
+    { label: "Low Stock", value: `${summary.lowStock} SKUs`, helper: "Below reorder point", tone: "warning" },
+    { label: "Out of Stock", value: `${summary.outOfStock} SKUs`, helper: "Needs action", tone: "urgent" },
+    { label: "Incoming", value: `${summary.incoming} pcs`, helper: "Open purchase orders", tone: "success" },
+  ];
+  return `<section class="catalog-summary-grid inventory-summary-grid" aria-label="Inventory summary">${cards.map((card) => renderCatalogSummaryCard(card)).join("")}</section>`;
+}
+
+function renderInventoryMovementSummary(movements) {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todaysMovements = movements.filter((item) => String(item.createdAt || "").slice(0, 10) === todayKey);
+  const received = todaysMovements.filter((item) => isPositiveMovement(item)).reduce((sum, item) => sum + item.quantityDelta, 0);
+  const issued = todaysMovements.filter((item) => item.quantityDelta < 0).reduce((sum, item) => sum + Math.abs(item.quantityDelta), 0);
+  const adjusted = todaysMovements.filter((item) => String(item.movementType || "").toUpperCase().includes("ADJUST")).reduce((sum, item) => sum + item.quantityDelta, 0);
+  const net = todaysMovements.reduce((sum, item) => sum + item.quantityDelta, 0);
+  const cards = [
+    { label: "Received Today", value: formatSignedQuantity(received), helper: "Positive stock movements", tone: "success" },
+    { label: "Issued Today", value: formatSignedQuantity(-issued), helper: "Sales and outbound movements", tone: "urgent" },
+    { label: "Adjusted", value: formatSignedQuantity(adjusted), helper: "Count variance", tone: adjusted < 0 ? "urgent" : "success" },
+    { label: "Net Movement", value: formatSignedQuantity(net), helper: "Today", tone: net < 0 ? "urgent" : "success" },
+  ];
+  return `<section class="catalog-summary-grid inventory-summary-grid" aria-label="Movement summary">${cards.map((card) => renderCatalogSummaryCard(card)).join("")}</section>`;
+}
+
+function renderInventoryTabs(summary) {
+  const tabs = [
+    { key: "stock", label: "Stock Overview", count: summary.totalRows },
+    { key: "low", label: "Low Stock", count: summary.lowStock },
+    { key: "out", label: "Out of Stock", count: summary.outOfStock },
+    { key: "movements", label: "Movements", count: inventoryMovements.length },
+    { key: "count", label: "Stock Count", parked: true },
+  ];
+  return `<section class="inventory-tabs" aria-label="Inventory views">${tabs.map((tab) => {
+    const active = inventoryView === tab.key || (inventoryView === "stock" && inventoryStockStateFilter === tab.key);
+    return `<button class="${active ? "active" : ""}" data-inventory-tab="${escapeHtml(tab.key)}" type="button" ${tab.parked ? "disabled" : ""}>${escapeHtml(tab.label)}${tab.count !== undefined ? `<span>${tab.count}</span>` : ""}</button>`;
+  }).join("")}</section>`;
+}
+
+function renderInventoryStockFilters() {
+  return `
+    <section class="catalog-controls inventory-controls" aria-label="Inventory controls">
+      <div class="catalog-filter-row">
+        <label class="search-field catalog-search">
+          ${renderIcon("search", "search-icon")}
+          <input id="inventory-search" value="${escapeHtml(inventoryQuery)}" placeholder="Search product, variant, SKU..." type="search" />
+        </label>
+        <select id="inventory-location-filter" aria-label="Inventory location filter">
+          <option value="all" ${inventoryLocationFilter === "all" ? "selected" : ""}>All Locations</option>
+          ${inventoryLocations.map((location) => `<option value="${escapeHtml(location.id)}" ${inventoryLocationFilter === location.id ? "selected" : ""}>${escapeHtml(formatInventoryLocation(location))}</option>`).join("")}
+        </select>
+        <select id="inventory-stock-state-filter" aria-label="Stock state filter">
+          <option value="all" ${inventoryStockStateFilter === "all" ? "selected" : ""}>All Stock States</option>
+          <option value="low" ${inventoryStockStateFilter === "low" ? "selected" : ""}>Low Stock</option>
+          <option value="out" ${inventoryStockStateFilter === "out" ? "selected" : ""}>Out of Stock</option>
+          <option value="healthy" ${inventoryStockStateFilter === "healthy" ? "selected" : ""}>Healthy</option>
+        </select>
+        <button class="note-button catalog-reset-button" data-inventory-reset-filters type="button">Reset</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderInventoryMovementFilters() {
+  const movementTypes = uniqueList(inventoryMovements.map((item) => item.movementType).filter(Boolean));
+  const sources = uniqueList(inventoryMovements.map((item) => item.source).filter(Boolean));
+  return `
+    <section class="catalog-controls inventory-controls" aria-label="Movement controls">
+      <div class="catalog-filter-row">
+        <label class="search-field catalog-search">
+          ${renderIcon("search", "search-icon")}
+          <input id="inventory-search" value="${escapeHtml(inventoryQuery)}" placeholder="Search SKU, product, reference..." type="search" />
+        </label>
+        <select id="inventory-movement-type-filter" aria-label="Movement type filter">
+          <option value="all" ${inventoryMovementTypeFilter === "all" ? "selected" : ""}>All Movement Types</option>
+          ${movementTypes.map((type) => `<option value="${escapeHtml(type)}" ${inventoryMovementTypeFilter === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
+        </select>
+        <select id="inventory-movement-source-filter" aria-label="Movement source filter">
+          <option value="all" ${inventoryMovementSourceFilter === "all" ? "selected" : ""}>All Sources</option>
+          ${sources.map((source) => `<option value="${escapeHtml(source)}" ${inventoryMovementSourceFilter === source ? "selected" : ""}>${escapeHtml(source)}</option>`).join("")}
+        </select>
+        <button class="note-button catalog-reset-button" data-inventory-reset-filters type="button">Reset</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderInventoryNotice(canReceive) {
+  if (inventoryReceiveDrawer.status === "success") return `<div class="catalog-notice success">Receive Stock submitted through ${INVENTORY_RECEIVE_RPC}.</div>`;
+  if (inventoryLoadState === "loading") return `<div class="catalog-notice">Loading canonical inventory...</div>`;
+  if (inventoryLoadState === "error") return `<div class="catalog-notice error">Unable to load canonical inventory. ${escapeHtml(inventoryLoadError || "Check Supabase access and inventory RLS policies.")}</div>`;
+  if (!canReceive) return `<div class="catalog-notice">Inventory receive is restricted to Owner and Admin roles. Current role is read-only.</div>`;
+  return "";
+}
+
+function renderInventoryStockTable(rows, canReceive) {
+  return `
+    <article class="content-card table-card catalog-table-card inventory-table-card">
+      <p class="table-helper-text catalog-count-label">${rows.length} ${rows.length === 1 ? "SKU" : "SKUS"}</p>
+      <table class="products-table catalog-table inventory-table">
+        <colgroup>
+          <col class="inventory-product-col">
+          <col class="inventory-sku-col">
+          <col class="inventory-on-hand-col">
+          <col class="inventory-reorder-col">
+          <col class="inventory-incoming-col">
+          <col class="inventory-stock-col">
+          <col class="inventory-last-cost-col">
+          <col class="inventory-stock-value-col">
+          <col class="inventory-action-col">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Product / Variant</th>
+            <th>SKU</th>
+            <th>On Hand</th>
+            <th>Reorder</th>
+            <th>Incoming</th>
+            <th>Stock</th>
+            <th>Last Cost</th>
+            <th>Stock Value</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>${rows.map((row) => renderInventoryStockRow(row, canReceive)).join("")}</tbody>
+      </table>
+      ${renderInventoryStockEmptyState(rows)}
+    </article>
+  `;
+}
+
+function renderInventoryStockRow(row, canReceive) {
+  const action = row.onHand <= 0 ? "Receive" : "View";
+  return `
+    <tr>
+      <td data-mobile-label="Product / Variant"><div class="catalog-name-stack inventory-product-stack"><strong>${escapeHtml(row.productName)} · ${escapeHtml(row.variantLabel)}</strong><span>Catalog-linked variant</span></div></td>
+      <td data-mobile-label="SKU"><span class="mono-value">${escapeHtml(row.sku)}</span></td>
+      <td data-mobile-label="On Hand"><div class="inventory-on-hand-cell"><strong class="${row.onHand <= 0 ? "inventory-negative" : ""}">${row.onHand}</strong><span>Sellable: ${row.sellable} · Reserved: ${row.reserved}</span></div></td>
+      <td data-mobile-label="Reorder">${formatInventoryOptionalNumber(row.reorderPoint)}</td>
+      <td data-mobile-label="Incoming">${formatInventoryOptionalNumber(row.incoming)}</td>
+      <td data-mobile-label="Stock">${renderInventoryStockPill(row.stockState)}</td>
+      <td data-mobile-label="Last Cost">${formatInventoryMoney(row.unitCost)}</td>
+      <td data-mobile-label="Stock Value">${formatInventoryMoney(row.stockValue)}</td>
+      <td data-mobile-label="Action"><button class="${action === "Receive" ? "primary-button" : "note-button"} compact-action" data-inventory-receive="${escapeHtml(row.id)}" type="button" ${canReceive ? "" : "disabled"}>${action}</button></td>
+    </tr>
+  `;
+}
+
+function renderInventoryMovementTable(rows) {
+  return `
+    <article class="content-card table-card catalog-table-card inventory-table-card">
+      <p class="table-helper-text catalog-count-label">${rows.length} ${rows.length === 1 ? "MOVEMENT" : "MOVEMENTS"}</p>
+      <table class="products-table catalog-table inventory-movement-table">
+        <thead>
+          <tr>
+            <th class="movement-date-col">Date / Time</th>
+            <th class="movement-product-col">Product / SKU</th>
+            <th class="movement-type-col">Type</th>
+            <th class="movement-qty-col">Qty Change</th>
+            <th class="movement-balance-col">Balance After</th>
+            <th class="movement-source-col">Source</th>
+            <th class="movement-reference-col">Reference</th>
+            <th class="movement-reason-col">Reason / Note</th>
+            <th class="movement-operator-col">Done By</th>
+          </tr>
+        </thead>
+        <tbody>${rows.map(renderInventoryMovementRow).join("")}</tbody>
+      </table>
+      ${renderInventoryMovementEmptyState(rows)}
+    </article>
+  `;
+}
+
+function renderInventoryMovementRow(row) {
+  return `
+    <tr>
+      <td class="movement-date-col" data-mobile-label="Date / Time">${escapeHtml(formatInventoryDateTime(row.createdAt))}</td>
+      <td class="movement-product-col" data-mobile-label="Product / SKU"><div class="catalog-name-stack movement-product-stack"><strong>${escapeHtml([row.productName, row.variantLabel].filter(Boolean).join(" · ") || "-")}</strong><span>${escapeHtml(row.sku || "-")}</span></div></td>
+      <td class="movement-type-col" data-mobile-label="Type">${renderInventoryMovementPill(row.movementType)}</td>
+      <td class="movement-qty-col" data-mobile-label="Qty Change"><strong class="${row.quantityDelta < 0 ? "inventory-negative" : "inventory-positive"}">${escapeHtml(formatMovementQuantityDelta(row.quantityDelta))}</strong></td>
+      <td class="movement-balance-col" data-mobile-label="Balance After"><strong>${row.balanceAfter ?? "-"}</strong></td>
+      <td class="movement-source-col" data-mobile-label="Source">${escapeHtml(row.source || "-")}</td>
+      <td class="movement-reference-col" data-mobile-label="Reference">${escapeHtml(row.reference || "-")}</td>
+      <td class="movement-reason-col" data-mobile-label="Reason / Note">${escapeHtml(row.reason || "-")}</td>
+      <td class="movement-operator-col" data-mobile-label="Done By">${escapeHtml(row.operator || "-")}</td>
+    </tr>
+  `;
+}
+
+function renderInventoryReceiveDrawer(row, canReceive) {
+  const disabled = inventoryReceiveDrawer.status === "saving" || !canReceive || !row;
+  const quantity = escapeHtml(inventoryReceiveDrawer.quantity);
+  return `
+    <div class="catalog-drawer-backdrop" data-inventory-close-receive></div>
+    <aside class="catalog-drawer inventory-receive-drawer" aria-label="Receive stock drawer">
+      <header>
+        <div>
+          <span>OWNER / ADMIN ACTION</span>
+          <h2>Receive Stock</h2>
+          <p>Receiving creates a ledger movement. Unit Cost remains managed by Master Catalog.</p>
+          ${row ? renderInventoryStockPill(row.stockState) : ""}
+        </div>
+        <button class="catalog-drawer-close" data-inventory-close-receive type="button" aria-label="Close receive stock drawer">X</button>
+      </header>
+      <form class="catalog-form" id="inventory-receive-form">
+        ${inventoryReceiveDrawer.error ? `<p class="catalog-form-error">${escapeHtml(inventoryReceiveDrawer.error)}</p>` : ""}
+        ${!canReceive ? `<p class="catalog-form-error">Only Owner and Admin can receive stock.</p>` : ""}
+        ${row ? `
+          <section class="catalog-drawer-section">
+            <h3>Product / Variant / SKU</h3>
+            <div class="inventory-readonly-grid">
+              ${renderInventoryReadonlyFact("Product", row.productName)}
+              ${renderInventoryReadonlyFact("Variant", row.variantLabel)}
+              ${renderInventoryReadonlyFact("SKU", row.sku)}
+              ${renderInventoryReadonlyFact("Location", row.locationName)}
+              ${renderInventoryReadonlyFact("On Hand", row.onHand)}
+              ${renderInventoryReadonlyFact("Sellable", row.sellable)}
+              ${renderInventoryReadonlyFact("Existing Unit Cost", formatInventoryMoney(row.unitCost))}
+              ${renderInventoryReadonlyFact("Selling Price", formatInventoryMoney(row.sellingPrice))}
+            </div>
+          </section>
+          <section class="catalog-drawer-section">
+            <h3>Receive Details</h3>
+            <label class="catalog-field"><span>Inventory Location</span><select data-inventory-receive-field="locationId" ${disabled ? "disabled" : ""}>${inventoryLocations.map((location) => `<option value="${escapeHtml(location.id)}" ${location.id === row.locationId ? "selected" : ""}>${escapeHtml(formatInventoryLocation(location))}</option>`).join("")}</select></label>
+            <label class="catalog-field"><span>Quantity</span><input data-inventory-receive-field="quantity" min="1" step="1" inputmode="numeric" type="number" value="${quantity}" ${disabled ? "disabled" : ""} required></label>
+            <label class="catalog-field"><span>Source Reference</span><input data-inventory-receive-field="sourceReference" value="${escapeHtml(inventoryReceiveDrawer.sourceReference)}" ${disabled ? "disabled" : ""} placeholder="Receipt, invoice, or manual reference"></label>
+            <label class="catalog-field"><span>Reason / Note</span><textarea data-inventory-receive-field="reason" rows="3" ${disabled ? "disabled" : ""} placeholder="Operational note">${escapeHtml(inventoryReceiveDrawer.reason)}</textarea></label>
+          </section>
+        ` : `<section class="catalog-drawer-section"><p>No stock row selected.</p></section>`}
+        <footer class="catalog-drawer-footer">
+          <span>${inventoryReceiveDrawer.idempotencyKey ? `Idempotency: ${escapeHtml(inventoryReceiveDrawer.idempotencyKey)}` : "Idempotency key is created on submit."}</span>
+          <div>
+            <button class="note-button" data-inventory-close-receive type="button" ${inventoryReceiveDrawer.status === "saving" ? "disabled" : ""}>Cancel</button>
+            <button class="primary-button catalog-save-button" type="submit" ${disabled ? "disabled" : ""}>${inventoryReceiveDrawer.status === "saving" ? "Receiving..." : "Confirm Receive"}</button>
+          </div>
+        </footer>
+      </form>
+    </aside>
+  `;
+}
+
+function getInventorySummary() {
+  return {
+    totalRows: inventoryRows.length,
+    onHand: inventoryRows.reduce((sum, row) => sum + row.onHand, 0),
+    lowStock: inventoryRows.filter((row) => row.stockState === "LOW STOCK").length,
+    outOfStock: inventoryRows.filter((row) => row.stockState === "OUT OF STOCK").length,
+    incoming: inventoryRows.reduce((sum, row) => sum + row.incoming, 0),
+  };
+}
+
+function getVisibleInventoryRows() {
+  const normalizedQuery = inventoryQuery.trim().toLowerCase();
+  return inventoryRows.filter((row) => {
+    const matchesQuery = !normalizedQuery || [row.productName, row.variantLabel, row.sku, row.locationName, row.category, row.brand].join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesLocation = inventoryLocationFilter === "all" || row.locationId === inventoryLocationFilter;
+    const stockKey = row.stockState === "LOW STOCK" ? "low" : row.stockState === "OUT OF STOCK" ? "out" : "healthy";
+    const matchesStock = inventoryStockStateFilter === "all" || inventoryStockStateFilter === stockKey;
+    return matchesQuery && matchesLocation && matchesStock;
+  });
+}
+
+function getVisibleInventoryMovements() {
+  const normalizedQuery = inventoryQuery.trim().toLowerCase();
+  return inventoryMovements.filter((row) => {
+    const matchesQuery = !normalizedQuery || [row.productName, row.variantLabel, row.sku, row.locationName, row.source, row.reference, row.reason, row.operator].join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesType = inventoryMovementTypeFilter === "all" || row.movementType === inventoryMovementTypeFilter;
+    const matchesSource = inventoryMovementSourceFilter === "all" || row.source === inventoryMovementSourceFilter;
+    return matchesQuery && matchesType && matchesSource;
+  });
+}
+
+function renderInventoryStockEmptyState(rows) {
+  if (rows.length) return "";
+  if (inventoryLoadState === "loading") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading inventory...</strong><span>Checking canonical Product, Variant, SKU, Location, and Balance records.</span></div>`;
+  if (inventoryLoadState === "error") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Inventory unavailable</strong><span>${escapeHtml(inventoryLoadError || "Canonical inventory data could not be loaded.")}</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No inventory rows</strong><span>No eligible physical, sellable, ready-for-sale SKU is currently bound to an active inventory location.</span></div>`;
+}
+
+function renderInventoryMovementEmptyState(rows) {
+  if (rows.length) return "";
+  if (inventoryLoadState === "loading") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading movements...</strong><span>Checking canonical stock movement records.</span></div>`;
+  if (inventoryLoadState === "error") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Movement history unavailable</strong><span>${escapeHtml(inventoryLoadError || "Canonical stock movements could not be loaded.")}</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No movement history</strong><span>No append-only stock movement records match the current filters.</span></div>`;
+}
+
+function renderInventoryStockPill(state) {
+  const className = state === "OUT OF STOCK" ? "out-of-stock" : state === "LOW STOCK" ? "low-stock" : "healthy";
+  return `<span class="status-pill inventory-${className}">${escapeHtml(state || "UNKNOWN")}</span>`;
+}
+
+function renderInventoryMovementPill(type) {
+  const normalized = String(type || "UNKNOWN").toUpperCase();
+  const className = normalized.includes("RECEIPT") || normalized.includes("RECEIVE") || normalized.includes("RETURN")
+    ? "inventory-healthy"
+    : normalized.includes("SALE")
+      ? "inventory-sale"
+      : normalized.includes("ADJUST")
+        ? "inventory-out-of-stock"
+        : "inventory-low-stock";
+  return `<span class="status-pill ${className}">${escapeHtml(normalized)}</span>`;
+}
+
+function renderInventoryReadonlyFact(label, value) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value ?? "-"))}</strong></div>`;
+}
+
+function isPositiveMovement(item) {
+  return Number(item?.quantityDelta || 0) > 0;
+}
+
+function formatSignedQuantity(value) {
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${number} pcs`;
+}
+
+function formatMovementQuantityDelta(value) {
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${number}`;
+}
+
+function formatInventoryMoney(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  return Number.isFinite(number) ? `PHP ${number.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
+}
+
+function formatInventoryOptionalNumber(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toLocaleString("en-US") : "—";
+}
+
+function formatInventoryDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function formatInventoryLocation(location) {
+  return [location.branchName || location.branchCode, location.name].filter(Boolean).join(" / ") || location.id;
+}
+
+function createClosedInventoryReceiveDrawer() {
+  return { open: false, rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
+}
+
+function openInventoryReceiveDrawer(rowId = "") {
+  if (!canReceiveInventoryForRole(adminUser?.role)) return;
+  const row = inventoryRows.find((item) => item.id === rowId) ?? getVisibleInventoryRows()[0];
+  if (!row) return;
+  inventoryReceiveDrawer = {
+    open: true,
+    rowId: row.id,
+    quantity: "",
+    sourceReference: "",
+    reason: "",
+    error: "",
+    status: "idle",
+    idempotencyKey: "",
+  };
+  render();
+}
+
+function updateInventoryReceiveField(field, value) {
+  if (field === "locationId") {
+    const currentRow = inventoryRows.find((row) => row.id === inventoryReceiveDrawer.rowId);
+    const nextRow = inventoryRows.find((row) => row.variantId === currentRow?.variantId && row.locationId === value);
+    inventoryReceiveDrawer = { ...inventoryReceiveDrawer, rowId: nextRow?.id || inventoryReceiveDrawer.rowId, error: "" };
+    render();
+    return;
+  }
+  inventoryReceiveDrawer = { ...inventoryReceiveDrawer, [field]: value, error: "" };
+}
+
+function validateInventoryReceive(row) {
+  if (!canReceiveInventoryForRole(adminUser?.role)) return "Only Owner and Admin can receive stock.";
+  if (!adminAuthSession?.access_token) return "Authenticated Owner/Admin session is required.";
+  if (!row?.variantId) return "Select a product variant.";
+  if (!row?.locationId) return "Select an inventory location.";
+  const quantity = Number(inventoryReceiveDrawer.quantity);
+  if (!Number.isInteger(quantity) || quantity <= 0) return "Quantity must be a positive whole number.";
+  return "";
+}
+
+async function submitInventoryReceive() {
+  if (inventoryReceiveDrawer.status === "saving") return;
+  const row = inventoryRows.find((item) => item.id === inventoryReceiveDrawer.rowId);
+  const validationError = validateInventoryReceive(row);
+  if (validationError) {
+    inventoryReceiveDrawer = { ...inventoryReceiveDrawer, error: validationError };
+    render();
+    return;
+  }
+
+  const idempotencyKey = inventoryReceiveDrawer.idempotencyKey || createInventoryIdempotencyKey();
+  inventoryReceiveDrawer = { ...inventoryReceiveDrawer, status: "saving", error: "", idempotencyKey };
+  render();
+
+  try {
+    await receiveAdminInventoryStock({
+      variantId: row.variantId,
+      locationId: row.locationId,
+      quantity: Number(inventoryReceiveDrawer.quantity),
+      idempotencyKey,
+      sourceReference: inventoryReceiveDrawer.sourceReference,
+      reason: inventoryReceiveDrawer.reason,
+    }, adminAuthSession);
+    inventoryReceiveDrawer = { ...createClosedInventoryReceiveDrawer(), status: "success" };
+    hasLoadedInventory = false;
+    await loadInventory({ force: true });
+  } catch (error) {
+    console.error("Unable to receive inventory stock.", error);
+    inventoryReceiveDrawer = { ...inventoryReceiveDrawer, status: "idle", error: error.message || "Receive Stock failed." };
+    render();
+  }
 }
 
 function getVisibleCatalogProducts() {
@@ -6219,9 +6733,9 @@ function renderCatalogEditorProductInformation(draft, disabled = false) {
         ${renderCatalogField("brandId", "Brand", renderCatalogBrandSelect(draft, disabled))}
         ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled))}
         ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "" : "Select Product Type first.")}
+        ${renderCatalogField("salesChannels", "Sales Channels", renderCatalogSalesChannels(draft, disabled), "Choose where this Product is intentionally available. Brand stays separate.")}
         ${renderCatalogInput("subcategory", "Subcategory", draft.subcategory || "", "text", false, disabled, "Select subcategory")}
         ${renderCatalogField("productCode", "Product Code", `<input id="catalog-productCode" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, draft.productCode ? "" : "Generated on save.")}
-        ${renderCatalogField("catalog", "Destination", renderCatalogSelect(draft, disabled))}
       </div>
     </article>
   `;
@@ -6676,11 +7190,15 @@ function renderCatalogEditorReadinessCard(readiness) {
 function renderCatalogEditorAvailabilityCard(draft) {
   const brand = brands.find((item) => item.id === draft.brandId);
   const websiteLabel = brand?.websiteSlug ? `${brand.name} storefront` : "Admin only";
+  const channelLabels = getCatalogDraftSalesChannelCodes(draft)
+    .map((code) => canonicalSalesChannels.find((channel) => channel.code === code)?.label)
+    .filter(Boolean);
   return `
     <article class="catalog-editor-card compact" aria-label="Sales & Availability">
       <header><h2>Sales & Availability</h2></header>
       <div class="catalog-kv-list">
-        ${renderCatalogDetailRow("POS", "Available")}
+        ${renderCatalogDetailRow("Sales Channels", channelLabels.join(", ") || "Not selected")}
+        ${renderCatalogDetailRow("POS", getCatalogDraftSalesChannelCodes(draft).includes("POS") ? "Available" : "Hidden")}
         ${renderCatalogDetailRow("Website", websiteLabel)}
         ${renderCatalogDetailRow("Inquiry / Quotation", "Available")}
         ${renderCatalogDetailRow("Reorder", "Available")}
@@ -6831,6 +7349,7 @@ function getCatalogEditorMargin(draft) {
 function getCatalogEditorReadiness(draft) {
   return [
     { label: "Brand and product identity", ready: Boolean(draft.name && draft.brandId && draft.productType && draft.category), target: "catalog-section-product-identity", missing: "Add name, Brand, product type, and category." },
+    { label: "Sales Channels", ready: draft.status !== "published" || getCatalogDraftSalesChannelCodes(draft).length > 0, target: "catalog-section-product-identity", missing: "Choose at least one Sales Channel before publishing." },
     { label: "Cost and selling price", ready: Boolean(draft.unitCost && draft.startingPrice), target: "catalog-section-pricing", missing: "Enter unit cost and selling price." },
     { label: "Variants", ready: Boolean(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length), target: "catalog-section-variants", missing: "Add at least one size or color." },
     { label: "At least one product image", ready: getCatalogEditorImageCount(draft) > 0, target: "catalog-section-images", missing: "Upload a product image." },
@@ -6848,6 +7367,9 @@ function validateCatalogProductEditor(draft, product) {
   const category = productCategories.find((item) => item.name === draft.category);
   if (!draft.category) return "Category is required.";
   if (category && category.productType !== draft.productType) return "Category must match the selected Product Type.";
+  const legacyChannels = getCatalogDraftLegacyChannels(draft);
+  if (legacyChannels.length) return `Legacy channel requires correction: ${legacyChannels.join(", ")}`;
+  if (product.status === "published" && getCatalogDraftSalesChannelCodes(draft).length === 0) return "Ready for Sale sellable products require at least one Sales Channel.";
   return "";
 }
 
@@ -6962,6 +7484,61 @@ function formatCatalogUpdated(value) {
 
 function renderCatalogSelect(draft, disabled = false) {
   return `<select data-catalog-field="catalogKey" ${disabled ? "disabled" : ""}>${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
+}
+
+function renderCatalogSalesChannels(draft, disabled = false) {
+  const selectedCodes = new Set(getCatalogDraftSalesChannelCodes(draft));
+  const legacyChannels = getCatalogDraftLegacyChannels(draft);
+  return `
+    <div class="catalog-sales-channel-field" role="group" aria-label="Sales Channels">
+      <div class="catalog-sales-channel-options">
+        ${canonicalSalesChannels.map((channel) => `
+          <label class="catalog-sales-channel-chip ${selectedCodes.has(channel.code) ? "selected" : ""}">
+            <input data-catalog-sales-channel="${escapeHtml(channel.code)}" type="checkbox" ${selectedCodes.has(channel.code) ? "checked" : ""} ${disabled ? "disabled" : ""} />
+            <span>${escapeHtml(channel.label)}</span>
+          </label>
+        `).join("")}
+      </div>
+      ${legacyChannels.length ? `<p class="catalog-form-error">Legacy channel requires correction: ${escapeHtml(legacyChannels.join(", "))}</p>` : ""}
+    </div>
+  `;
+}
+
+function getCatalogDraftSalesChannelCodes(draft) {
+  const keys = Array.isArray(draft?.catalogKeys) ? draft.catalogKeys : [draft?.catalogKey].filter(Boolean);
+  return Array.from(new Set(keys
+    .map((key) => catalogOptions.find((catalog) => catalog.key === key)?.channel || String(key || "").trim().toUpperCase())
+    .filter((channel) => canonicalSalesChannelCodes.has(channel))));
+}
+
+function getCatalogDraftLegacyChannels(draft) {
+  const rawKeys = Array.isArray(draft?.catalogKeys) ? draft.catalogKeys : [draft?.catalogKey].filter(Boolean);
+  return Array.from(new Set(rawKeys
+    .map((key) => {
+      const option = catalogOptions.find((catalog) => catalog.key === key);
+      return option?.channel || String(key || "").trim().toUpperCase();
+    })
+    .filter((channel) => channel && !canonicalSalesChannelCodes.has(channel))));
+}
+
+function channelCodeToCatalogKey(code) {
+  return catalogOptions.find((catalog) => catalog.channel === code)?.key || "";
+}
+
+function setCatalogDraftSalesChannel(channelCode, selected) {
+  if (!catalogDraft || !canonicalSalesChannelCodes.has(channelCode)) return;
+  const canonicalKeys = getCatalogDraftSalesChannelCodes(catalogDraft).map(channelCodeToCatalogKey).filter(Boolean);
+  const key = channelCodeToCatalogKey(channelCode);
+  const nextKeys = selected ? [...canonicalKeys, key] : canonicalKeys.filter((item) => item !== key);
+  const normalizedKeys = Array.from(new Set(nextKeys));
+  catalogDraft = {
+    ...catalogDraft,
+    catalogKey: normalizedKeys[0] || "",
+    catalogKeys: normalizedKeys,
+  };
+  catalogValidationError = "";
+  catalogSaveError = "";
+  render();
 }
 
 function renderCatalogStatusSelect(draft, disabled = false) {
@@ -7865,7 +8442,7 @@ function renderSidebar(currentRoute) {
     { label: "Categories", path: "/catalog/categories", icon: "layers", activePaths: ["/catalog/categories"] },
     { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", disabled: true },
     { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", disabled: true },
-    { label: "Inventory", path: "/catalog/inventory", icon: "boxes", disabled: true },
+    { label: "Inventory", path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"] },
   ];
   const workflowNavItems = [
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
@@ -8696,12 +9273,14 @@ async function saveCatalogDraft() {
 
 function normalizeCatalogDraft(draft) {
   const category = productCategories.find((item) => item.name === draft.category);
+  const catalogKeys = getCatalogDraftSalesChannelCodes(draft).map(channelCodeToCatalogKey).filter(Boolean);
   return {
     ...draft,
     name: String(draft.name || "").trim(),
     productCode: String(draft.productCode || "").trim(),
     slug: String(draft.productCode || draft.slug || "").trim(),
-    catalogKeys: [draft.catalogKey].filter(Boolean),
+    catalogKey: catalogKeys[0] || "",
+    catalogKeys,
     brandId: String(draft.brandId || "").trim(),
     brandName: getCatalogEditorBrandLabel(draft),
     category: String(draft.category || "").trim(),
@@ -8723,7 +9302,8 @@ function normalizeCatalogDraft(draft) {
 }
 
 function validateCatalogProduct(product) {
-  if (!catalogOptions.some((catalog) => catalog.key === product.catalogKey)) return "Choose a valid catalog.";
+  if (product.catalogKeys.some((key) => !catalogOptions.some((catalog) => catalog.key === key))) return "Choose valid Sales Channels.";
+  if (new Set(product.catalogKeys).size !== product.catalogKeys.length) return "Duplicate Sales Channels are not allowed.";
   if (!product.name) return "Product name is required.";
   if (!catalogStatusOptions.includes(product.status)) return "Choose a valid status.";
   if (!Number.isFinite(product.minimumQuantity) || product.minimumQuantity < 1) return "Minimum quantity must be at least 1.";
@@ -9240,6 +9820,78 @@ function bindEvents() {
     render();
   });
 
+  document.querySelectorAll("[data-inventory-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const tab = button.dataset.inventoryTab;
+      if (tab === "movements") {
+        inventoryView = "movements";
+        inventoryStockStateFilter = "all";
+      } else if (tab === "low" || tab === "out") {
+        inventoryView = "stock";
+        inventoryStockStateFilter = tab;
+      } else {
+        inventoryView = "stock";
+        inventoryStockStateFilter = "all";
+      }
+      render();
+    });
+  });
+
+  document.getElementById("inventory-search")?.addEventListener("input", (event) => {
+    inventoryQuery = event.target.value;
+    render();
+    focusFieldAtEnd("inventory-search");
+  });
+
+  document.getElementById("inventory-location-filter")?.addEventListener("change", (event) => {
+    inventoryLocationFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("inventory-stock-state-filter")?.addEventListener("change", (event) => {
+    inventoryStockStateFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("inventory-movement-type-filter")?.addEventListener("change", (event) => {
+    inventoryMovementTypeFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("inventory-movement-source-filter")?.addEventListener("change", (event) => {
+    inventoryMovementSourceFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-inventory-reset-filters]")?.addEventListener("click", () => {
+    inventoryQuery = "";
+    inventoryLocationFilter = inventoryLocations.length === 1 ? inventoryLocations[0].id : "all";
+    inventoryStockStateFilter = "all";
+    inventoryMovementTypeFilter = "all";
+    inventoryMovementSourceFilter = "all";
+    render();
+  });
+
+  document.querySelector("[data-inventory-open-receive]")?.addEventListener("click", () => openInventoryReceiveDrawer());
+  document.querySelectorAll("[data-inventory-receive]").forEach((button) => {
+    button.addEventListener("click", () => openInventoryReceiveDrawer(button.dataset.inventoryReceive));
+  });
+  document.querySelectorAll("[data-inventory-close-receive]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      inventoryReceiveDrawer = createClosedInventoryReceiveDrawer();
+      render();
+    });
+  });
+  document.querySelectorAll("[data-inventory-receive-field]").forEach((field) => {
+    const eventName = field.tagName === "SELECT" ? "change" : "input";
+    field.addEventListener(eventName, (event) => updateInventoryReceiveField(field.dataset.inventoryReceiveField, event.target.value));
+  });
+  document.getElementById("inventory-receive-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitInventoryReceive();
+  });
+
   document.getElementById("catalog-brand-filter")?.addEventListener("change", (event) => {
     catalogBrandFilter = event.target.value;
     render();
@@ -9372,6 +10024,12 @@ function bindEvents() {
     field.addEventListener(eventName, (event) => {
       updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
       if (field.dataset.catalogField === "productType") render();
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-sales-channel]").forEach((field) => {
+    field.addEventListener("change", () => {
+      setCatalogDraftSalesChannel(field.dataset.catalogSalesChannel, field.checked);
     });
   });
 

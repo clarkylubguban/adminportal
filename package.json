@@ -33,6 +33,7 @@
     "test:native-order-guard-db": "node scripts/test-native-order-guard-db.mjs",
     "test:native-order-authority-db": "node scripts/test-native-order-authority-db.mjs",
     "test:native-order-payment-guard-db": "node scripts/test-native-order-payment-guard-db.mjs",
+    "test:master-catalog-sales-channels": "node scripts/test-master-catalog-sales-channels.mjs",
     "test:admin-inventory-p0": "node scripts/test-admin-inventory-p0.mjs",
     "test:admin-inventory-responsive": "node scripts/test-admin-inventory-responsive.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",

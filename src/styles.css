@@ -13849,6 +13849,41 @@ body,
   margin-top: 8px;
 }
 
+.catalog-sales-channel-field {
+  display: grid;
+  gap: 8px;
+}
+
+.catalog-sales-channel-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-sales-channel-chip {
+  align-items: center;
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.catalog-sales-channel-chip.selected {
+  background: var(--trry-lime-soft);
+  border-color: var(--trry-focus);
+}
+
+.catalog-sales-channel-chip input {
+  margin: 0;
+}
+
 .catalog-attribute-chip,
 .catalog-muted-chip {
   align-items: center;

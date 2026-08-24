@@ -13,11 +13,21 @@ export const MASTER_PRODUCTS_TABLE = "products";
 export const PRODUCT_VARIANTS_TABLE = "product_variants";
 export const PRODUCT_IMAGES_TABLE = "product_images";
 
-export const catalogOptions = [
-  { key: "trry_webapp", label: "TRRY WEBAPP", channel: "TRRY_WEBAPP" },
-  { key: "foghead", label: "FOGHEAD", channel: "FOGHEAD" },
-  { key: "trry_portal", label: "TRRY PORTAL", channel: "TRRY_PORTAL" },
+export const canonicalSalesChannels = [
+  { code: "STLOLAB", label: "STLOLab" },
+  { code: "TRRY_WEBAPP", label: "TRRY WebApp" },
+  { code: "POS", label: "POS" },
+  { code: "TRRY_APPAREL", label: "TRRY Apparel" },
 ];
+
+export const catalogOptions = [
+  { key: "stlolab", label: "STLOLab", channel: "STLOLAB" },
+  { key: "trry_webapp", label: "TRRY WebApp", channel: "TRRY_WEBAPP" },
+  { key: "pos", label: "POS", channel: "POS" },
+  { key: "trry_apparel", label: "TRRY Apparel", channel: "TRRY_APPAREL" },
+];
+
+export const canonicalSalesChannelCodes = new Set(canonicalSalesChannels.map((channel) => channel.code));
 
 export const catalogStatusOptions = ["draft", "published", "hidden", "archived"];
 
@@ -595,8 +605,9 @@ function mapCatalogKeysToChannels(keys) {
   const normalizedKeys = (Array.isArray(keys) ? keys : [keys]).filter(Boolean);
   const channels = normalizedKeys
     .map((key) => catalogOptions.find((catalog) => catalog.key === key)?.channel || String(key).trim().toUpperCase())
+    .filter((channel) => canonicalSalesChannelCodes.has(channel))
     .filter(Boolean);
-  return channels.length ? Array.from(new Set(channels)) : [catalogOptions[0].channel];
+  return Array.from(new Set(channels));
 }
 
 function mapChannelsToCatalogKeys(channels) {

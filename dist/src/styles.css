@@ -2511,6 +2511,451 @@ td:nth-child(9) {
   font-size: 12px;
 }
 
+/* M9E.2B Inventory P0 */
+.inventory-page .breadcrumb {
+  display: block;
+  color: #949eb2;
+  font-size: 11px;
+  font-weight: 500;
+  margin-bottom: 4px;
+}
+
+.inventory-heading {
+  align-items: center;
+  background: #fff;
+  gap: 18px;
+  min-height: 82px;
+  padding: 0;
+}
+
+.inventory-heading-actions {
+  display: flex;
+  gap: 10px;
+  margin-left: auto;
+}
+
+.inventory-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.inventory-tabs {
+  align-items: center;
+  background: #fff;
+  border: 1px solid #f1f2f5;
+  border-radius: 9px;
+  display: flex;
+  gap: 6px;
+  min-height: 46px;
+  overflow-x: auto;
+  padding: 5px;
+  width: 100%;
+}
+
+.inventory-tabs button {
+  align-items: center;
+  background: #fff;
+  border: 0;
+  border-radius: 7px;
+  color: #5c667a;
+  display: inline-flex;
+  flex: 0 0 auto;
+  gap: 7px;
+  font-size: 10px;
+  font-weight: 650;
+  min-height: 34px;
+  padding: 9px 12px;
+  white-space: nowrap;
+}
+
+.inventory-tabs button.active {
+  background: #0c0e11;
+  color: #fff;
+}
+
+.inventory-tabs button span {
+  background: #f0f2f7;
+  border-radius: 999px;
+  color: #5c667a;
+  font-size: 9px;
+  padding: 4px 8px;
+}
+
+.inventory-tabs button.active span {
+  background: var(--trry-lime);
+  color: #0e1116;
+}
+
+.inventory-controls .catalog-filter-row {
+  grid-template-columns: minmax(220px, 1fr) repeat(2, minmax(140px, 190px)) 90px !important;
+}
+
+.inventory-table-card {
+  overflow-x: auto;
+}
+
+.inventory-table {
+  min-width: 1120px;
+  table-layout: fixed;
+  width: 100%;
+}
+
+.inventory-movement-table {
+  min-width: 1180px;
+  table-layout: fixed;
+}
+
+.inventory-table th,
+.inventory-table td,
+.inventory-movement-table th,
+.inventory-movement-table td {
+  white-space: nowrap;
+}
+
+.inventory-table th,
+.inventory-table td {
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.inventory-movement-table th,
+.inventory-movement-table td {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-movement-table .status-pill {
+  min-width: max-content;
+  white-space: nowrap;
+}
+
+.movement-date-col {
+  width: 12%;
+}
+
+.movement-product-col {
+  width: 21%;
+}
+
+.movement-type-col {
+  width: 9%;
+}
+
+.movement-qty-col {
+  width: 8%;
+}
+
+.movement-balance-col {
+  width: 9%;
+}
+
+.movement-source-col {
+  width: 10%;
+}
+
+.movement-reference-col {
+  width: 12%;
+}
+
+.movement-reason-col {
+  width: 12%;
+}
+
+.movement-operator-col {
+  width: 7%;
+}
+
+.movement-date-col,
+.movement-type-col,
+.movement-qty-col,
+.movement-balance-col,
+.movement-source-col,
+.movement-operator-col {
+  white-space: nowrap;
+}
+
+.movement-product-stack {
+  max-width: 100%;
+  min-width: 0;
+}
+
+.movement-product-stack strong,
+.movement-product-stack span {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-product-col {
+  width: 28%;
+}
+
+.inventory-sku-col {
+  width: 16%;
+}
+
+.inventory-on-hand-col {
+  width: 12%;
+}
+
+.inventory-reorder-col {
+  width: 6%;
+}
+
+.inventory-incoming-col {
+  width: 8%;
+}
+
+.inventory-stock-col {
+  width: 11%;
+}
+
+.inventory-last-cost-col {
+  width: 6%;
+}
+
+.inventory-stock-value-col {
+  width: 6%;
+}
+
+.inventory-action-col {
+  width: 7%;
+}
+
+.inventory-product-stack {
+  max-width: 100%;
+}
+
+.inventory-product-stack strong,
+.inventory-product-stack span,
+.inventory-table .mono-value {
+  display: block;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-on-hand-cell {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.inventory-on-hand-cell strong {
+  color: #0e1116;
+  display: block;
+  font-size: 12px;
+  line-height: 1.1;
+}
+
+.inventory-on-hand-cell strong.inventory-negative {
+  color: #e52930;
+}
+
+.inventory-on-hand-cell span {
+  color: #7a8496;
+  display: block;
+  font-size: 9px;
+  font-weight: 650;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.inventory-table .status-pill {
+  max-width: 100%;
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.inventory-table .compact-action {
+  min-width: 76px;
+}
+
+.inventory-rule-note {
+  align-items: center;
+  background: #edf2ff;
+  border-radius: 7px;
+  color: #5c667a;
+  display: flex;
+  gap: 10px;
+  min-height: 42px;
+  padding: 10px 12px;
+  width: min(850px, 100%);
+}
+
+.inventory-rule-note strong {
+  color: #2563eb;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.inventory-rule-note span {
+  font-size: 9px;
+  font-weight: 600;
+}
+
+.status-pill.inventory-healthy {
+  background: #eefad4;
+  color: #5b8f00;
+}
+
+.status-pill.inventory-low-stock {
+  background: #fff2d9;
+  color: #c56a00;
+}
+
+.status-pill.inventory-out-of-stock {
+  background: #ffe5eb;
+  color: #e52930;
+}
+
+.status-pill.inventory-sale {
+  background: #edf2ff;
+  color: #2563eb;
+}
+
+.inventory-negative {
+  color: #e52930;
+}
+
+.inventory-positive {
+  color: #5b8f00;
+}
+
+.inventory-receive-drawer {
+  width: min(520px, calc(100vw - 24px));
+}
+
+.inventory-readonly-grid {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inventory-readonly-grid div {
+  background: #f9fafb;
+  border: 1px solid #eef0f4;
+  border-radius: 7px;
+  padding: 10px;
+}
+
+.inventory-readonly-grid span {
+  color: #7a8496;
+  display: block;
+  font-size: 10px;
+  font-weight: 650;
+  margin-bottom: 4px;
+}
+
+.inventory-readonly-grid strong {
+  color: #0e1116;
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 1100px) {
+  .inventory-summary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .inventory-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    padding: 16px;
+  }
+
+  .inventory-heading-actions {
+    margin-left: 0;
+    width: 100%;
+  }
+}
+
+@media (max-width: 760px) {
+  .inventory-summary-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .inventory-controls .catalog-filter-row {
+    grid-template-columns: 1fr !important;
+  }
+
+  .inventory-heading-actions {
+    flex-direction: column;
+  }
+
+  .inventory-heading-actions button {
+    width: 100%;
+  }
+
+  .inventory-table,
+  .inventory-movement-table {
+    min-width: 0;
+    table-layout: auto;
+  }
+
+  .inventory-table thead,
+  .inventory-movement-table thead {
+    display: none;
+  }
+
+  .inventory-table tbody,
+  .inventory-movement-table tbody,
+  .inventory-table tr,
+  .inventory-movement-table tr,
+  .inventory-table td,
+  .inventory-movement-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .inventory-table tr,
+  .inventory-movement-table tr {
+    border-bottom: 1px solid #f1f2f5;
+    padding: 12px 0;
+  }
+
+  .inventory-table td,
+  .inventory-movement-table td {
+    align-items: center;
+    border: 0;
+    display: flex;
+    justify-content: space-between;
+    min-height: 34px;
+    padding: 7px 14px;
+    white-space: normal;
+  }
+
+  .inventory-table th,
+  .inventory-table td {
+    overflow: visible;
+    text-overflow: clip;
+  }
+
+  .inventory-product-stack strong,
+  .inventory-product-stack span,
+  .inventory-table .mono-value,
+  .inventory-on-hand-cell span {
+    white-space: normal;
+  }
+
+  .inventory-table td::before,
+  .inventory-movement-table td::before {
+    color: #7a8496;
+    content: attr(data-mobile-label);
+    flex: 0 0 42%;
+    font-size: 10px;
+    font-weight: 750;
+    text-transform: uppercase;
+  }
+
+  .inventory-readonly-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
 .note-button.danger,
 .compact-action.danger {
   border-color: #f1c3c5;
@@ -13402,6 +13847,41 @@ body,
   flex-wrap: wrap;
   gap: 6px;
   margin-top: 8px;
+}
+
+.catalog-sales-channel-field {
+  display: grid;
+  gap: 8px;
+}
+
+.catalog-sales-channel-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.catalog-sales-channel-chip {
+  align-items: center;
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 12px;
+  font-weight: 800;
+  gap: 7px;
+  min-height: 34px;
+  padding: 7px 10px;
+}
+
+.catalog-sales-channel-chip.selected {
+  background: var(--trry-lime-soft);
+  border-color: var(--trry-focus);
+}
+
+.catalog-sales-channel-chip input {
+  margin: 0;
 }
 
 .catalog-attribute-chip,
@@ -29336,4 +29816,47 @@ pre,
   .app-shell.admin-saas-shell .catalog-reset-button {
     min-height: 38px !important;
   }
+}
+
+/* M9E.2C.2 inventory drawer final spacing polish. */
+.app-shell.admin-saas-shell .inventory-receive-drawer header {
+  padding: 16px 22px 14px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer header > div {
+  gap: 5px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer header h2,
+.app-shell.admin-saas-shell .inventory-receive-drawer header p {
+  margin: 0 !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer header .status-pill {
+  margin-top: 4px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .catalog-form {
+  padding-top: 12px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .catalog-drawer-section {
+  gap: 10px !important;
+  padding: 16px 0 !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .catalog-drawer-section:first-of-type {
+  padding-top: 0 !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .catalog-drawer-section h3 {
+  margin: 0 !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .inventory-readonly-grid {
+  gap: 8px !important;
+}
+
+.app-shell.admin-saas-shell .inventory-receive-drawer .inventory-readonly-grid div {
+  padding: 8px 10px !important;
 }
