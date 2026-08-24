@@ -26,7 +26,7 @@ assert.ok(main.includes('"/catalog/inventory": "Catalog"'), "Inventory route mus
 assert.ok(localDev.includes('"/catalog/inventory"'), "Local dev server must serve direct Inventory route");
 assert.ok(main.includes('path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"]'), "Inventory nav must be enabled");
 assert.ok(main.includes('path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"]'), "Suppliers must be enabled for Supplier Master M1");
-assert.ok(main.includes('path: "/catalog/purchasing", icon: "shopping-cart", disabled: true'), "Purchasing must remain parked");
+assert.ok(main.includes('path: "/catalog/purchasing", icon: "shopping-cart", activePaths: ["/catalog/purchasing"]'), "Purchasing nav must be enabled for Purchase Orders M2");
 
 for (const table of ["products", "product_variants", "brands", "product_categories", "inventory_locations", "inventory_balances", "stock_movements"]) {
   assert.ok(service.includes(`"${table}"`), `canonical table missing: ${table}`);
@@ -152,4 +152,4 @@ assert.ok(styles.includes(".movement-reason-col"), "Inventory movement Reason / 
 assert.ok(styles.includes(".movement-reference-col"), "Inventory movement Reference width missing");
 assert.ok(styles.includes(".inventory-movement-table .status-pill"), "Inventory movement type chip readability rule missing");
 
-process.stdout.write("PASS Admin Inventory P0 route, canonical bindings, RPC payload, permissions, idempotency, and parked purchasing\n");
+process.stdout.write("PASS Admin Inventory P0 route, canonical bindings, RPC payload, permissions, idempotency, and M2 purchasing boundary\n");

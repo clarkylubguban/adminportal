@@ -28,6 +28,7 @@ const appRoutes = new Set([
   "/catalog/brands",
   "/catalog/categories",
   "/catalog/suppliers",
+  "/catalog/purchasing",
   "/catalog/inventory",
   "/login",
   "/set-password",

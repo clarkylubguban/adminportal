@@ -76,6 +76,18 @@ import {
   validateSupplierDraft,
 } from "./services/adminSuppliers.js";
 import {
+  PO_NUMBER_PREVIEW,
+  canWritePurchaseOrdersForRole,
+  createEmptyPurchaseOrderDraft,
+  createEmptyPurchaseOrderLine,
+  createPurchaseOrder,
+  getPurchaseOrderTotals,
+  getPurchaseOrders,
+  isEligiblePurchaseVariant,
+  markPurchaseOrderOrdered,
+  validatePurchaseOrderDraft,
+} from "./services/adminPurchasing.js";
+import {
   deleteCatalogImagePath,
   uploadCatalogImage,
   validateCatalogImageFileWithDimensions,
@@ -518,6 +530,20 @@ let selectedSupplierId = null;
 let supplierDraft = null;
 let supplierSaveState = "idle";
 let supplierSaveError = "";
+let purchaseOrders = [];
+let purchasingLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
+let purchasingLoadError = "";
+let hasLoadedPurchaseOrders = false;
+let purchasingQuery = "";
+let purchasingStatusFilter = "all";
+let purchasingSupplierFilter = "all";
+let purchasingExpectedFilter = "all";
+let purchasingDrawerOpen = false;
+let purchasingDraft = null;
+let purchasingSaveState = "idle";
+let purchasingSaveError = "";
+let selectedPurchaseOrderId = null;
+let purchaseOrderDetailTab = "items";
 const CATALOG_PRODUCT_IMAGE_LIMIT = 6;
 let categoryStatusFilter = "active";
 let categoryProductTypeFilter = "all";
@@ -607,6 +633,7 @@ const routes = {
   "/production": "Production",
   "/catalog": "Catalog",
   "/catalog/inventory": "Catalog",
+  "/catalog/purchasing": "Catalog",
   "/catalog/suppliers": "Catalog",
   "/my-tasks": "My Tasks",
   "/calendar": "Calendar",
@@ -616,6 +643,7 @@ const routes = {
   "/catalog/brands": "Catalog",
   "/catalog/categories": "Catalog",
   "/catalog/inventory": "Catalog",
+  "/catalog/purchasing": "Catalog",
   "/catalog/suppliers": "Catalog",
 };
 
@@ -690,6 +718,7 @@ function render() {
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
   if (getRoutePath() === "/catalog/inventory" && inventoryLoadState === "idle") window.setTimeout(loadInventory, 0);
+  if (getRoutePath() === "/catalog/purchasing" && purchasingLoadState === "idle") window.setTimeout(loadPurchaseOrders, 0);
   if (getRoutePath() === "/catalog/suppliers" && supplierLoadState === "idle") window.setTimeout(loadSuppliers, 0);
 
   document.getElementById("root").innerHTML = `
@@ -1358,6 +1387,7 @@ function startAdminDataLoading() {
   loadBrands();
   loadInventory();
   loadSuppliers();
+  loadPurchaseOrders();
   if (isTaskFeatureUiEnabled()) loadMyTasks();
 }
 
@@ -1532,6 +1562,32 @@ async function loadSuppliers({ force = false } = {}) {
     suppliers = [];
     supplierLoadState = "error";
     supplierLoadError = error.message || "Unable to load supplier records.";
+  } finally {
+    render();
+  }
+}
+
+async function loadPurchaseOrders({ force = false } = {}) {
+  if (!force && hasLoadedPurchaseOrders && purchasingLoadState !== "loading") return;
+  hasLoadedPurchaseOrders = true;
+  purchasingLoadState = "loading";
+  purchasingLoadError = "";
+
+  try {
+    const result = await getPurchaseOrders(adminAuthSession);
+    const nextOrders = Array.isArray(result?.purchaseOrders) ? result.purchaseOrders : [];
+    purchaseOrders = nextOrders;
+    purchasingLoadState = result?.status === "error" ? "error" : nextOrders.length ? "success" : "empty";
+    purchasingLoadError = result?.error?.message ?? "";
+
+    if (selectedPurchaseOrderId && !purchaseOrders.some((order) => order.id === selectedPurchaseOrderId)) {
+      selectedPurchaseOrderId = null;
+    }
+  } catch (error) {
+    console.error("Unable to apply Purchase Orders.", error);
+    purchaseOrders = [];
+    purchasingLoadState = "error";
+    purchasingLoadError = error.message || "Unable to load purchase orders.";
   } finally {
     render();
   }
@@ -5174,6 +5230,9 @@ function renderCatalogPage() {
   if (getRoutePath() === "/catalog/suppliers") {
     return renderSuppliersPage();
   }
+  if (getRoutePath() === "/catalog/purchasing") {
+    return renderPurchasingPage();
+  }
   if (getRoutePath() === "/catalog/inventory") {
     return renderInventoryPage();
   }
@@ -5261,6 +5320,293 @@ function renderCatalogPage() {
       </article>
     </main>
   `;
+}
+
+function renderPurchasingPage() {
+  if (selectedPurchaseOrderId) {
+    return renderPurchaseOrderDetailPage();
+  }
+  return renderPurchaseOrderListPage();
+}
+
+function renderPurchaseOrderListPage() {
+  const visibleOrders = getVisiblePurchaseOrders();
+  const canWrite = canWritePurchaseOrdersForRole(adminUser?.role);
+  const supplierOptions = getPurchasingSupplierOptions();
+
+  return `
+    <main class="orders-page catalog-page purchasing-page admin-saas-page">
+      <div class="page-heading catalog-heading purchasing-heading">
+        <div>
+          <span class="breadcrumb">Home  &rsaquo;  Purchasing  &rsaquo;  Purchase Orders</span>
+          <h1>Purchasing</h1>
+          <p class="subtitle">Create supplier purchase orders from catalog product variants. Receiving remains parked for M2.</p>
+        </div>
+        ${canWrite ? `<button class="catalog-add-button" data-purchase-order-create type="button">+ Create PO</button>` : ""}
+      </div>
+
+      <section class="catalog-summary-grid purchasing-summary-grid" aria-label="Purchase order summary">
+        ${getPurchaseOrderSummaryCards().map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="supplier-tabs purchasing-tabs" aria-label="Purchasing tabs">
+        <button class="active" type="button">Purchase Orders</button>
+        <button type="button" data-route-target="/catalog/suppliers">Suppliers</button>
+        <button type="button" data-receiving-history-parked disabled>Receiving History</button>
+      </section>
+
+      <section class="catalog-controls purchasing-controls" aria-label="Purchase order controls">
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="purchase-order-search" value="${escapeHtml(purchasingQuery)}" placeholder="Search PO, supplier, SKU..." type="search" />
+          </label>
+          <select id="purchase-order-status-filter" aria-label="PO status filter">
+            <option value="all" ${purchasingStatusFilter === "all" ? "selected" : ""}>All Statuses</option>
+            <option value="DRAFT" ${purchasingStatusFilter === "DRAFT" ? "selected" : ""}>Draft</option>
+            <option value="ORDERED" ${purchasingStatusFilter === "ORDERED" ? "selected" : ""}>Ordered</option>
+          </select>
+          <select id="purchase-order-supplier-filter" aria-label="PO supplier filter">
+            <option value="all" ${purchasingSupplierFilter === "all" ? "selected" : ""}>All Suppliers</option>
+            ${supplierOptions.map((supplier) => `<option value="${escapeHtml(supplier.id)}" ${purchasingSupplierFilter === supplier.id ? "selected" : ""}>${escapeHtml(supplier.name)}</option>`).join("")}
+          </select>
+          <select id="purchase-order-expected-filter" aria-label="Expected date filter">
+            <option value="all" ${purchasingExpectedFilter === "all" ? "selected" : ""}>All Expected Dates</option>
+            <option value="with-date" ${purchasingExpectedFilter === "with-date" ? "selected" : ""}>With Expected Date</option>
+            <option value="missing" ${purchasingExpectedFilter === "missing" ? "selected" : ""}>Missing Expected Date</option>
+            <option value="overdue" ${purchasingExpectedFilter === "overdue" ? "selected" : ""}>Overdue</option>
+          </select>
+          <button class="note-button catalog-reset-button" data-purchase-order-reset-filters type="button">Reset</button>
+        </div>
+      </section>
+
+      ${renderPurchaseOrderNotice(canWrite)}
+
+      <article class="content-card table-card catalog-table-card purchasing-table-card">
+        <p class="table-helper-text catalog-count-label">${visibleOrders.length} ${visibleOrders.length === 1 ? "PURCHASE ORDER" : "PURCHASE ORDERS"}</p>
+        <table class="products-table catalog-table purchase-order-table">
+          <thead>
+            <tr>
+              <th>PO Number</th>
+              <th>Supplier</th>
+              <th>Ordered</th>
+              <th>Expected</th>
+              <th>Items</th>
+              <th>Total Cost</th>
+              <th>Receiving</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>${visibleOrders.map(renderPurchaseOrderRow).join("")}</tbody>
+        </table>
+        ${renderPurchaseOrderEmptyState(visibleOrders)}
+      </article>
+      <div class="supplier-rule-note purchasing-boundary-note"><strong>BOUNDARY</strong><span>PO does not change On Hand. Inventory increases only when an authorized user confirms Receive Stock.</span></div>
+      ${purchasingDrawerOpen ? renderPurchaseOrderDrawer(canWrite) : ""}
+    </main>
+  `;
+}
+
+function renderPurchaseOrderRow(order) {
+  return `
+    <tr data-purchase-order-row="${escapeHtml(order.id)}" tabindex="0">
+      <td data-mobile-label="PO Number"><span class="mono-value">${escapeHtml(order.poNumber || "-")}</span></td>
+      <td data-mobile-label="Supplier"><div class="catalog-name-stack"><strong>${escapeHtml(order.supplierName || "-")}</strong><span>${escapeHtml(order.supplierReference || "-")}</span></div></td>
+      <td data-mobile-label="Ordered">${escapeHtml(formatPurchaseDate(order.orderedAt || order.orderDate))}</td>
+      <td data-mobile-label="Expected">${escapeHtml(formatPurchaseDate(order.expectedDate))}</td>
+      <td data-mobile-label="Items">${escapeHtml(String(order.itemCount || 0))}</td>
+      <td data-mobile-label="Total Cost">${formatPurchaseMoney(order.totalCost)}</td>
+      <td data-mobile-label="Receiving">${order.status === "ORDERED" ? `0 / ${escapeHtml(String(order.itemCount || 0))}` : "—"}</td>
+      <td data-mobile-label="Status">${renderPurchaseOrderStatusPill(order.status)}</td>
+      <td data-mobile-label="Action"><button class="note-button compact-action" data-purchase-order-view="${escapeHtml(order.id)}" type="button">View</button></td>
+    </tr>
+  `;
+}
+
+function renderPurchaseOrderDetailPage() {
+  const order = purchaseOrders.find((item) => item.id === selectedPurchaseOrderId);
+  if (!order) {
+    selectedPurchaseOrderId = null;
+    return renderPurchaseOrderListPage();
+  }
+
+  return `
+    <main class="orders-page catalog-page purchasing-page po-detail-page admin-saas-page">
+      <div class="page-heading catalog-heading purchasing-heading">
+        <div>
+          <span class="breadcrumb">Home  &rsaquo;  Purchasing  &rsaquo;  ${escapeHtml(order.poNumber || "Purchase Order")}</span>
+          <h1>Purchase Order</h1>
+          <p class="subtitle">${escapeHtml(order.poNumber || "-")} · ${escapeHtml(order.supplierName || "-")}</p>
+        </div>
+        <div class="purchasing-heading-actions">
+          <button class="note-button" data-purchase-order-back type="button">Back to POs</button>
+          <button class="primary-button catalog-save-button" data-receive-stock-parked type="button" disabled>Receive Stock</button>
+        </div>
+      </div>
+
+      <section class="catalog-summary-grid purchasing-summary-grid" aria-label="Purchase order detail summary">
+        ${[
+          { label: "Status", value: formatPurchaseStatus(order.status), helper: "M2 order lifecycle" },
+          { label: "Ordered", value: formatPurchaseDate(order.orderedAt || order.orderDate), helper: "No stock movement" },
+          { label: "Expected", value: formatPurchaseDate(order.expectedDate), helper: "Supplier delivery target" },
+          { label: "PO Total", value: formatPurchaseMoney(order.totalCost), helper: "Items plus freight" },
+        ].map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="supplier-tabs purchasing-tabs" aria-label="Purchase order detail tabs">
+        <button class="${purchaseOrderDetailTab === "items" ? "active" : ""}" data-po-detail-tab="items" type="button">Order Items</button>
+        <button data-receiving-history-parked disabled type="button">Receiving History</button>
+        <button class="${purchaseOrderDetailTab === "supplier" ? "active" : ""}" data-po-detail-tab="supplier" type="button">Supplier</button>
+      </section>
+
+      ${purchaseOrderDetailTab === "supplier" ? renderPurchaseOrderSupplierPanel(order) : renderPurchaseOrderLineTable(order)}
+      <div class="supplier-rule-note purchasing-boundary-note"><strong>BOUNDARY</strong><span>PO does not change On Hand. Inventory increases only when an authorized user confirms Receive Stock.</span></div>
+    </main>
+  `;
+}
+
+function renderPurchaseOrderLineTable(order) {
+  return `
+    <article class="content-card table-card catalog-table-card purchasing-table-card">
+      <table class="products-table catalog-table po-detail-table">
+        <thead>
+          <tr>
+            <th>Product / SKU</th>
+            <th>Ordered</th>
+            <th>Received</th>
+            <th>Remaining</th>
+            <th>Unit Cost</th>
+            <th>Line Total</th>
+            <th>Last Receipt</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${order.lines.map((line) => `
+            <tr>
+              <td data-mobile-label="Product / SKU"><div class="catalog-name-stack"><strong>${escapeHtml(line.productName || "-")}</strong><span>${escapeHtml([line.sku, line.variantLabel].filter(Boolean).join(" · ") || "-")}</span></div></td>
+              <td data-mobile-label="Ordered">${escapeHtml(String(line.orderedQuantity))}</td>
+              <td data-mobile-label="Received">0</td>
+              <td data-mobile-label="Remaining">${escapeHtml(String(line.remainingQuantity))}</td>
+              <td data-mobile-label="Unit Cost">${formatPurchaseMoney(line.unitCost)}</td>
+              <td data-mobile-label="Line Total">${formatPurchaseMoney(line.lineTotal)}</td>
+              <td data-mobile-label="Last Receipt">—</td>
+              <td data-mobile-label="Status">${renderPurchaseLineStatusPill(line.status)}</td>
+              <td data-mobile-label="Action"><button class="note-button compact-action" data-receive-stock-parked type="button" disabled>Receive</button></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </article>
+  `;
+}
+
+function renderPurchaseOrderSupplierPanel(order) {
+  const supplier = suppliers.find((item) => item.id === order.supplierId);
+  return `
+    <article class="content-card supplier-po-panel">
+      <header><h2>${escapeHtml(order.supplierName || "Supplier")}</h2><button class="note-button" data-purchase-order-supplier="${escapeHtml(order.supplierId)}" type="button">Open Supplier</button></header>
+      <div class="supplier-field-row three">
+        ${renderSupplierReadonlyFact("Supplier Ref", order.supplierReference)}
+        ${renderSupplierReadonlyFact("Currency", supplier?.currency || "PHP")}
+        ${renderSupplierReadonlyFact("Lead Time", supplier?.leadTimeDays ? `${supplier.leadTimeDays} days` : "")}
+      </div>
+      ${renderSupplierReadonlyFact("Supplier PO Ref", order.supplierReferenceNote)}
+      ${renderSupplierReadonlyFact("Internal Note", order.internalNote)}
+    </article>
+  `;
+}
+
+function renderPurchaseOrderDrawer(canWrite) {
+  const draft = purchasingDraft ?? createEmptyPurchaseOrderDraft();
+  const totals = getPurchaseOrderTotals(getPurchaseOrderDraftWithLineSnapshot(draft));
+  const disabled = purchasingSaveState === "saving" || !canWrite;
+  const supplierOptions = suppliers.filter((supplier) => supplier.active !== false && !supplier.archivedAt);
+  const variantOptions = getPurchaseVariantOptions();
+
+  return `
+    <div class="catalog-drawer-backdrop" data-purchase-order-close></div>
+    <aside class="catalog-drawer purchase-order-drawer" aria-label="Create purchase order drawer">
+      <header>
+        <div>
+          <span class="info-chip">PURCHASING · PURCHASE ORDER</span>
+          <h2>Create PO</h2>
+          <p>Supplier to catalog variant ordering, with receiving parked for the next milestone.</p>
+        </div>
+        <button class="catalog-drawer-close" data-purchase-order-close type="button" aria-label="Close purchase order drawer">X</button>
+      </header>
+      <form class="catalog-form purchase-order-form" id="purchase-order-form">
+        ${purchasingSaveError ? `<p class="catalog-form-error">${escapeHtml(purchasingSaveError)}</p>` : ""}
+        <section class="catalog-drawer-section">
+          <h3>Supplier</h3>
+          <label class="catalog-field"><span>Supplier</span><select data-po-field="supplierId" ${disabled ? "disabled" : ""} required><option value="">Choose active supplier</option>${supplierOptions.map((supplier) => `<option value="${escapeHtml(supplier.id)}" ${draft.supplierId === supplier.id ? "selected" : ""}>${escapeHtml(supplier.name)}</option>`).join("")}</select></label>
+          <div class="supplier-field-row">
+            <label class="catalog-field"><span>Expected Date</span><input data-po-field="expectedDate" value="${escapeHtml(draft.expectedDate)}" type="date" ${disabled ? "disabled" : ""}></label>
+            <label class="catalog-field"><span>PO Number</span><input class="locked-field" value="${escapeHtml(PO_NUMBER_PREVIEW)}" readonly></label>
+          </div>
+          <label class="catalog-field"><span>Supplier Ref</span><input data-po-field="supplierReference" value="${escapeHtml(draft.supplierReference)}" placeholder="Supplier quote or invoice ref" ${disabled ? "disabled" : ""}></label>
+        </section>
+        <section class="catalog-drawer-section po-lines-section">
+          <div class="section-heading-row"><h3>Order Items</h3><button class="note-button" data-po-add-line type="button" ${disabled ? "disabled" : ""}>+ Add Line</button></div>
+          ${draft.lines.map((line, index) => renderPurchaseOrderLineEditor(line, index, variantOptions, disabled)).join("")}
+        </section>
+        <section class="catalog-drawer-section">
+          <h3>Cost Summary</h3>
+          <div class="po-cost-summary">
+            <div><span>Items Subtotal</span><strong>${formatPurchaseMoney(totals.itemsSubtotal)}</strong></div>
+            <label class="catalog-field"><span>Shipping / Freight</span><input data-po-field="freightCost" value="${escapeHtml(draft.freightCost)}" min="0" step="0.01" type="number" ${disabled ? "disabled" : ""}></label>
+            <div><span>PO Total</span><strong>${formatPurchaseMoney(totals.totalCost)}</strong></div>
+          </div>
+          <label class="catalog-field"><span>Internal Note</span><textarea data-po-field="internalNote" rows="3" placeholder="Optional buying notes" ${disabled ? "disabled" : ""}>${escapeHtml(draft.internalNote)}</textarea></label>
+        </section>
+        <div class="supplier-rule-note drawer po-rule-note"><strong>PO RULE</strong><span>Saving Draft creates no Inventory movement. Sending the PO also creates no On Hand quantity.</span></div>
+        <footer class="catalog-drawer-footer">
+          <span>${canWrite ? "Save as Draft or mark Ordered. Receive Stock remains disabled in M2." : "Purchase Order writes are restricted to Owner and Admin roles."}</span>
+          <div>
+            <button class="note-button" data-purchase-order-close type="button" ${purchasingSaveState === "saving" ? "disabled" : ""}>Cancel</button>
+            <button class="note-button catalog-save-button" data-po-save-status="DRAFT" type="button" ${disabled ? "disabled" : ""}>${purchasingSaveState === "saving" ? "Saving..." : "Save Draft"}</button>
+            <button class="primary-button catalog-save-button" data-po-save-status="ORDERED" type="button" ${disabled ? "disabled" : ""}>Create & Mark Ordered</button>
+          </div>
+        </footer>
+      </form>
+    </aside>
+  `;
+}
+
+function renderPurchaseOrderLineEditor(line, index, variantOptions, disabled) {
+  const selected = variantOptions.find((option) => option.variantId === line.variantId);
+  const label = selected ? `${selected.productName} · ${selected.variantLabel}` : "Choose product / variant";
+  const lineTotal = Number(line.orderedQuantity || 0) * Number(line.unitCost || 0);
+
+  return `
+    <article class="po-line-card" data-po-line-card="${index}">
+      <div class="po-line-grid">
+        <label class="catalog-field"><span>Product / Variant</span><select data-po-line-field="variantId" data-po-line-index="${index}" ${disabled ? "disabled" : ""} required><option value="">${escapeHtml(label)}</option>${variantOptions.map((option) => `<option value="${escapeHtml(option.variantId)}" ${line.variantId === option.variantId ? "selected" : ""}>${escapeHtml(`${option.productName} · ${option.variantLabel} · ${option.sku}`)}</option>`).join("")}</select></label>
+        <label class="catalog-field"><span>SKU</span><input class="locked-field" value="${escapeHtml(line.sku || selected?.sku || "")}" readonly></label>
+        <label class="catalog-field"><span>Qty</span><input data-po-line-field="orderedQuantity" data-po-line-index="${index}" value="${escapeHtml(line.orderedQuantity)}" min="1" step="1" type="number" ${disabled ? "disabled" : ""}></label>
+        <label class="catalog-field"><span>Unit Cost</span><input data-po-line-field="unitCost" data-po-line-index="${index}" value="${escapeHtml(line.unitCost)}" min="0" step="0.01" type="number" ${disabled ? "disabled" : ""}></label>
+        <div class="po-line-total"><span>Line Total</span><strong>${formatPurchaseMoney(lineTotal)}</strong></div>
+        <button class="note-button compact-action" data-po-remove-line="${index}" type="button" ${disabled || purchasingDraft?.lines?.length <= 1 ? "disabled" : ""}>Remove</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderPurchaseOrderNotice(canWrite) {
+  if (purchasingLoadState === "loading") return `<div class="catalog-notice">Loading purchase orders...</div>`;
+  if (purchasingLoadState === "error") return `<div class="catalog-notice error">Unable to load purchase orders. ${escapeHtml(purchasingLoadError || "Check Supabase access and purchase order RLS policies.")}</div>`;
+  if (purchasingSaveState === "success") return `<div class="catalog-notice success">Purchase order saved. Receiving stayed parked.</div>`;
+  if (!canWrite) return `<div class="catalog-notice">Purchase Order writes are restricted to Owner and Admin roles. Current role is read-only.</div>`;
+  return "";
+}
+
+function renderPurchaseOrderEmptyState(rows) {
+  if (rows.length) return "";
+  if (purchasingLoadState === "loading") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading purchase orders...</strong><span>Checking supplier PO records.</span></div>`;
+  if (purchasingLoadState === "error") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Purchase orders unavailable</strong><span>${escapeHtml(purchasingLoadError || "PO data could not be loaded.")}</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No purchase orders found</strong><span>Create a supplier PO or adjust the current filters.</span></div>`;
 }
 
 function renderCatalogCategoriesPage() {
@@ -5409,6 +5755,210 @@ function renderCatalogBrandsPage() {
   `;
 }
 
+function getPurchaseOrderSummaryCards() {
+  const ordered = purchaseOrders.filter((order) => order.status === "ORDERED");
+  const openValue = ordered.reduce((sum, order) => sum + Number(order.totalCost || 0), 0);
+  return [
+    { label: "Open POs", value: String(ordered.length), helper: formatPurchaseMoney(openValue) },
+    { label: "Awaiting Delivery", value: String(ordered.length), helper: "Receiving parked", tone: "warning" },
+    { label: "Partially Received", value: "0", helper: "M2 disabled", tone: "info" },
+    { label: "Stock Received Value", value: "₱0", helper: "No PO receive movement", tone: "success" },
+  ];
+}
+
+function getVisiblePurchaseOrders() {
+  const normalizedQuery = purchasingQuery.trim().toLowerCase();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return purchaseOrders.filter((order) => {
+    const matchesQuery = !normalizedQuery || [
+      order.poNumber,
+      order.supplierName,
+      order.supplierReference,
+      order.supplierReferenceNote,
+      ...(order.lines ?? []).flatMap((line) => [line.productName, line.sku, line.variantLabel]),
+    ].join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesStatus = purchasingStatusFilter === "all" || order.status === purchasingStatusFilter;
+    const matchesSupplier = purchasingSupplierFilter === "all" || order.supplierId === purchasingSupplierFilter;
+    const expectedDate = order.expectedDate ? new Date(`${order.expectedDate}T00:00:00`) : null;
+    const matchesExpected = purchasingExpectedFilter === "all"
+      || (purchasingExpectedFilter === "with-date" && Boolean(order.expectedDate))
+      || (purchasingExpectedFilter === "missing" && !order.expectedDate)
+      || (purchasingExpectedFilter === "overdue" && expectedDate && expectedDate < today && order.status === "ORDERED");
+    return matchesQuery && matchesStatus && matchesSupplier && matchesExpected;
+  });
+}
+
+function getPurchasingSupplierOptions() {
+  const supplierIds = new Set(purchaseOrders.map((order) => order.supplierId).filter(Boolean));
+  return suppliers
+    .filter((supplier) => supplierIds.has(supplier.id) || supplier.active !== false)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getPurchaseVariantOptions() {
+  return catalogProducts.flatMap((product) => {
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    return variants
+      .filter((variant) => isEligiblePurchaseVariant(product, variant))
+      .map((variant) => ({
+        productId: product.id,
+        variantId: variant.id,
+        productName: product.name,
+        sku: variant.sku || variant.globalSku || "",
+        variantLabel: [variant.color, variant.size].filter(Boolean).join(" / ") || "Standard",
+        unitCost: variant.unitCost || product.unitCost || "0",
+      }));
+  });
+}
+
+function getPurchaseOrderDraftWithLineSnapshot(draft = {}) {
+  const variantOptions = getPurchaseVariantOptions();
+  return {
+    ...draft,
+    lines: (draft.lines ?? []).map((line) => {
+      const selected = variantOptions.find((option) => option.variantId === line.variantId);
+      return {
+        ...line,
+        productId: selected?.productId || line.productId || "",
+        productName: selected?.productName || line.productName || "",
+        sku: selected?.sku || line.sku || "",
+        variantLabel: selected?.variantLabel || line.variantLabel || "",
+        unitCost: line.unitCost === "" && selected ? selected.unitCost : line.unitCost,
+      };
+    }),
+  };
+}
+
+function openPurchaseOrderDrawer(supplierId = "") {
+  if (!canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  purchasingDraft = createEmptyPurchaseOrderDraft(supplierId);
+  purchasingDrawerOpen = true;
+  purchasingSaveState = "idle";
+  purchasingSaveError = "";
+  selectedPurchaseOrderId = null;
+  purchaseOrderDetailTab = "items";
+  render();
+}
+
+function closePurchaseOrderDrawer() {
+  purchasingDrawerOpen = false;
+  purchasingDraft = null;
+  purchasingSaveError = "";
+  render();
+}
+
+function updatePurchaseDraftField(field, value) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  purchasingDraft = { ...purchasingDraft, [field]: value };
+  purchasingSaveError = "";
+  render();
+}
+
+function updatePurchaseLineField(index, field, value) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  const lines = purchasingDraft.lines.map((line, lineIndex) => {
+    if (lineIndex !== index) return line;
+    if (field !== "variantId") return { ...line, [field]: value };
+    const selected = getPurchaseVariantOptions().find((option) => option.variantId === value);
+    return {
+      ...line,
+      variantId: value,
+      productId: selected?.productId || "",
+      productName: selected?.productName || "",
+      sku: selected?.sku || "",
+      variantLabel: selected?.variantLabel || "",
+      unitCost: line.unitCost && line.unitCost !== "0" ? line.unitCost : selected?.unitCost || "0",
+    };
+  });
+  purchasingDraft = { ...purchasingDraft, lines };
+  purchasingSaveError = "";
+  render();
+}
+
+function addPurchaseOrderLine() {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  purchasingDraft = { ...purchasingDraft, lines: [...purchasingDraft.lines, createEmptyPurchaseOrderLine()] };
+  render();
+}
+
+function removePurchaseOrderLine(index) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role) || purchasingDraft.lines.length <= 1) return;
+  purchasingDraft = { ...purchasingDraft, lines: purchasingDraft.lines.filter((_, lineIndex) => lineIndex !== index) };
+  render();
+}
+
+async function savePurchaseOrder(status) {
+  if (!purchasingDraft || purchasingSaveState === "saving") return;
+  if (!canWritePurchaseOrdersForRole(adminUser?.role)) {
+    purchasingSaveError = "Only Owner and Admin can create purchase orders.";
+    render();
+    return;
+  }
+
+  const draft = getPurchaseOrderDraftWithLineSnapshot(purchasingDraft);
+  const validationError = validatePurchaseOrderDraft(draft);
+  if (validationError) {
+    purchasingSaveError = validationError;
+    render();
+    return;
+  }
+
+  purchasingSaveState = "saving";
+  purchasingSaveError = "";
+  render();
+
+  try {
+    const savedOrder = status === "ORDERED"
+      ? await markPurchaseOrderOrdered(draft, adminAuthSession)
+      : await createPurchaseOrder(draft, "DRAFT", adminAuthSession);
+    if (savedOrder) {
+      purchaseOrders = [savedOrder, ...purchaseOrders.filter((order) => order.id !== savedOrder.id)];
+      selectedPurchaseOrderId = savedOrder.id;
+    }
+    purchasingDrawerOpen = false;
+    purchasingDraft = null;
+    purchasingSaveState = "success";
+  } catch (error) {
+    console.error("Unable to save purchase order.", error);
+    purchasingSaveState = "idle";
+    purchasingSaveError = error.message || "Purchase order save failed.";
+  }
+  render();
+}
+
+function openPurchaseOrderDetail(id) {
+  selectedPurchaseOrderId = id;
+  purchasingDrawerOpen = false;
+  purchasingSaveError = "";
+  purchaseOrderDetailTab = "items";
+  render();
+}
+
+function formatPurchaseMoney(value) {
+  const numericValue = Number(value || 0);
+  return `₱${numericValue.toLocaleString("en-PH", { maximumFractionDigits: 2, minimumFractionDigits: numericValue % 1 ? 2 : 0 })}`;
+}
+
+function formatPurchaseDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-PH", { month: "short", day: "2-digit", year: "numeric" });
+}
+
+function formatPurchaseStatus(status) {
+  return String(status || "DRAFT").replace(/_/g, " ");
+}
+
+function renderPurchaseOrderStatusPill(status) {
+  return `<span class="status-pill po-status ${statusToClass(formatPurchaseStatus(status))}">${escapeHtml(formatPurchaseStatus(status))}</span>`;
+}
+
+function renderPurchaseLineStatusPill(status) {
+  return `<span class="status-pill po-line-status">${escapeHtml(formatPurchaseStatus(status))}</span>`;
+}
+
 function renderSuppliersPage() {
   const visibleSuppliers = getVisibleSuppliers();
   const selectedSupplier = suppliers.find((item) => item.id === selectedSupplierId) ?? null;
@@ -5431,7 +5981,7 @@ function renderSuppliersPage() {
       </section>
 
       <section class="supplier-tabs" aria-label="Purchasing setup tabs">
-        <button type="button" disabled>Purchase Orders</button>
+        <button type="button" data-route-target="/catalog/purchasing">Purchase Orders</button>
         <button class="active" type="button">Suppliers</button>
         <button type="button" disabled>Receiving History</button>
       </section>
@@ -5607,10 +6157,10 @@ function renderSupplierDetail(supplier) {
       </section>
       <div class="supplier-rule-note drawer"><strong>BOUNDARY</strong><span>Supplier stores vendor identity and purchasing terms. Purchase Orders and confirmed receiving own transactions and stock effects.</span></div>
       <footer class="catalog-drawer-footer">
-        <span>CREATE PO is parked for Purchasing M2.</span>
+        <span>${canWritePurchaseOrdersForRole(adminUser?.role) ? "Create PO opens Purchasing M2 with this supplier preselected." : "Purchase Order writes are restricted to Owner and Admin roles."}</span>
         <div>
           <button class="note-button" data-supplier-edit="${escapeHtml(supplier.id)}" type="button" ${canWriteSuppliersForRole(adminUser?.role) ? "" : "disabled"}>Edit Supplier</button>
-          <button class="primary-button catalog-save-button" data-supplier-create-po-hook="${escapeHtml(supplier.id)}" type="button" disabled>Create PO</button>
+          <button class="primary-button catalog-save-button" data-supplier-create-po-hook="${escapeHtml(supplier.id)}" type="button" ${canWritePurchaseOrdersForRole(adminUser?.role) ? "" : "disabled"}>Create PO</button>
         </div>
       </footer>
     </div>
@@ -8854,7 +9404,7 @@ function renderSidebar(currentRoute) {
     { label: "Brands", path: "/catalog/brands", icon: "tag", activePaths: ["/catalog/brands"] },
     { label: "Categories", path: "/catalog/categories", icon: "layers", activePaths: ["/catalog/categories"] },
     { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"] },
-    { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", disabled: true },
+    { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", activePaths: ["/catalog/purchasing"] },
     { label: "Inventory", path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"] },
   ];
   const workflowNavItems = [
@@ -10369,6 +10919,112 @@ function bindEvents() {
   document.getElementById("supplier-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await saveSupplierDraft();
+  });
+
+  document.getElementById("purchase-order-search")?.addEventListener("input", (event) => {
+    purchasingQuery = event.target.value;
+    render();
+    focusFieldAtEnd("purchase-order-search");
+  });
+
+  document.getElementById("purchase-order-status-filter")?.addEventListener("change", (event) => {
+    purchasingStatusFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("purchase-order-supplier-filter")?.addEventListener("change", (event) => {
+    purchasingSupplierFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("purchase-order-expected-filter")?.addEventListener("change", (event) => {
+    purchasingExpectedFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-purchase-order-reset-filters]")?.addEventListener("click", () => {
+    purchasingQuery = "";
+    purchasingStatusFilter = "all";
+    purchasingSupplierFilter = "all";
+    purchasingExpectedFilter = "all";
+    render();
+  });
+
+  document.querySelector("[data-purchase-order-create]")?.addEventListener("click", () => openPurchaseOrderDrawer());
+
+  document.querySelectorAll("[data-purchase-order-row]").forEach((row) => {
+    const openRow = () => openPurchaseOrderDetail(row.dataset.purchaseOrderRow);
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea")) return;
+      openRow();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openRow();
+    });
+  });
+
+  document.querySelectorAll("[data-purchase-order-view]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openPurchaseOrderDetail(button.dataset.purchaseOrderView);
+    });
+  });
+
+  document.querySelector("[data-purchase-order-back]")?.addEventListener("click", () => {
+    selectedPurchaseOrderId = null;
+    purchaseOrderDetailTab = "items";
+    render();
+  });
+
+  document.querySelectorAll("[data-po-detail-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      purchaseOrderDetailTab = button.dataset.poDetailTab;
+      render();
+    });
+  });
+
+  document.querySelector("[data-purchase-order-supplier]")?.addEventListener("click", (event) => {
+    navigateTo("/catalog/suppliers");
+    openSupplierDrawer("view", event.currentTarget.dataset.purchaseOrderSupplier);
+  });
+
+  document.querySelectorAll("[data-purchase-order-close]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      closePurchaseOrderDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-po-field]").forEach((field) => {
+    const eventName = field.tagName === "SELECT" ? "change" : "input";
+    field.addEventListener(eventName, (event) => updatePurchaseDraftField(field.dataset.poField, event.target.value));
+  });
+
+  document.querySelectorAll("[data-po-line-field]").forEach((field) => {
+    const eventName = field.tagName === "SELECT" ? "change" : "input";
+    field.addEventListener(eventName, (event) => updatePurchaseLineField(Number(field.dataset.poLineIndex || 0), field.dataset.poLineField, event.target.value));
+  });
+
+  document.querySelector("[data-po-add-line]")?.addEventListener("click", addPurchaseOrderLine);
+
+  document.querySelectorAll("[data-po-remove-line]").forEach((button) => {
+    button.addEventListener("click", () => removePurchaseOrderLine(Number(button.dataset.poRemoveLine || 0)));
+  });
+
+  document.querySelectorAll("[data-po-save-status]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      await savePurchaseOrder(button.dataset.poSaveStatus);
+    });
+  });
+
+  document.querySelectorAll("[data-supplier-create-po-hook]").forEach((button) => {
+    button.addEventListener("click", () => {
+      navigateTo("/catalog/purchasing");
+      openPurchaseOrderDrawer(button.dataset.supplierCreatePoHook);
+    });
   });
 
   document.getElementById("catalog-brand-filter")?.addEventListener("change", (event) => {

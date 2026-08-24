@@ -23,7 +23,7 @@ const localDev = await readFile("scripts/local-dev.mjs", "utf8");
 assert.ok(main.includes('"/catalog/suppliers": "Catalog"'), "Suppliers route must be registered under Catalog");
 assert.ok(localDev.includes('"/catalog/suppliers"'), "Local dev server must serve direct Suppliers route");
 assert.ok(main.includes('path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"]'), "Suppliers nav must be enabled");
-assert.ok(main.includes('path: "/catalog/purchasing", icon: "shopping-cart", disabled: true'), "Purchasing must remain disabled");
+assert.ok(main.includes('path: "/catalog/purchasing", icon: "shopping-cart", activePaths: ["/catalog/purchasing"]'), "Purchasing nav must be enabled for Purchase Orders M2");
 
 assert.equal(SUPPLIERS_TABLE, "suppliers", "Supplier service must use canonical suppliers table");
 assert.ok(service.includes('export const SUPPLIERS_TABLE = "suppliers"'), "Supplier table constant missing");
@@ -61,7 +61,7 @@ for (const field of [
 assert.ok(main.includes("function renderSupplierDetail"), "Supplier Detail drawer renderer missing");
 assert.ok(main.includes("Edit Supplier"), "Edit Supplier action missing");
 assert.ok(main.includes("data-supplier-create-po-hook"), "CREATE PO M2 hook missing");
-assert.ok(main.includes("disabled>Create PO</button>"), "CREATE PO must remain disabled/parked");
+assert.ok(main.includes("canWritePurchaseOrdersForRole(adminUser?.role) ? \"\" : \"disabled\""), "CREATE PO must be enabled only for Owner/Admin");
 assert.ok(main.includes("Supplier records create no stock movement. Inventory changes only through confirmed receiving."), "Approved supplier boundary copy missing");
 
 for (const header of ["Supplier Ref", "Supplier", "Open POs", "Open PO Value", "Last Purchase", "Last Receipt", "Notes", "Status", "Action"]) {

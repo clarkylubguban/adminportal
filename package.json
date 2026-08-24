@@ -37,6 +37,7 @@
     "test:admin-inventory-p0": "node scripts/test-admin-inventory-p0.mjs",
     "test:admin-inventory-responsive": "node scripts/test-admin-inventory-responsive.mjs",
     "test:admin-suppliers-m1": "node scripts/test-admin-suppliers-m1.mjs",
+    "test:admin-purchasing-m2": "node scripts/test-admin-purchasing-m2.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
