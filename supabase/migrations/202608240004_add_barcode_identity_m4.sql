@@ -59,6 +59,7 @@ declare
   v_variant public.product_variants%rowtype;
   v_product public.products%rowtype;
   v_existing public.product_variant_barcodes%rowtype;
+  v_existing_found boolean := false;
   v_saved public.product_variant_barcodes%rowtype;
 begin
   if v_actor is null then
@@ -107,8 +108,9 @@ begin
   from public.product_variant_barcodes
   where code = v_code
   for update;
+  v_existing_found := found;
 
-  if found and v_existing.variant_id <> p_variant_id then
+  if v_existing_found and v_existing.variant_id <> p_variant_id then
     raise exception 'Barcode already assigned to another product variant.';
   end if;
 
@@ -121,7 +123,7 @@ begin
     and is_primary = true
     and id <> coalesce(v_existing.id, '00000000-0000-0000-0000-000000000000'::uuid);
 
-  if found then
+  if v_existing_found then
     update public.product_variant_barcodes
     set active = true,
         is_primary = true,

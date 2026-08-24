@@ -31,6 +31,12 @@ assert.ok(migration.includes("public.is_active_admin_user(array['owner','admin',
 assert.ok(migration.includes("upper(coalesce(v_product.product_type, '')) <> 'PHYSICAL'"), "physical product guard missing");
 assert.ok(migration.includes("btrim(coalesce(v_variant.sku, '')) = ''"), "SKU required guard missing");
 assert.ok(migration.includes("Barcode already assigned to another product variant."), "duplicate assignment block missing");
+assert.ok(migration.includes("v_existing_found boolean := false"), "assignment must declare explicit existing barcode boolean");
+assert.ok(migration.includes("v_existing_found := found"), "assignment must capture SELECT FOUND immediately");
+assert.ok(migration.includes("if v_existing_found and v_existing.variant_id <> p_variant_id then"), "duplicate block must use explicit SELECT result");
+assert.ok(migration.includes("if v_existing_found then"), "assignment branch must use explicit SELECT result");
+assert.ok(!migration.includes("if found and v_existing.variant_id <> p_variant_id then"), "assignment duplicate branch must not use generic FOUND");
+assert.ok(!migration.includes("if found then\n    update public.product_variant_barcodes"), "assignment update branch must not use generic FOUND after demotion");
 assert.ok(migration.includes("create or replace function trry_api.lookup_variant_by_barcode"), "exact lookup RPC missing");
 assert.ok(migration.includes("barcode.code = v_code"), "lookup must be exact");
 assert.equal(/receive_inventory|stock_movements|inventory_balances/i.test(migration), false, "barcode migration must not post inventory");
@@ -45,6 +51,22 @@ assert.equal(canPrintBarcodesForRole("staff"), true, "Staff can print existing l
 assert.ok(service.includes("LOOKUP_VARIANT_BY_BARCODE_RPC_SCHEMA = \"trry_api\""), "lookup service must call trry_api schema");
 assert.ok(service.includes("normalizeBarcode"), "service normalization missing");
 assert.ok(service.includes("return payload ? mapLookupPayload(payload) : null"), "lookup must return one variant or null");
+
+const assignmentStore = createAssignmentStore();
+let result = assignmentStore.assign("variant-a", "BARCODE-A");
+assert.equal(result.operation, "insert", "first assignment should insert");
+assert.equal(result.row.isPrimary, true, "first barcode should become primary");
+result = assignmentStore.assign("variant-a", "BARCODE-B");
+assert.equal(result.operation, "insert", "new barcode after existing primary must use insert path");
+assert.equal(assignmentStore.find("BARCODE-A").active, true, "old same-variant alias must remain active");
+assert.equal(assignmentStore.find("BARCODE-A").isPrimary, false, "old same-variant alias must be demoted");
+assert.equal(assignmentStore.find("BARCODE-B").isPrimary, true, "new barcode must become primary");
+result = assignmentStore.assign("variant-a", "BARCODE-A");
+assert.equal(result.operation, "update", "same-variant existing barcode should update existing row, not duplicate");
+assert.equal(assignmentStore.rows.filter((row) => row.code === "BARCODE-A").length, 1, "same barcode must not duplicate");
+assert.throws(() => assignmentStore.assign("variant-b", "BARCODE-B"), /Barcode already assigned to another product variant/, "cross-variant duplicate must be blocked");
+assert.equal(assignmentStore.generate("variant-a").code, "BARCODE-A", "generate should return existing primary without new sequence");
+assert.equal(assignmentStore.rows.length, 2, "generate on existing primary must not insert another barcode");
 
 assert.equal(normalizeBarcode(" trry 0001\n"), "TRRY0001", "barcode normalization failed");
 const observed = [];
@@ -110,4 +132,38 @@ process.stdout.write("PASS Admin Barcode M4 identity, scanner, label printing, M
 
 async function read(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+function createAssignmentStore() {
+  const rows = [];
+  let id = 0;
+  return {
+    rows,
+    find: (code) => rows.find((row) => row.code === code),
+    assign(variantId, code) {
+      const existing = rows.find((row) => row.code === code);
+      const existingFound = Boolean(existing);
+      if (existingFound && existing.variantId !== variantId) {
+        throw new Error("Barcode already assigned to another product variant.");
+      }
+      rows
+        .filter((row) => row.variantId === variantId && row.active && row.isPrimary && (!existingFound || row.id !== existing.id))
+        .forEach((row) => {
+          row.isPrimary = false;
+        });
+      if (existingFound) {
+        existing.active = true;
+        existing.isPrimary = true;
+        return { operation: "update", row: existing };
+      }
+      const row = { id: `barcode-${++id}`, variantId, code, active: true, isPrimary: true };
+      rows.push(row);
+      return { operation: "insert", row };
+    },
+    generate(variantId) {
+      const primary = rows.find((row) => row.variantId === variantId && row.active && row.isPrimary);
+      if (primary) return primary;
+      return this.assign(variantId, `TRRY${String(id + 1).padStart(10, "0")}`).row;
+    },
+  };
 }
