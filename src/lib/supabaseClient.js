@@ -109,6 +109,14 @@ async function writeSupabaseTableRequest(tableName, { method = "POST", params = 
 }
 
 export async function executeSupabaseRpcWithAuth(functionName, body = {}, accessToken) {
+  return executeSupabaseRpcRequest({ functionName, body, accessToken });
+}
+
+export async function executeSupabaseSchemaRpcWithAuth(schemaName, functionName, body = {}, accessToken) {
+  return executeSupabaseRpcRequest({ schemaName, functionName, body, accessToken });
+}
+
+async function executeSupabaseRpcRequest({ schemaName = "", functionName, body = {}, accessToken }) {
   if (!accessToken) {
     throw new Error("Supabase auth session is missing.");
   }
@@ -118,15 +126,21 @@ export async function executeSupabaseRpcWithAuth(functionName, body = {}, access
     throw new Error("Supabase env is missing or disabled.");
   }
 
+  const headers = {
+    apikey: config.anonKey,
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    Prefer: "return=representation",
+  };
+  if (schemaName) {
+    headers["Content-Profile"] = schemaName;
+    headers["Accept-Profile"] = schemaName;
+  }
+
   const response = await fetch(`${config.url}/rest/${SUPABASE_REST_VERSION}/rpc/${functionName}`, {
     method: "POST",
-    headers: {
-      apikey: config.anonKey,
-      Authorization: `Bearer ${accessToken}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-      Prefer: "return=representation",
-    },
+    headers,
     body: JSON.stringify(body),
   });
 

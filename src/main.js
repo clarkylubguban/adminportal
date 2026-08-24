@@ -61,7 +61,7 @@ import {
   updateAdminProduct,
 } from "./services/adminCatalog.js";
 import {
-  INVENTORY_RECEIVE_RPC,
+  INVENTORY_RECEIVE_RPC_LABEL,
   canReceiveInventoryForRole,
   createInventoryIdempotencyKey,
   getAdminInventory,
@@ -5477,7 +5477,7 @@ function renderInventoryMovementFilters() {
 }
 
 function renderInventoryNotice(canReceive) {
-  if (inventoryReceiveDrawer.status === "success") return `<div class="catalog-notice success">Receive Stock submitted through ${INVENTORY_RECEIVE_RPC}.</div>`;
+  if (inventoryReceiveDrawer.status === "success") return `<div class="catalog-notice success">Receive Stock submitted through ${INVENTORY_RECEIVE_RPC_LABEL}.</div>`;
   if (inventoryLoadState === "loading") return `<div class="catalog-notice">Loading canonical inventory...</div>`;
   if (inventoryLoadState === "error") return `<div class="catalog-notice error">Unable to load canonical inventory. ${escapeHtml(inventoryLoadError || "Check Supabase access and inventory RLS policies.")}</div>`;
   if (!canReceive) return `<div class="catalog-notice">Inventory receive is restricted to Owner and Admin roles. Current role is read-only.</div>`;

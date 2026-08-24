@@ -1,5 +1,5 @@
 import {
-  executeSupabaseRpcWithAuth,
+  executeSupabaseSchemaRpcWithAuth,
   getSupabaseConfig,
   isSupabaseReady,
   readSupabaseTableWithAuth,
@@ -8,7 +8,9 @@ import {
 export const INVENTORY_BALANCES_TABLE = "inventory_balances";
 export const INVENTORY_LOCATIONS_TABLE = "inventory_locations";
 export const STOCK_MOVEMENTS_TABLE = "stock_movements";
-export const INVENTORY_RECEIVE_RPC = "trry_api.receive_inventory";
+export const INVENTORY_RECEIVE_RPC_SCHEMA = "trry_api";
+export const INVENTORY_RECEIVE_RPC = "receive_inventory";
+export const INVENTORY_RECEIVE_RPC_LABEL = `${INVENTORY_RECEIVE_RPC_SCHEMA}.${INVENTORY_RECEIVE_RPC}`;
 export const PRODUCTION_SUPABASE_PROJECT_REF = "wcgtwfctpnwgpglywvvx";
 
 const MASTER_PRODUCTS_TABLE = "products";
@@ -90,7 +92,7 @@ export async function receiveAdminInventoryStock(payload, authSession) {
   assertProductionSupabaseProject();
   assertReceivePayload(payload);
 
-  return executeSupabaseRpcWithAuth(INVENTORY_RECEIVE_RPC, {
+  return executeSupabaseSchemaRpcWithAuth(INVENTORY_RECEIVE_RPC_SCHEMA, INVENTORY_RECEIVE_RPC, {
     p_location_id: payload.locationId,
     p_variant_id: payload.variantId,
     p_quantity: payload.quantity,

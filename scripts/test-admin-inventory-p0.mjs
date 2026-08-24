@@ -2,8 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
   INVENTORY_RECEIVE_RPC,
+  INVENTORY_RECEIVE_RPC_LABEL,
+  INVENTORY_RECEIVE_RPC_SCHEMA,
   canReceiveInventoryForRole,
   createInventoryIdempotencyKey,
+  receiveAdminInventoryStock,
 } from "../src/services/adminInventory.js";
 
 const main = await readFile("src/main.js", "utf8");
@@ -29,10 +32,59 @@ for (const table of ["products", "product_variants", "brands", "product_categori
   assert.ok(service.includes(`"${table}"`), `canonical table missing: ${table}`);
 }
 
-assert.equal(INVENTORY_RECEIVE_RPC, "trry_api.receive_inventory", "Receive RPC name changed");
+assert.equal(INVENTORY_RECEIVE_RPC_SCHEMA, "trry_api", "Receive RPC schema changed");
+assert.equal(INVENTORY_RECEIVE_RPC, "receive_inventory", "Receive RPC function changed");
+assert.equal(INVENTORY_RECEIVE_RPC_LABEL, "trry_api.receive_inventory", "Receive RPC label changed");
+assert.equal(service.includes('executeSupabaseRpcWithAuth(INVENTORY_RECEIVE_RPC'), false, "Receive Stock must not use dotted public RPC routing");
+assert.ok(service.includes("executeSupabaseSchemaRpcWithAuth(INVENTORY_RECEIVE_RPC_SCHEMA, INVENTORY_RECEIVE_RPC"), "Receive Stock must call the schema-aware RPC helper");
 for (const key of ["p_location_id", "p_variant_id", "p_quantity", "p_idempotency_key", "p_source_reference", "p_reason"]) {
   assert.ok(service.includes(key), `Receive RPC payload missing ${key}`);
 }
+
+const originalWindow = globalThis.window;
+const originalFetch = globalThis.fetch;
+let rpcRequest = null;
+globalThis.window = {
+  TRRY_ADMIN_ENV: {
+    VITE_USE_SUPABASE_DATA: "true",
+    VITE_SUPABASE_URL: "https://wcgtwfctpnwgpglywvvx.supabase.co",
+    VITE_SUPABASE_ANON_KEY: "test-anon-key",
+  },
+};
+globalThis.fetch = async (url, options) => {
+  rpcRequest = { url: String(url), options };
+  return {
+    ok: true,
+    status: 200,
+    text: async () => JSON.stringify([{ ok: true }]),
+  };
+};
+
+const receivePayload = {
+  locationId: "6e8b2ba6-f2e1-4630-a92f-392281c767a2",
+  variantId: "47dd86de-7576-4166-b918-c8bad144f6b9",
+  quantity: 2,
+  idempotencyKey: "admin-inventory-receive-schema-routing-test",
+  sourceReference: "M9G.3-QA",
+  reason: "schema routing test",
+};
+await receiveAdminInventoryStock(receivePayload, { access_token: "owner-admin-token" });
+globalThis.fetch = originalFetch;
+globalThis.window = originalWindow;
+
+assert.ok(rpcRequest, "Receive RPC request was not sent");
+assert.ok(rpcRequest.url.endsWith("/rest/v1/rpc/receive_inventory"), "Receive RPC must call the undotted function path");
+assert.equal(rpcRequest.url.includes("trry_api.receive_inventory"), false, "Receive RPC path must not use dotted schema/function name");
+assert.equal(rpcRequest.options.headers["Content-Profile"], "trry_api", "Receive RPC must route through trry_api schema");
+assert.equal(rpcRequest.options.headers["Accept-Profile"], "trry_api", "Receive RPC must accept trry_api schema responses");
+assert.deepEqual(JSON.parse(rpcRequest.options.body), {
+  p_location_id: receivePayload.locationId,
+  p_variant_id: receivePayload.variantId,
+  p_quantity: receivePayload.quantity,
+  p_idempotency_key: receivePayload.idempotencyKey,
+  p_source_reference: receivePayload.sourceReference,
+  p_reason: receivePayload.reason,
+}, "Receive RPC payload changed");
 
 assert.equal(canReceiveInventoryForRole("owner"), true, "Owner must receive");
 assert.equal(canReceiveInventoryForRole("admin"), true, "Admin must receive");
