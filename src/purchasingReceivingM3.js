@@ -9,6 +9,8 @@ import {
   receivePurchaseOrder,
   validatePurchaseOrderReceipt,
 } from "./services/adminPurchasing.js";
+import { lookupVariantByBarcode } from "./services/adminBarcodes.js";
+import { createBarcodeScanner, normalizeBarcode } from "./shared/barcodeScanner.js";
 
 const M3_FLASH_KEY = "trry-admin-m3-receive-success";
 const state = {
@@ -19,6 +21,7 @@ const state = {
   loadedAt: 0,
   loading: null,
   enhancing: false,
+  activeOverlay: null,
 };
 
 const root = document.querySelector("#root");
@@ -262,8 +265,15 @@ async function openReceiveDrawer(order, selectedLineId = "") {
         </section>
         <section class="m3-section">
           <div class="m3-section-heading">
-            <div><h3>Items Received Now</h3><p>Enter only the physical quantity you are confirming now.</p></div>
-            <span class="m3-manual-chip">MANUAL QUANTITY · M3</span>
+            <div><h3>Items Received Now</h3><p>Scan or enter only the physical quantity you are confirming now.</p></div>
+            <span class="m3-manual-chip">MANUAL QUANTITY · M3 / SCAN READY · M4</span>
+          </div>
+          <div class="m3-scanner-panel">
+            <label class="m3-field">
+              <span>Scan Barcode</span>
+              <input data-m3-scan-input data-barcode-scan-input placeholder="USB scanner ready" autocomplete="off">
+            </label>
+            <strong data-m3-scan-status>USB SCANNER READY</strong>
           </div>
           <div class="m3-receive-lines">
             ${availableLines.map((line) => renderReceiveLine(line, selectedLineId === line.id)).join("")}
@@ -277,11 +287,12 @@ async function openReceiveDrawer(order, selectedLineId = "") {
             <button class="primary-button" data-m3-confirm type="submit" disabled>Confirm Receive</button>
           </div>
         </footer>
-        <p class="m3-phase-note">Barcode / scanner stays outside M3.</p>
+        <p class="m3-phase-note">Barcode / scanner stays outside M3. Scanning changes only Received Now. Confirm Receive remains the stock authority.</p>
       </form>
     </aside>
   `;
   document.body.appendChild(overlay);
+  state.activeOverlay = overlay;
   overlay.querySelectorAll("[data-m3-close]").forEach((button) => button.addEventListener("click", closeM3Overlay));
   overlay.querySelectorAll("[data-m3-fill-remaining]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -294,6 +305,7 @@ async function openReceiveDrawer(order, selectedLineId = "") {
     input.addEventListener("input", () => updateReceiveSummary(overlay));
   });
   overlay.querySelector("[data-m3-receive-form]")?.addEventListener("submit", (event) => submitReceipt(event, freshOrder, overlay));
+  bindM4ReceiveScanner(overlay, freshOrder);
   updateReceiveSummary(overlay);
   overlay.querySelector("[data-m3-location]")?.focus();
 }
@@ -448,7 +460,73 @@ async function openReceivingHistory() {
 }
 
 function closeM3Overlay() {
-  document.querySelectorAll(".m3-overlay").forEach((node) => node.remove());
+  document.querySelectorAll(".m3-overlay").forEach((node) => {
+    node.dispatchEvent(new Event("m4:close"));
+    node.remove();
+  });
+  state.activeOverlay = null;
+}
+
+function bindM4ReceiveScanner(overlay, order) {
+  const input = overlay.querySelector("[data-m3-scan-input]");
+  const status = overlay.querySelector("[data-m3-scan-status]");
+  const onScan = (code) => handleM4ReceiveScan(order, overlay, code);
+  const scanner = createBarcodeScanner({
+    enabled: () => document.body.contains(overlay),
+    onScan,
+    minLength: 4,
+  });
+  input?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    if (event.defaultPrevented) return;
+    event.preventDefault();
+    const code = normalizeBarcode(input.value);
+    input.value = "";
+    if (code) onScan(code);
+  });
+  overlay.addEventListener("m4:close", () => scanner.detach(), { once: true });
+  if (status) status.textContent = "USB SCANNER READY";
+}
+
+async function handleM4ReceiveScan(order, overlay, code) {
+  const status = overlay.querySelector("[data-m3-scan-status]");
+  setScanStatus(status, "LOOKING UP BARCODE");
+  try {
+    const found = await lookupVariantByBarcode(code, state.session);
+    if (!found) {
+      setScanStatus(status, "BARCODE NOT FOUND");
+      return;
+    }
+    if (!found.productActive || !found.variantActive) {
+      setScanStatus(status, "ARCHIVED / INACTIVE");
+      return;
+    }
+    const line = (order.lines ?? []).find((item) => item.variantId === found.variantId);
+    if (!line) {
+      setScanStatus(status, "NOT ON THIS PO");
+      return;
+    }
+    const input = overlay.querySelector(`[data-m3-qty="${cssEscape(line.id)}"]`);
+    if (!input) {
+      setScanStatus(status, "NOT ON THIS PO");
+      return;
+    }
+    const current = Number(input.value || 0);
+    const remaining = Number(input.dataset.remaining || line.remainingQuantity || 0);
+    if (remaining <= 0 || current >= remaining) {
+      setScanStatus(status, "ALREADY FULLY RECEIVED");
+      return;
+    }
+    input.value = String(Math.min(current + 1, remaining));
+    updateReceiveSummary(overlay);
+    setScanStatus(status, `${found.productName} · ${found.variantLabel} · Scanned · Received Now ${input.value}`);
+  } catch (error) {
+    setScanStatus(status, error.message || "BARCODE LOOKUP FAILED");
+  }
+}
+
+function setScanStatus(node, message) {
+  if (node) node.textContent = message;
 }
 
 function bindOnce(node, key, eventName, handler) {
