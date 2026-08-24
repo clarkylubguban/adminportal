@@ -107,13 +107,36 @@ assert.ok(barcodeUi.includes("Barcode & Labels"), "Master Catalog action missing
 assert.ok(barcodeUi.includes("Generate Missing"), "Generate Missing action missing");
 assert.ok(barcodeUi.includes("Print Selected"), "Print Selected action missing");
 assert.ok(barcodeUi.includes("XPrinter XP-236B"), "XP-236B printer profile missing");
-assert.ok(barcodeUi.includes("40 x 30 mm"), "40x30 default preset missing");
-assert.ok(barcodeUi.includes("50 x 30 mm") && barcodeUi.includes("50 x 25 mm"), "additional label presets missing");
+assert.equal(barcodeUi.includes("assignVariantBarcode"), false, "Barcode UI must not call manual assignment RPC");
+assert.equal(barcodeUi.includes("data-m4-assign"), false, "visible Assign action must be removed");
+assert.equal(barcodeUi.includes("data-m4-assign-input"), false, "editable manual barcode input must be removed");
+assert.equal(barcodeUi.includes(">Assign<"), false, "Assign button copy must be absent");
+assert.ok(barcodeUi.includes("m4-barcode-code"), "barcode column should render read-only mono text");
+assert.ok(barcodeUi.includes("Not generated"), "missing barcode read-only state missing");
+assert.ok(barcodeUi.includes("Generate Barcode"), "Generate Barcode action missing for missing barcode rows");
+assert.ok(barcodeUi.includes("Reprint Label"), "Reprint Label action missing for assigned barcode rows");
+assert.ok(barcodeUi.includes("data-m4-reprint"), "Reprint Label hook missing");
+assert.ok(barcodeUi.includes("printRows([button.dataset.m4Reprint])"), "Reprint Label must print the existing row");
+assert.equal(barcodeUi.includes("Reprint ID"), false, "Reprint ID copy must be removed");
+assert.equal(barcodeUi.includes("data-m4-label-preset"), false, "preset selector must be absent");
+assert.equal(barcodeUi.includes("data-m4-price-toggle"), false, "price toggle must be absent");
+assert.equal(barcodeUi.includes("40 x 30 mm"), false, "40x30 preset must be absent from Barcode UI");
+assert.equal(barcodeUi.includes("50 x 30 mm"), false, "50x30 preset must be absent from Barcode UI");
+assert.equal(barcodeUi.includes("50 x 25 mm"), false, "50x25 preset must be absent from Barcode UI");
+assert.ok(barcodeUi.includes("@page { size: 30mm 20mm; margin: 0; }"), "30x20 @page rule missing");
+assert.ok(barcodeUi.includes("width: ${LABEL_SIZE.width}mm; height: ${LABEL_SIZE.height}mm"), "30x20 physical label dimensions missing");
 assert.ok(barcodeUi.includes("window.open") && barcodeUi.includes(".print()"), "browser print path missing");
 assert.ok(barcodeUi.includes("page-break-after: always"), "one print document must create physical labels");
-assert.ok(barcodeUi.includes("Generate, assign, scan, print, and reprint never change inventory."), "stock boundary copy missing");
+assert.ok(barcodeUi.includes("Generate, scan, print, and reprint never change inventory."), "stock boundary copy missing");
+assert.ok(barcodeUi.includes("[\"1\", \"2\", \"3\", \"6\", \"12\"]"), "copies selector must keep fixed copy options");
+assert.ok(barcodeUi.includes("Custom"), "custom copies option missing");
+assert.equal(/class="price"|m4-price-toggle|sellingPrice\)|formatMoney/i.test(barcodeUi), false, "price output/toggle should be removed from 30x20 label UI");
 assert.equal(/receiveAdminInventoryStock|receive_inventory|stock_movements|inventory_balances/i.test(barcodeUi), false, "label printing must not call inventory writes");
 assert.ok(barcodeCss.includes(".m4-inventory-highlight"), "inventory scan highlight CSS missing");
+
+const printed = simulateReprintLabels("TRRY0000000042", 6);
+assert.deepEqual(printed, Array(6).fill("TRRY0000000042"), "Reprint Label must reuse the existing barcode for every copy");
+assert.equal(printed.includes("TRRY0000000043"), false, "Reprint Label must not generate a new barcode");
 
 assert.ok(m3.includes("SCAN READY · M4"), "M3 receiving scanner UI missing");
 assert.ok(m3.includes("lookupVariantByBarcode"), "M3 scanner must lookup barcode");
@@ -166,4 +189,8 @@ function createAssignmentStore() {
       return this.assign(variantId, `TRRY${String(id + 1).padStart(10, "0")}`).row;
     },
   };
+}
+
+function simulateReprintLabels(barcode, copies) {
+  return Array.from({ length: copies }, () => barcode);
 }

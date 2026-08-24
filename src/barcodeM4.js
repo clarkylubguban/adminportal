@@ -1,7 +1,6 @@
 import { getCurrentAdminAuthSession } from "./lib/supabaseClient.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
-  assignVariantBarcode,
   canManageBarcodesForRole,
   canPrintBarcodesForRole,
   generateVariantBarcode,
@@ -12,11 +11,7 @@ import {
 import { createBarcodeScanner } from "./shared/barcodeScanner.js";
 import { renderCode128Svg } from "./shared/code128.js";
 
-const LABEL_PRESETS = {
-  "40x30": { label: "40 x 30 mm", width: 40, height: 30 },
-  "50x30": { label: "50 x 30 mm", width: 50, height: 30 },
-  "50x25": { label: "50 x 25 mm", width: 50, height: 25 },
-};
+const LABEL_SIZE = { width: 30, height: 20 };
 
 const state = {
   session: null,
@@ -26,8 +21,6 @@ const state = {
   error: "",
   selected: new Set(),
   labelQty: "1",
-  preset: "40x30",
-  price: true,
   feedback: "",
   savingVariantId: "",
   inventoryFeedback: "",
@@ -139,12 +132,10 @@ async function openBarcodeManager() {
       <div class="m4-barcode-toolbar">
         <label><span>Copies</span><select data-m4-label-qty>${["1", "2", "3", "6", "12"].map((qty) => `<option value="${qty}" ${state.labelQty === qty ? "selected" : ""}>${qty}</option>`).join("")}<option value="custom" ${!["1", "2", "3", "6", "12"].includes(state.labelQty) ? "selected" : ""}>Custom</option></select></label>
         <input data-m4-custom-qty type="number" min="1" step="1" value="${escapeHtml(state.labelQty)}" ${["1", "2", "3", "6", "12"].includes(state.labelQty) ? "hidden" : ""}>
-        <label><span>Preset</span><select data-m4-label-preset>${Object.entries(LABEL_PRESETS).map(([key, preset]) => `<option value="${key}" ${state.preset === key ? "selected" : ""}>${preset.label}</option>`).join("")}</select></label>
-        <label class="m4-price-toggle"><input data-m4-price-toggle type="checkbox" ${state.price ? "checked" : ""}> Price</label>
         <button class="note-button" data-m4-generate-missing type="button" ${canManage ? "" : "disabled"}>Generate Missing</button>
         <button class="primary-button" data-m4-print-selected type="button" ${canPrint ? "" : "disabled"}>Print Selected</button>
       </div>
-      <div class="m4-barcode-rule"><strong>STOCK RULE</strong><span>Generate, assign, scan, print, and reprint never change inventory.</span></div>
+      <div class="m4-barcode-rule"><strong>STOCK RULE</strong><span>Generate, scan, print, and reprint never change inventory.</span></div>
       <div class="m4-barcode-table-wrap">
         <table class="products-table catalog-table m4-barcode-table">
           <thead><tr><th></th><th>Product / Variant</th><th>SKU</th><th>Barcode</th><th>Status</th><th>Action</th></tr></thead>
@@ -165,12 +156,12 @@ function renderBarcodeRow(row, canManage, canPrint) {
       <td><input data-m4-select="${escapeHtml(row.variantId)}" type="checkbox" ${checked} ${row.barcode ? "" : "disabled"}></td>
       <td><div class="catalog-name-stack"><strong>${escapeHtml(row.productName)} · ${escapeHtml(row.variantLabel)}</strong><span>${escapeHtml(row.physical ? "Physical product" : "Not physical")}</span></div></td>
       <td><span class="mono-value">${escapeHtml(row.sku || "-")}</span></td>
-      <td><input data-m4-assign-input="${escapeHtml(row.variantId)}" value="${escapeHtml(row.barcode?.code || "")}" placeholder="TRRY0000000001" ${canManage && !disabled ? "" : "disabled"}></td>
+      <td><span class="mono-value m4-barcode-code">${escapeHtml(row.barcode?.code || "Not generated")}</span></td>
       <td><span class="status-pill m4-status-${statusClass(row.status)}">${escapeHtml(row.status)}</span></td>
       <td><div class="m4-row-actions">
-        <button class="note-button compact-action" data-m4-generate="${escapeHtml(row.variantId)}" type="button" ${canManage && !disabled ? "" : "disabled"}>${row.barcode ? "Reprint ID" : "Generate"}</button>
-        <button class="note-button compact-action" data-m4-assign="${escapeHtml(row.variantId)}" type="button" ${canManage && !disabled ? "" : "disabled"}>Assign</button>
-        <button class="primary-button compact-action" data-m4-print="${escapeHtml(row.variantId)}" type="button" ${canPrint && row.barcode ? "" : "disabled"}>Print</button>
+        ${row.barcode
+          ? `<button class="primary-button compact-action" data-m4-reprint="${escapeHtml(row.variantId)}" type="button" ${canPrint ? "" : "disabled"}>Reprint Label</button>`
+          : `<button class="note-button compact-action" data-m4-generate="${escapeHtml(row.variantId)}" type="button" ${canManage && !disabled ? "" : "disabled"}>Generate Barcode</button>`}
       </div></td>
     </tr>
   `;
@@ -185,23 +176,13 @@ function bindBarcodeManager(overlay) {
   overlay.querySelector("[data-m4-custom-qty]")?.addEventListener("input", (event) => {
     state.labelQty = String(Math.max(1, Number.parseInt(event.target.value || "1", 10) || 1));
   });
-  overlay.querySelector("[data-m4-label-preset]")?.addEventListener("change", (event) => {
-    state.preset = event.target.value;
-  });
-  overlay.querySelector("[data-m4-price-toggle]")?.addEventListener("change", (event) => {
-    state.price = event.target.checked;
-  });
   overlay.querySelectorAll("[data-m4-select]").forEach((input) => input.addEventListener("change", () => {
     if (input.checked) state.selected.add(input.dataset.m4Select);
     else state.selected.delete(input.dataset.m4Select);
   }));
   overlay.querySelectorAll("[data-m4-generate]").forEach((button) => button.addEventListener("click", () => withBarcodeSave(button.dataset.m4Generate, () => generateVariantBarcode(button.dataset.m4Generate, state.session))));
-  overlay.querySelectorAll("[data-m4-assign]").forEach((button) => button.addEventListener("click", () => {
-    const code = overlay.querySelector(`[data-m4-assign-input="${cssEscape(button.dataset.m4Assign)}"]`)?.value || "";
-    return withBarcodeSave(button.dataset.m4Assign, () => assignVariantBarcode(button.dataset.m4Assign, code, state.session));
-  }));
   overlay.querySelector("[data-m4-generate-missing]")?.addEventListener("click", generateMissingBarcodes);
-  overlay.querySelectorAll("[data-m4-print]").forEach((button) => button.addEventListener("click", () => printRows([button.dataset.m4Print])));
+  overlay.querySelectorAll("[data-m4-reprint]").forEach((button) => button.addEventListener("click", () => printRows([button.dataset.m4Reprint])));
   overlay.querySelector("[data-m4-print-selected]")?.addEventListener("click", () => printRows([...state.selected]));
 }
 
@@ -240,28 +221,25 @@ function printRows(variantIds) {
     openBarcodeManager();
     return;
   }
-  const preset = LABEL_PRESETS[state.preset] ?? LABEL_PRESETS["40x30"];
   const labels = rows.flatMap((row) => Array.from({ length: qty }, () => row));
   const printWindow = window.open("", "trry-m4-labels", "width=820,height=640");
   if (!printWindow) return;
   printWindow.document.write(`
     <!doctype html><html><head><title>TRRY Barcode Labels</title>
     <style>
-      @page { size: ${preset.width}mm ${preset.height}mm; margin: 0; }
+      @page { size: 30mm 20mm; margin: 0; }
       * { box-sizing: border-box; }
       body { margin: 0; color: #111; font-family: Arial, sans-serif; }
-      .label { width: ${preset.width}mm; height: ${preset.height}mm; page-break-after: always; padding: 2mm; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-      .label strong { font-size: 8px; line-height: 1.1; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .label span { font-size: 7px; line-height: 1.1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .label .barcode { margin: 1mm 0; width: 100%; }
-      .label svg { width: 100%; height: ${preset.height > 25 ? 14 : 11}mm; display: block; }
-      .label .price { font-weight: 700; font-size: 8px; }
+      .label { width: ${LABEL_SIZE.width}mm; height: ${LABEL_SIZE.height}mm; page-break-after: always; padding: 1mm; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+      .label strong { font-size: 6px; line-height: 1; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .label span { font-size: 5px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .label .barcode { margin: 0.7mm 0 0.3mm; width: 100%; }
+      .label svg { width: 100%; height: 9mm; display: block; }
     </style></head><body>${labels.map((row) => `
       <section class="label">
         <strong>${escapeHtml(row.productName)}</strong>
         <span>${escapeHtml(row.variantLabel)}</span>
-        <div class="barcode">${renderCode128Svg(row.barcode.code, { width: 320, height: 72, showText: true })}</div>
-        ${state.price ? `<span class="price">${formatMoney(row.sellingPrice)}</span>` : ""}
+        <div class="barcode">${renderCode128Svg(row.barcode.code, { width: 260, height: 54, showText: true })}</div>
       </section>
     `).join("")}</body></html>
   `);
@@ -315,16 +293,6 @@ function getBarcodeErrorMessage(error) {
 
 function statusClass(status) {
   return String(status || "").toLowerCase().replace(/[^a-z0-9]+/g, "-");
-}
-
-function formatMoney(value) {
-  const amount = Number(value || 0);
-  return `PHP ${amount.toLocaleString("en-PH", { maximumFractionDigits: 2, minimumFractionDigits: amount % 1 ? 2 : 0 })}`;
-}
-
-function cssEscape(value) {
-  if (globalThis.CSS?.escape) return CSS.escape(String(value || ""));
-  return String(value || "").replace(/(["\\])/g, "\\$1");
 }
 
 function escapeHtml(value) {

@@ -78,8 +78,7 @@
 }
 
 .m4-barcode-toolbar select,
-.m4-barcode-toolbar input,
-.m4-barcode-table input {
+.m4-barcode-toolbar input {
   min-height: 36px;
   border: 1px solid #c7c7c7;
   border-radius: 6px;
@@ -87,14 +86,9 @@
   background: #ffffff;
 }
 
-.m4-price-toggle {
-  display: inline-flex !important;
-  grid-template-columns: auto auto;
-  align-items: center;
-  min-height: 36px;
-  padding: 0 8px;
-  border: 1px solid #c7c7c7;
-  border-radius: 6px;
+.m4-barcode-code {
+  display: inline-block;
+  min-width: 132px;
 }
 
 .m4-barcode-rule,
