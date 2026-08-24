@@ -13851,13 +13851,14 @@ body,
 
 .catalog-sales-channel-field {
   display: grid;
-  gap: 8px;
+  gap: 6px;
+  width: 100%;
 }
 
 .catalog-sales-channel-options {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
   gap: 8px;
+  grid-template-columns: repeat(4, minmax(max-content, 1fr));
 }
 
 .catalog-sales-channel-chip {
@@ -13868,20 +13869,43 @@ body,
   color: var(--saas-ink);
   cursor: pointer;
   display: inline-flex;
-  font-size: 12px;
-  font-weight: 800;
-  gap: 7px;
-  min-height: 34px;
-  padding: 7px 10px;
+  font-family: var(--saas-font);
+  font-size: 13px;
+  font-weight: 600;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
+  white-space: nowrap;
 }
 
 .catalog-sales-channel-chip.selected {
-  background: var(--trry-lime-soft);
-  border-color: var(--trry-focus);
+  background: var(--saas-surface-soft);
+  border-color: var(--saas-border-strong);
 }
 
 .catalog-sales-channel-chip input {
+  accent-color: var(--saas-ink);
+  flex: 0 0 auto;
+  height: 14px;
   margin: 0;
+  width: 14px;
+}
+
+.catalog-sales-channel-chip:focus-within {
+  border-color: var(--saas-ink);
+  box-shadow: 0 0 0 3px var(--trry-focus-ring);
+}
+
+.catalog-sales-channel-chip:has(input:disabled) {
+  background: #f0f2f3;
+  color: #9aa3af;
+  cursor: not-allowed;
+}
+
+@media (max-width: 1199px) {
+  .catalog-sales-channel-options {
+    grid-template-columns: repeat(2, minmax(max-content, 1fr));
+  }
 }
 
 .catalog-attribute-chip,
