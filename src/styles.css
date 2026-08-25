@@ -30173,6 +30173,99 @@ pre,
   grid-template-columns: minmax(180px, 1fr) 120px 70px 96px 96px 74px;
 }
 
+.po-variant-picker {
+  position: relative;
+}
+
+.po-selected-variant {
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  display: grid;
+  gap: 2px 8px;
+  grid-template-columns: 1fr auto;
+  margin-bottom: 6px;
+  min-height: 48px;
+  padding: 8px 10px;
+}
+
+.po-selected-variant strong,
+.po-selected-variant span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.po-selected-variant strong {
+  color: #0e1116;
+  font-size: 12px;
+}
+
+.po-selected-variant span {
+  color: #697386;
+  font-size: 11px;
+}
+
+.po-selected-variant button {
+  grid-row: 1 / span 2;
+}
+
+.po-selected-empty {
+  color: #697386;
+  grid-column: 1 / span 2;
+}
+
+.po-variant-results {
+  background: #ffffff;
+  border: 1px solid #d8dee9;
+  border-radius: 8px;
+  box-shadow: 0 16px 34px rgba(14, 17, 22, 0.16);
+  display: none;
+  left: 0;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 4px;
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  z-index: 30;
+}
+
+.po-variant-results.open {
+  display: grid;
+  gap: 2px;
+}
+
+.po-variant-results button,
+.po-variant-empty {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: #0e1116;
+  display: grid;
+  gap: 2px;
+  padding: 8px;
+  text-align: left;
+  width: 100%;
+}
+
+.po-variant-results button.active,
+.po-variant-results button:hover {
+  background: #edf2ff;
+}
+
+.po-variant-results strong {
+  font-size: 12px;
+}
+
+.po-variant-results span,
+.po-variant-empty {
+  color: #697386;
+  font-size: 11px;
+}
+
 .po-line-total,
 .po-cost-summary > div {
   background: #ffffff;

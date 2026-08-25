@@ -544,6 +544,8 @@ let purchasingSaveState = "idle";
 let purchasingSaveError = "";
 let selectedPurchaseOrderId = null;
 let purchaseOrderDetailTab = "items";
+let purchaseOrderPickerState = { activeIndex: -1, queries: {}, highlighted: {} };
+let purchaseOrderOutsideClickBound = false;
 const CATALOG_PRODUCT_IMAGE_LIMIT = 6;
 let categoryStatusFilter = "active";
 let categoryProductTypeFilter = "all";
@@ -5559,9 +5561,9 @@ function renderPurchaseOrderDrawer(canWrite) {
         <section class="catalog-drawer-section">
           <h3>Cost Summary</h3>
           <div class="po-cost-summary">
-            <div><span>Items Subtotal</span><strong>${formatPurchaseMoney(totals.itemsSubtotal)}</strong></div>
+            <div><span>Items Subtotal</span><strong data-po-items-subtotal>${formatPurchaseMoney(totals.itemsSubtotal)}</strong></div>
             <label class="catalog-field"><span>Shipping / Freight</span><input data-po-field="freightCost" value="${escapeHtml(draft.freightCost)}" min="0" step="0.01" type="number" ${disabled ? "disabled" : ""}></label>
-            <div><span>PO Total</span><strong>${formatPurchaseMoney(totals.totalCost)}</strong></div>
+            <div><span>PO Total</span><strong data-po-total>${formatPurchaseMoney(totals.totalCost)}</strong></div>
           </div>
           <label class="catalog-field"><span>Internal Note</span><textarea data-po-field="internalNote" rows="3" placeholder="Optional buying notes" ${disabled ? "disabled" : ""}>${escapeHtml(draft.internalNote)}</textarea></label>
         </section>
@@ -5581,21 +5583,51 @@ function renderPurchaseOrderDrawer(canWrite) {
 
 function renderPurchaseOrderLineEditor(line, index, variantOptions, disabled) {
   const selected = variantOptions.find((option) => option.variantId === line.variantId);
-  const label = selected ? `${selected.productName} · ${selected.variantLabel}` : "Choose product / variant";
   const lineTotal = Number(line.orderedQuantity || 0) * Number(line.unitCost || 0);
+  const active = purchaseOrderPickerState.activeIndex === index;
+  const query = purchaseOrderPickerState.queries[index] ?? "";
+  const results = active ? getPurchaseVariantSearchResults(query, variantOptions) : [];
+  const listboxId = `po-variant-results-${index}`;
 
   return `
     <article class="po-line-card" data-po-line-card="${index}">
       <div class="po-line-grid">
-        <label class="catalog-field"><span>Product / Variant</span><select data-po-line-field="variantId" data-po-line-index="${index}" ${disabled ? "disabled" : ""} required><option value="">${escapeHtml(label)}</option>${variantOptions.map((option) => `<option value="${escapeHtml(option.variantId)}" ${line.variantId === option.variantId ? "selected" : ""}>${escapeHtml(`${option.productName} · ${option.variantLabel} · ${option.sku}`)}</option>`).join("")}</select></label>
-        <label class="catalog-field"><span>SKU</span><input class="locked-field" value="${escapeHtml(line.sku || selected?.sku || "")}" readonly></label>
+        <div class="catalog-field po-variant-picker" data-po-variant-picker="${index}">
+          <span>Product / Variant</span>
+          <div class="po-selected-variant" data-po-selected-variant="${index}">
+            ${renderPurchaseSelectedVariant(line, selected)}
+          </div>
+          <input data-po-line-search="${index}" role="combobox" aria-expanded="${active ? "true" : "false"}" aria-controls="${listboxId}" aria-autocomplete="list" value="${escapeHtml(query)}" placeholder="Search product, SKU, color, size..." ${disabled ? "disabled" : ""}>
+          <div class="po-variant-results ${active ? "open" : ""}" id="${listboxId}" role="listbox" data-po-variant-results="${index}">
+            ${active ? renderPurchaseVariantSearchResults(results, index, purchaseOrderPickerState.highlighted[index] ?? 0) : ""}
+          </div>
+        </div>
+        <label class="catalog-field"><span>SKU</span><input class="locked-field" data-po-line-sku="${index}" value="${escapeHtml(line.sku || selected?.sku || "")}" readonly></label>
         <label class="catalog-field"><span>Qty</span><input data-po-line-field="orderedQuantity" data-po-line-index="${index}" value="${escapeHtml(line.orderedQuantity)}" min="1" step="1" type="number" ${disabled ? "disabled" : ""}></label>
         <label class="catalog-field"><span>Unit Cost</span><input data-po-line-field="unitCost" data-po-line-index="${index}" value="${escapeHtml(line.unitCost)}" min="0" step="0.01" type="number" ${disabled ? "disabled" : ""}></label>
-        <div class="po-line-total"><span>Line Total</span><strong>${formatPurchaseMoney(lineTotal)}</strong></div>
+        <div class="po-line-total"><span>Line Total</span><strong data-po-line-total="${index}">${formatPurchaseMoney(lineTotal)}</strong></div>
         <button class="note-button compact-action" data-po-remove-line="${index}" type="button" ${disabled || purchasingDraft?.lines?.length <= 1 ? "disabled" : ""}>Remove</button>
       </div>
     </article>
   `;
+}
+
+function renderPurchaseSelectedVariant(line, selected) {
+  const productName = line.productName || selected?.productName || "";
+  const variantLabel = line.variantLabel || selected?.variantLabel || "";
+  const sku = line.sku || selected?.sku || "";
+  if (!productName && !sku) return `<span class="po-selected-empty">No product selected</span>`;
+  return `<strong>${escapeHtml(productName || "Selected product")}</strong><span>${escapeHtml([variantLabel, sku].filter(Boolean).join(" · "))}</span><button class="note-button compact-action" data-po-change-variant type="button">Change</button>`;
+}
+
+function renderPurchaseVariantSearchResults(results, index, highlightedIndex = 0) {
+  if (!results.length) return `<div class="po-variant-empty" role="option" aria-disabled="true">No matching product / variant</div>`;
+  return results.map((option, resultIndex) => `
+    <button class="${resultIndex === highlightedIndex ? "active" : ""}" type="button" role="option" aria-selected="${resultIndex === highlightedIndex ? "true" : "false"}" data-po-select-variant="${escapeHtml(option.variantId)}" data-po-select-index="${index}">
+      <strong>${escapeHtml(option.productName)}</strong>
+      <span>${escapeHtml([option.variantLabel, option.sku].filter(Boolean).join(" · "))}</span>
+    </button>
+  `).join("");
 }
 
 function renderPurchaseOrderNotice(canWrite) {
@@ -5810,10 +5842,20 @@ function getPurchaseVariantOptions() {
         variantId: variant.id,
         productName: product.name,
         sku: variant.sku || variant.globalSku || "",
+        color: variant.color || "",
+        size: variant.size || "",
         variantLabel: [variant.color, variant.size].filter(Boolean).join(" / ") || "Standard",
         unitCost: variant.unitCost || product.unitCost || "0",
       }));
   });
+}
+
+function getPurchaseVariantSearchResults(query = "", variantOptions = getPurchaseVariantOptions(), limit = 10) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const matches = normalizedQuery
+    ? variantOptions.filter((option) => [option.productName, option.sku, option.variantLabel, option.color, option.size].join(" ").toLowerCase().includes(normalizedQuery))
+    : variantOptions;
+  return matches.slice(0, limit);
 }
 
 function getPurchaseOrderDraftWithLineSnapshot(draft = {}) {
@@ -5842,6 +5884,7 @@ function openPurchaseOrderDrawer(supplierId = "") {
   purchasingSaveError = "";
   selectedPurchaseOrderId = null;
   purchaseOrderDetailTab = "items";
+  purchaseOrderPickerState = { activeIndex: -1, queries: {}, highlighted: {} };
   render();
 }
 
@@ -5849,17 +5892,27 @@ function closePurchaseOrderDrawer() {
   purchasingDrawerOpen = false;
   purchasingDraft = null;
   purchasingSaveError = "";
+  purchaseOrderPickerState = { activeIndex: -1, queries: {}, highlighted: {} };
   render();
 }
 
 function updatePurchaseDraftField(field, value) {
+  setPurchaseDraftField(field, value);
+  if (field === "freightCost") refreshPurchaseOrderTotalsInPlace();
+}
+
+function setPurchaseDraftField(field, value) {
   if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
   purchasingDraft = { ...purchasingDraft, [field]: value };
   purchasingSaveError = "";
-  render();
 }
 
 function updatePurchaseLineField(index, field, value) {
+  setPurchaseLineField(index, field, value);
+  refreshPurchaseOrderTotalsInPlace();
+}
+
+function setPurchaseLineField(index, field, value) {
   if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
   const lines = purchasingDraft.lines.map((line, lineIndex) => {
     if (lineIndex !== index) return line;
@@ -5877,18 +5930,111 @@ function updatePurchaseLineField(index, field, value) {
   });
   purchasingDraft = { ...purchasingDraft, lines };
   purchasingSaveError = "";
-  render();
+}
+
+function openPurchaseVariantPicker(index) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  purchaseOrderPickerState = {
+    ...purchaseOrderPickerState,
+    activeIndex: index,
+    queries: { ...purchaseOrderPickerState.queries, [index]: purchaseOrderPickerState.queries[index] ?? "" },
+    highlighted: { ...purchaseOrderPickerState.highlighted, [index]: purchaseOrderPickerState.highlighted[index] ?? 0 },
+  };
+  updatePurchaseVariantResultsInPlace(index);
+}
+
+function closePurchaseVariantPicker(index = purchaseOrderPickerState.activeIndex) {
+  if (index < 0) return;
+  purchaseOrderPickerState = { ...purchaseOrderPickerState, activeIndex: -1 };
+  updatePurchaseVariantResultsInPlace(index);
+}
+
+function updatePurchaseVariantQuery(index, value) {
+  purchaseOrderPickerState = {
+    ...purchaseOrderPickerState,
+    activeIndex: index,
+    queries: { ...purchaseOrderPickerState.queries, [index]: value },
+    highlighted: { ...purchaseOrderPickerState.highlighted, [index]: 0 },
+  };
+  updatePurchaseVariantResultsInPlace(index);
+}
+
+function movePurchaseVariantHighlight(index, direction) {
+  const results = getPurchaseVariantSearchResults(purchaseOrderPickerState.queries[index] ?? "");
+  if (!results.length) return;
+  const current = purchaseOrderPickerState.highlighted[index] ?? 0;
+  const next = (current + direction + results.length) % results.length;
+  purchaseOrderPickerState = { ...purchaseOrderPickerState, highlighted: { ...purchaseOrderPickerState.highlighted, [index]: next } };
+  updatePurchaseVariantResultsInPlace(index);
+}
+
+function selectHighlightedPurchaseVariant(index) {
+  const results = getPurchaseVariantSearchResults(purchaseOrderPickerState.queries[index] ?? "");
+  const selected = results[purchaseOrderPickerState.highlighted[index] ?? 0];
+  if (selected) selectPurchaseVariantInPlace(index, selected.variantId);
+}
+
+function updatePurchaseVariantResultsInPlace(index) {
+  const input = document.querySelector(`[data-po-line-search="${index}"]`);
+  const container = document.querySelector(`[data-po-variant-results="${index}"]`);
+  if (!input || !container) return;
+  const active = purchaseOrderPickerState.activeIndex === index;
+  const results = active ? getPurchaseVariantSearchResults(purchaseOrderPickerState.queries[index] ?? "") : [];
+  input.setAttribute("aria-expanded", active ? "true" : "false");
+  input.value = purchaseOrderPickerState.queries[index] ?? "";
+  container.classList.toggle("open", active);
+  container.innerHTML = active ? renderPurchaseVariantSearchResults(results, index, purchaseOrderPickerState.highlighted[index] ?? 0) : "";
+}
+
+function selectPurchaseVariantInPlace(index, variantId) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  const selected = getPurchaseVariantOptions().find((option) => option.variantId === variantId);
+  if (!selected) return;
+  const currentLine = purchasingDraft.lines[index] || createEmptyPurchaseOrderLine();
+  const shouldUseSelectedCost = !currentLine.unitCost || currentLine.unitCost === "0";
+  setPurchaseLineField(index, "variantId", variantId);
+  const line = purchasingDraft.lines[index];
+  if (shouldUseSelectedCost) {
+    const costInput = document.querySelector(`[data-po-line-field="unitCost"][data-po-line-index="${index}"]`);
+    if (costInput) costInput.value = line.unitCost;
+  }
+  const selectedContainer = document.querySelector(`[data-po-selected-variant="${index}"]`);
+  if (selectedContainer) selectedContainer.innerHTML = renderPurchaseSelectedVariant(line, selected);
+  const skuInput = document.querySelector(`[data-po-line-sku="${index}"]`);
+  if (skuInput) skuInput.value = line.sku || selected.sku || "";
+  purchaseOrderPickerState = {
+    ...purchaseOrderPickerState,
+    activeIndex: -1,
+    queries: { ...purchaseOrderPickerState.queries, [index]: "" },
+    highlighted: { ...purchaseOrderPickerState.highlighted, [index]: 0 },
+  };
+  updatePurchaseVariantResultsInPlace(index);
+  refreshPurchaseOrderTotalsInPlace();
+}
+
+function refreshPurchaseOrderTotalsInPlace() {
+  if (!purchasingDraft) return;
+  const totals = getPurchaseOrderTotals(getPurchaseOrderDraftWithLineSnapshot(purchasingDraft));
+  document.querySelector("[data-po-items-subtotal]")?.replaceChildren(document.createTextNode(formatPurchaseMoney(totals.itemsSubtotal)));
+  document.querySelector("[data-po-total]")?.replaceChildren(document.createTextNode(formatPurchaseMoney(totals.totalCost)));
+  (purchasingDraft.lines || []).forEach((line, index) => {
+    const lineTotal = Number(line.orderedQuantity || 0) * Number(line.unitCost || 0);
+    document.querySelector(`[data-po-line-total="${index}"]`)?.replaceChildren(document.createTextNode(formatPurchaseMoney(lineTotal)));
+  });
 }
 
 function addPurchaseOrderLine() {
   if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
   purchasingDraft = { ...purchasingDraft, lines: [...purchasingDraft.lines, createEmptyPurchaseOrderLine()] };
+  purchaseOrderPickerState = { ...purchaseOrderPickerState, activeIndex: purchasingDraft.lines.length - 1 };
   render();
+  window.requestAnimationFrame?.(() => document.querySelector(`[data-po-line-search="${purchasingDraft.lines.length - 1}"]`)?.focus());
 }
 
 function removePurchaseOrderLine(index) {
   if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role) || purchasingDraft.lines.length <= 1) return;
   purchasingDraft = { ...purchasingDraft, lines: purchasingDraft.lines.filter((_, lineIndex) => lineIndex !== index) };
+  purchaseOrderPickerState = { activeIndex: -1, queries: {}, highlighted: {} };
   render();
 }
 
@@ -11037,9 +11183,61 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-po-line-field]").forEach((field) => {
-    const eventName = field.tagName === "SELECT" ? "change" : "input";
-    field.addEventListener(eventName, (event) => updatePurchaseLineField(Number(field.dataset.poLineIndex || 0), field.dataset.poLineField, event.target.value));
+    field.addEventListener("input", (event) => updatePurchaseLineField(Number(field.dataset.poLineIndex || 0), field.dataset.poLineField, event.target.value));
   });
+
+  document.querySelectorAll("[data-po-variant-picker]").forEach((picker) => {
+    picker.addEventListener("click", (event) => {
+      const changeButton = event.target.closest("[data-po-change-variant]");
+      if (changeButton) {
+        event.preventDefault();
+        const index = Number(picker.dataset.poVariantPicker || 0);
+        openPurchaseVariantPicker(index);
+        document.querySelector(`[data-po-line-search="${index}"]`)?.focus();
+        return;
+      }
+      const optionButton = event.target.closest("[data-po-select-variant]");
+      if (optionButton) {
+        event.preventDefault();
+        selectPurchaseVariantInPlace(Number(optionButton.dataset.poSelectIndex || 0), optionButton.dataset.poSelectVariant);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-po-line-search]").forEach((field) => {
+    const index = Number(field.dataset.poLineSearch || 0);
+    field.addEventListener("focus", () => openPurchaseVariantPicker(index));
+    field.addEventListener("input", (event) => updatePurchaseVariantQuery(index, event.target.value));
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        openPurchaseVariantPicker(index);
+        movePurchaseVariantHighlight(index, 1);
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        openPurchaseVariantPicker(index);
+        movePurchaseVariantHighlight(index, -1);
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        selectHighlightedPurchaseVariant(index);
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closePurchaseVariantPicker(index);
+      }
+    });
+  });
+
+  if (!purchaseOrderOutsideClickBound) {
+    document.addEventListener("click", (event) => {
+      if (purchaseOrderPickerState.activeIndex >= 0 && !event.target.closest("[data-po-variant-picker]")) {
+        closePurchaseVariantPicker(purchaseOrderPickerState.activeIndex);
+      }
+    });
+    purchaseOrderOutsideClickBound = true;
+  }
 
   document.querySelector("[data-po-add-line]")?.addEventListener("click", addPurchaseOrderLine);
 

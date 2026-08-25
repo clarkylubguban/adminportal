@@ -23,6 +23,19 @@ const localDev = await readFile("scripts/local-dev.mjs", "utf8");
 const supplierTest = await readFile("scripts/test-admin-suppliers-m1.mjs", "utf8");
 const inventoryTest = await readFile("scripts/test-admin-inventory-p0.mjs", "utf8");
 
+function readFunctionSource(source, name) {
+  const start = source.indexOf(`function ${name}`);
+  assert.notEqual(start, -1, `${name} function missing`);
+  const bodyStart = source.indexOf("{", start);
+  let depth = 0;
+  for (let index = bodyStart; index < source.length; index += 1) {
+    if (source[index] === "{") depth += 1;
+    if (source[index] === "}") depth -= 1;
+    if (depth === 0) return source.slice(start, index + 1);
+  }
+  throw new Error(`${name} function did not close`);
+}
+
 assert.ok(main.includes('"/catalog/purchasing": "Catalog"'), "Purchasing route must be registered");
 assert.ok(localDev.includes('"/catalog/purchasing"'), "Local dev must serve direct Purchasing route");
 assert.ok(main.includes('path: "/catalog/purchasing", icon: "shopping-cart", activePaths: ["/catalog/purchasing"]'), "Purchasing nav must be enabled");
@@ -32,7 +45,12 @@ assert.ok(main.includes("renderPurchaseOrderDrawer"), "Create PO drawer missing"
 assert.ok(main.includes("renderPurchaseOrderDetailPage"), "PO detail renderer missing");
 assert.ok(main.includes("data-receiving-history-parked") && main.includes("data-receive-stock-parked"), "Receiving must be visibly parked");
 assert.ok(main.includes("Supplier Ref") && main.includes("Shipping / Freight") && main.includes("Internal Note"), "Drawer fields missing");
-assert.ok(main.includes("Product / Variant") && main.includes("data-po-line-field=\"variantId\""), "Product/variant picker missing");
+assert.ok(main.includes("Product / Variant") && main.includes("data-po-line-search") && main.includes('role="combobox"') && main.includes('role="listbox"'), "Product/variant search picker missing");
+assert.equal(main.includes("data-po-line-field=\"variantId\""), false, "Create PO item picker must not render the legacy full variant select");
+assert.ok(main.includes("getPurchaseVariantSearchResults") && main.includes("slice(0, limit)"), "Product/variant search must be capped in memory");
+assert.ok(main.includes("data-po-select-variant") && main.includes("data-po-selected-variant") && main.includes("data-po-change-variant"), "Product/variant selection controls missing");
+assert.ok(main.includes("ArrowDown") && main.includes("ArrowUp") && main.includes("Enter") && main.includes("Escape"), "Product/variant picker keyboard controls missing");
+assert.ok(main.includes("data-po-items-subtotal") && main.includes("data-po-total") && main.includes("data-po-line-total") && main.includes("refreshPurchaseOrderTotalsInPlace"), "PO totals must refresh in place");
 assert.ok(main.includes("Save Draft") && main.includes("Create & Mark Ordered"), "PO save actions missing");
 assert.ok(main.includes('savePurchaseOrder("DRAFT")') || main.includes('data-po-save-status="DRAFT"'), "Draft save action missing");
 assert.ok(main.includes("markPurchaseOrderOrdered"), "Ordered save action missing");
@@ -40,6 +58,20 @@ assert.ok(main.includes("data-purchase-order-mark-ordered") && main.includes("MA
 assert.ok(main.includes('order.status === "DRAFT"'), "Mark Ordered action must disappear outside Draft status");
 assert.ok(main.includes("canWritePurchaseOrdersForRole(adminUser?.role) && order.status === \"DRAFT\""), "Mark Ordered action must be Owner/Admin gated");
 assert.ok(main.includes("PO does not change On Hand. Inventory increases only when an authorized user confirms Receive Stock."), "PO inventory boundary copy missing");
+
+const updateDraftSource = readFunctionSource(main, "updatePurchaseDraftField");
+const updateLineSource = readFunctionSource(main, "updatePurchaseLineField");
+const searchSource = readFunctionSource(main, "getPurchaseVariantSearchResults");
+const selectSource = readFunctionSource(main, "selectPurchaseVariantInPlace");
+assert.equal(updateDraftSource.includes("render()"), false, "Create PO draft field edits must not full render per keystroke");
+assert.equal(updateLineSource.includes("render()"), false, "Create PO line field edits must not full render per keystroke");
+assert.equal(/fetch|supabase|executeSupabaseRpcWithAuth|getAdminCatalogProducts|rpc/i.test(searchSource), false, "Product search must stay in memory and avoid Supabase per keystroke");
+for (const token of ["productName", "sku", "variantLabel", "color", "size"]) {
+  assert.ok(searchSource.includes(token), `Product search must match ${token}`);
+}
+assert.ok(selectSource.includes('setPurchaseLineField(index, "variantId", variantId)'), "Variant selection must reuse one line instead of adding duplicates");
+assert.ok(selectSource.includes("shouldUseSelectedCost"), "Variant selection must preserve manually entered unit cost");
+assert.ok(selectSource.includes("data-po-line-sku") && selectSource.includes("refreshPurchaseOrderTotalsInPlace"), "Variant selection must update SKU and totals in place");
 
 for (const header of ["PO Number", "Supplier", "Ordered", "Expected", "Items", "Total Cost", "Receiving", "Status", "Action"]) {
   assert.ok(main.includes(`<th>${header}</th>`), `PO list table header missing: ${header}`);
