@@ -5,6 +5,7 @@ import { createBarcodeScanner, normalizeBarcode } from "../src/shared/barcodeSca
 import {
   canManageBarcodesForRole,
   canPrintBarcodesForRole,
+  isBarcodeEligibleProductVariant,
 } from "../src/services/adminBarcodes.js";
 
 const migration = await read("supabase/migrations/202608240004_add_barcode_identity_m4.sql");
@@ -48,9 +49,30 @@ assert.equal(canManageBarcodesForRole("owner"), true, "Owner can manage");
 assert.equal(canManageBarcodesForRole("admin"), true, "Admin can manage");
 assert.equal(canManageBarcodesForRole("staff"), false, "Staff cannot generate/reassign");
 assert.equal(canPrintBarcodesForRole("staff"), true, "Staff can print existing labels");
+assert.equal(isBarcodeEligibleProductVariant(
+  { productType: "PHYSICAL", status: "published", active: true, archivedAt: "" },
+  { sku: "BND-ACTIVE-S", active: true, archivedAt: "" }
+), true, "active physical product variant with SKU should be eligible for barcode generation");
+assert.equal(isBarcodeEligibleProductVariant(
+  { productType: "PHYSICAL", status: "archived", active: true, archivedAt: "2026-08-25T00:00:00.000Z" },
+  { sku: "BND-ARCHIVED-S", active: true, archivedAt: "" }
+), false, "archived Brand New Day parent variants must be hidden from barcode generation");
+assert.equal(isBarcodeEligibleProductVariant(
+  { productType: "PHYSICAL", status: "archived", active: false, archivedAt: "2026-08-25T00:00:00.000Z" },
+  { sku: "PREMIUM-COTTON-TEE-S", active: true, archivedAt: "" }
+), false, "archived Premium Cotton Tee variants must be hidden from barcode generation");
+assert.equal(isBarcodeEligibleProductVariant(
+  { productType: "SERVICE", status: "published", active: true, archivedAt: "" },
+  { sku: "SERVICE-SKU", active: true, archivedAt: "" }
+), false, "non-physical products must be hidden from barcode generation");
+assert.equal(isBarcodeEligibleProductVariant(
+  { productType: "PHYSICAL", status: "published", active: true, archivedAt: "" },
+  { sku: "   ", globalSku: "", active: true, archivedAt: "" }
+), false, "SKU-less variants must be hidden from barcode generation");
 assert.ok(service.includes("LOOKUP_VARIANT_BY_BARCODE_RPC_SCHEMA = \"trry_api\""), "lookup service must call trry_api schema");
 assert.ok(service.includes("normalizeBarcode"), "service normalization missing");
 assert.ok(service.includes("return payload ? mapLookupPayload(payload) : null"), "lookup must return one variant or null");
+assert.ok(service.includes(".filter((variant) => isBarcodeEligibleProductVariant(product, variant))"), "Barcode manager must filter inactive/archived/non-physical/SKU-less variants before rendering");
 
 const assignmentStore = createAssignmentStore();
 let result = assignmentStore.assign("variant-a", "BARCODE-A");

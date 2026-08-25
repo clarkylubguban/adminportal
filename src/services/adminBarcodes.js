@@ -25,6 +25,20 @@ export function canPrintBarcodesForRole(role) {
   return ["owner", "admin", "staff"].includes(String(role || "").trim().toLowerCase());
 }
 
+export function isBarcodeEligibleProductVariant(product = {}, variant = {}) {
+  const productType = String(product.productType || "").trim().toUpperCase();
+  const sku = String(variant.sku || variant.globalSku || "").trim();
+  return (
+    product.active !== false &&
+    String(product.status || "").trim().toLowerCase() !== "archived" &&
+    !product.archivedAt &&
+    productType === "PHYSICAL" &&
+    variant.active !== false &&
+    !variant.archivedAt &&
+    Boolean(sku)
+  );
+}
+
 export async function getVariantBarcodes(authSession) {
   if (!isSupabaseReady()) return { rows: [], status: "empty", source: "local", error: null };
   try {
@@ -51,11 +65,10 @@ export async function getBarcodeManagerRows(authSession) {
     if (!row.active) continue;
     codeCounts.set(row.code, (codeCounts.get(row.code) ?? 0) + 1);
   }
-  const rows = (catalogResult.products ?? []).flatMap((product) => (product.variants ?? []).map((variant) => {
+  const rows = (catalogResult.products ?? []).flatMap((product) => (product.variants ?? [])
+    .filter((variant) => isBarcodeEligibleProductVariant(product, variant))
+    .map((variant) => {
     const barcode = primaryByVariantId.get(variant.id) ?? null;
-    const physical = String(product.productType || "").toUpperCase() === "PHYSICAL";
-    const hasSku = Boolean(String(variant.sku || variant.globalSku || "").trim());
-    const active = product.status !== "archived" && variant.active !== false;
     return {
       id: variant.id,
       variantId: variant.id,
@@ -64,12 +77,12 @@ export async function getBarcodeManagerRows(authSession) {
       variantLabel: [variant.color, variant.size].filter(Boolean).join(" / ") || "Default",
       sku: variant.sku || variant.globalSku || "",
       sellingPrice: Number(variant.sellingPrice || product.startingPrice || 0),
-      productActive: product.status !== "archived",
-      variantActive: variant.active !== false,
-      physical,
-      hasSku,
+      productActive: true,
+      variantActive: true,
+      physical: true,
+      hasSku: true,
       barcode,
-      status: !active ? "ARCHIVED / INACTIVE" : barcode && codeCounts.get(barcode.code) > 1 ? "DUPLICATE ERROR" : barcode ? "READY" : physical && hasSku ? "MISSING" : "ARCHIVED / INACTIVE",
+      status: barcode && codeCounts.get(barcode.code) > 1 ? "DUPLICATE ERROR" : barcode ? "READY" : "MISSING",
     };
   }));
   return {
