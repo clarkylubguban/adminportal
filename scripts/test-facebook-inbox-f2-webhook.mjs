@@ -66,6 +66,31 @@ test("payload validation handles invalid JSON, payload limit, and non-page objec
   assert.equal(repo.messages.length, 0);
 });
 
+test("Supabase repository sends one normalized RPC batch per page webhook", async () => {
+  const calls = [];
+  const client = {
+    async rpc(name, args) {
+      calls.push({ name, args });
+      return { data: { ok: true }, error: null };
+    },
+  };
+
+  const result = await invokePost(pagePayload([
+    messageEvent("MID-RPC-1", "first"),
+    messageEvent("MID-RPC-2", "second"),
+  ]), { client });
+
+  assert.equal(result.status, 200);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0].name, "ingest_meta_messenger_events");
+  assert.equal(calls[0].args.object_type, "page");
+  assert.equal(calls[0].args.received_at, NOW.toISOString());
+  assert.equal(calls[0].args.events.length, 2);
+  assert.equal(calls[0].args.events[0].eventKey, "meta:message:MID-RPC-1");
+  assert.equal(calls[0].args.events[0].message.direction, "inbound");
+  assert.equal(calls[0].args.events[0].eventTime, "2026-08-25T10:38:41.000Z");
+});
+
 test("inbound messages normalize once, preserve Meta time, and set needs_reply", async () => {
   const repo = new MemoryMetaInboxRepository();
   const payload = pagePayload([messageEvent("MID-INBOUND", "hello", 1787654321000)]);
@@ -175,7 +200,8 @@ async function invoke(method, url, raw, headers = {}, options = {}) {
   await taskAutomationHandler(request, response, {
     appSecret: options.appSecret ?? SECRET,
     verifyToken: options.verifyToken ?? VERIFY_TOKEN,
-    repository: options.repo || new MemoryMetaInboxRepository(),
+    client: options.client,
+    repository: options.repo ?? (options.client ? undefined : new MemoryMetaInboxRepository()),
     receivedAt: NOW,
     limits: options.limits,
   });

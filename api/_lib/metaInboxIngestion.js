@@ -8,6 +8,15 @@ export async function ingestMetaWebhookPayload(payload, options) {
   const repository = options.repository;
   const receivedAt = options.receivedAt || new Date();
   const events = extractMessagingEvents(payload);
+  if (typeof repository.ingestNormalizedEvents === "function") {
+    const normalized = events.map((event) => serializeNormalizedEvent(normalizeMessagingEvent(event)));
+    await repository.ingestNormalizedEvents({
+      events: normalized,
+      receivedAt,
+      objectType: payload.object || "page",
+    });
+    return;
+  }
   for (const event of events) {
     await ingestMessagingEvent(event, { repository, receivedAt, objectType: payload.object });
   }
@@ -179,6 +188,15 @@ export function createSupabaseMetaInboxRepository(client) {
 class SupabaseMetaInboxRepository {
   constructor(client) {
     this.client = client;
+  }
+
+  async ingestNormalizedEvents(row) {
+    const { error } = await this.client.rpc("ingest_meta_messenger_events", {
+      events: row.events,
+      received_at: row.receivedAt.toISOString(),
+      object_type: row.objectType || "page",
+    });
+    if (error) throw error;
   }
 
   async recordWebhookEvent(row) {
@@ -367,6 +385,25 @@ class SupabaseMetaInboxRepository {
     if (error) throw error;
     return data;
   }
+}
+
+function serializeNormalizedEvent(event) {
+  return {
+    eventKey: event.eventKey,
+    pageId: event.pageId,
+    eventType: event.eventType,
+    raw: event.raw,
+    eventTime: event.eventTime.toISOString(),
+    shouldProcess: event.shouldProcess,
+    customerPsid: event.customerPsid,
+    customerDisplayName: event.customerDisplayName,
+    conversationState: event.conversationState,
+    message: event.message,
+    attachments: event.attachments,
+    delivery: event.delivery,
+    read: event.read,
+    referralAttribution: event.referralAttribution,
+  };
 }
 
 function classifyEvent(item, standby) {
