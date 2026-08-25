@@ -38,7 +38,17 @@ import {
   findNativeOrderBySourceInquiryId,
   hasNativeOrderAuthority,
 } from "./services/nativeOrderAuthority.js";
-import { getApprovedAdminUser } from "./services/adminUsers.js";
+import {
+  getAdminModuleAccess,
+  getApprovedAdminUser,
+} from "./services/adminUsers.js";
+import {
+  INBOX_WORK_VIEWS,
+  filterInboxConversations,
+  getAdminInboxConversationDetail,
+  getAdminInboxConversationRows,
+  getInboxReplyWindowState,
+} from "./services/adminInbox.js";
 import {
   getAdminAssignmentUsers,
   updateInquiryAssignment,
@@ -134,6 +144,7 @@ const lucideIcons = {
   "shield-check": '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.68-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"></path><path d="m9 12 2 2 4-4"></path>',
   menu: '<path d="M4 6h16"></path><path d="M4 12h16"></path><path d="M4 18h16"></path>',
   search: '<path d="m21 21-4.34-4.34"></path><circle cx="11" cy="11" r="8"></circle>',
+  "message-square": '<path d="M21 15a4 4 0 0 1-4 4H8l-5 3V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>',
   bell: '<path d="M10.268 21a2 2 0 0 0 3.464 0"></path><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"></path>',
   bot: '<path d="M12 8V4H8"></path><rect width="16" height="12" x="4" y="8" rx="2"></rect><path d="M2 14h2"></path><path d="M20 14h2"></path><path d="M15 13v2"></path><path d="M9 13v2"></path>',
   "chevron-down": '<path d="m6 9 6 6 6-6"></path>',
@@ -627,10 +638,20 @@ let calendarAssigneeFilter = "";
 let calendarSourceFilter = "";
 let calendarStatusFilter = "";
 let calendarSelectedTask = null;
+let inboxAccessState = "unknown";
+let inboxConversations = [];
+let inboxDetail = null;
+let inboxLoadState = "idle";
+let inboxLoadError = "";
+let inboxDetailState = "idle";
+let inboxDetailError = "";
+let inboxSelectedConversationId = "";
+let inboxActiveView = "needs_reply";
 
 const routes = {
   "/": "Overview",
   "/inquiries": "Inquiries",
+  "/inbox": "Inbox",
   "/orders": "Orders",
   "/production": "Production",
   "/catalog": "Catalog",
@@ -719,6 +740,7 @@ function render() {
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
+  if (currentRoute === "Inbox" && canViewInboxRoute() && inboxLoadState === "idle") window.setTimeout(loadInboxConversations, 0);
   if (getRoutePath() === "/catalog/inventory" && inventoryLoadState === "idle") window.setTimeout(loadInventory, 0);
   if (getRoutePath() === "/catalog/purchasing" && purchasingLoadState === "idle") window.setTimeout(loadPurchaseOrders, 0);
   if (getRoutePath() === "/catalog/suppliers" && supplierLoadState === "idle") window.setTimeout(loadSuppliers, 0);
@@ -737,8 +759,10 @@ function render() {
                 ? renderMvpInquiriesPage()
                 : currentRoute === "Production"
                   ? renderMvpProductionPage()
-                  : currentRoute === "My Tasks"
-                    ? renderMyTasksPage()
+                  : currentRoute === "Inbox"
+                    ? renderInboxPage()
+                    : currentRoute === "My Tasks"
+                      ? renderMyTasksPage()
                     : currentRoute === "Calendar"
                       ? renderCalendarPage()
                       : currentRoute === "Workboard"
@@ -1167,6 +1191,7 @@ async function approveAdminSession(session) {
     }
 
     adminUser = approvedUser;
+    inboxAccessState = await getInboxAccessState(session);
     adminAuthStatus = "approved";
     adminAuthMessage = "";
     startAdminDataLoading();
@@ -1217,6 +1242,7 @@ async function initializeAdminAuth() {
     if (isLocalTaskQaMode()) {
       adminAuthSession = createLocalTaskQaSession();
       adminUser = createLocalTaskQaUser();
+      inboxAccessState = "allowed";
       adminAuthStatus = "approved";
       adminAuthMessage = "";
       startAdminDataLoading();
@@ -1254,6 +1280,8 @@ async function logoutAdminUser() {
     await signOutAdmin();
     adminAuthSession = null;
     adminUser = null;
+    resetInboxState();
+    inboxAccessState = "unknown";
     adminLoginPassword = "";
     adminLoginPasswordVisible = false;
     adminAuthMessage = "";
@@ -1265,6 +1293,15 @@ async function logoutAdminUser() {
     adminAuthStatus = "approved";
   }
   render();
+}
+
+async function getInboxAccessState(session) {
+  try {
+    return (await getAdminModuleAccess(session, "inbox")) ? "allowed" : "denied";
+  } catch (error) {
+    console.warn("Unable to verify Inbox module access.", error);
+    return "denied";
+  }
 }
 function renderAdminShellMessage() {
   return adminShellMessage
@@ -1659,6 +1696,248 @@ function isFeatureFlagEnabled(...names) {
 
 function canViewMyTasksRoute() {
   return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_MY_TASKS", "VITE_MY_TASKS_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
+}
+
+function canViewInboxRoute() {
+  return adminAuthStatus === "approved" && inboxAccessState === "allowed";
+}
+
+function resetInboxState() {
+  inboxConversations = [];
+  inboxDetail = null;
+  inboxLoadState = "idle";
+  inboxLoadError = "";
+  inboxDetailState = "idle";
+  inboxDetailError = "";
+  inboxSelectedConversationId = "";
+  inboxActiveView = "needs_reply";
+}
+
+async function loadInboxConversations({ silent = false } = {}) {
+  if (!canViewInboxRoute() || !adminAuthSession?.access_token) return;
+  if (!silent) {
+    inboxLoadState = "loading";
+    inboxLoadError = "";
+    render();
+  }
+
+  try {
+    inboxConversations = await getAdminInboxConversationRows(adminAuthSession);
+    inboxLoadState = inboxConversations.length ? "ready" : "empty";
+    inboxLoadError = "";
+    const visible = getVisibleInboxConversations();
+    if (!visible.some((conversation) => conversation.id === inboxSelectedConversationId)) {
+      inboxSelectedConversationId = visible[0]?.id || "";
+      inboxDetail = null;
+      inboxDetailState = inboxSelectedConversationId ? "idle" : "empty";
+    }
+    if (inboxSelectedConversationId && inboxDetailState === "idle") {
+      window.setTimeout(() => loadInboxConversationDetail(inboxSelectedConversationId), 0);
+    }
+  } catch (error) {
+    console.error("Unable to load Inbox conversations.", error);
+    inboxConversations = [];
+    inboxLoadState = "error";
+    inboxLoadError = error.message || "Unable to load Inbox conversations.";
+    inboxSelectedConversationId = "";
+    inboxDetail = null;
+    inboxDetailState = "empty";
+  }
+  render();
+}
+
+async function loadInboxConversationDetail(conversationId) {
+  if (!canViewInboxRoute() || !adminAuthSession?.access_token || !conversationId) return;
+  inboxSelectedConversationId = conversationId;
+  inboxDetailState = "loading";
+  inboxDetailError = "";
+  render();
+
+  try {
+    inboxDetail = await getAdminInboxConversationDetail(adminAuthSession, conversationId);
+    inboxDetailState = "ready";
+  } catch (error) {
+    console.error("Unable to load Inbox conversation detail.", error);
+    inboxDetail = null;
+    inboxDetailState = "error";
+    inboxDetailError = error.message || "Unable to load Inbox conversation.";
+  }
+  render();
+}
+
+function getVisibleInboxConversations() {
+  return filterInboxConversations(inboxConversations, inboxActiveView, getCurrentAdminUserId());
+}
+
+function renderInboxPage() {
+  if (!canViewInboxRoute()) {
+    return `<main class="inbox-page"><section class="inbox-empty-state"><strong>Inbox access is restricted</strong><span>Your account does not have access to the Inbox module.</span></section></main>`;
+  }
+
+  const visible = getVisibleInboxConversations();
+  const selected = visible.find((conversation) => conversation.id === inboxSelectedConversationId)
+    || inboxConversations.find((conversation) => conversation.id === inboxSelectedConversationId)
+    || visible[0]
+    || null;
+  if (selected && selected.id !== inboxSelectedConversationId) {
+    inboxSelectedConversationId = selected.id;
+    inboxDetail = null;
+    inboxDetailState = "idle";
+    window.setTimeout(() => loadInboxConversationDetail(selected.id), 0);
+  }
+
+  return `
+    <main class="inbox-page">
+      <section class="inbox-toolbar">
+        <div><span>FACEBOOK INBOX</span><h1>Customer Inbox</h1></div>
+        <button class="inbox-refresh" data-inbox-refresh type="button">${renderIcon("circle-check", "ops-button-icon")}Refresh</button>
+      </section>
+      <section class="inbox-work-tabs" aria-label="Inbox work views">
+        ${INBOX_WORK_VIEWS.map((view) => renderInboxViewTab(view)).join("")}
+      </section>
+      ${renderInboxLoadNotice()}
+      <section class="inbox-grid">
+        <aside class="inbox-list" aria-label="Conversation list">
+          ${renderInboxConversationList(visible)}
+        </aside>
+        <section class="inbox-thread" aria-label="Conversation thread">
+          ${renderInboxThread(selected)}
+        </section>
+        <aside class="inbox-detail-panel" aria-label="Conversation details">
+          ${renderInboxDetailPanel(selected)}
+        </aside>
+      </section>
+    </main>
+  `;
+}
+
+function renderInboxViewTab(view) {
+  const count = filterInboxConversations(inboxConversations, view.key, getCurrentAdminUserId()).length;
+  return `<button class="${inboxActiveView === view.key ? "active" : ""}" data-inbox-view="${escapeHtml(view.key)}" type="button"><span>${escapeHtml(view.label)}</span><strong>${count}</strong></button>`;
+}
+
+function renderInboxLoadNotice() {
+  if (inboxLoadState === "loading") return `<div class="inbox-notice">Loading Inbox conversations...</div>`;
+  if (inboxLoadState === "error") return `<div class="inbox-notice error" role="alert">${escapeHtml(inboxLoadError)}</div>`;
+  return "";
+}
+
+function renderInboxConversationList(conversations) {
+  if (inboxLoadState === "loading") return `<div class="inbox-empty-column">Loading conversations...</div>`;
+  if (!conversations.length) return `<div class="inbox-empty-column">No conversations in this view.</div>`;
+  return conversations.map((conversation) => {
+    const selected = conversation.id === inboxSelectedConversationId;
+    const reply = getInboxReplyWindowState(conversation.replyWindowExpiresAt);
+    return `<button class="inbox-conversation-card ${selected ? "active" : ""} ${conversation.state}" data-inbox-conversation="${escapeHtml(conversation.id)}" type="button">
+      <span class="inbox-avatar" aria-hidden="true">${escapeHtml(getInboxInitial(conversation.customerLabel))}</span>
+      <span class="inbox-card-main">
+        <strong>${escapeHtml(conversation.customerLabel)}</strong>
+        <small>${escapeHtml(conversation.pageName || "Facebook Page")} / ${escapeHtml(conversation.customerSecondary)}</small>
+        <em>${escapeHtml(formatInboxState(conversation.state))} / ${escapeHtml(formatTaskDateTime(conversation.lastMessageAt || conversation.openedAt))}</em>
+      </span>
+      <span class="inbox-reply-pill ${reply.tone}">${escapeHtml(reply.label)}</span>
+    </button>`;
+  }).join("");
+}
+
+function renderInboxThread(conversation) {
+  if (!conversation) return `<div class="inbox-empty-state"><strong>No conversation selected</strong><span>Select a conversation from the queue.</span></div>`;
+  if (inboxDetailState === "loading" || inboxDetailState === "idle") {
+    return `<div class="inbox-empty-state"><strong>Loading thread</strong><span>${escapeHtml(conversation.customerLabel)}</span></div>`;
+  }
+  if (inboxDetailState === "error") {
+    return `<div class="inbox-empty-state error"><strong>Unable to open thread</strong><span>${escapeHtml(inboxDetailError)}</span></div>`;
+  }
+  const messages = inboxDetail?.messages || [];
+  return `
+    <header class="inbox-thread-header">
+      <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>${escapeHtml(conversation.pageName || "Facebook Page")}</span></div>
+      <span>${escapeHtml(formatInboxState(conversation.state))}</span>
+    </header>
+    <div class="inbox-message-list">
+      ${messages.length ? messages.map(renderInboxMessage).join("") : `<div class="inbox-empty-column">No messages captured yet.</div>`}
+    </div>
+    <footer class="inbox-reply-disabled">
+      <textarea disabled rows="2" title="Available in a later Inbox phase" placeholder="Available in a later Inbox phase"></textarea>
+      <button disabled title="Available in a later Inbox phase" type="button">Send</button>
+    </footer>
+  `;
+}
+
+function renderInboxMessage(message) {
+  const direction = message.direction === "outbound" ? "outbound" : message.direction === "inbound" ? "inbound" : "system";
+  const attachments = message.attachments?.length
+    ? `<div class="inbox-attachments">${message.attachments.map(renderInboxAttachment).join("")}</div>`
+    : "";
+  const status = direction === "outbound" && message.statusLabel ? `<small>${escapeHtml(message.statusLabel)}</small>` : "";
+  return `<article class="inbox-message ${direction}">
+    <p>${escapeHtml(message.body || getInboxMessageFallback(message.messageType))}</p>
+    ${attachments}
+    <footer><span>${escapeHtml(formatTaskDateTime(message.sentAt))}</span>${status}</footer>
+  </article>`;
+}
+
+function renderInboxAttachment(attachment) {
+  const name = attachment.filename || attachment.mimeType || attachment.type || "Attachment";
+  const stored = attachment.storagePath ? "stored privately" : attachment.ingestionStatus || "pending";
+  return `<span class="inbox-attachment">${renderIcon("file-text", "ops-button-icon")}${escapeHtml(name)} / ${escapeHtml(stored)}</span>`;
+}
+
+function renderInboxDetailPanel(conversation) {
+  if (!conversation) return `<div class="inbox-empty-column">No details to show.</div>`;
+  const reply = getInboxReplyWindowState(conversation.replyWindowExpiresAt);
+  const link = inboxDetail?.inquiryLink || (conversation.inquiryId ? { inquiryId: conversation.inquiryId, convertedAt: conversation.convertedAt } : null);
+  return `
+    <section class="inbox-detail-card">
+      <h2>Customer</h2>
+      ${renderInboxFact("Name", conversation.customerLabel)}
+      ${renderInboxFact("Phone", conversation.primaryPhone || "Not yet captured")}
+      ${renderInboxFact("Email", conversation.primaryEmail || "Not yet captured")}
+      ${renderInboxFact("Company", conversation.companyName || "Not yet captured")}
+    </section>
+    <section class="inbox-detail-card">
+      <h2>Conversation</h2>
+      ${renderInboxFact("Owner", conversation.ownerUserId ? getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }) : "Unassigned")}
+      ${renderInboxFact("Opened", formatTaskDateTime(conversation.openedAt))}
+      ${renderInboxFact("Last inbound", formatTaskDateTime(conversation.lastInboundAt))}
+      ${renderInboxFact("Last outbound", formatTaskDateTime(conversation.lastOutboundAt))}
+      ${renderInboxFact("Reply window", reply.label)}
+    </section>
+    <section class="inbox-detail-card">
+      <h2>Attribution</h2>
+      ${renderInboxFact("Entry", conversation.entrySource || "Not yet captured")}
+      ${renderInboxFact("Referral", conversation.referralRef || "Not yet captured")}
+      ${renderInboxFact("Campaign", conversation.campaignName || conversation.campaignId || "Not yet captured")}
+      ${renderInboxFact("Ad", conversation.adName || conversation.adId || "Not yet captured")}
+    </section>
+    <section class="inbox-detail-card">
+      <h2>Inquiry Link</h2>
+      ${link ? renderInboxFact("Inquiry", link.inquiryId) + renderInboxFact("Converted", formatTaskDateTime(link.convertedAt)) : renderInboxFact("Status", "Not yet converted")}
+      <button disabled title="Available in a later Inbox phase" type="button">Convert to Inquiry</button>
+    </section>
+    <section class="inbox-detail-actions">
+      <button disabled title="Available in a later Inbox phase" type="button">Assign</button>
+      <button disabled title="Available in a later Inbox phase" type="button">Add Note</button>
+      <button disabled title="Available in a later Inbox phase" type="button">Follow-up</button>
+      <button disabled title="Available in a later Inbox phase" type="button">Close</button>
+    </section>
+  `;
+}
+
+function renderInboxFact(label, value) {
+  return `<div class="inbox-fact"><span>${escapeHtml(label)}</span><strong title="${escapeHtml(value || "-")}">${escapeHtml(value || "-")}</strong></div>`;
+}
+
+function formatInboxState(state) {
+  return String(state || "needs_reply").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function getInboxInitial(label) {
+  return String(label || "Facebook customer").trim().charAt(0).toUpperCase() || "F";
+}
+
+function getInboxMessageFallback(messageType) {
+  return messageType && messageType !== "text" ? `${formatInboxState(messageType)} message` : "Message body not captured.";
 }
 
 async function loadMyTasks({ silent = false } = {}) {
@@ -9570,6 +9849,7 @@ function renderSidebar(currentRoute) {
   const routePath = getRoutePath();
   const topNavItems = [
     { label: "Overview", path: "/overview" },
+    ...(canViewInboxRoute() ? [{ label: "Inbox", path: "/inbox", icon: "message-square" }] : []),
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
@@ -9697,6 +9977,7 @@ function renderMobileTopBar() {
 function renderMobileBottomNav(currentRoute) {
   const navItems = [
     { label: "Overview", path: "/overview" },
+    ...(canViewInboxRoute() ? [{ label: "Inbox", path: "/inbox", icon: "message-square" }] : []),
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
@@ -10781,6 +11062,22 @@ function bindEvents() {
       render();
     });
   });
+
+  document.querySelectorAll("[data-inbox-view]").forEach((button) => {
+    button.addEventListener("click", () => {
+      inboxActiveView = button.dataset.inboxView || "needs_reply";
+      inboxSelectedConversationId = "";
+      inboxDetail = null;
+      inboxDetailState = "empty";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-inbox-conversation]").forEach((button) => {
+    button.addEventListener("click", () => loadInboxConversationDetail(button.dataset.inboxConversation));
+  });
+
+  document.querySelector("[data-inbox-refresh]")?.addEventListener("click", () => loadInboxConversations());
 
   document.querySelectorAll("[data-copy-value]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -12330,6 +12627,7 @@ function getCurrentRoute() {
 function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path === legacyOrderDashboardPath) return activeOrdersPath;
+  if (path === "/inbox" && !canViewInboxRoute()) return defaultRoutePath;
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (path === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
@@ -12348,6 +12646,7 @@ function normalizeRoutePath(path) {
   if (["/forgot-password", "/reset-password", "/set-password", "/login"].includes(routePath)) {
     return `${routePath}${url.search}${url.hash}`;
   }
+  if (routePath === "/inbox" && !canViewInboxRoute()) return defaultRoutePath;
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (routePath === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;

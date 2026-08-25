@@ -1,4 +1,7 @@
-import { readSupabaseTableWithAuth } from "../lib/supabaseClient.js";
+import {
+  executeSupabaseRpcWithAuth,
+  readSupabaseTableWithAuth,
+} from "../lib/supabaseClient.js";
 
 // Database schema, RLS policies, and initial admin setup
 // must be managed directly in Supabase.
@@ -37,6 +40,29 @@ export async function getApprovedAdminUser(session) {
     displayName: adminUser.display_name || "",
     role,
   };
+}
+
+export async function getAdminModuleAccess(session, moduleKey) {
+  if (!session?.access_token) return false;
+  const normalizedModule = String(moduleKey || "").trim();
+  if (!normalizedModule) return false;
+
+  const result = await executeSupabaseRpcWithAuth(
+    "has_admin_module_access",
+    { module_key: normalizedModule },
+    session.access_token
+  );
+
+  if (typeof result === "boolean") return result;
+  if (Array.isArray(result)) {
+    const first = result[0];
+    if (typeof first === "boolean") return first;
+    if (first && typeof first === "object") {
+      const value = first.has_admin_module_access ?? first.allowed ?? Object.values(first)[0];
+      return value === true || value === "true";
+    }
+  }
+  return result === true || result === "true";
 }
 
 async function readAdminUserRows(session) {
