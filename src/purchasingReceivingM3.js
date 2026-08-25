@@ -13,6 +13,7 @@ import { lookupVariantByBarcode } from "./services/adminBarcodes.js";
 import { createBarcodeScanner, normalizeBarcode } from "./shared/barcodeScanner.js";
 
 const M3_FLASH_KEY = "trry-admin-m3-receive-success";
+const M3_DATA_TTL_MS = 30000;
 const state = {
   session: null,
   user: null,
@@ -21,25 +22,33 @@ const state = {
   loadedAt: 0,
   loading: null,
   enhancing: false,
+  enhanceScheduled: false,
+  pendingForce: false,
   activeOverlay: null,
 };
 
 const root = document.querySelector("#root");
 if (root) {
   const observer = new MutationObserver(() => scheduleEnhance());
-  observer.observe(root, { childList: true, subtree: true });
+  observer.observe(root, { childList: true, subtree: false });
 }
 window.addEventListener("popstate", () => scheduleEnhance(true));
 window.addEventListener("focus", () => scheduleEnhance(true));
 scheduleEnhance();
 
 function scheduleEnhance(force = false) {
-  if (state.enhancing) return;
-  queueMicrotask(async () => {
+  state.pendingForce = state.pendingForce || force;
+  if (state.enhanceScheduled) return;
+  state.enhanceScheduled = true;
+  const frame = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 16);
+  frame(async () => {
+    const runForce = state.pendingForce;
+    state.enhanceScheduled = false;
+    state.pendingForce = false;
     if (state.enhancing) return;
     state.enhancing = true;
     try {
-      await enhanceM3(force);
+      await enhanceM3(runForce);
     } catch (error) {
       console.warn("M3 purchasing enhancement unavailable.", error);
     } finally {
@@ -64,7 +73,7 @@ async function enhanceM3(force = false) {
 }
 
 async function ensureM3Data(force = false) {
-  const fresh = Date.now() - state.loadedAt < 5000;
+  const fresh = Date.now() - state.loadedAt < M3_DATA_TTL_MS;
   if (!force && fresh && state.orders.length >= 0) return;
   if (state.loading) return state.loading;
 
@@ -100,7 +109,7 @@ async function ensureM3Data(force = false) {
 function patchPurchasingCopy() {
   const subtitle = document.querySelector(".purchasing-page .purchasing-heading .subtitle");
   if (subtitle?.textContent?.includes("Receiving remains parked")) {
-    subtitle.textContent = "Create supplier purchase orders, receive delivered quantities, and post confirmed stock into the inventory ledger.";
+    setText(subtitle, "Create supplier purchase orders, receive delivered quantities, and post confirmed stock into the inventory ledger.");
   }
 
   const statusFilter = document.querySelector("#purchase-order-status-filter");
@@ -113,7 +122,7 @@ function patchPurchasingCopy() {
   }
 
   document.querySelectorAll(".po-detail-page .purchasing-summary-grid small").forEach((helper) => {
-    if (helper.textContent?.trim() === "M2 order lifecycle") helper.textContent = "Receiving lifecycle";
+    if (helper.textContent?.trim() === "M2 order lifecycle") setText(helper, "Receiving lifecycle");
   });
   patchPurchaseOrderSummary();
 }
@@ -140,8 +149,8 @@ function patchSummaryCard(grid, label, value, helper) {
   if (!card) return;
   const valueNode = card.querySelector("strong");
   const helperNode = card.querySelector("small");
-  if (valueNode) valueNode.textContent = value;
-  if (helperNode) helperNode.textContent = helper;
+  setText(valueNode, value);
+  setText(helperNode, helper);
 }
 
 function patchPurchaseOrderList() {
@@ -150,9 +159,9 @@ function patchPurchaseOrderList() {
     if (!order) return;
     const receivingCell = row.querySelector('td[data-mobile-label="Receiving"]');
     const status = String(order.status || "").toUpperCase();
-    if (receivingCell) receivingCell.textContent = ["DRAFT", "CANCELLED"].includes(status) ? "—" : `${order.receivedUnits} / ${order.orderedUnits} pcs`;
+    setText(receivingCell, ["DRAFT", "CANCELLED"].includes(status) ? "—" : `${order.receivedUnits} / ${order.orderedUnits} pcs`);
     const statusPill = row.querySelector('td[data-mobile-label="Status"] .status-pill');
-    if (statusPill) statusPill.textContent = formatStatus(order.status);
+    setText(statusPill, formatStatus(order.status));
   });
 }
 
@@ -167,10 +176,10 @@ function patchPurchaseOrderDetail() {
 
   const headingButton = detail.querySelector(".purchasing-heading-actions [data-receive-stock-parked]");
   if (headingButton) {
-    headingButton.disabled = !canReceive || order.remainingUnits <= 0;
-    headingButton.textContent = order.remainingUnits <= 0 ? "Received" : "Receive Stock";
-    headingButton.removeAttribute("data-receive-stock-parked");
-    headingButton.dataset.m3ReceiveOrder = order.id;
+    setDisabled(headingButton, !canReceive || order.remainingUnits <= 0);
+    setText(headingButton, order.remainingUnits <= 0 ? "Received" : "Receive Stock");
+    removeAttributeIfPresent(headingButton, "data-receive-stock-parked");
+    setDatasetValue(headingButton, "m3ReceiveOrder", order.id);
     bindOnce(headingButton, "m3ReceiveBound", "click", () => openReceiveDrawer(order));
   }
 
@@ -183,15 +192,15 @@ function patchPurchaseOrderDetail() {
     const lastReceiptCell = row.querySelector('td[data-mobile-label="Last Receipt"]');
     const statusPill = row.querySelector('td[data-mobile-label="Status"] .status-pill');
     const action = row.querySelector("button[data-receive-stock-parked], button[data-m3-receive-line]");
-    if (receivedCell) receivedCell.textContent = String(line.receivedQuantity);
-    if (remainingCell) remainingCell.textContent = String(line.remainingQuantity);
-    if (lastReceiptCell) lastReceiptCell.textContent = formatDateTime(line.lastReceivedAt);
-    if (statusPill) statusPill.textContent = formatStatus(line.status);
+    setText(receivedCell, String(line.receivedQuantity));
+    setText(remainingCell, String(line.remainingQuantity));
+    setText(lastReceiptCell, formatDateTime(line.lastReceivedAt));
+    setText(statusPill, formatStatus(line.status));
     if (action) {
-      action.disabled = !canReceive || line.remainingQuantity <= 0;
-      action.textContent = line.remainingQuantity <= 0 ? "Received" : "Receive";
-      action.removeAttribute("data-receive-stock-parked");
-      action.dataset.m3ReceiveLine = line.id;
+      setDisabled(action, !canReceive || line.remainingQuantity <= 0);
+      setText(action, line.remainingQuantity <= 0 ? "Received" : "Receive");
+      removeAttributeIfPresent(action, "data-receive-stock-parked");
+      setDatasetValue(action, "m3ReceiveLine", line.id);
       bindOnce(action, "m3ReceiveBound", "click", () => openReceiveDrawer(order, line.id));
     }
   });
@@ -199,9 +208,9 @@ function patchPurchaseOrderDetail() {
 
 function enableReceivingHistoryButtons() {
   document.querySelectorAll("[data-receiving-history-parked], [data-m3-receiving-history]").forEach((button) => {
-    button.disabled = false;
-    button.removeAttribute("data-receiving-history-parked");
-    button.dataset.m3ReceivingHistory = "true";
+    setDisabled(button, false);
+    removeAttributeIfPresent(button, "data-receiving-history-parked");
+    setDatasetValue(button, "m3ReceivingHistory", "true");
     bindOnce(button, "m3HistoryBound", "click", () => openReceivingHistory());
   });
 }
@@ -214,7 +223,7 @@ function showM3Flash() {
   if (!host) return;
   const notice = document.createElement("div");
   notice.className = "catalog-notice success m3-receive-flash";
-  notice.textContent = message;
+  setText(notice, message);
   host.insertAdjacentElement("afterend", notice);
 }
 
@@ -361,8 +370,8 @@ async function submitReceipt(event, order, overlay) {
     return;
   }
 
-  confirmButton.disabled = true;
-  confirmButton.textContent = "Receiving...";
+  setDisabled(confirmButton, true);
+  setText(confirmButton, "Receiving...");
   setFormError(errorBox, "");
 
   try {
@@ -374,8 +383,8 @@ async function submitReceipt(event, order, overlay) {
     window.location.reload();
   } catch (error) {
     console.error("Unable to receive purchase order.", error);
-    confirmButton.disabled = false;
-    confirmButton.textContent = "Confirm Receive";
+    setDisabled(confirmButton, false);
+    setText(confirmButton, "Confirm Receive");
     setFormError(errorBox, error.message || "Receive Stock failed.");
   }
 }
@@ -389,8 +398,8 @@ function updateReceiveSummary(overlay) {
   const parsed = parseReceiveInputs(order, overlay);
   const units = parsed.lines.reduce((sum, line) => sum + Math.max(line.quantity, 0), 0);
   const skuCount = parsed.lines.filter((line) => line.quantity > 0).length;
-  summary.textContent = `Receiving ${units} pcs across ${skuCount} ${skuCount === 1 ? "SKU" : "SKUs"}`;
-  if (confirmButton) confirmButton.disabled = Boolean(parsed.error) || units <= 0;
+  setText(summary, `Receiving ${units} pcs across ${skuCount} ${skuCount === 1 ? "SKU" : "SKUs"}`);
+  setDisabled(confirmButton, Boolean(parsed.error) || units <= 0);
 }
 
 function parseReceiveInputs(order, overlay) {
@@ -485,7 +494,7 @@ function bindM4ReceiveScanner(overlay, order) {
     if (code) onScan(code);
   });
   overlay.addEventListener("m4:close", () => scanner.detach(), { once: true });
-  if (status) status.textContent = "USB SCANNER READY";
+  setText(status, "USB SCANNER READY");
 }
 
 async function handleM4ReceiveScan(order, overlay, code) {
@@ -526,7 +535,7 @@ async function handleM4ReceiveScan(order, overlay, code) {
 }
 
 function setScanStatus(node, message) {
-  if (node) node.textContent = message;
+  setText(node, message);
 }
 
 function bindOnce(node, key, eventName, handler) {
@@ -537,8 +546,36 @@ function bindOnce(node, key, eventName, handler) {
 
 function setFormError(node, message) {
   if (!node) return;
-  node.hidden = !message;
-  node.textContent = message || "";
+  setHidden(node, !message);
+  setText(node, message || "");
+}
+
+function setText(node, value) {
+  if (!node) return;
+  const next = String(value ?? "");
+  if (node.textContent !== next) node.textContent = next;
+}
+
+function setDisabled(node, value) {
+  if (!node) return;
+  const next = Boolean(value);
+  if (node.disabled !== next) node.disabled = next;
+}
+
+function setHidden(node, value) {
+  if (!node) return;
+  const next = Boolean(value);
+  if (node.hidden !== next) node.hidden = next;
+}
+
+function setDatasetValue(node, key, value) {
+  if (!node) return;
+  const next = String(value ?? "");
+  if (node.dataset[key] !== next) node.dataset[key] = next;
+}
+
+function removeAttributeIfPresent(node, name) {
+  if (node?.hasAttribute(name)) node.removeAttribute(name);
 }
 
 function formatStatus(value) {
