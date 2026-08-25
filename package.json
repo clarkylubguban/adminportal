@@ -40,6 +40,7 @@
     "test:admin-purchasing-m2": "node scripts/test-admin-purchasing-m2.mjs",
     "test:admin-purchasing-m3": "node scripts/test-admin-purchasing-m3.mjs",
     "test:admin-barcode-m4": "node scripts/test-admin-barcode-m4.mjs",
+    "test:facebook-inbox-f1-db": "node scripts/test-facebook-inbox-f1-db.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
