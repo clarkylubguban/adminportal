@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import { access, readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
-import { handleMetaWebhook, signMetaBody } from "../api/_lib/metaWebhook.js";
+import taskAutomationHandler, { config } from "../api/task-automation.js";
+import { signMetaBody } from "../api/_lib/metaWebhook.js";
 
 const SECRET = "synthetic-meta-app-secret-at-least-32-characters";
 const VERIFY_TOKEN = "synthetic-verify-token";
@@ -10,6 +12,14 @@ const NOW = new Date("2026-08-25T12:00:00.000Z");
 
 const tests = [];
 const test = (name, fn) => tests.push({ name, fn });
+
+test("Meta webhook shares the task-automation serverless entrypoint", async () => {
+  const vercel = JSON.parse(await readFile("vercel.json", "utf8"));
+  const rewrite = vercel.rewrites.find((item) => item.source === "/api/integrations/meta/webhook");
+  assert.equal(rewrite?.destination, "/api/task-automation");
+  assert.equal(config.api.bodyParser, false);
+  await assert.rejects(access("api/meta-webhook.js"), /ENOENT/);
+});
 
 test("GET verification accepts the correct token and rejects wrong or missing config", async () => {
   const ok = await invokeGet(`/api/integrations/meta/webhook?hub.mode=subscribe&hub.verify_token=${VERIFY_TOKEN}&hub.challenge=CHALLENGE`);
@@ -162,7 +172,7 @@ async function invoke(method, url, raw, headers = {}, options = {}) {
   request.url = url;
   request.headers = headers;
   const response = createResponse();
-  await handleMetaWebhook(request, response, {
+  await taskAutomationHandler(request, response, {
     appSecret: options.appSecret ?? SECRET,
     verifyToken: options.verifyToken ?? VERIFY_TOKEN,
     repository: options.repo || new MemoryMetaInboxRepository(),

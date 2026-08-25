@@ -21,7 +21,7 @@
     },
     {
       "source": "/api/integrations/meta/webhook",
-      "destination": "/api/meta-webhook"
+      "destination": "/api/task-automation"
     },
     {
       "source": "/api/inquiries/:id/orders",
