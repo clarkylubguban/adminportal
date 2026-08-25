@@ -576,6 +576,9 @@ let staffDraft = createEmptyStaffDraft();
 let staffSaveState = "idle";
 let staffSaveError = "";
 let staffActionId = "";
+let employeeQuery = "";
+let employeeRoleFilter = "all";
+let employeeStatusFilter = "active";
 let assignmentUsers = [];
 let assignmentLoadState = "idle";
 let assignmentLoadError = "";
@@ -640,6 +643,8 @@ const routes = {
   "/my-tasks": "My Tasks",
   "/calendar": "Calendar",
   "/workboard": "Workboard",
+  "/settings": "Settings",
+  "/settings/people-access": "Settings",
   "/overview": "Overview",
   "/catalog": "Catalog",
   "/catalog/brands": "Catalog",
@@ -715,10 +720,11 @@ function render() {
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = currentRoute === "Catalog";
+  const isAdminSaasRoute = currentRoute === "Catalog" || currentRoute === "Settings";
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
+  if (currentRoute === "Settings" && staffLoadState === "idle") window.setTimeout(loadStaffUsers, 0);
   if (getRoutePath() === "/catalog/inventory" && inventoryLoadState === "idle") window.setTimeout(loadInventory, 0);
   if (getRoutePath() === "/catalog/purchasing" && purchasingLoadState === "idle") window.setTimeout(loadPurchaseOrders, 0);
   if (getRoutePath() === "/catalog/suppliers" && supplierLoadState === "idle") window.setTimeout(loadSuppliers, 0);
@@ -745,7 +751,9 @@ function render() {
                         ? renderWorkboardPage()
                         : currentRoute === "Catalog"
                           ? renderCatalogPage()
-                          : renderOverviewPage()
+                          : currentRoute === "Settings"
+                            ? renderPeopleAccessEmployeesPage()
+                            : renderOverviewPage()
         }
         ${renderFooter()}
       </section>
@@ -8726,6 +8734,10 @@ function canManageStaffAccounts() {
   return ["owner", "admin"].includes(adminUser?.role);
 }
 
+function canViewSettingsRoute() {
+  return canManageStaffAccounts();
+}
+
 function createCatalogDraft(product = null) {
   if (product) {
     const images = normalizeCatalogDraftImages(product.images?.length ? product.images : (product.imageUrl ? [{ url: product.imageUrl, publicUrl: product.imageUrl, storagePath: "", isPrimary: true }] : []));
@@ -8809,6 +8821,201 @@ function inferCatalogProductType(product) {
 
 function createEmptyStaffDraft() {
   return { displayName: "", email: "", role: "staff" };
+}
+
+function getVisibleEmployeeUsers() {
+  const normalizedQuery = employeeQuery.trim().toLowerCase();
+
+  return staffUsers.filter((user) => {
+    const role = String(user.role || "").toLowerCase();
+    const active = user.isActive !== false;
+    const matchesQuery =
+      !normalizedQuery ||
+      [
+        user.displayName,
+        user.email,
+        role,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+    const matchesRole = employeeRoleFilter === "all" || role === employeeRoleFilter;
+    const matchesStatus =
+      employeeStatusFilter === "all" ||
+      (employeeStatusFilter === "active" && active) ||
+      (employeeStatusFilter === "deactivated" && !active);
+
+    return matchesQuery && matchesRole && matchesStatus;
+  });
+}
+
+function getEmployeeKpis() {
+  const activeUsers = staffUsers.filter((user) => user.isActive !== false);
+  return {
+    teamMembers: activeUsers.length,
+    roles: new Set(activeUsers.map((user) => user.role).filter(Boolean)).size,
+    suspended: staffUsers.filter((user) => user.isActive === false).length,
+  };
+}
+
+function renderPeopleAccessEmployeesPage() {
+  if (!canManageStaffAccounts()) {
+    return `<main class="people-access-page"><section class="people-access-denied"><span>SETTINGS</span><h1>Access restricted</h1><p>Your account cannot manage employees.</p></section></main>`;
+  }
+
+  const visibleEmployees = getVisibleEmployeeUsers();
+  const kpis = getEmployeeKpis();
+  const loading = staffLoadState === "idle" || staffLoadState === "loading";
+  const activeCount = staffUsers.filter((user) => user.isActive !== false).length;
+
+  return `<main class="people-access-page admin-saas-page">
+    <section class="people-access-hero">
+      <div class="people-access-title">
+        <span>Home › Settings › People &amp; Access</span>
+        <h1>People &amp; Access</h1>
+        <p>Manage employees and assign their access role.</p>
+      </div>
+      <button class="people-access-primary" type="button" data-staff-new ${loading ? "disabled" : ""}>+ INVITE EMPLOYEE</button>
+    </section>
+
+    ${staffFeedback ? `<p class="staff-feedback" role="status">${escapeHtml(staffFeedback)}</p>` : ""}
+
+    <section class="people-access-tabs" aria-label="People and Access sections">
+      <button class="active" type="button" aria-current="page">Employees</button>
+      <button type="button" disabled aria-disabled="true">Roles &amp; Permissions</button>
+      <span>${activeCount} ACTIVE</span>
+    </section>
+
+    <section class="people-access-kpis" aria-label="Employee summary">
+      ${renderEmployeeKpiCard("TEAM MEMBERS", kpis.teamMembers, "Active accounts")}
+      ${renderEmployeeKpiCard("ROLES", kpis.roles, "Access presets")}
+      ${renderEmployeeKpiCard("SUSPENDED", kpis.suspended, kpis.suspended ? "Deactivated accounts" : "No suspended users")}
+    </section>
+
+    <section class="employee-controls" aria-label="Employee filters">
+      <input id="employee-search" type="search" value="${escapeHtml(employeeQuery)}" placeholder="Search employee, role, email..." />
+      <select id="employee-role-filter" aria-label="Filter employees by role">
+        ${renderEmployeeRoleOptions()}
+      </select>
+      <select id="employee-status-filter" aria-label="Filter employees by status">
+        <option value="all" ${employeeStatusFilter === "all" ? "selected" : ""}>All statuses</option>
+        <option value="active" ${employeeStatusFilter === "active" ? "selected" : ""}>Active</option>
+        <option value="deactivated" ${employeeStatusFilter === "deactivated" ? "selected" : ""}>Deactivated</option>
+      </select>
+      <button type="button" data-employee-reset>RESET</button>
+    </section>
+
+    <section class="employees-panel" aria-label="Employees">
+      <div class="employees-panel-title">
+        <strong>EMPLOYEES</strong>
+        <span>Profile photo, assigned role, account status, and access are managed here.</span>
+      </div>
+      <div class="employees-table" role="table" aria-label="Employees">
+        <div class="employees-table-header" role="row">
+          <span>EMPLOYEE</span><span>ROLE</span><span>STATUS</span><span>LAST LOGIN</span><span>ACCESS</span><span>ACTION</span>
+        </div>
+        <div class="employees-table-body" role="rowgroup">
+          ${renderEmployeeTableBody(visibleEmployees, loading)}
+        </div>
+      </div>
+      <footer class="employees-panel-footer">
+        <span>${escapeHtml(getEmployeeShowingLabel(visibleEmployees.length))}</span>
+        <button type="button" data-employee-view-deactivated>VIEW DEACTIVATED</button>
+      </footer>
+    </section>
+    ${staffDrawerMode ? renderStaffDrawer() : ""}
+  </main>`;
+}
+
+function renderEmployeeKpiCard(label, value, helper) {
+  return `<article class="employee-kpi-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(helper)}</small></article>`;
+}
+
+function renderEmployeeRoleOptions() {
+  const roles = Array.from(new Set(staffUsers.map((user) => String(user.role || "").toLowerCase()).filter(Boolean))).sort();
+  const options = [["all", "All roles"], ...roles.map((role) => [role, getEmployeeRoleLabel({ role })])];
+  return options.map(([value, label]) => `<option value="${escapeHtml(value)}" ${employeeRoleFilter === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+}
+
+function renderEmployeeTableBody(visibleEmployees, loading) {
+  if (loading) return `<p class="employee-empty-state">Loading employees...</p>`;
+  if (staffLoadState === "error") return `<p class="employee-empty-state error"><strong>Unable to load employees</strong><span>${escapeHtml(staffLoadError || "Unable to load employees.")}</span></p>`;
+  if (!visibleEmployees.length) return `<p class="employee-empty-state">${escapeHtml(getEmployeeEmptyLabel())}</p>`;
+  return visibleEmployees.map(renderEmployeeRow).join("");
+}
+
+function renderEmployeeRow(user) {
+  const active = user.isActive !== false;
+  return `<div class="employee-row" role="row">
+    <div class="employee-profile-cell">
+      <span class="employee-avatar ${escapeHtml(getEmployeeAvatarTone(user))}"><b>${escapeHtml(getEmployeeInitial(user))}</b></span>
+      <div><strong>${escapeHtml(user.displayName || "Unnamed employee")}</strong><small>${escapeHtml(user.email || "No email")}</small></div>
+    </div>
+    <span class="employee-role-cell">${escapeHtml(getEmployeeRoleLabel(user))}</span>
+    <span>${renderEmployeeStatusChip(active)}</span>
+    <span class="employee-last-login">${escapeHtml(formatEmployeeLastLogin(user.lastSignInAt))}</span>
+    <span>${renderEmployeeAccessChip(user)}</span>
+    <span><button type="button" data-staff-edit="${escapeHtml(user.id)}">EDIT</button></span>
+  </div>`;
+}
+
+function renderEmployeeStatusChip(active) {
+  return `<b class="employee-chip ${active ? "active" : "deactivated"}">${active ? "ACTIVE" : "DEACTIVATED"}</b>`;
+}
+
+function renderEmployeeAccessChip(user) {
+  const role = String(user.role || "").toLowerCase();
+  const label = role === "owner" ? "FULL ACCESS" : role === "admin" ? "MANAGEMENT" : "MY WORK";
+  const tone = role === "owner" ? "full" : "summary";
+  return `<b class="employee-chip ${tone}">${label}</b>`;
+}
+
+function getEmployeeRoleLabel(user) {
+  const role = String(user?.role || "").toLowerCase();
+  if (role === "owner") return "Owner / Admin";
+  if (role === "admin") return "Admin / Operations";
+  if (role === "staff") return "Production Staff";
+  return formatAdminRole(role || "staff");
+}
+
+function getEmployeeInitial(user) {
+  const label = user.displayName || user.email || "Employee";
+  return label.trim().charAt(0).toUpperCase() || "E";
+}
+
+function getEmployeeAvatarTone(user) {
+  const tones = ["tone-blue", "tone-lavender", "tone-coral", "tone-green", "tone-gold"];
+  const seed = String(user.id || user.email || user.displayName || "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return tones[seed % tones.length];
+}
+
+function getEmployeeShowingLabel(count) {
+  if (employeeStatusFilter === "deactivated") return `Showing ${count} deactivated employees`;
+  if (employeeStatusFilter === "all") return `Showing ${count} employees`;
+  return `Showing ${count} active employees`;
+}
+
+function getEmployeeEmptyLabel() {
+  if (employeeQuery.trim() || employeeRoleFilter !== "all") return "No employees match the current filters";
+  if (employeeStatusFilter === "deactivated") return "No deactivated employees found";
+  return "No active employees found";
+}
+
+function formatEmployeeLastLogin(value) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Never";
+  const manilaNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const manilaDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const diffMs = manilaNow.getTime() - manilaDate.getTime();
+  if (diffMs >= 0 && diffMs <= 5 * 60 * 1000) return "Now";
+  const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  if (dayKey === todayKey) {
+    return `Today ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" }).format(date)}`;
+  }
+  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" }).format(date);
 }
 
 function renderStaffAccessPage() {
@@ -9587,6 +9794,9 @@ function renderSidebar(currentRoute) {
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
+  const settingsNavItems = [
+    ...(canViewSettingsRoute() ? [{ label: "Settings", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
+  ];
   const renderNavItem = (item) => {
     const isActive = item.activePaths ? item.activePaths.includes(routePath) : item.label === currentRoute;
     const itemLabel = item.label === "Staff" ? "Staff Access" : item.label;
@@ -9611,6 +9821,7 @@ function renderSidebar(currentRoute) {
           ${catalogSupplyItems.map(renderNavItem).join("")}
         </div>
         ${workflowNavItems.map(renderNavItem).join("")}
+        ${settingsNavItems.map(renderNavItem).join("")}
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -9704,8 +9915,13 @@ function renderMobileBottomNav(currentRoute) {
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewSettingsRoute() ? [{ label: "Settings", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
   ];
-  return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
+  const routePath = getRoutePath();
+  return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => {
+    const isActive = item.activePaths ? item.activePaths.includes(routePath) : item.label === currentRoute;
+    return `<a class="${isActive ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`;
+  }).join("")}</nav>`;
 }
 function renderGlobalSearchHint() {
   const normalized = globalSearchQuery.trim().toLowerCase();
@@ -10734,6 +10950,29 @@ function bindEvents() {
       await submitStaffForm();
     });
   }
+
+  document.getElementById("employee-search")?.addEventListener("input", (event) => {
+    employeeQuery = event.target.value;
+    render();
+  });
+  document.getElementById("employee-role-filter")?.addEventListener("change", (event) => {
+    employeeRoleFilter = event.target.value;
+    render();
+  });
+  document.getElementById("employee-status-filter")?.addEventListener("change", (event) => {
+    employeeStatusFilter = event.target.value;
+    render();
+  });
+  document.querySelector("[data-employee-reset]")?.addEventListener("click", () => {
+    employeeQuery = "";
+    employeeRoleFilter = "all";
+    employeeStatusFilter = "active";
+    render();
+  });
+  document.querySelector("[data-employee-view-deactivated]")?.addEventListener("click", () => {
+    employeeStatusFilter = "deactivated";
+    render();
+  });
 
   document.querySelectorAll(".menu-button, .mobile-menu-button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -12333,6 +12572,7 @@ function getRoutePath() {
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (path === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
+  if ((path === "/settings" || path === "/settings/people-access") && !canViewSettingsRoute()) return defaultRoutePath;
   return routes[path] ? path : defaultRoutePath;
 }
 
@@ -12351,6 +12591,7 @@ function normalizeRoutePath(path) {
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (routePath === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
+  if ((routePath === "/settings" || routePath === "/settings/people-access") && !canViewSettingsRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
 }
 

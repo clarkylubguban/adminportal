@@ -23,6 +23,8 @@ const appRoutes = new Set([
   "/my-tasks",
   "/calendar",
   "/workboard",
+  "/settings",
+  "/settings/people-access",
   "/overview",
   "/catalog",
   "/catalog/brands",
