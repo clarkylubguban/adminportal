@@ -7,6 +7,24 @@
 -- Raw webhook payloads are service-role only.
 -- Existing ops_inquiries and orders are not modified.
 
+do $$
+begin
+  if to_regclass('public.admin_role_module_permissions') is null then
+    raise exception using
+      errcode = '42P01',
+      message = 'PEOPLE_ACCESS_PERMISSION_FOUNDATION_REQUIRED',
+      detail = 'Facebook Inbox F1 requires public.admin_role_module_permissions from the canonical People & Access foundation.';
+  end if;
+
+  if to_regprocedure('public.has_admin_module_access(text)') is null then
+    raise exception using
+      errcode = '42883',
+      message = 'PEOPLE_ACCESS_MODULE_ACCESS_FUNCTION_REQUIRED',
+      detail = 'Facebook Inbox F1 requires public.has_admin_module_access(text) from the canonical People & Access foundation.';
+  end if;
+end;
+$$;
+
 create table if not exists public.meta_page_connections (
   id uuid primary key default gen_random_uuid(),
   page_id text not null,
@@ -485,65 +503,6 @@ drop trigger if exists inbox_messages_touch_conversation on public.inbox_message
 create trigger inbox_messages_touch_conversation
 after insert on public.inbox_messages
 for each row execute function public.inbox_touch_conversation_from_message();
-
--- Base branch inspection: the Inbox permission contract is referenced by the
--- locked Figma source of truth, but not yet materialized in migrations.
--- Create the shared module-access table/function only if absent, then seed
--- only the Inbox entries needed by F1.
-create table if not exists public.admin_role_module_permissions (
-  role_key text not null,
-  module_key text not null,
-  can_access boolean not null default false,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  constraint admin_role_module_permissions_pkey primary key (role_key, module_key),
-  constraint admin_role_module_permissions_role_key_check check (
-    length(btrim(role_key)) between 1 and 120
-  ),
-  constraint admin_role_module_permissions_module_key_check check (
-    length(btrim(module_key)) between 1 and 120
-  )
-);
-
-alter table public.admin_role_module_permissions enable row level security;
-
-create or replace function public.has_admin_module_access(module_key text)
-returns boolean
-language sql
-stable
-security definer
-set search_path = public
-as $$
-  select exists (
-    select 1
-    from public.admin_users admin_user
-    join public.admin_role_module_permissions permission
-      on permission.role_key = case admin_user.role
-        when 'owner' then 'owner_admin'
-        when 'admin' then 'admin_operations'
-        when 'staff' then 'cashier_front_desk'
-        else admin_user.role
-      end
-     and permission.module_key = has_admin_module_access.module_key
-     and permission.can_access = true
-    where admin_user.user_id = (select auth.uid())
-      and admin_user.is_active = true
-  );
-$$;
-
-revoke all on table public.admin_role_module_permissions from public, anon, authenticated;
-grant select, insert, update, delete on table public.admin_role_module_permissions to service_role;
-revoke all on function public.has_admin_module_access(text) from public, anon;
-grant execute on function public.has_admin_module_access(text) to authenticated;
-
-insert into public.admin_role_module_permissions (role_key, module_key, can_access)
-values
-  ('owner_admin', 'inbox', true),
-  ('admin_operations', 'inbox', true),
-  ('cashier_front_desk', 'inbox', true)
-on conflict (role_key, module_key)
-do update set can_access = excluded.can_access,
-              updated_at = clock_timestamp();
 
 alter table public.meta_page_connections enable row level security;
 alter table public.inbox_contacts enable row level security;

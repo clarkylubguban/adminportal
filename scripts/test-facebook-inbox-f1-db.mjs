@@ -29,6 +29,7 @@ try {
 
   await execSql(supabaseHarnessSql());
   await applyMigrationsBeforeF1();
+  await installPeopleAccessPrerequisite();
   await seedStagingBaseline();
 
   const beforeCounts = await coreCounts();
@@ -59,6 +60,44 @@ async function applyMigrationsBeforeF1() {
     .sort();
   assert.ok(files.includes("202608080001_phase3d_native_orders.sql"), "core migration chain must include native Orders");
   for (const file of files) await execSql(await readFile(`supabase/migrations/${file}`, "utf8"));
+}
+
+async function installPeopleAccessPrerequisite() {
+  await execSql(`
+    create table public.admin_role_module_permissions (
+      role_key text not null,
+      module_key text not null,
+      can_access boolean not null default false,
+      primary key (role_key, module_key)
+    );
+
+    create or replace function public.has_admin_module_access(module_key text)
+    returns boolean
+    language sql
+    stable
+    security definer
+    set search_path = public
+    as $$
+      select exists (
+        select 1
+        from public.admin_users admin_user
+        join public.admin_role_module_permissions permission
+          on permission.role_key = case admin_user.role
+            when 'owner' then 'owner_admin'
+            when 'admin' then 'admin_operations'
+            when 'staff' then 'cashier_front_desk'
+            else admin_user.role
+          end
+         and permission.module_key = has_admin_module_access.module_key
+         and permission.can_access = true
+        where admin_user.user_id = (select auth.uid())
+          and admin_user.is_active = true
+      )
+    $$;
+
+    grant execute on function public.has_admin_module_access(text) to authenticated;
+    grant select, insert, update, delete on public.admin_role_module_permissions to service_role;
+  `);
 }
 
 async function seedStagingBaseline() {
@@ -123,6 +162,13 @@ async function seedStagingBaseline() {
       'pickup',
       date '2026-09-15'
     from generate_series(1, 9) series;
+
+    insert into public.admin_role_module_permissions (role_key, module_key, can_access)
+    values
+      ('owner_admin', 'inbox', false),
+      ('admin_operations', 'inbox', false)
+    on conflict (role_key, module_key) do update
+    set can_access = excluded.can_access;
   `);
 }
 
@@ -238,10 +284,18 @@ async function verifyCashierInboxAccess() {
     order by role_key
   `);
   assert.deepEqual(rows, [
-    { role_key: "admin_operations", module_key: "inbox", can_access: true },
+    { role_key: "admin_operations", module_key: "inbox", can_access: false },
     { role_key: "cashier_front_desk", module_key: "inbox", can_access: true },
-    { role_key: "owner_admin", module_key: "inbox", can_access: true },
+    { role_key: "owner_admin", module_key: "inbox", can_access: false },
   ]);
+
+  const cashierAccess = await single(`
+    select public.has_admin_module_access('inbox') as allowed
+    from (
+      select set_config('request.jwt.claim.sub', '97000000-0000-4000-8000-000000000004', true)
+    ) claim
+  `);
+  assert.equal(cashierAccess.allowed, true);
 }
 
 async function verifyNoLegacyMessageTables() {
@@ -360,6 +414,7 @@ function supabaseHarnessSql() {
     grant usage on schema public, auth, storage to anon, authenticated, service_role;
     grant all on auth.users, storage.buckets, storage.objects to service_role;
     grant select, insert, update, delete on storage.objects to anon, authenticated;
+
   `;
 }
 
