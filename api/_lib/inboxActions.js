@@ -1,15 +1,16 @@
-import { getAuthorizedAdmin, getBearerToken, readJsonBody, sendJson } from "./adminAccess.js";
+import { adminLegacyRoleToAccessRole, getAuthorizedAdmin, getBearerToken, readJsonBody, sendJson } from "./adminAccess.js";
 import { validateAssignmentUser } from "./adminAssignments.js";
 import { cleanReplyText, getMetaReplyCapability, sendMetaTextMessage } from "./metaSend.js";
 import { createServerSupabaseClient } from "./supabaseServer.js";
 
-const ACTIONS = new Set(["reply", "assign", "note", "follow-up", "close", "capability"]);
+const ACTIONS = new Set(["reply", "assign", "note", "follow-up", "close", "capability", "send-state"]);
 
 export async function handleInboxAction(request, response, dependencies = {}) {
   const route = parseInboxRoute(request.url || "/");
   if (!route || !ACTIONS.has(route.action)) return sendJson(response, 404, { ok: false, error: "not found" });
   if (route.action === "capability") return sendJson(response, 200, { ok: true, ...getMetaReplyCapability(dependencies.env || process.env) });
-  if (request.method !== "POST") return sendJson(response, 405, { ok: false, error: "method not allowed" });
+  if (route.action === "send-state" && request.method !== "GET") return sendJson(response, 405, { ok: false, error: "method not allowed" });
+  if (route.action !== "send-state" && request.method !== "POST") return sendJson(response, 405, { ok: false, error: "method not allowed" });
 
   const token = getBearerToken(request);
   if (!token) return sendJson(response, 401, { ok: false, error: "admin session required" });
@@ -19,6 +20,7 @@ export async function handleInboxAction(request, response, dependencies = {}) {
   if (!actor) return sendJson(response, 401, { ok: false, error: "admin session required" });
 
   try {
+    if (route.action === "send-state") return handleSendState({ response, supabase, actor, conversationId: route.id });
     const body = await readJsonBody(request);
     if (route.action === "reply") return handleReply({ request, response, supabase, actor, conversationId: route.id, body, dependencies });
     if (route.action === "assign") return handleAssign({ response, supabase, actor, conversationId: route.id, body });
@@ -29,6 +31,25 @@ export async function handleInboxAction(request, response, dependencies = {}) {
     console.error("Inbox action failed.", { message: error?.message, code: error?.code });
     return sendJson(response, 500, { ok: false, error: "inbox action failed" });
   }
+}
+
+async function handleSendState({ response, supabase, actor, conversationId }) {
+  if (!await canAccessInbox(supabase, actor)) return sendJson(response, 403, { ok: false, error: "inbox access required" });
+
+  const visible = await canReadConversation(supabase, conversationId);
+  if (!visible) return sendJson(response, 404, { ok: false, error: "conversation not found" });
+
+  const { data, error } = await supabase
+    .from("inbox_outbound_attempts")
+    .select("status,created_at")
+    .eq("conversation_id", conversationId)
+    .in("status", ["sending", "unknown", "failed", "sent"])
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+
+  const status = normalizeSendStateStatus(data?.[0]?.status);
+  return sendJson(response, 200, { ok: true, status });
 }
 
 async function handleReply({ response, supabase, actor, conversationId, body, dependencies }) {
@@ -124,6 +145,44 @@ async function rpc(supabase, name, args) {
   const { data, error } = await supabase.rpc(name, args);
   if (error) throw error;
   return data || {};
+}
+
+async function canAccessInbox(supabase, actor) {
+  const roleKey = actor.accessRoleKey || adminLegacyRoleToAccessRole(actor.role);
+  const { data, error } = await supabase
+    .from("admin_role_module_permissions")
+    .select("can_access")
+    .eq("role_key", roleKey)
+    .eq("module_key", "inbox")
+    .maybeSingle();
+  if (error) throw error;
+  if (data?.can_access === true) return true;
+
+  const { data: grants, error: grantError } = await supabase
+    .from("admin_temporary_module_grants")
+    .select("user_id")
+    .eq("user_id", actor.userId)
+    .eq("module_key", "inbox")
+    .is("revoked_at", null)
+    .lte("starts_at", new Date().toISOString())
+    .gt("expires_at", new Date().toISOString())
+    .limit(1);
+  if (grantError) throw grantError;
+  return (grants || []).length > 0;
+}
+
+async function canReadConversation(supabase, conversationId) {
+  const { data, error } = await supabase
+    .from("inbox_conversations")
+    .select("id")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data?.id);
+}
+
+function normalizeSendStateStatus(status) {
+  return ["sending", "unknown", "failed", "sent"].includes(status) ? status : "none";
 }
 
 function sendRpcError(response, result = {}) {

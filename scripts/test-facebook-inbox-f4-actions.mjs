@@ -146,24 +146,58 @@ test("Ownership and operational routes call canonical RPCs through task-automati
   }
 });
 
+test("Send-state route requires auth, Inbox access, and returns safe status only", async () => {
+  const unauthenticated = await invokeInbox("GET", "/api/inbox/c/send-state", null, {
+    supabase: createMockSupabase(),
+    env: metaEnv(),
+  }, { auth: false });
+  assert.equal(unauthenticated.status, 401);
+
+  const forbidden = await invokeInbox("GET", "/api/inbox/c/send-state", null, {
+    supabase: createMockSupabase({ moduleAccess: false }),
+    env: metaEnv(),
+  });
+  assert.equal(forbidden.status, 403);
+
+  const authorized = await invokeInbox("GET", "/api/inbox/c/send-state", null, {
+    supabase: createMockSupabase({
+      sendStateRows: [{
+        status: "unknown",
+        created_at: "2026-08-26T00:00:00Z",
+        body_hash: "secret-body-hash",
+        recipient_psid: "PSID-F4",
+        page_access_token: "server-only-page-token",
+      }],
+    }),
+    env: metaEnv(),
+  });
+  assert.equal(authorized.status, 200);
+  assert.deepEqual(authorized.json, { ok: true, status: "unknown" });
+  const serialized = JSON.stringify(authorized.json);
+  assert.equal(serialized.includes("PSID-F4"), false);
+  assert.equal(serialized.includes("server-only-page-token"), false);
+  assert.equal(serialized.includes("secret-body-hash"), false);
+});
+
 for (const { name, fn } of tests) {
   await fn();
   console.log(`PASS ${name}`);
 }
 console.log("PASS Facebook Inbox F4 actions, Meta send, and shared entrypoint routing");
 
-async function invokeInbox(method, url, body, dependencies) {
+async function invokeInbox(method, url, body, dependencies, options = {}) {
   const raw = Buffer.from(JSON.stringify(body || {}));
   const request = Readable.from(raw);
   request.method = method;
   request.url = url;
-  request.headers = { authorization: "Bearer synthetic-token", "content-type": "application/json" };
+  request.headers = { "content-type": "application/json" };
+  if (options.auth !== false) request.headers.authorization = "Bearer synthetic-token";
   const response = createResponse();
   await taskAutomationHandler(request, response, dependencies);
   return response.result();
 }
 
-function createMockSupabase({ reserveResult } = {}) {
+function createMockSupabase({ reserveResult, moduleAccess = true, sendStateRows = [] } = {}) {
   const rpcCalls = [];
   const supabase = {
     auth: {
@@ -174,7 +208,10 @@ function createMockSupabase({ reserveResult } = {}) {
     from(table) {
       if (table === "admin_users") return selectBuilder([ACTION_ACTOR]);
       if (table === "admin_role_action_permissions") return selectBuilder([{ can_perform: true }]);
-      if (table === "admin_role_module_permissions") return selectBuilder([{ role_key: "cashier_front_desk", can_access: true }]);
+      if (table === "admin_role_module_permissions") return selectBuilder([{ role_key: "cashier_front_desk", can_access: moduleAccess }]);
+      if (table === "admin_temporary_module_grants") return selectBuilder([]);
+      if (table === "inbox_conversations") return selectBuilder([{ id: "c" }]);
+      if (table === "inbox_outbound_attempts") return selectBuilder(sendStateRows);
       return selectBuilder([]);
     },
     async rpc(name, args) {
@@ -201,6 +238,8 @@ function selectBuilder(rows) {
     is() { return this; },
     lte() { return this; },
     gt() { return this; },
+    order() { return this; },
+    limit() { return this; },
     or() { return this; },
     async maybeSingle() { return { data: rows[0] || null, error: null }; },
     then(resolve) { return Promise.resolve({ data: rows, error: null }).then(resolve); },

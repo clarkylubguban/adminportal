@@ -164,6 +164,16 @@ export async function getInboxReplyCapability(authSession) {
   return { replyConfigured: payload.replyConfigured === true };
 }
 
+export async function getInboxSendState(authSession, conversationId) {
+  const token = getAccessToken(authSession);
+  const response = await fetch(`/api/inbox/${encodeURIComponent(conversationId)}/send-state`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) return { status: "none" };
+  return { status: normalizeInboxSendState(payload.status) };
+}
+
 export async function sendInboxReply(authSession, conversationId, { text, expectedUpdatedAt, idempotencyKey }) {
   return postInboxAction(authSession, conversationId, "reply", { text, expectedUpdatedAt, idempotencyKey });
 }
@@ -309,6 +319,10 @@ export function getInboxReplyWindowState(expiresAt, now = new Date()) {
   if (diffMs <= 0) return { tone: "expired", label: "Closed" };
   const hours = Math.ceil(diffMs / 3600000);
   return { tone: hours <= 4 ? "soon" : "open", label: `${hours}h remaining` };
+}
+
+export function normalizeInboxSendState(status) {
+  return ["none", "sending", "unknown", "failed", "sent"].includes(status) ? status : "none";
 }
 
 function normalizeInboxAttachment(attachment) {
