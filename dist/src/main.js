@@ -39,15 +39,22 @@ import {
   hasNativeOrderAuthority,
 } from "./services/nativeOrderAuthority.js";
 import {
+  getAdminActionPermission,
   getAdminModuleAccess,
   getApprovedAdminUser,
 } from "./services/adminUsers.js";
 import {
   INBOX_WORK_VIEWS,
+  addInboxInternalNote,
+  assignInboxConversation,
+  closeInboxConversation,
   filterInboxConversations,
   getAdminInboxConversationDetail,
   getAdminInboxConversationRows,
+  getInboxReplyCapability,
   getInboxReplyWindowState,
+  scheduleInboxFollowUp,
+  sendInboxReply,
 } from "./services/adminInbox.js";
 import {
   getAdminAssignmentUsers,
@@ -647,6 +654,15 @@ let inboxDetailState = "idle";
 let inboxDetailError = "";
 let inboxSelectedConversationId = "";
 let inboxActiveView = "needs_reply";
+let inboxActionPermissions = createInboxActionPermissions();
+let inboxReplyCapability = { replyConfigured: false };
+let inboxAssignmentUsers = [];
+let inboxReplyDraft = "";
+let inboxNoteDraft = "";
+let inboxFollowUpDraft = "";
+let inboxFollowUpReason = "";
+let inboxMutationState = "idle";
+let inboxMutationError = "";
 
 const routes = {
   "/": "Overview",
@@ -1297,11 +1313,56 @@ async function logoutAdminUser() {
 
 async function getInboxAccessState(session) {
   try {
-    return (await getAdminModuleAccess(session, "inbox")) ? "allowed" : "denied";
+    const allowed = await getAdminModuleAccess(session, "inbox");
+    if (!allowed) {
+      inboxActionPermissions = createInboxActionPermissions();
+      inboxReplyCapability = { replyConfigured: false };
+      return "denied";
+    }
+    await loadInboxActionAccess(session);
+    await loadInboxReplyCapability(session);
+    inboxAssignmentUsers = await getAdminAssignmentUsers(session, { moduleKey: "inbox" }).catch((error) => {
+      console.warn("Unable to load Inbox assignment users.", error);
+      return [];
+    });
+    return "allowed";
   } catch (error) {
     console.warn("Unable to verify Inbox module access.", error);
+    inboxActionPermissions = createInboxActionPermissions();
+    inboxReplyCapability = { replyConfigured: false };
     return "denied";
   }
+}
+
+async function loadInboxActionAccess(session) {
+  const entries = await Promise.all(Object.keys(createInboxActionPermissions()).map(async (key) => {
+    try {
+      return [key, await getAdminActionPermission(session, key)];
+    } catch (error) {
+      console.warn("Unable to verify Inbox action access.", { action: key, message: error?.message });
+      return [key, false];
+    }
+  }));
+  inboxActionPermissions = Object.fromEntries(entries);
+}
+
+async function loadInboxReplyCapability(session) {
+  try {
+    inboxReplyCapability = await getInboxReplyCapability(session);
+  } catch (error) {
+    console.warn("Unable to verify Inbox reply capability.", error);
+    inboxReplyCapability = { replyConfigured: false };
+  }
+}
+
+function createInboxActionPermissions() {
+  return {
+    inbox_reply: false,
+    inbox_take_ownership: false,
+    inbox_reassign: false,
+    inbox_internal_note: false,
+    inbox_manage_state: false,
+  };
 }
 function renderAdminShellMessage() {
   return adminShellMessage
@@ -1715,6 +1776,15 @@ function resetInboxState() {
   inboxDetailError = "";
   inboxSelectedConversationId = "";
   inboxActiveView = "needs_reply";
+  inboxActionPermissions = createInboxActionPermissions();
+  inboxReplyCapability = { replyConfigured: false };
+  inboxAssignmentUsers = [];
+  inboxReplyDraft = "";
+  inboxNoteDraft = "";
+  inboxFollowUpDraft = "";
+  inboxFollowUpReason = "";
+  inboxMutationState = "idle";
+  inboxMutationError = "";
 }
 
 async function loadInboxConversations({ silent = false } = {}) {
@@ -1769,8 +1839,135 @@ async function loadInboxConversationDetail(conversationId) {
   render();
 }
 
+async function refreshInboxSelection() {
+  await loadInboxConversations({ silent: true });
+  if (inboxSelectedConversationId) await loadInboxConversationDetail(inboxSelectedConversationId);
+}
+
+async function submitInboxReply() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxMutationState === "saving") return;
+  inboxMutationState = "saving";
+  inboxMutationError = "";
+  render();
+  try {
+    await sendInboxReply(adminAuthSession, conversation.id, {
+      text: inboxReplyDraft,
+      expectedUpdatedAt: conversation.updatedAt,
+      idempotencyKey: createIdempotencyKey("inbox-reply"),
+    });
+    inboxReplyDraft = "";
+    await refreshInboxSelection();
+  } catch (error) {
+    inboxMutationError = error.message || "Inbox reply failed.";
+  } finally {
+    inboxMutationState = "idle";
+    render();
+  }
+}
+
+async function assignInboxToMe() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxMutationState === "saving") return;
+  await runInboxMutation(() => assignInboxConversation(adminAuthSession, conversation.id, {
+    targetUserId: getCurrentAdminUserId(),
+    expectedUpdatedAt: conversation.updatedAt,
+    idempotencyKey: createIdempotencyKey("inbox-assign"),
+  }));
+}
+
+async function reassignInboxConversation(targetUserId) {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || !targetUserId || inboxMutationState === "saving") return;
+  await runInboxMutation(() => assignInboxConversation(adminAuthSession, conversation.id, {
+    targetUserId,
+    expectedUpdatedAt: conversation.updatedAt,
+    idempotencyKey: createIdempotencyKey("inbox-reassign"),
+  }));
+}
+
+async function submitInboxNote() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxMutationState === "saving") return;
+  await runInboxMutation(async () => {
+    await addInboxInternalNote(adminAuthSession, conversation.id, {
+      body: inboxNoteDraft,
+      idempotencyKey: createIdempotencyKey("inbox-note"),
+    });
+    inboxNoteDraft = "";
+  });
+}
+
+async function submitInboxFollowUp() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxMutationState === "saving") return;
+  await runInboxMutation(async () => {
+    await scheduleInboxFollowUp(adminAuthSession, conversation.id, {
+      snoozedUntil: inboxFollowUpDraft ? new Date(inboxFollowUpDraft).toISOString() : "",
+      reason: inboxFollowUpReason,
+      expectedUpdatedAt: conversation.updatedAt,
+      idempotencyKey: createIdempotencyKey("inbox-follow-up"),
+    });
+    inboxFollowUpDraft = "";
+    inboxFollowUpReason = "";
+  });
+}
+
+async function submitInboxClose() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxMutationState === "saving") return;
+  if (!window.confirm("Close this Inbox conversation?")) return;
+  await runInboxMutation(() => closeInboxConversation(adminAuthSession, conversation.id, {
+    expectedUpdatedAt: conversation.updatedAt,
+    idempotencyKey: createIdempotencyKey("inbox-close"),
+  }));
+  inboxActiveView = "closed";
+}
+
+async function runInboxMutation(work) {
+  inboxMutationState = "saving";
+  inboxMutationError = "";
+  render();
+  try {
+    await work();
+    await refreshInboxSelection();
+  } catch (error) {
+    inboxMutationError = error.message || "Inbox action failed.";
+  } finally {
+    inboxMutationState = "idle";
+    render();
+  }
+}
+
 function getVisibleInboxConversations() {
   return filterInboxConversations(inboxConversations, inboxActiveView, getCurrentAdminUserId());
+}
+
+function getSelectedInboxConversation() {
+  return inboxConversations.find((conversation) => conversation.id === inboxSelectedConversationId) || null;
+}
+
+function getInboxComposerState(conversation) {
+  const reply = getInboxReplyWindowState(conversation.replyWindowExpiresAt);
+  const currentUserId = getCurrentAdminUserId();
+  const ownedByOther = conversation.ownerUserId && conversation.ownerUserId !== currentUserId;
+  if (inboxActionPermissions.inbox_reply !== true) {
+    return { enabled: false, placeholder: "Reply unavailable", helper: "Reply permission required." };
+  }
+  if (!inboxReplyCapability.replyConfigured) {
+    return { enabled: false, placeholder: "Messenger sending not configured", helper: "Messenger sending is not configured for this environment." };
+  }
+  if (conversation.state === "closed") {
+    return { enabled: false, placeholder: "Conversation closed", helper: "Reply composer disabled." };
+  }
+  if (reply.tone === "expired" || reply.tone === "unknown") {
+    return { enabled: false, placeholder: "Reply window closed", helper: "Free-form Messenger replies are unavailable." };
+  }
+  if (ownedByOther) {
+    const owner = getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId });
+    return { enabled: false, placeholder: `Owned by ${owner}`, helper: `Owned by ${owner}` };
+  }
+  return { enabled: true, placeholder: "Reply to customer", helper: "" };
 }
 
 function renderInboxPage() {
@@ -1853,6 +2050,7 @@ function renderInboxThread(conversation) {
     return `<div class="inbox-empty-state error"><strong>Unable to open thread</strong><span>${escapeHtml(inboxDetailError)}</span></div>`;
   }
   const messages = inboxDetail?.messages || [];
+  const composerState = getInboxComposerState(conversation);
   return `
     <header class="inbox-thread-header">
       <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>${escapeHtml(conversation.pageName || "Facebook Page")}</span></div>
@@ -1861,9 +2059,13 @@ function renderInboxThread(conversation) {
     <div class="inbox-message-list">
       ${messages.length ? messages.map(renderInboxMessage).join("") : `<div class="inbox-empty-column">No messages captured yet.</div>`}
     </div>
-    <footer class="inbox-reply-disabled">
-      <textarea disabled rows="2" title="Available in a later Inbox phase" placeholder="Available in a later Inbox phase"></textarea>
-      <button disabled title="Available in a later Inbox phase" type="button">Send</button>
+    <footer class="inbox-reply-disabled ${composerState.enabled ? "active" : ""}">
+      <textarea ${composerState.enabled ? "" : "disabled"} rows="2" maxlength="2000" data-inbox-reply-draft placeholder="${escapeHtml(composerState.placeholder)}">${escapeHtml(inboxReplyDraft)}</textarea>
+      <div class="inbox-composer-actions">
+        <span>${Math.min(inboxReplyDraft.trim().length, 2000)}/2000</span>
+        <button ${composerState.enabled && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-send-reply type="button">${inboxMutationState === "saving" ? "Sending..." : "Send"}</button>
+      </div>
+      ${composerState.helper ? `<small>${escapeHtml(composerState.helper)}</small>` : ""}
     </footer>
   `;
 }
@@ -1891,11 +2093,19 @@ function renderInboxDetailPanel(conversation) {
   if (!conversation) return `<div class="inbox-empty-column">No details to show.</div>`;
   const reply = getInboxReplyWindowState(conversation.replyWindowExpiresAt);
   const link = inboxDetail?.inquiryLink || (conversation.inquiryId ? { inquiryId: conversation.inquiryId, convertedAt: conversation.convertedAt } : null);
+  const canReassign = inboxActionPermissions.inbox_reassign === true;
+  const canManageState = inboxActionPermissions.inbox_manage_state === true;
+  const canTakeOwnership = inboxActionPermissions.inbox_take_ownership === true;
+  const canNote = inboxActionPermissions.inbox_internal_note === true;
+  const isUnassigned = !conversation.ownerUserId;
+  const ownedByMe = conversation.ownerUserId && conversation.ownerUserId === getCurrentAdminUserId();
+  const canAssignSelf = isUnassigned && canTakeOwnership;
   return `
     <header class="inbox-detail-heading">
       <div><h2>Customer & Operations</h2><span>${escapeHtml(link ? "Linked inquiry" : "Not yet an inquiry")}</span></div>
       <strong>${escapeHtml(reply.label)}</strong>
     </header>
+    ${inboxMutationError ? `<div class="inbox-notice error" role="alert">${escapeHtml(inboxMutationError)}</div>` : ""}
     <section class="inbox-detail-card">
       <h2>Customer</h2>
       ${renderInboxFact("Name", conversation.customerLabel)}
@@ -1921,13 +2131,27 @@ function renderInboxDetailPanel(conversation) {
     <section class="inbox-detail-card">
       <h2>Inquiry Link</h2>
       ${link ? renderInboxFact("Inquiry", link.inquiryId) + renderInboxFact("Converted", formatTaskDateTime(link.convertedAt)) : renderInboxFact("Status", "Not yet an inquiry")}
-      <button disabled title="Available in a later Inbox phase" type="button">Convert to Inquiry</button>
+      <button disabled title="Available in F5" type="button">Convert to Inquiry</button>
+    </section>
+    <section class="inbox-detail-card">
+      <h2>Internal Note</h2>
+      <textarea ${canNote ? "" : "disabled"} data-inbox-note-draft maxlength="4000" rows="3" placeholder="Add an internal note">${escapeHtml(inboxNoteDraft)}</textarea>
+      <button ${canNote && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-add-note type="button">Add Note</button>
+    </section>
+    <section class="inbox-detail-card">
+      <h2>Follow-up</h2>
+      <input ${canManageState ? "" : "disabled"} data-inbox-follow-up-draft type="datetime-local" value="${escapeHtml(inboxFollowUpDraft)}" />
+      <textarea ${canManageState ? "" : "disabled"} data-inbox-follow-up-reason rows="2" maxlength="500" placeholder="Internal reason">${escapeHtml(inboxFollowUpReason)}</textarea>
+      <button ${canManageState && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-follow-up type="button">Follow-up</button>
     </section>
     <section class="inbox-detail-actions">
-      <button disabled title="Available in a later Inbox phase" type="button">Assign</button>
-      <button disabled title="Available in a later Inbox phase" type="button">Add Note</button>
-      <button disabled title="Available in a later Inbox phase" type="button">Follow-up</button>
-      <button disabled title="Available in a later Inbox phase" type="button">Close</button>
+      <button ${canAssignSelf && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-assign-me type="button">Assign to me</button>
+      <select ${canReassign && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-reassign>
+        <option value="">Reassign</option>
+        ${inboxAssignmentUsers.map((user) => `<option value="${escapeHtml(user.userId)}" ${user.userId === conversation.ownerUserId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}
+      </select>
+      <button ${canManageState && conversation.state !== "closed" && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-close type="button">Close</button>
+      <span>${ownedByMe ? "Owned by you" : conversation.ownerUserId ? `Owned by ${escapeHtml(getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }))}` : "Unassigned"}</span>
     </section>
   `;
 }
@@ -11086,6 +11310,25 @@ function bindEvents() {
   });
 
   document.querySelector("[data-inbox-refresh]")?.addEventListener("click", () => loadInboxConversations());
+  document.querySelector("[data-inbox-reply-draft]")?.addEventListener("input", (event) => {
+    inboxReplyDraft = event.target.value;
+    render();
+  });
+  document.querySelector("[data-inbox-send-reply]")?.addEventListener("click", () => submitInboxReply());
+  document.querySelector("[data-inbox-assign-me]")?.addEventListener("click", () => assignInboxToMe());
+  document.querySelector("[data-inbox-reassign]")?.addEventListener("change", (event) => reassignInboxConversation(event.target.value));
+  document.querySelector("[data-inbox-note-draft]")?.addEventListener("input", (event) => {
+    inboxNoteDraft = event.target.value;
+  });
+  document.querySelector("[data-inbox-add-note]")?.addEventListener("click", () => submitInboxNote());
+  document.querySelector("[data-inbox-follow-up-draft]")?.addEventListener("input", (event) => {
+    inboxFollowUpDraft = event.target.value;
+  });
+  document.querySelector("[data-inbox-follow-up-reason]")?.addEventListener("input", (event) => {
+    inboxFollowUpReason = event.target.value;
+  });
+  document.querySelector("[data-inbox-follow-up]")?.addEventListener("click", () => submitInboxFollowUp());
+  document.querySelector("[data-inbox-close]")?.addEventListener("click", () => submitInboxClose());
 
   document.querySelectorAll("[data-copy-value]").forEach((button) => {
     button.addEventListener("click", async () => {

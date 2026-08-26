@@ -127,6 +127,12 @@ async function handleTaskApiRoute(routePath, request, response) {
     return true;
   }
 
+  if (routePath === "/api/inbox/capability" || routePath.startsWith("/api/inbox/")) {
+    const { default: handleInboxActionRequest } = await import("../api/task-automation.js");
+    await handleInboxActionRequest(request, response);
+    return true;
+  }
+
   if (routePath === "/api/tasks") {
     const { default: handleTasksRequest } = await import("../api/tasks/index.js");
     await handleTasksRequest(request, response);

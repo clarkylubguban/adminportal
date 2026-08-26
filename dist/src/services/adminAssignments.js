@@ -1,8 +1,9 @@
-export async function getAdminAssignmentUsers(authSession) {
+export async function getAdminAssignmentUsers(authSession, { moduleKey = "" } = {}) {
   const accessToken = typeof authSession === "string" ? authSession : authSession?.access_token;
   if (!accessToken) throw new Error("Supabase auth session is required for assignment users.");
 
-  const response = await fetch("/api/assignment-users", {
+  const path = moduleKey ? `/api/assignment-users?module=${encodeURIComponent(moduleKey)}` : "/api/assignment-users";
+  const response = await fetch(path, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       Accept: "application/json",

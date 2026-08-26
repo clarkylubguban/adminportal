@@ -34,15 +34,15 @@ assert.ok(main.includes("getAdminInboxConversationDetail(adminAuthSession, conve
 assert.ok(main.includes("Customer & Operations"), "Inbox detail panel must expose the customer and operations surface label");
 assert.ok(main.includes("Not yet an inquiry"), "Unlinked conversations must not imply Inquiry conversion has happened");
 assert.ok(main.includes("function getCurrentAdminUserId()"), "Inbox assigned-to-me filters must have a current admin user helper");
-assert.ok(main.includes('title="Available in a later Inbox phase"'), "future mutation controls must be disabled with helper title");
-assert.equal(/data-inbox-(reply|send|assign|note|close|convert)[^"]*"/.test(main), false, "F3 must not expose mutation data hooks");
+assert.ok(main.includes('title="Available in F5"') && main.includes("Convert to Inquiry"), "Convert to Inquiry must remain disabled for a later Inbox phase");
+assert.ok(main.includes("data-inbox-send-reply"), "F4 may activate mutation hooks while preserving the F3 read surface");
 
 assert.ok(service.includes('"inbox_conversations"'), "conversation read missing");
 assert.ok(service.includes('"inbox_messages"'), "message read missing");
 assert.ok(service.includes('"inbox_attachments"'), "attachment read missing");
 assert.ok(service.includes('"inbox_inquiry_links"'), "inquiry link read missing");
 assert.equal(service.includes("meta_webhook_events"), false, "raw webhook event table must not be read by browser service");
-assert.equal(/createSupabase|writeSupabase|updateSupabase|fetch\(/.test(service), false, "Inbox F3 service must stay read-only");
+assert.ok(service.includes("getAdminInboxConversationRows") && service.includes("getAdminInboxConversationDetail"), "F3 read service exports must remain available");
 
 assert.ok(styles.includes(".inbox-grid"), "Inbox layout CSS missing");
 assert.ok(styles.includes("grid-template-columns: minmax(240px, 0.9fr) minmax(360px, 1.5fr) minmax(260px, 0.95fr)"), "desktop three-column Inbox layout missing");

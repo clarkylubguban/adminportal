@@ -23,6 +23,7 @@ const CONVERSATION_SELECT = [
   "last_inbound_at",
   "last_outbound_at",
   "reply_window_expires_at",
+  "updated_at",
   "entry_source",
   "referral_ref",
   "campaign_id",
@@ -153,6 +154,36 @@ export async function getAdminInboxConversationDetail(authSession, conversationI
   return normalizeInboxConversationDetail({ messages, attachments, notes, events, inquiryLink: links[0] || null });
 }
 
+export async function getInboxReplyCapability(authSession) {
+  const token = getAccessToken(authSession);
+  const response = await fetch("/api/inbox/capability", {
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json" },
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) return { replyConfigured: false };
+  return { replyConfigured: payload.replyConfigured === true };
+}
+
+export async function sendInboxReply(authSession, conversationId, { text, expectedUpdatedAt, idempotencyKey }) {
+  return postInboxAction(authSession, conversationId, "reply", { text, expectedUpdatedAt, idempotencyKey });
+}
+
+export async function assignInboxConversation(authSession, conversationId, { targetUserId, expectedUpdatedAt, idempotencyKey }) {
+  return postInboxAction(authSession, conversationId, "assign", { targetUserId, expectedUpdatedAt, idempotencyKey });
+}
+
+export async function addInboxInternalNote(authSession, conversationId, { body, idempotencyKey }) {
+  return postInboxAction(authSession, conversationId, "note", { body, idempotencyKey });
+}
+
+export async function scheduleInboxFollowUp(authSession, conversationId, { snoozedUntil, reason, expectedUpdatedAt, idempotencyKey }) {
+  return postInboxAction(authSession, conversationId, "follow-up", { snoozedUntil, reason, expectedUpdatedAt, idempotencyKey });
+}
+
+export async function closeInboxConversation(authSession, conversationId, { expectedUpdatedAt, idempotencyKey }) {
+  return postInboxAction(authSession, conversationId, "close", { expectedUpdatedAt, idempotencyKey });
+}
+
 export function normalizeInboxConversationRow({ conversation, identity = null, contact = null, page = null, inquiryLink = null }) {
   return {
     id: conversation.id,
@@ -166,6 +197,7 @@ export function normalizeInboxConversationRow({ conversation, identity = null, c
     lastInboundAt: conversation.last_inbound_at || "",
     lastOutboundAt: conversation.last_outbound_at || "",
     replyWindowExpiresAt: conversation.reply_window_expires_at || "",
+    updatedAt: conversation.updated_at || "",
     entrySource: conversation.entry_source || "",
     referralRef: conversation.referral_ref || "",
     campaignId: conversation.campaign_id || "",
@@ -301,6 +333,43 @@ function compareMessageRows(a, b) {
 function getAccessToken(authSession) {
   if (!authSession?.access_token) throw new Error("Authenticated Inbox read session is required.");
   return authSession.access_token;
+}
+
+async function postInboxAction(authSession, conversationId, action, body) {
+  const token = getAccessToken(authSession);
+  const response = await fetch(`/api/inbox/${encodeURIComponent(conversationId)}/${action}`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify(body || {}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) {
+    const error = new Error(formatInboxActionError(payload?.error || "Inbox action failed."));
+    error.code = payload?.error || "";
+    error.status = response.status;
+    throw error;
+  }
+  return payload;
+}
+
+function formatInboxActionError(code) {
+  const messages = {
+    REPLY_WINDOW_CLOSED: "Reply window closed",
+    CONVERSATION_CHANGED: "Conversation changed. Refresh before continuing.",
+    SEND_IN_PROGRESS: "Send already in progress.",
+    SEND_STATUS_UNKNOWN: "Send status uncertain. Check Business Suite before trying again.",
+    CONVERSATION_OWNED_BY_OTHER: "This conversation is owned by another staff member.",
+    META_SEND_NOT_CONFIGURED: "Messenger sending is not configured for this environment.",
+    REPLY_TEXT_REQUIRED: "Enter a reply before sending.",
+    REPLY_TEXT_TOO_LONG: "Reply must be 2000 characters or fewer.",
+    INBOX_REASSIGN_DENIED: "You do not have permission to reassign this conversation.",
+    ASSIGNMENT_TARGET_DENIED: "That employee cannot be assigned to Inbox conversations.",
+  };
+  return messages[code] || String(code || "Inbox action failed.").replace(/_/g, " ");
 }
 
 function safeText(value) {

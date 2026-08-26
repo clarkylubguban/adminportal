@@ -4,11 +4,21 @@ export async function getAuthorizedAdmin(supabase, token) {
   const { data: userData, error: userError } = await supabase.auth.getUser(token);
   if (userError || !userData?.user) return null;
 
-  const { data, error } = await supabase
+  let data;
+  let error;
+  ({ data, error } = await supabase
     .from("admin_users")
-    .select("id,user_id,email,display_name,role,is_active")
+    .select("id,user_id,email,display_name,role,access_role_key,is_active")
     .eq("user_id", userData.user.id)
-    .maybeSingle();
+    .maybeSingle());
+
+  if (isMissingColumnError(error, "access_role_key")) {
+    ({ data, error } = await supabase
+      .from("admin_users")
+      .select("id,user_id,email,display_name,role,is_active")
+      .eq("user_id", userData.user.id)
+      .maybeSingle());
+  }
 
   if (error) throw error;
   if (!data || data.is_active === false) return null;
@@ -22,8 +32,39 @@ export async function getAuthorizedAdmin(supabase, token) {
     email: data.email || userData.user.email || "",
     displayName: data.display_name || "",
     role,
+    accessRoleKey: normalizeAccessRoleKey(data.access_role_key || adminLegacyRoleToAccessRole(role)),
     isActive: data.is_active !== false,
   };
+}
+
+export async function hasAdminActionPermission(supabase, adminUser, actionKey) {
+  const normalizedAction = cleanText(actionKey, 120);
+  if (!adminUser?.isActive || !normalizedAction) return false;
+  const accessRoleKey = normalizeAccessRoleKey(adminUser.accessRoleKey || adminLegacyRoleToAccessRole(adminUser.role));
+  if (!accessRoleKey) return false;
+
+  const { data, error } = await supabase
+    .from("admin_role_action_permissions")
+    .select("can_access")
+    .eq("role_key", accessRoleKey)
+    .eq("action_key", normalizedAction)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data?.can_access === true;
+}
+
+export function adminLegacyRoleToAccessRole(role) {
+  switch (normalizeRole(role)) {
+    case "owner":
+      return "owner_admin";
+    case "admin":
+      return "admin_operations";
+    case "staff":
+      return "cashier_front_desk";
+    default:
+      return "";
+  }
 }
 
 export function getBearerToken(request) {
@@ -64,6 +105,15 @@ export function normalizeRole(role) {
 
 export function cleanText(value, max = 200) {
   return String(value || "").trim().slice(0, max);
+}
+
+function normalizeAccessRoleKey(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function isMissingColumnError(error, columnName) {
+  if (!error) return false;
+  return error.code === "42703" || String(error.message || "").includes(columnName);
 }
 
 export function cleanEmail(value) {

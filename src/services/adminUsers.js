@@ -65,6 +65,29 @@ export async function getAdminModuleAccess(session, moduleKey) {
   return result === true || result === "true";
 }
 
+export async function getAdminActionPermission(session, actionKey) {
+  if (!session?.access_token) return false;
+  const normalizedAction = String(actionKey || "").trim();
+  if (!normalizedAction) return false;
+
+  const result = await executeSupabaseRpcWithAuth(
+    "has_admin_action_permission",
+    { p_action_key: normalizedAction },
+    session.access_token
+  );
+
+  if (typeof result === "boolean") return result;
+  if (Array.isArray(result)) {
+    const first = result[0];
+    if (typeof first === "boolean") return first;
+    if (first && typeof first === "object") {
+      const value = first.has_admin_action_permission ?? first.allowed ?? Object.values(first)[0];
+      return value === true || value === "true";
+    }
+  }
+  return result === true || result === "true";
+}
+
 async function readAdminUserRows(session) {
   try {
     return await readSupabaseTableWithAuth(

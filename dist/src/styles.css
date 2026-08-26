@@ -97,6 +97,7 @@
 .inbox-refresh,
 .inbox-detail-card button,
 .inbox-detail-actions button,
+.inbox-detail-actions select,
 .inbox-reply-disabled button {
   align-items: center;
   background: #ffffff;
@@ -389,6 +390,32 @@
   resize: none;
 }
 
+.inbox-reply-disabled.active textarea {
+  background: #ffffff;
+  color: #171717;
+}
+
+.inbox-reply-disabled small {
+  color: #756b60;
+  font-size: 11px;
+  font-weight: 800;
+  grid-column: 1 / -1;
+}
+
+.inbox-composer-actions {
+  align-items: end;
+  display: grid;
+  gap: 6px;
+  justify-items: end;
+}
+
+.inbox-composer-actions span,
+.inbox-detail-actions > span {
+  color: #756b60;
+  font-size: 11px;
+  font-weight: 850;
+}
+
 .inbox-detail-panel {
   align-content: start;
   display: grid;
@@ -427,6 +454,25 @@
   padding: 12px;
 }
 
+.inbox-detail-card textarea,
+.inbox-detail-card input,
+.inbox-detail-actions select {
+  background: #ffffff;
+  border: 1px solid #ded6cc;
+  border-radius: 7px;
+  color: #222222;
+  font: inherit;
+  font-size: 12px;
+  min-height: 36px;
+  min-width: 0;
+  padding: 8px;
+}
+
+.inbox-detail-card textarea {
+  line-height: 1.35;
+  resize: vertical;
+}
+
 .inbox-detail-card h2 {
   color: #171717;
   font-size: 13px;
@@ -457,6 +503,12 @@
   display: grid;
   gap: 8px;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.inbox-detail-actions > span {
+  align-self: center;
+  grid-column: 1 / -1;
+  overflow-wrap: anywhere;
 }
 
 .inbox-empty-state,

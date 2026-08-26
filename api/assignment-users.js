@@ -13,7 +13,8 @@ export default async function handler(request, response) {
     const caller = await getAuthorizedAdmin(supabase, token);
     if (!caller) return sendJson(response, 401, { ok: false, error: "admin session required" });
 
-    const users = await listAssignmentUsers(supabase, caller);
+    const moduleKey = new URL(request.url || "/", "http://localhost").searchParams.get("module") || "";
+    const users = await listAssignmentUsers(supabase, caller, { moduleKey });
     return sendJson(response, 200, { ok: true, users });
   } catch (error) {
     console.error("Assignment users request failed.", { message: error?.message, code: error?.code });

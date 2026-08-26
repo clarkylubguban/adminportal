@@ -45,6 +45,9 @@
     "test:facebook-inbox-f2-db": "node scripts/test-facebook-inbox-f2-db.mjs",
     "test:facebook-inbox-f3-read": "node scripts/test-facebook-inbox-f3-read.mjs",
     "test:facebook-inbox-f3-browser": "node scripts/test-facebook-inbox-f3-browser.mjs",
+    "test:facebook-inbox-f4-db": "node scripts/test-facebook-inbox-f4-db.mjs",
+    "test:facebook-inbox-f4-actions": "node scripts/test-facebook-inbox-f4-actions.mjs",
+    "test:facebook-inbox-f4-browser": "node scripts/test-facebook-inbox-f4-browser.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
