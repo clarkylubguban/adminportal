@@ -173,7 +173,7 @@ function createMockSupabase({ reserveResult } = {}) {
     },
     from(table) {
       if (table === "admin_users") return selectBuilder([ACTION_ACTOR]);
-      if (table === "admin_role_action_permissions") return selectBuilder([{ can_access: true }]);
+      if (table === "admin_role_action_permissions") return selectBuilder([{ can_perform: true }]);
       if (table === "admin_role_module_permissions") return selectBuilder([{ role_key: "cashier_front_desk", can_access: true }]);
       return selectBuilder([]);
     },
@@ -199,6 +199,7 @@ function selectBuilder(rows) {
     eq() { return this; },
     in() { return this; },
     is() { return this; },
+    lte() { return this; },
     gt() { return this; },
     or() { return this; },
     async maybeSingle() { return { data: rows[0] || null, error: null }; },

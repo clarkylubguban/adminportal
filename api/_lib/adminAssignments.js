@@ -120,10 +120,12 @@ function legacyRoleToAccessRole(role) {
       return "owner_admin";
     case "admin":
       return "admin_operations";
+    case "viewer":
+      return "viewer";
     case "staff":
-      return "cashier_front_desk";
+      return "staff";
     default:
-      return "";
+      return "staff";
   }
 }
 
@@ -145,14 +147,14 @@ async function getTemporaryModuleAccess(supabase, moduleKey, userIds) {
   if (!ids.length) return new Set();
 
   const { data, error } = await supabase
-    .from("admin_temporary_module_access")
+    .from("admin_temporary_module_grants")
     .select("user_id,module_key,expires_at,revoked_at")
     .eq("module_key", moduleKey)
     .in("user_id", ids)
     .is("revoked_at", null)
+    .lte("starts_at", new Date().toISOString())
     .gt("expires_at", new Date().toISOString());
 
-  if (isMissingRelationError(error)) return new Set();
   if (error) throw error;
   return new Set((data || []).map((row) => row.user_id).filter(Boolean));
 }

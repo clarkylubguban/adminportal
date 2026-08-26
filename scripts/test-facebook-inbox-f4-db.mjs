@@ -14,9 +14,15 @@ const owner = "98000000-0000-4000-8000-000000000001";
 const admin = "98000000-0000-4000-8000-000000000002";
 const cashier = "98000000-0000-4000-8000-000000000003";
 const production = "98000000-0000-4000-8000-000000000004";
+const legacyStaff = "98000000-0000-4000-8000-000000000005";
+const tempActiveStaff = "98000000-0000-4000-8000-000000000006";
+const tempExpiredStaff = "98000000-0000-4000-8000-000000000007";
+const tempFutureStaff = "98000000-0000-4000-8000-000000000008";
+const tempRevokedStaff = "98000000-0000-4000-8000-000000000009";
 const conversation = "99000000-0000-4000-8000-000000000001";
 const ownedConversation = "99000000-0000-4000-8000-000000000002";
 const followUpConversation = "99000000-0000-4000-8000-000000000003";
+const tempGrantConversation = "99000000-0000-4000-8000-000000000004";
 
 let started = false;
 
@@ -34,7 +40,10 @@ try {
   await seedInboxData();
 
   await verifyActionMatrix();
+  await verifyLiveSchemaReferences();
   await verifyOutboundAttemptContract();
+  await verifyLegacyStaffDoesNotElevate();
+  await verifyTemporaryGrantAssignmentTargets();
   await verifyReplyReservationAndCompletion();
   await verifyIdempotencyAndCollision();
   await verifyOwnershipRules();
@@ -68,22 +77,43 @@ async function installPeopleAccessPrerequisite() {
 
     create table public.admin_actions (
       action_key text primary key,
-      action_name text not null
+      name text not null,
+      is_protected boolean not null default false,
+      created_at timestamptz not null default now()
     );
 
     create table public.admin_role_action_permissions (
       role_key text not null,
       action_key text not null references public.admin_actions(action_key) on delete cascade,
-      can_access boolean not null default false,
+      can_perform boolean not null default false,
+      created_at timestamptz not null default now(),
       primary key (role_key, action_key)
     );
+
+    create table public.admin_temporary_module_grants (
+      user_id uuid not null references public.admin_users(user_id) on delete cascade,
+      module_key text not null,
+      starts_at timestamptz not null default now(),
+      expires_at timestamptz not null,
+      revoked_at timestamptz
+    );
+
+    create or replace function public.admin_legacy_role_to_access_role(p_role text)
+    returns text language sql stable as $$
+      select case lower(coalesce(p_role, ''))
+        when 'owner' then 'owner_admin'
+        when 'admin' then 'admin_operations'
+        when 'viewer' then 'viewer'
+        else 'staff'
+      end
+    $$;
 
     create or replace function public.has_admin_module_access(p_module_key text)
     returns boolean language sql stable security definer set search_path = public as $$
       select exists (
         select 1 from public.admin_users admin_user
         join public.admin_role_module_permissions permission
-          on permission.role_key = coalesce(admin_user.access_role_key, case admin_user.role when 'owner' then 'owner_admin' when 'admin' then 'admin_operations' else 'cashier_front_desk' end)
+          on permission.role_key = coalesce(admin_user.access_role_key, public.admin_legacy_role_to_access_role(admin_user.role))
          and permission.module_key = p_module_key
          and permission.can_access = true
         where admin_user.user_id = auth.uid() and admin_user.is_active = true
@@ -95,9 +125,9 @@ async function installPeopleAccessPrerequisite() {
       select exists (
         select 1 from public.admin_users admin_user
         join public.admin_role_action_permissions permission
-          on permission.role_key = coalesce(admin_user.access_role_key, case admin_user.role when 'owner' then 'owner_admin' when 'admin' then 'admin_operations' else 'cashier_front_desk' end)
+          on permission.role_key = coalesce(admin_user.access_role_key, public.admin_legacy_role_to_access_role(admin_user.role))
          and permission.action_key = p_action_key
-         and permission.can_access = true
+         and permission.can_perform = true
         where admin_user.user_id = auth.uid() and admin_user.is_active = true
       )
     $$;
@@ -110,14 +140,24 @@ async function seedInboxData() {
       ('${owner}', 'owner@trry.test'),
       ('${admin}', 'admin@trry.test'),
       ('${cashier}', 'cashier@trry.test'),
-      ('${production}', 'production@trry.test');
+      ('${production}', 'production@trry.test'),
+      ('${legacyStaff}', 'legacy-staff@trry.test'),
+      ('${tempActiveStaff}', 'temp-active@trry.test'),
+      ('${tempExpiredStaff}', 'temp-expired@trry.test'),
+      ('${tempFutureStaff}', 'temp-future@trry.test'),
+      ('${tempRevokedStaff}', 'temp-revoked@trry.test');
 
     insert into public.admin_users (user_id, email, role, access_role_key, display_name, is_active, is_test)
     values
       ('${owner}', 'owner@trry.test', 'owner', 'owner_admin', 'Owner', true, false),
       ('${admin}', 'admin@trry.test', 'admin', 'admin_operations', 'Operations', true, false),
       ('${cashier}', 'cashier@trry.test', 'staff', 'cashier_front_desk', 'Cashier', true, false),
-      ('${production}', 'production@trry.test', 'staff', 'production_staff', 'Production', true, false);
+      ('${production}', 'production@trry.test', 'staff', 'production_staff', 'Production', true, false),
+      ('${legacyStaff}', 'legacy-staff@trry.test', 'staff', null, 'Legacy Staff', true, false),
+      ('${tempActiveStaff}', 'temp-active@trry.test', 'staff', null, 'Temp Active', true, false),
+      ('${tempExpiredStaff}', 'temp-expired@trry.test', 'staff', null, 'Temp Expired', true, false),
+      ('${tempFutureStaff}', 'temp-future@trry.test', 'staff', null, 'Temp Future', true, false),
+      ('${tempRevokedStaff}', 'temp-revoked@trry.test', 'staff', null, 'Temp Revoked', true, false);
 
     insert into public.admin_role_module_permissions (role_key, module_key, can_access)
     values
@@ -127,6 +167,13 @@ async function seedInboxData() {
       ('production_staff', 'inbox', false)
     on conflict (role_key, module_key) do update
     set can_access = excluded.can_access;
+
+    insert into public.admin_temporary_module_grants (user_id, module_key, starts_at, expires_at, revoked_at)
+    values
+      ('${tempActiveStaff}', 'inbox', now() - interval '1 hour', now() + interval '1 hour', null),
+      ('${tempExpiredStaff}', 'inbox', now() - interval '2 hours', now() - interval '1 hour', null),
+      ('${tempFutureStaff}', 'inbox', now() + interval '1 hour', now() + interval '2 hours', null),
+      ('${tempRevokedStaff}', 'inbox', now() - interval '1 hour', now() + interval '1 hour', now());
 
     insert into public.meta_page_connections (id, page_id, page_name, status)
     values ('90000000-0000-4000-8000-000000000001', 'PAGE-F4', 'F4 Page', 'testing');
@@ -150,21 +197,41 @@ async function seedInboxData() {
       ('${conversation}', '92000000-0000-4000-8000-000000000001', 'needs_reply', null, now(), now() + interval '2 hours'),
       ('${ownedConversation}', '92000000-0000-4000-8000-000000000002', 'needs_reply', '${admin}', now(), now() + interval '2 hours'),
       ('${followUpConversation}', '92000000-0000-4000-8000-000000000003', 'follow_up', '${cashier}', now(), now() + interval '2 hours'),
-      ('99000000-0000-4000-8000-000000000004', '92000000-0000-4000-8000-000000000004', 'needs_reply', null, now(), now() - interval '2 hours');
+      ('${tempGrantConversation}', '92000000-0000-4000-8000-000000000004', 'needs_reply', null, now(), now() + interval '2 hours');
   `);
 }
 
 async function verifyActionMatrix() {
   const rows = await queryJson(`
-    select role_key, action_key, can_access
+    select role_key, action_key, can_perform
     from public.admin_role_action_permissions
     where action_key like 'inbox_%'
     order by role_key, action_key
   `);
   assert.equal(rows.length, 30);
-  assert.equal(rows.find((row) => row.role_key === "cashier_front_desk" && row.action_key === "inbox_reply").can_access, true);
-  assert.equal(rows.find((row) => row.role_key === "cashier_front_desk" && row.action_key === "inbox_reassign").can_access, false);
-  assert.equal(rows.find((row) => row.role_key === "production_staff" && row.action_key === "inbox_reply").can_access, false);
+  assert.equal(rows.find((row) => row.role_key === "cashier_front_desk" && row.action_key === "inbox_reply").can_perform, true);
+  assert.equal(rows.find((row) => row.role_key === "cashier_front_desk" && row.action_key === "inbox_reassign").can_perform, false);
+  assert.equal(rows.find((row) => row.role_key === "production_staff" && row.action_key === "inbox_reply").can_perform, false);
+
+  const actions = await queryJson(`
+    select action_key, name, is_protected
+    from public.admin_actions
+    where action_key like 'inbox_%'
+    order by action_key
+  `);
+  assert.equal(actions.length, 5);
+  assert.equal(actions.find((row) => row.action_key === "inbox_reassign").is_protected, true);
+  assert.equal(actions.find((row) => row.action_key === "inbox_reply").name, "Reply to Inbox customers");
+}
+
+async function verifyLiveSchemaReferences() {
+  const migration = await readFile(`supabase/migrations/${F4}`, "utf8");
+  assert.equal(migration.includes("action_name"), false, "F4 migration must not reference admin_actions.action_name");
+  assert.equal(migration.includes("admin_temporary_module_access"), false, "F4 migration must not reference non-canonical temp module table");
+  assert.ok(migration.includes("admin_actions (action_key, name, is_protected)"), "F4 migration must use admin_actions.name");
+  assert.ok(migration.includes("admin_role_action_permissions (role_key, action_key, can_perform)"), "F4 migration must use can_perform");
+  assert.ok(migration.includes("admin_temporary_module_grants"), "F4 migration must use canonical temporary grants");
+  assert.ok(migration.includes("admin_legacy_role_to_access_role"), "F4 migration must delegate legacy role mapping");
 }
 
 async function verifyOutboundAttemptContract() {
@@ -177,6 +244,43 @@ async function verifyOutboundAttemptContract() {
   assert.deepEqual(authedGrants, []);
   const indexes = await queryJson(`select indexname, indexdef from pg_indexes where schemaname = 'public' and tablename = 'inbox_outbound_attempts'`);
   assert.ok(indexes.some((index) => index.indexname === "inbox_outbound_attempts_active_conversation_uidx" && /status = ANY|status IN/i.test(index.indexdef)));
+}
+
+async function verifyLegacyStaffDoesNotElevate() {
+  assert.equal((await single(`select public.admin_legacy_role_to_access_role('staff') as role_key`)).role_key, "staff");
+  for (const action of ["inbox_reply", "inbox_take_ownership", "inbox_reassign", "inbox_internal_note", "inbox_manage_state"]) {
+    const allowed = await single(`select public.inbox_f4_user_has_action('${legacyStaff}', '${action}') as allowed`);
+    assert.equal(allowed.allowed, false, `legacy Staff without access_role_key must not receive ${action}`);
+  }
+
+  assert.equal((await single(`select public.inbox_f4_user_has_action('${cashier}', 'inbox_reply') as allowed`)).allowed, true);
+  assert.equal((await single(`select public.inbox_f4_user_has_action('${cashier}', 'inbox_reassign') as allowed`)).allowed, false);
+}
+
+async function verifyTemporaryGrantAssignmentTargets() {
+  const active = await rpc("mutate_inbox_assignment", {
+    p_conversation_id: tempGrantConversation,
+    p_actor_user_id: admin,
+    p_target_user_id: tempActiveStaff,
+    p_expected_updated_at: null,
+    p_idempotency_key: "idem-temp-active",
+  });
+  assert.equal(active.ok, true);
+
+  for (const [target, key] of [
+    [tempExpiredStaff, "expired"],
+    [tempFutureStaff, "future"],
+    [tempRevokedStaff, "revoked"],
+  ]) {
+    const result = await rpc("mutate_inbox_assignment", {
+      p_conversation_id: tempGrantConversation,
+      p_actor_user_id: admin,
+      p_target_user_id: target,
+      p_expected_updated_at: null,
+      p_idempotency_key: `idem-temp-${key}`,
+    });
+    assert.equal(result.error, "ASSIGNMENT_TARGET_DENIED", `${key} temporary Inbox grant must be denied`);
+  }
 }
 
 async function verifyReplyReservationAndCompletion() {

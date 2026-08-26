@@ -12,8 +12,16 @@ begin
     raise exception using errcode = '42P01', message = 'PEOPLE_ACCESS_ACTION_PERMISSIONS_REQUIRED';
   end if;
 
+  if to_regclass('public.admin_temporary_module_grants') is null then
+    raise exception using errcode = '42P01', message = 'PEOPLE_ACCESS_TEMPORARY_MODULE_GRANTS_REQUIRED';
+  end if;
+
   if to_regprocedure('public.has_admin_action_permission(text)') is null then
     raise exception using errcode = '42883', message = 'PEOPLE_ACCESS_ACTION_PERMISSION_FUNCTION_REQUIRED';
+  end if;
+
+  if to_regprocedure('public.admin_legacy_role_to_access_role(text)') is null then
+    raise exception using errcode = '42883', message = 'PEOPLE_ACCESS_LEGACY_ROLE_MAPPING_REQUIRED';
   end if;
 
   if not exists (
@@ -28,17 +36,18 @@ begin
 end;
 $$;
 
-insert into public.admin_actions (action_key, action_name)
+insert into public.admin_actions (action_key, name, is_protected)
 values
-  ('inbox_reply', 'Reply to Inbox customers'),
-  ('inbox_take_ownership', 'Take Inbox ownership'),
-  ('inbox_reassign', 'Reassign Inbox conversations'),
-  ('inbox_internal_note', 'Add Inbox internal notes'),
-  ('inbox_manage_state', 'Manage Inbox follow-up / close')
+  ('inbox_reply', 'Reply to Inbox customers', false),
+  ('inbox_take_ownership', 'Take Inbox ownership', false),
+  ('inbox_reassign', 'Reassign Inbox conversations', true),
+  ('inbox_internal_note', 'Add Inbox internal notes', false),
+  ('inbox_manage_state', 'Manage Inbox follow-up / close', true)
 on conflict (action_key) do update
-set action_name = excluded.action_name;
+set name = excluded.name,
+    is_protected = excluded.is_protected;
 
-insert into public.admin_role_action_permissions (role_key, action_key, can_access)
+insert into public.admin_role_action_permissions (role_key, action_key, can_perform)
 values
   ('owner_admin', 'inbox_reply', true),
   ('owner_admin', 'inbox_take_ownership', true),
@@ -71,7 +80,7 @@ values
   ('viewer', 'inbox_internal_note', false),
   ('viewer', 'inbox_manage_state', false)
 on conflict (role_key, action_key) do update
-set can_access = excluded.can_access;
+set can_perform = excluded.can_perform;
 
 create table if not exists public.inbox_outbound_attempts (
   id uuid primary key default gen_random_uuid(),
@@ -122,12 +131,7 @@ set search_path = ''
 as $$
   select coalesce(
     nullif(admin_row.access_role_key, ''),
-    case admin_row.role
-      when 'owner' then 'owner_admin'
-      when 'admin' then 'admin_operations'
-      when 'staff' then 'cashier_front_desk'
-      else admin_row.role
-    end
+    public.admin_legacy_role_to_access_role(admin_row.role)
   )
 $$;
 
@@ -144,7 +148,7 @@ as $$
     join public.admin_role_action_permissions permission
       on permission.role_key = public.inbox_f4_access_role(admin_user)
      and permission.action_key = p_action_key
-     and permission.can_access = true
+     and permission.can_perform = true
     where admin_user.user_id = p_actor_user_id
       and admin_user.is_active = true
   )
@@ -160,13 +164,27 @@ as $$
   select exists (
     select 1
     from public.admin_users admin_user
-    join public.admin_role_module_permissions permission
-      on permission.role_key = public.inbox_f4_access_role(admin_user)
-     and permission.module_key = p_module_key
-     and permission.can_access = true
     where admin_user.user_id = p_user_id
       and admin_user.is_active = true
       and coalesce(admin_user.is_test, false) = false
+      and (
+        exists (
+          select 1
+          from public.admin_role_module_permissions permission
+          where permission.role_key = public.inbox_f4_access_role(admin_user)
+            and permission.module_key = p_module_key
+            and permission.can_access = true
+        )
+        or exists (
+          select 1
+          from public.admin_temporary_module_grants grant_row
+          where grant_row.user_id = p_user_id
+            and grant_row.module_key = p_module_key
+            and grant_row.revoked_at is null
+            and grant_row.starts_at <= now()
+            and grant_row.expires_at > now()
+        )
+      )
   )
 $$;
 

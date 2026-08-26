@@ -45,25 +45,28 @@ export async function hasAdminActionPermission(supabase, adminUser, actionKey) {
 
   const { data, error } = await supabase
     .from("admin_role_action_permissions")
-    .select("can_access")
+    .select("can_perform")
     .eq("role_key", accessRoleKey)
     .eq("action_key", normalizedAction)
     .maybeSingle();
 
   if (error) throw error;
-  return data?.can_access === true;
+  return data?.can_perform === true;
 }
 
+// Mirrors public.admin_legacy_role_to_access_role(text).
 export function adminLegacyRoleToAccessRole(role) {
   switch (normalizeRole(role)) {
     case "owner":
       return "owner_admin";
     case "admin":
       return "admin_operations";
+    case "viewer":
+      return "viewer";
     case "staff":
-      return "cashier_front_desk";
+      return "staff";
     default:
-      return "";
+      return "staff";
   }
 }
 
