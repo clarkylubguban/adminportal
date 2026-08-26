@@ -49,7 +49,7 @@ export async function getAdminModuleAccess(session, moduleKey) {
 
   const result = await executeSupabaseRpcWithAuth(
     "has_admin_module_access",
-    { module_key: normalizedModule },
+    { p_module_key: normalizedModule },
     session.access_token
   );
 

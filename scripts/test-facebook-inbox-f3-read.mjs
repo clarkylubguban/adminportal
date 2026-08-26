@@ -11,6 +11,7 @@ import {
 } from "../src/services/adminInbox.js";
 
 const main = await read("src/main.js");
+const adminUsers = await read("src/services/adminUsers.js");
 const service = await read("src/services/adminInbox.js");
 const styles = await read("src/styles.css");
 const pkg = JSON.parse(await read("package.json"));
@@ -26,9 +27,13 @@ assert.ok(pkg.scripts["test:facebook-inbox-f3-read"], "F3 read test script must 
 assert.ok(main.includes('"/inbox": "Inbox"'), "canonical /inbox route missing");
 assert.ok(main.includes("canViewInboxRoute() ? [{ label: \"Inbox\", path: \"/inbox\""), "Inbox nav must be gated by module access");
 assert.ok(main.includes('getAdminModuleAccess(session, "inbox")'), "Inbox route must consume canonical module access");
+assert.ok(adminUsers.includes("p_module_key"), "Module access RPC must use the canonical People & Access parameter name");
 assert.ok(main.includes('path === "/inbox" && !canViewInboxRoute()'), "direct /inbox route must be gated");
 assert.ok(main.includes("getAdminInboxConversationRows(adminAuthSession)"), "Inbox list must use authenticated read service");
 assert.ok(main.includes("getAdminInboxConversationDetail(adminAuthSession, conversationId)"), "Inbox detail must use authenticated read service");
+assert.ok(main.includes("Customer & Operations"), "Inbox detail panel must expose the customer and operations surface label");
+assert.ok(main.includes("Not yet an inquiry"), "Unlinked conversations must not imply Inquiry conversion has happened");
+assert.ok(main.includes("function getCurrentAdminUserId()"), "Inbox assigned-to-me filters must have a current admin user helper");
 assert.ok(main.includes('title="Available in a later Inbox phase"'), "future mutation controls must be disabled with helper title");
 assert.equal(/data-inbox-(reply|send|assign|note|close|convert)[^"]*"/.test(main), false, "F3 must not expose mutation data hooks");
 
@@ -94,6 +99,7 @@ assert.equal(getInboxOutboundStatus({ direction: "outbound", read_at: "2026-08-2
 assert.equal(getInboxOutboundStatus({ direction: "outbound", delivered_at: "2026-08-25T09:01:00Z" }), "Delivered");
 assert.equal(getInboxOutboundStatus({ direction: "outbound" }), "Sent");
 assert.equal(getInboxReplyWindowState("2026-08-25T13:00:00Z", new Date("2026-08-25T10:00:00Z")).tone, "soon");
+assert.equal(getInboxReplyWindowState("2026-08-25T09:00:00Z", new Date("2026-08-25T10:00:00Z")).label, "Closed");
 assert.equal(formatInboxCustomerName({ identity: {}, contact: {} }), "Facebook customer");
 
 process.stdout.write("PASS Facebook Inbox F3 read-only surface contract\n");

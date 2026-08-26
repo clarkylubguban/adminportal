@@ -1702,6 +1702,10 @@ function canViewInboxRoute() {
   return adminAuthStatus === "approved" && inboxAccessState === "allowed";
 }
 
+function getCurrentAdminUserId() {
+  return adminUser?.userId || adminUser?.user_id || adminAuthSession?.user?.id || "";
+}
+
 function resetInboxState() {
   inboxConversations = [];
   inboxDetail = null;
@@ -1888,6 +1892,10 @@ function renderInboxDetailPanel(conversation) {
   const reply = getInboxReplyWindowState(conversation.replyWindowExpiresAt);
   const link = inboxDetail?.inquiryLink || (conversation.inquiryId ? { inquiryId: conversation.inquiryId, convertedAt: conversation.convertedAt } : null);
   return `
+    <header class="inbox-detail-heading">
+      <div><h2>Customer & Operations</h2><span>${escapeHtml(link ? "Linked inquiry" : "Not yet an inquiry")}</span></div>
+      <strong>${escapeHtml(reply.label)}</strong>
+    </header>
     <section class="inbox-detail-card">
       <h2>Customer</h2>
       ${renderInboxFact("Name", conversation.customerLabel)}
@@ -1912,7 +1920,7 @@ function renderInboxDetailPanel(conversation) {
     </section>
     <section class="inbox-detail-card">
       <h2>Inquiry Link</h2>
-      ${link ? renderInboxFact("Inquiry", link.inquiryId) + renderInboxFact("Converted", formatTaskDateTime(link.convertedAt)) : renderInboxFact("Status", "Not yet converted")}
+      ${link ? renderInboxFact("Inquiry", link.inquiryId) + renderInboxFact("Converted", formatTaskDateTime(link.convertedAt)) : renderInboxFact("Status", "Not yet an inquiry")}
       <button disabled title="Available in a later Inbox phase" type="button">Convert to Inquiry</button>
     </section>
     <section class="inbox-detail-actions">

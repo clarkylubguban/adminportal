@@ -274,7 +274,7 @@ export function getInboxReplyWindowState(expiresAt, now = new Date()) {
   const expires = new Date(expiresAt);
   if (Number.isNaN(expires.getTime())) return { tone: "unknown", label: "Not available" };
   const diffMs = expires.getTime() - now.getTime();
-  if (diffMs <= 0) return { tone: "expired", label: "Expired" };
+  if (diffMs <= 0) return { tone: "expired", label: "Closed" };
   const hours = Math.ceil(diffMs / 3600000);
   return { tone: hours <= 4 ? "soon" : "open", label: `${hours}h remaining` };
 }
