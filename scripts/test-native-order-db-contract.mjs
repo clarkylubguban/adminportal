@@ -355,8 +355,9 @@ function psql(args, input = null) {
 function waitForPostgres() {
   const deadline = Date.now() + 90_000;
   while (Date.now() < deadline) {
-    const result = docker(["exec", CONTAINER, "pg_isready", "-U", "postgres", "-d", DB], { allowFailure: true });
-    if (result.status === 0) return;
+    const ready = docker(["exec", CONTAINER, "pg_isready", "-U", "postgres", "-d", DB], { allowFailure: true });
+    const query = docker(["exec", CONTAINER, "psql", "-U", "postgres", "-d", DB, "-X", "-t", "-A", "-c", "select 1"], { allowFailure: true });
+    if (ready.status === 0 && query.status === 0 && query.stdout.trim() === "1") return;
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
   }
   throw new Error("Postgres container did not become ready");

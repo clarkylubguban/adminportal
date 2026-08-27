@@ -34,7 +34,7 @@ assert.ok(main.includes("getAdminInboxConversationDetail(adminAuthSession, conve
 assert.ok(main.includes("Customer & Operations"), "Inbox detail panel must expose the customer and operations surface label");
 assert.ok(main.includes("Not yet an inquiry"), "Unlinked conversations must not imply Inquiry conversion has happened");
 assert.ok(main.includes("function getCurrentAdminUserId()"), "Inbox assigned-to-me filters must have a current admin user helper");
-assert.ok(main.includes('title="Available in F5"') && main.includes("Convert to Inquiry"), "Convert to Inquiry must remain disabled for a later Inbox phase");
+assert.ok(main.includes("Convert to Inquiry") || main.includes("CONVERT TO INQUIRY"), "Inquiry conversion area must remain present");
 assert.ok(main.includes("data-inbox-send-reply"), "F4 may activate mutation hooks while preserving the F3 read surface");
 
 assert.ok(service.includes('"inbox_conversations"'), "conversation read missing");

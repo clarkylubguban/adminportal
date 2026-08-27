@@ -1,9 +1,9 @@
-import { adminLegacyRoleToAccessRole, getAuthorizedAdmin, getBearerToken, readJsonBody, sendJson } from "./adminAccess.js";
+import { adminLegacyRoleToAccessRole, getAuthorizedAdmin, getBearerToken, hasAdminActionPermission, readJsonBody, sendJson } from "./adminAccess.js";
 import { validateAssignmentUser } from "./adminAssignments.js";
 import { cleanReplyText, getMetaReplyCapability, sendMetaTextMessage } from "./metaSend.js";
 import { createServerSupabaseClient } from "./supabaseServer.js";
 
-const ACTIONS = new Set(["reply", "assign", "note", "follow-up", "close", "capability", "send-state"]);
+const ACTIONS = new Set(["reply", "assign", "note", "follow-up", "close", "convert-to-inquiry", "capability", "send-state"]);
 
 export async function handleInboxAction(request, response, dependencies = {}) {
   const route = parseInboxRoute(request.url || "/");
@@ -27,6 +27,7 @@ export async function handleInboxAction(request, response, dependencies = {}) {
     if (route.action === "note") return handleNote({ response, supabase, actor, conversationId: route.id, body });
     if (route.action === "follow-up") return handleFollowUp({ response, supabase, actor, conversationId: route.id, body });
     if (route.action === "close") return handleClose({ response, supabase, actor, conversationId: route.id, body });
+    if (route.action === "convert-to-inquiry") return handleConvertToInquiry({ response, supabase, actor, conversationId: route.id, body });
   } catch (error) {
     console.error("Inbox action failed.", { message: error?.message, code: error?.code });
     return sendJson(response, 500, { ok: false, error: "inbox action failed" });
@@ -141,6 +142,27 @@ async function handleClose({ response, supabase, actor, conversationId, body }) 
   return result?.ok === true ? sendJson(response, 200, { ok: true, conversation: result.conversation }) : sendRpcError(response, result);
 }
 
+async function handleConvertToInquiry({ response, supabase, actor, conversationId, body }) {
+  if (!await canAccessInbox(supabase, actor)) return sendJson(response, 403, { ok: false, error: "inbox access required" });
+  if (!await hasAdminActionPermission(supabase, actor, "inbox_convert_to_inquiry")) {
+    return sendJson(response, 403, { ok: false, error: "INBOX_CONVERT_TO_INQUIRY_DENIED" });
+  }
+
+  const result = await rpc(supabase, "convert_inbox_conversation_to_inquiry", {
+    p_conversation_id: conversationId,
+    p_actor_user_id: actor.userId,
+    p_idempotency_key: getIdempotencyKey(body),
+  });
+  return result?.ok === true
+    ? sendJson(response, 200, {
+        ok: true,
+        inquiry: result.inquiry || null,
+        conversation: result.conversation || null,
+        replay: result.replay === true,
+      })
+    : sendRpcError(response, result);
+}
+
 async function rpc(supabase, name, args) {
   const { data, error } = await supabase.rpc(name, args);
   if (error) throw error;
@@ -189,6 +211,8 @@ function sendRpcError(response, result = {}) {
   const error = result?.error || "INBOX_ACTION_DENIED";
   const status = error === "CONVERSATION_CHANGED" || error === "SEND_IN_PROGRESS" || error === "SEND_STATUS_UNKNOWN" ? 409
     : error === "REPLY_WINDOW_CLOSED" ? 409
+    : error === "IDEMPOTENCY_KEY_CONFLICT" ? 409
+    : error.endsWith("_NOT_FOUND") ? 404
     : error.endsWith("_DENIED") || error === "CONVERSATION_OWNED_BY_OTHER" ? 403
     : error.endsWith("_REQUIRED") || error.endsWith("_INVALID") ? 400
     : 500;

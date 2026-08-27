@@ -48,6 +48,7 @@ import {
   addInboxInternalNote,
   assignInboxConversation,
   closeInboxConversation,
+  convertInboxConversationToInquiry,
   filterInboxConversations,
   getAdminInboxConversationDetail,
   getAdminInboxConversationRows,
@@ -666,6 +667,7 @@ let inboxSendState = { status: "none" };
 let inboxCloseConfirmId = "";
 let inboxMutationState = "idle";
 let inboxMutationError = "";
+let inboxConversionState = "idle";
 
 const routes = {
   "/": "Overview",
@@ -1365,6 +1367,7 @@ function createInboxActionPermissions() {
     inbox_reassign: false,
     inbox_internal_note: false,
     inbox_manage_state: false,
+    inbox_convert_to_inquiry: false,
   };
 }
 function renderAdminShellMessage() {
@@ -1790,6 +1793,7 @@ function resetInboxState() {
   inboxCloseConfirmId = "";
   inboxMutationState = "idle";
   inboxMutationError = "";
+  inboxConversionState = "idle";
 }
 
 async function loadInboxConversations({ silent = false } = {}) {
@@ -1856,6 +1860,37 @@ async function loadInboxConversationDetail(conversationId) {
 async function refreshInboxSelection() {
   await loadInboxConversations({ silent: true });
   if (inboxSelectedConversationId) await loadInboxConversationDetail(inboxSelectedConversationId);
+}
+
+async function convertSelectedInboxConversationToInquiry() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxMutationState === "saving" || inboxConversionState === "saving") return;
+  inboxConversionState = "saving";
+  inboxMutationError = "";
+  render();
+  try {
+    await convertInboxConversationToInquiry(adminAuthSession, conversation.id, {
+      idempotencyKey: createIdempotencyKey("inbox-convert-to-inquiry"),
+    });
+    inboxActiveView = "converted";
+    await refreshInboxSelection();
+  } catch (error) {
+    inboxMutationError = error.message || "Inbox conversion failed.";
+  } finally {
+    inboxConversionState = "idle";
+    render();
+  }
+}
+
+async function openInboxInquiry(inquiryId) {
+  if (!inquiryId) return;
+  navigateTo("/inquiries");
+  if (shouldLoadSupabaseOps) {
+    hasLoadedOpsInquiries = false;
+    await loadOpsBoardInquiries();
+  }
+  expandedOpsInquiryId = inquiryId;
+  render();
 }
 
 async function submitInboxReply() {
@@ -2143,6 +2178,7 @@ function renderInboxDetailPanel(conversation) {
   const canManageState = inboxActionPermissions.inbox_manage_state === true;
   const canTakeOwnership = inboxActionPermissions.inbox_take_ownership === true;
   const canNote = inboxActionPermissions.inbox_internal_note === true;
+  const canConvert = inboxActionPermissions.inbox_convert_to_inquiry === true;
   const isUnassigned = !conversation.ownerUserId;
   const ownedByMe = conversation.ownerUserId && conversation.ownerUserId === getCurrentAdminUserId();
   const canAssignSelf = isUnassigned && canTakeOwnership;
@@ -2177,7 +2213,7 @@ function renderInboxDetailPanel(conversation) {
     <section class="inbox-detail-card">
       <h2>Inquiry Link</h2>
       ${link ? renderInboxFact("Inquiry", link.inquiryId) + renderInboxFact("Converted", formatTaskDateTime(link.convertedAt)) : renderInboxFact("Status", "Not yet an inquiry")}
-      <button disabled title="Available in F5" type="button">Convert to Inquiry</button>
+      ${renderInboxInquiryAction(conversation, link, canConvert)}
     </section>
     <section class="inbox-detail-card">
       <h2>Internal Notes</h2>
@@ -2204,6 +2240,15 @@ function renderInboxDetailPanel(conversation) {
       <span>${ownedByMe ? "Owned by you" : conversation.ownerUserId ? `Owned by ${escapeHtml(getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }))}` : "Unassigned"}</span>
     </section>
   `;
+}
+
+function renderInboxInquiryAction(conversation, link, canConvert) {
+  if (link?.inquiryId) {
+    return `<button data-inbox-view-inquiry="${escapeHtml(link.inquiryId)}" type="button">VIEW INQUIRY</button>`;
+  }
+  const canStartConversion = canConvert && conversation.state !== "closed" && inboxMutationState !== "saving" && inboxConversionState !== "saving";
+  const label = inboxConversionState === "saving" ? "CONVERTING..." : "CONVERT TO INQUIRY";
+  return `<button ${canStartConversion ? "" : "disabled"} data-inbox-convert-to-inquiry type="button">${label}</button>`;
 }
 
 function renderInboxNotes(notes) {
@@ -11414,6 +11459,8 @@ function bindEvents() {
   document.querySelector("[data-inbox-close]")?.addEventListener("click", () => submitInboxClose());
   document.querySelector("[data-inbox-close-cancel]")?.addEventListener("click", () => cancelInboxClose());
   document.querySelector("[data-inbox-close-confirm]")?.addEventListener("click", () => confirmInboxClose());
+  document.querySelector("[data-inbox-convert-to-inquiry]")?.addEventListener("click", () => convertSelectedInboxConversationToInquiry());
+  document.querySelector("[data-inbox-view-inquiry]")?.addEventListener("click", (event) => openInboxInquiry(event.currentTarget.dataset.inboxViewInquiry));
 
   document.querySelectorAll("[data-copy-value]").forEach((button) => {
     button.addEventListener("click", async () => {

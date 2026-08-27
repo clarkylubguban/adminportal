@@ -194,6 +194,10 @@ export async function closeInboxConversation(authSession, conversationId, { expe
   return postInboxAction(authSession, conversationId, "close", { expectedUpdatedAt, idempotencyKey });
 }
 
+export async function convertInboxConversationToInquiry(authSession, conversationId, { idempotencyKey }) {
+  return postInboxAction(authSession, conversationId, "convert-to-inquiry", { idempotencyKey });
+}
+
 export function normalizeInboxConversationRow({ conversation, identity = null, contact = null, page = null, inquiryLink = null }) {
   return {
     id: conversation.id,
