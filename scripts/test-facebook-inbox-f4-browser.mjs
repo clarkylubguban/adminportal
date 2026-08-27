@@ -23,7 +23,7 @@ assert.ok(main.includes("data-inbox-close-cancel"), "Inline close cancel control
 assert.ok(main.includes("data-inbox-close-confirm"), "Inline close confirm control missing");
 assert.ok(main.includes("Confirm Close"), "Inline close confirmation copy missing");
 assert.ok(main.includes("Close this conversation?"), "Inline close question missing");
-assert.ok(main.includes("Convert to Inquiry") || main.includes("CONVERT TO INQUIRY"), "Inquiry conversion area must remain present");
+assert.ok(main.includes("Convert to Inquiry") || main.includes("CONVERT TO INQUIRY") || main.includes("CONVERT INQUIRY"), "Inquiry conversion area must remain present");
 assert.ok(main.includes("expectedUpdatedAt: conversation.updatedAt"), "F4 mutations must carry optimistic concurrency timestamps");
 assert.ok(main.includes("getAdminActionPermission(session, key)"), "Inbox UI must consume canonical action permission helper");
 assert.ok(main.includes('getAdminAssignmentUsers(session, { moduleKey: "inbox" })'), "Inbox assignment users must be module-filtered");

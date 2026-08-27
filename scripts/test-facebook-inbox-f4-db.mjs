@@ -55,13 +55,19 @@ try {
   if (started) docker(["rm", "-f", CONTAINER], { allowFailure: true });
 }
 
+async function readMigration(file) {
+  return (await readFile(`supabase/migrations/${file}`, "utf8")).replace(/^\uFEFF/, "");
+}
+
 async function applyCoreMigrations() {
   const files = (await readdir("supabase/migrations"))
     .filter((name) => name.endsWith(".sql"))
     .filter((name) => ![F1, F2, F21, F4].includes(name))
     .filter((name) => name < "202608110001_add_master_catalog_m0_foundation.sql")
     .sort();
-  for (const file of files) await execSql(await readFile(`supabase/migrations/${file}`, "utf8"));
+  if (files.length) {
+    await execSql((await Promise.all(files.map((file) => readMigration(file)))).join("\n\n"));
+  }
 }
 
 async function installPeopleAccessPrerequisite() {
@@ -472,7 +478,7 @@ function psql(args, input = null) {
 }
 
 function waitForPostgres() {
-  const deadline = Date.now() + 90_000;
+  const deadline = Date.now() + 240_000;
   while (Date.now() < deadline) {
     const ready = docker(["exec", CONTAINER, "pg_isready", "-U", "postgres", "-d", DB], { allowFailure: true });
     const query = docker(["exec", CONTAINER, "psql", "-U", "postgres", "-d", DB, "-X", "-t", "-A", "-c", "select 1"], { allowFailure: true });

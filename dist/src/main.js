@@ -668,6 +668,7 @@ let inboxCloseConfirmId = "";
 let inboxMutationState = "idle";
 let inboxMutationError = "";
 let inboxConversionState = "idle";
+let inboxSendStatusRefreshState = "idle";
 
 const routes = {
   "/": "Overview",
@@ -1794,6 +1795,7 @@ function resetInboxState() {
   inboxMutationState = "idle";
   inboxMutationError = "";
   inboxConversionState = "idle";
+  inboxSendStatusRefreshState = "idle";
 }
 
 async function loadInboxConversations({ silent = false } = {}) {
@@ -1860,6 +1862,26 @@ async function loadInboxConversationDetail(conversationId) {
 async function refreshInboxSelection() {
   await loadInboxConversations({ silent: true });
   if (inboxSelectedConversationId) await loadInboxConversationDetail(inboxSelectedConversationId);
+}
+
+async function checkInboxSendStatus() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxSendStatusRefreshState === "checking") return;
+  inboxSendStatusRefreshState = "checking";
+  inboxMutationError = "";
+  render();
+  try {
+    const sendState = await getInboxSendState(adminAuthSession, conversation.id);
+    inboxSendState = sendState;
+    if (sendState.status === "sent" || sendState.status === "none") {
+      await refreshInboxSelection();
+    }
+  } catch (error) {
+    inboxMutationError = error.message || "Unable to check send status.";
+  } finally {
+    inboxSendStatusRefreshState = "idle";
+    render();
+  }
 }
 
 async function convertSelectedInboxConversationToInquiry() {
@@ -2144,6 +2166,7 @@ function renderInboxThread(conversation) {
       <textarea ${composerState.enabled ? "" : "disabled"} rows="2" maxlength="2000" data-inbox-reply-draft placeholder="${escapeHtml(composerState.placeholder)}">${escapeHtml(inboxReplyDraft)}</textarea>
       <div class="inbox-composer-actions">
         <span>${Math.min(inboxReplyDraft.trim().length, 2000)}/2000</span>
+        ${inboxSendState.status === "unknown" ? `<button ${inboxSendStatusRefreshState === "checking" ? "disabled" : ""} data-inbox-check-send-status type="button">${inboxSendStatusRefreshState === "checking" ? "Checking..." : "CHECK STATUS"}</button>` : ""}
         <button ${composerState.enabled && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-send-reply type="button">${inboxMutationState === "saving" ? "Sending..." : "Send"}</button>
       </div>
       ${composerState.helper ? `<small>${escapeHtml(composerState.helper)}</small>` : ""}
@@ -11442,6 +11465,7 @@ function bindEvents() {
     inboxReplyDraft = event.target.value;
     render();
   });
+  document.querySelector("[data-inbox-check-send-status]")?.addEventListener("click", () => checkInboxSendStatus());
   document.querySelector("[data-inbox-send-reply]")?.addEventListener("click", () => submitInboxReply());
   document.querySelector("[data-inbox-assign-me]")?.addEventListener("click", () => assignInboxToMe());
   document.querySelector("[data-inbox-reassign]")?.addEventListener("change", (event) => reassignInboxConversation(event.target.value));

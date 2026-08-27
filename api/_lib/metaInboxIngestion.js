@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { cleanReplyText } from "./metaSend.js";
 
 const CHANNEL = "facebook_messenger";
 const OPEN_STATES = new Set(["needs_reply", "waiting", "follow_up", "converted"]);
@@ -155,11 +156,13 @@ export function normalizeMessagingEvent(event) {
   };
 
   if (message) {
+    const body = cleanNullableText(message.text, 10000);
     normalized.message = {
       externalMessageId: mid || null,
       direction,
       messageType: messageType(message),
-      body: cleanNullableText(message.text, 10000),
+      body,
+      bodyHash: isEcho ? createReplyBodyHash(body) : null,
       senderExternalId: senderId || null,
       isEcho,
       metadata: stripUndefined({
@@ -469,6 +472,11 @@ function metaTime(value) {
 
 function stableHash(value) {
   return createHash("sha256").update(stableStringify(value)).digest("hex");
+}
+
+function createReplyBodyHash(value) {
+  const result = cleanReplyText(value);
+  return result.ok ? createHash("sha256").update(result.text).digest("hex") : null;
 }
 
 function stableStringify(value) {
