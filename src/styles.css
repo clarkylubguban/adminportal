@@ -29549,12 +29549,12 @@ pre,
 }
 
 .mvp-inquiries-page .mvp-table.inquiry {
-  min-width: 1180px;
+  min-width: 980px;
 }
 
 .mvp-inquiries-page .mvp-table.inquiry .mvp-table-head,
 .mvp-inquiries-page .mvp-table.inquiry .mvp-table-row {
-  grid-template-columns: 126px minmax(148px, 1fr) minmax(130px, 0.78fr) minmax(112px, 0.7fr) 116px 78px 108px 108px minmax(132px, 0.78fr) 120px !important;
+  grid-template-columns: 126px minmax(164px, 1fr) minmax(150px, 0.9fr) 116px 78px 124px minmax(148px, 0.8fr) 120px !important;
   padding-left: 12px;
   padding-right: 12px;
 }

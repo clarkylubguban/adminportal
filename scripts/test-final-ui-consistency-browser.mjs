@@ -41,7 +41,7 @@ try {
 
   for (const viewport of viewports) {
     await setViewport(cdp, viewport);
-    await verifyDashboard(cdp, viewport, "/inquiries", "Inquiry", "CODE|CUSTOMER|ITEM|REQUEST|SERVICE|QTY|QUOTE STATUS|FOLLOW-UP|OWNER|ACTION");
+    await verifyDashboard(cdp, viewport, "/inquiries", "Inquiry", "CODE|CUSTOMER|ITEM|SERVICE|QTY|QUOTE STATUS|OWNER|ACTION");
     await verifyDashboard(cdp, viewport, "/orders", "Orders", "ORDER|CUSTOMER|SUMMARY|AMOUNT|PAYMENT|PRODUCTION|DUE|OWNER|NEXT ACTION|ACTION");
     await verifyDashboard(cdp, viewport, "/production", "Production", "JOB|CUSTOMER|SUMMARY|METHOD|MATERIALS|ARTWORK|DUE|STAFF|STAGE|ACTION");
     await verifyDrawers(cdp, viewport);

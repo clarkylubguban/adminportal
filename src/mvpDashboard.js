@@ -420,18 +420,16 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function inquiryTable(items, total, currentPage, pageCount, pageSize) {
-    const headers = ["Code", "Customer", "Item", "Request", "Service", "Qty", "Quote Status", "Follow-up", "Owner", "Action"];
+    const headers = ["Code", "Customer", "Item", "Service", "Qty", "Quote Status", "Owner", "Action"];
     const desktopRows = items.map((item) => {
       const stage = quoteStage(item);
       return row("inquiry", item.id, [
         copyButton(item.id, item.id, "inquiry code"),
         customerCell(item),
         itemCell(item),
-        requestCell(item),
         cell(serviceDisplay(item)),
         quantityCell(item),
         status(QUOTE_STAGES[stage], stage),
-        followUpCell(item),
         inquiryOwnerSelectCell(item),
         inquiryActionCell(item),
       ]);
