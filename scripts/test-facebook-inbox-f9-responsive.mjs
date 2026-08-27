@@ -10,6 +10,7 @@ assert.ok(main.includes("data-inbox-back-to-list"), "Mobile thread must expose a
 assert.ok(main.includes("inboxMobileThreadOpen = true"), "Conversation selection must open the mobile thread pane");
 assert.ok(main.includes("inboxMobileThreadOpen = false"), "Back/view changes must return to the mobile list pane");
 assert.ok(main.includes("data-inbox-open-modal=\"customer_details\""), "Tablet/mobile thread must be able to open Details modal without the right panel");
+assert.equal(extractFunctionSource("renderInboxDetailPanel").includes("VIEW CUSTOMER DETAILS"), false, "Responsive details access must use the thread header only");
 
 const desktop = block("@media (min-width: 1200px) and (max-width: 1439px)");
 assert.ok(desktop.includes("clamp(250px, 22vw, 300px) minmax(0, 1fr) clamp(260px, 22vw, 310px)"), "1200-1439 desktop must keep three fluid columns");
@@ -19,6 +20,7 @@ const tablet = block("@media (min-width: 768px) and (max-width: 1199px)");
 assert.ok(tablet.includes("clamp(260px, 36vw, 290px) minmax(0, 1fr)"), "Tablet must use Conversation List | Messenger Thread");
 assert.ok(tablet.includes(".inbox-context-panel") && tablet.includes("display: none"), "Tablet must hide the permanent third panel");
 assert.ok(tablet.includes(".inbox-thread-details") && tablet.includes("display: inline-flex"), "Tablet must expose DETAILS in the thread header");
+assert.ok(styles.includes(".inbox-thread-details") && styles.includes("background: #1877f2"), "DETAILS must be a prominent blue action");
 
 const mobile = block("@media (max-width: 767px)");
 assert.ok(mobile.includes("grid-template-columns: minmax(0, 1fr)"), "Mobile must use one-pane layout");
@@ -46,6 +48,25 @@ function block(startText) {
   assert.notEqual(start, -1, `${startText} missing`);
   const next = styles.indexOf("\n@media", start + startText.length);
   return styles.slice(start, next === -1 ? styles.length : next);
+}
+
+function extractFunctionSource(name) {
+  let start = main.indexOf(`function ${name}`);
+  if (start === -1) start = main.indexOf(`async function ${name}`);
+  assert.notEqual(start, -1, `${name} function missing`);
+  const signature = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\([\\s\\S]*?\\)\\s*\\{`, "m");
+  const match = signature.exec(main.slice(start));
+  assert.ok(match, `${name} function signature not found`);
+  const open = start + match[0].length - 1;
+  let depth = 0;
+  for (let index = open; index < main.length; index += 1) {
+    if (main[index] === "{") depth += 1;
+    if (main[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return main.slice(start, index + 1);
+    }
+  }
+  throw new Error(`${name} function body not found`);
 }
 
 async function read(path) {

@@ -2395,16 +2395,12 @@ function renderInboxDetailPanel(conversation) {
     </section>
     <section class="inbox-detail-card">
       ${renderInboxFact("Channel", "Facebook Messenger")}
-      ${renderInboxFact("Lead state", link ? "Converted to inquiry" : "Not yet an inquiry")}
+      ${renderInboxFact("Lead State", link ? "Converted to inquiry" : "Not yet an inquiry")}
       ${renderInboxFact("Owner", conversation.ownerUserId ? getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }) : "Unassigned")}
-      ${renderInboxFact("Reply window", reply.label)}
-      ${link ? renderInboxFact("Inquiry", link.inquiryId) : ""}
+      ${renderInboxFact("Reply Window", reply.label)}
+      ${renderInboxFact("Inquiry", link?.inquiryId || "Not linked")}
       ${renderInboxFact("Order", conversation.orderId || "Not linked")}
       ${renderInboxInquiryAction(conversation, link, canConvert)}
-    </section>
-    <section class="inbox-summary-card">
-      <div><strong>Customer Details</strong><span>${escapeHtml(getInboxCustomerDetailsSummary(conversation))}</span></div>
-      <button data-inbox-open-modal="customer_details" type="button">VIEW CUSTOMER DETAILS</button>
     </section>
     <section class="inbox-summary-card">
       <div><strong>Internal Notes</strong><span>${escapeHtml(getInboxLatestNoteSummary(inboxDetail?.notes || []))}</span></div>

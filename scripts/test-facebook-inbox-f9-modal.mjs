@@ -31,10 +31,16 @@ assert.ok(notesModal.includes("data-inbox-note-draft") && notesModal.includes("d
 assert.ok(followUpModal.includes("inbox-centered-modal small"), "Follow-up must use a small centered modal");
 assert.ok(followUpModal.includes("data-inbox-follow-up-draft") && followUpModal.includes("data-inbox-follow-up-reason") && followUpModal.includes("data-inbox-follow-up"), "Follow-up modal must preserve F4 follow-up hooks");
 
-assert.ok(detailPanel.includes("VIEW CUSTOMER DETAILS"), "Right summary panel must expose Customer Details action");
+assert.equal(detailPanel.includes("VIEW CUSTOMER DETAILS"), false, "Right summary panel must not expose Customer Details action");
 assert.ok(detailPanel.includes("ADD NOTE / VIEW NOTES"), "Right summary panel must not permanently render the full notes form");
 assert.equal(detailPanel.includes("<h2>Customer Details</h2>"), false, "Right panel must not permanently render the old Customer Details card");
 assert.equal(detailPanel.includes("<h2>Customer Details</h2>") && detailPanel.includes("primaryPhone"), false, "Right panel must not permanently stack full contact fields");
+assert.ok(detailPanel.includes('renderInboxFact("Channel", "Facebook Messenger")'), "Core card must include Channel");
+assert.ok(detailPanel.includes('renderInboxFact("Lead State"'), "Core card must include Lead State");
+assert.ok(detailPanel.includes('renderInboxFact("Owner"'), "Core card must include Owner");
+assert.ok(detailPanel.includes('renderInboxFact("Reply Window"'), "Core card must include Reply Window");
+assert.ok(detailPanel.includes('renderInboxFact("Inquiry", link?.inquiryId || "Not linked")'), "Core card must include a stable Inquiry cell");
+assert.ok(detailPanel.includes('renderInboxFact("Order"'), "Core card must include Order");
 
 assert.ok(styles.includes(".inbox-modal-scrim"), "Modal scrim CSS missing");
 assert.ok(styles.includes("position: fixed"), "Modal scrim must be fixed, not a drawer");

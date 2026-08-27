@@ -395,7 +395,7 @@ export function getInboxReplyWindowState(expiresAt, now = new Date()) {
   const diffMs = expires.getTime() - now.getTime();
   if (diffMs <= 0) return { tone: "expired", label: "Closed" };
   const hours = Math.ceil(diffMs / 3600000);
-  return { tone: hours <= 4 ? "soon" : "open", label: `${hours}h remaining` };
+  return { tone: hours <= 4 ? "soon" : "open", label: `${hours}h left` };
 }
 
 export function normalizeInboxSendState(status) {

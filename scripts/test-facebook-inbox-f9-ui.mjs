@@ -27,7 +27,10 @@ assert.ok(main.includes("Search customer or message…"), "F9 list search placeh
 assert.ok(main.includes("INBOX_WORK_VIEWS.slice(0, 3)") && main.includes("INBOX_WORK_VIEWS.slice(3)"), "F9 work views must render as compact primary and secondary rows");
 assert.ok(main.includes("renderInboxAvatar(conversation"), "F9 must render safe avatars in the list/thread/panel");
 assert.ok(main.includes("conversation.lastMessageSnippet"), "F9 list rows must show the last captured message snippet");
-assert.ok(main.includes("VIEW CUSTOMER DETAILS"), "F9.1 summary panel must open the customer details modal");
+const threadSource = extractFunctionSource("renderInboxThread");
+const detailPanelSource = extractFunctionSource("renderInboxDetailPanel");
+assert.ok(threadSource.includes('data-inbox-open-modal="customer_details"') && threadSource.includes("DETAILS"), "F9.3 top DETAILS button must open the customer details modal");
+assert.equal(detailPanelSource.includes("VIEW CUSTOMER DETAILS"), false, "F9.3 right panel must remove side-panel Customer Details access");
 assert.ok(main.includes("ADD NOTE / VIEW NOTES"), "F9.1 summary panel must move notes behind an action");
 assert.ok(main.includes("renderInboxModal(selected)"), "F9.1 must render centered modal families from the Inbox page");
 assert.equal(extractFunctionSource("renderInboxPage").includes("FACEBOOK INBOX"), false, "F9 must remove the old oversized Facebook Inbox page header copy");
@@ -38,6 +41,8 @@ assert.ok(styles.includes("height: min(792px, calc(100vh - 156px))"), "F9 worksp
 assert.ok(styles.includes(".inbox-work-chip-groups"), "F9 compact work view chip styling missing");
 assert.ok(styles.includes(".inbox-message-row.inbound") && styles.includes(".inbox-message-row.outbound"), "F9 must preserve left inbound and right outbound message alignment");
 assert.ok(styles.includes(".inbox-context-panel"), "F9 right customer and operations panel styling missing");
+assert.ok(styles.includes("background: #1877f2"), "F9.3 must use Messenger blue for primary Inbox actions and outbound bubbles");
+assert.ok(styles.includes(".inbox-detail-card") && styles.includes("grid-template-columns: repeat(2, minmax(0, 1fr))"), "F9.3 Core card must use a two-column grid");
 assert.ok(styles.includes("@media (max-width: 1320px)") && styles.includes("@media (max-width: 1040px)"), "F9 desktop responsiveness must include 1366-safe and smaller fallbacks");
 assert.ok(styles.includes("@media (min-width: 768px) and (max-width: 1199px)"), "F9.1 tablet two-pane layout missing");
 assert.ok(styles.includes("@media (max-width: 767px)"), "F9.1 mobile single-pane layout missing");

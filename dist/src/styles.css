@@ -1032,7 +1032,7 @@
 }
 
 .inbox-message.outbound {
-  background: #151515;
+  background: #1877f2;
   color: #ffffff;
 }
 
@@ -1081,8 +1081,8 @@
 }
 
 .inbox-composer-actions button:last-child {
-  background: #151515;
-  border-color: #151515;
+  background: #1877f2;
+  border-color: #1877f2;
   color: #ffffff;
 }
 
@@ -1148,8 +1148,15 @@
 .inbox-detail-card {
   border: 1px solid #ebe8df;
   border-radius: 8px;
+  display: grid;
   gap: 9px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   padding: 12px;
+}
+
+.inbox-detail-card button {
+  grid-column: 1 / -1;
+  justify-content: center;
 }
 
 .inbox-detail-card h2 {
@@ -1167,6 +1174,14 @@
   color: #24231f;
   font-size: 12px;
   font-weight: 700;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.inbox-thread-details {
+  background: #1877f2;
+  border-color: #1877f2;
+  color: #ffffff;
 }
 
 .inbox-profile-refresh .mvp-secondary-action {
@@ -1220,8 +1235,7 @@
   }
 }
 
-.inbox-thread-back,
-.inbox-thread-details {
+.inbox-thread-back {
   display: none;
 }
 
