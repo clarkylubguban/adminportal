@@ -40,6 +40,7 @@ assert.ok(mobile.includes("overflow-x: auto"), "Mobile work-view chips must be s
 assert.ok(styles.includes("overflow-wrap: anywhere"), "Long messages and URLs must not force horizontal overflow");
 assert.ok(styles.includes("min-width: 0"), "Responsive Inbox must apply min-width:0 safety");
 assert.ok(styles.includes("overflow: hidden") && styles.includes("text-overflow: ellipsis"), "Conversation list text must truncate safely");
+assert.ok(styles.includes("grid-auto-rows: max-content") && styles.includes("max-height: 110px"), "Conversation rows must remain compact across responsive breakpoints");
 assert.ok(styles.includes("grid-template-rows: 92px minmax(0, 1fr) 104px"), "Desktop composer must stay bottom-aligned");
 assert.ok(styles.includes("grid-template-rows: auto minmax(0, 1fr) auto"), "Mobile composer must stay reachable in the thread pane");
 

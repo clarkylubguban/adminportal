@@ -71,6 +71,12 @@ assert.equal(/123456789|PSID|externalUserId/.test(viewModel), false, "rendered r
 assert.ok(styles.includes("overflow: hidden") && styles.includes("overflow-y: auto"), "F9 workspace must avoid page overflow while allowing column scroll");
 assert.ok(styles.includes(".inbox-composer") && styles.includes("grid-template-rows: 92px minmax(0, 1fr) 104px"), "F9 composer must remain visible at the bottom of the thread column");
 assert.ok(styles.includes("box-shadow: inset 4px 0 0 #baff16"), "F9 selected conversation must use the Figma active rail");
+assert.ok(styles.includes("grid-auto-rows: max-content"), "Conversation list rows must stay content-sized instead of filling available height");
+assert.ok(styles.includes("align-self: start") && styles.includes("max-height: 110px") && styles.includes("min-height: 96px"), "Selected conversation row must stay compact around 96-110px");
+const finalConversationCardRule = lastRule(".inbox-conversation-card");
+const finalListPanelRule = lastRule(".inbox-list-panel");
+assert.equal(/height:\s*100%/.test(finalConversationCardRule), false, "Final conversation card rule must not use height:100%");
+assert.equal(/grid-template-rows:\s*auto\s+auto\s+minmax\(0,\s*1fr\)/.test(finalListPanelRule), false, "Final conversation list rule must not stretch the final row to fill the panel");
 assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0, 1fr) minmax(300px, 350px)"), "Desktop layout must fill width with controlled side columns and flexible chat");
 assert.ok(styles.includes(".inbox-thread-actions .inbox-thread-details") && styles.includes("background: #1877f2"), "DETAILS must remain a blue active control");
 assert.ok(styles.includes(".inbox-message.outbound") && styles.includes("background: #1877f2"), "Outgoing bubble must remain blue");
@@ -129,4 +135,12 @@ function extractFunctionSource(name) {
 
 async function read(path) {
   return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+function lastRule(selector) {
+  const start = styles.lastIndexOf(`${selector} {`);
+  assert.notEqual(start, -1, `${selector} rule missing`);
+  const end = styles.indexOf("\n}", start);
+  assert.notEqual(end, -1, `${selector} rule end missing`);
+  return styles.slice(start, end + 2);
 }
