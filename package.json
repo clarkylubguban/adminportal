@@ -62,6 +62,8 @@
     "test:facebook-inbox-f8-db": "node scripts/test-facebook-inbox-f8-db.mjs",
     "test:facebook-inbox-f9-ui": "node scripts/test-facebook-inbox-f9-ui.mjs",
     "test:facebook-inbox-f9-browser": "node scripts/test-facebook-inbox-f9-browser.mjs",
+    "test:facebook-inbox-f9-responsive": "node scripts/test-facebook-inbox-f9-responsive.mjs",
+    "test:facebook-inbox-f9-modal": "node scripts/test-facebook-inbox-f9-modal.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
     "preview": "node scripts/local-dev.mjs"
   },

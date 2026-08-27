@@ -658,6 +658,8 @@ let inboxDetailError = "";
 let inboxSelectedConversationId = "";
 let inboxActiveView = "needs_reply";
 let inboxSearchQuery = "";
+let inboxMobileThreadOpen = false;
+let inboxActiveModal = "";
 let inboxActionPermissions = createInboxActionPermissions();
 let inboxReplyCapability = { replyConfigured: false };
 let inboxAssignmentUsers = [];
@@ -2179,7 +2181,7 @@ function renderInboxPage() {
   }
 
   return `
-    <main class="inbox-page">
+    <main class="inbox-page ${inboxMobileThreadOpen ? "inbox-mobile-thread-open" : ""}">
       <section class="inbox-page-header">
         <div class="inbox-title-stack">
           <nav class="inbox-breadcrumb" aria-label="Breadcrumb"><span>Home</span><span>Inbox</span></nav>
@@ -2211,6 +2213,7 @@ function renderInboxPage() {
           ${renderInboxDetailPanel(selected)}
         </aside>
       </section>
+      ${renderInboxModal(selected)}
     </main>
   `;
 }
@@ -2276,11 +2279,13 @@ function renderInboxThread(conversation) {
   return `
     <header class="inbox-thread-header">
       <div class="inbox-thread-person">
+        <button class="inbox-thread-back" data-inbox-back-to-list type="button" aria-label="Back to conversations">Back</button>
         ${renderInboxAvatar(conversation, "inbox-avatar large")}
         <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>Facebook Messenger • ${escapeHtml(formatInboxState(conversation.state))}</span></div>
       </div>
       <div class="inbox-thread-actions">
         <span class="inbox-reply-pill ${reply.tone}">${escapeHtml(reply.label)}</span>
+        <button class="inbox-thread-details" data-inbox-open-modal="customer_details" type="button">DETAILS</button>
         <button ${canAssignSelf && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-assign-me type="button">Assign</button>
         <select ${canReassign && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-reassign aria-label="Reassign conversation">
           <option value="">Reassign</option>
@@ -2339,50 +2344,143 @@ function renderInboxDetailPanel(conversation) {
     <section class="inbox-customer-summary">
       ${renderInboxAvatar(conversation, "inbox-avatar xlarge")}
       <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>${escapeHtml(conversation.pageName || "TRRY Apparel")} • Facebook Messenger</span></div>
-      ${renderInboxFact("Name", conversation.customerLabel)}
       ${renderInboxFacebookNameRefresh(conversation)}
     </section>
     <section class="inbox-detail-card">
-      <h2>Core</h2>
       ${renderInboxFact("Channel", "Facebook Messenger")}
-      ${renderInboxFact("Entry source", conversation.entrySource || "Not yet captured")}
+      ${renderInboxFact("Lead state", link ? "Converted to inquiry" : "Not yet an inquiry")}
       ${renderInboxFact("Owner", conversation.ownerUserId ? getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }) : "Unassigned")}
       ${renderInboxFact("Reply window", reply.label)}
-      ${renderInboxFact("Campaign", conversation.campaignName || conversation.campaignId || "Not yet captured")}
-    </section>
-    <section class="inbox-detail-card">
-      <h2>Customer Details</h2>
-      ${renderInboxFact("Phone", conversation.primaryPhone || "Not yet captured")}
-      ${renderInboxFact("Email", conversation.primaryEmail || "Not yet captured")}
-      ${renderInboxFact("Company", conversation.companyName || "Not yet captured")}
-    </section>
-    <section class="inbox-detail-card">
-      <h2>Lead Status</h2>
-      ${link ? renderInboxFact("Inquiry", link.inquiryId) + renderInboxFact("Converted", formatTaskDateTime(link.convertedAt)) : renderInboxFact("Status", "Not yet an inquiry")}
+      ${link ? renderInboxFact("Inquiry", link.inquiryId) : ""}
+      ${renderInboxFact("Order", conversation.orderId || "Not linked")}
       ${renderInboxInquiryAction(conversation, link, canConvert)}
     </section>
-    <section class="inbox-detail-card">
-      <h2>Linked Records</h2>
-      ${link ? renderInboxFact("Inquiry", link.inquiryId) : renderInboxFact("Inquiry", "Not linked")}
-      ${renderInboxFact("Order", conversation.orderId || "Not linked")}
+    <section class="inbox-summary-card">
+      <div><strong>Customer Details</strong><span>${escapeHtml(getInboxCustomerDetailsSummary(conversation))}</span></div>
+      <button data-inbox-open-modal="customer_details" type="button">VIEW CUSTOMER DETAILS</button>
     </section>
-    <section class="inbox-detail-card">
-      <h2>Internal Notes</h2>
-      ${renderInboxNotes(inboxDetail?.notes || [])}
-      <textarea ${canNote ? "" : "disabled"} data-inbox-note-draft maxlength="4000" rows="3" placeholder="Add an internal note">${escapeHtml(inboxNoteDraft)}</textarea>
-      <button ${canNote && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-add-note type="button">Add Note</button>
+    <section class="inbox-summary-card">
+      <div><strong>Internal Notes</strong><span>${escapeHtml(getInboxLatestNoteSummary(inboxDetail?.notes || []))}</span></div>
+      <button data-inbox-open-modal="notes" type="button">ADD NOTE / VIEW NOTES</button>
     </section>
-    <section class="inbox-detail-card">
-      <h2>Follow-up</h2>
-      <input ${canManageState ? "" : "disabled"} data-inbox-follow-up-draft type="datetime-local" value="${escapeHtml(inboxFollowUpDraft)}" />
-      <textarea ${canManageState ? "" : "disabled"} data-inbox-follow-up-reason rows="2" maxlength="500" placeholder="Internal reason">${escapeHtml(inboxFollowUpReason)}</textarea>
-      <button ${canManageState && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-follow-up type="button">Follow-up</button>
+    <section class="inbox-summary-card">
+      <div><strong>Snooze / Follow-up</strong><span>${escapeHtml(conversation.snoozedUntil ? formatTaskDateTime(conversation.snoozedUntil) : "No follow-up scheduled")}</span></div>
+      <button ${canManageState ? "" : "disabled"} data-inbox-open-modal="follow_up" type="button">FOLLOW-UP</button>
     </section>
     <section class="inbox-detail-actions">
       ${renderInboxCloseControl(conversation, canManageState)}
       <span>${ownedByMe ? "Owned by you" : conversation.ownerUserId ? `Owned by ${escapeHtml(getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }))}` : "Unassigned"}</span>
     </section>
   `;
+}
+
+function renderInboxModal(conversation) {
+  if (!conversation || !inboxActiveModal) return "";
+  if (inboxActiveModal === "customer_details") return renderInboxCustomerDetailsModal(conversation);
+  if (inboxActiveModal === "notes") return renderInboxNotesModal(conversation);
+  if (inboxActiveModal === "follow_up") return renderInboxFollowUpModal(conversation);
+  return "";
+}
+
+function renderInboxCustomerDetailsModal(conversation) {
+  const link = inboxDetail?.inquiryLink || (conversation.inquiryId ? { inquiryId: conversation.inquiryId, convertedAt: conversation.convertedAt } : null);
+  const profileName = conversation.customerLabel === "Facebook customer" ? "Not captured" : "Available";
+  const profilePhoto = conversation.profilePictureUrl ? "Available" : "Not captured";
+  return `<section class="inbox-modal-scrim" role="dialog" aria-modal="true" aria-labelledby="inbox-customer-details-title">
+    <div class="inbox-centered-modal inbox-customer-details-modal">
+      <header class="inbox-modal-header">
+        <div class="inbox-modal-topline"><span>DETAILS</span><button data-inbox-close-modal type="button" aria-label="Close customer details">×</button></div>
+        <h2 id="inbox-customer-details-title">Customer Details</h2>
+        <strong>${escapeHtml(conversation.customerLabel)} • Facebook Messenger</strong>
+        <p>Edit only missing customer information</p>
+      </header>
+      <div class="inbox-modal-body">
+        <section class="inbox-modal-card">
+          <h3>CUSTOMER CONTACT</h3>
+          <div class="inbox-modal-field-grid">
+            ${renderInboxModalField("Customer Name", conversation.customerLabel)}
+            ${renderInboxModalField("Mobile Number", conversation.primaryPhone || "Not provided")}
+            ${renderInboxModalField("Email", conversation.primaryEmail || "Not provided")}
+            ${renderInboxModalField("Company", conversation.companyName || "Not provided")}
+            ${renderInboxModalField("Address", "Not supported yet")}
+            ${renderInboxModalField("City", "Not supported yet")}
+            ${renderInboxModalField("State", "Not supported yet")}
+            ${renderInboxModalField("ZIP / Postal Code", "Not supported yet")}
+          </div>
+          <label class="inbox-modal-textarea"><span>Customer Notes</span><textarea disabled rows="3">Optional internal context about this customer. Keep Messenger conversation history separate.</textarea></label>
+          <div class="inbox-profile-summary"><span>Facebook Profile</span><strong>Profile name ${profileName} • Profile photo ${profilePhoto}</strong></div>
+          <div class="inbox-profile-summary linked"><span>Linked Records</span><strong>Inquiry ${link?.inquiryId || "not linked"} • Order ${conversation.orderId || "not linked"}</strong></div>
+        </section>
+      </div>
+      <footer class="inbox-modal-footer">
+        <button data-inbox-close-modal type="button">Cancel</button>
+        <button disabled type="button" title="Customer detail update API is not available in this UI phase.">Save Details</button>
+      </footer>
+    </div>
+  </section>`;
+}
+
+function renderInboxNotesModal(conversation) {
+  const canNote = inboxActionPermissions.inbox_internal_note === true;
+  return `<section class="inbox-modal-scrim" role="dialog" aria-modal="true" aria-labelledby="inbox-notes-title">
+    <div class="inbox-centered-modal small">
+      <header class="inbox-modal-header">
+        <div class="inbox-modal-topline"><span>NOTES</span><button data-inbox-close-modal type="button" aria-label="Close notes">×</button></div>
+        <h2 id="inbox-notes-title">Internal Notes</h2>
+        <strong>${escapeHtml(conversation.customerLabel)} • Facebook Messenger</strong>
+        <p>Keep internal context separate from Messenger messages.</p>
+      </header>
+      <div class="inbox-modal-body">
+        ${renderInboxNotes(inboxDetail?.notes || [])}
+        <textarea ${canNote ? "" : "disabled"} data-inbox-note-draft maxlength="4000" rows="4" placeholder="Add an internal note">${escapeHtml(inboxNoteDraft)}</textarea>
+      </div>
+      <footer class="inbox-modal-footer">
+        <button data-inbox-close-modal type="button">Cancel</button>
+        <button ${canNote && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-add-note type="button">Add Note</button>
+      </footer>
+    </div>
+  </section>`;
+}
+
+function renderInboxFollowUpModal(conversation) {
+  const canManageState = inboxActionPermissions.inbox_manage_state === true;
+  return `<section class="inbox-modal-scrim" role="dialog" aria-modal="true" aria-labelledby="inbox-follow-up-title">
+    <div class="inbox-centered-modal small">
+      <header class="inbox-modal-header">
+        <div class="inbox-modal-topline"><span>FOLLOW-UP</span><button data-inbox-close-modal type="button" aria-label="Close follow-up">×</button></div>
+        <h2 id="inbox-follow-up-title">Snooze / Follow-up</h2>
+        <strong>${escapeHtml(conversation.customerLabel)} • Facebook Messenger</strong>
+        <p>Schedule a follow-up without changing Messenger history.</p>
+      </header>
+      <div class="inbox-modal-body">
+        <label class="inbox-modal-input"><span>Follow-up time</span><input ${canManageState ? "" : "disabled"} data-inbox-follow-up-draft type="datetime-local" value="${escapeHtml(inboxFollowUpDraft)}" /></label>
+        <label class="inbox-modal-textarea"><span>Internal reason</span><textarea ${canManageState ? "" : "disabled"} data-inbox-follow-up-reason rows="3" maxlength="500" placeholder="Internal reason">${escapeHtml(inboxFollowUpReason)}</textarea></label>
+      </div>
+      <footer class="inbox-modal-footer">
+        <button data-inbox-close-modal type="button">Cancel</button>
+        <button ${canManageState && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-follow-up type="button">Follow-up</button>
+      </footer>
+    </div>
+  </section>`;
+}
+
+function renderInboxModalField(label, value) {
+  return `<label class="inbox-modal-input"><span>${escapeHtml(label)}</span><input disabled value="${escapeHtml(value || "Not provided")}" /></label>`;
+}
+
+function getInboxCustomerDetailsSummary(conversation) {
+  const available = [
+    conversation.primaryPhone ? "phone" : "",
+    conversation.primaryEmail ? "email" : "",
+    conversation.companyName ? "company" : "",
+  ].filter(Boolean);
+  return available.length ? `${available.join(", ")} captured` : "Phone, email and company not yet captured";
+}
+
+function getInboxLatestNoteSummary(notes) {
+  const note = notes[0];
+  if (!note?.body) return "No internal notes yet";
+  return note.body.length > 86 ? `${note.body.slice(0, 83)}...` : note.body;
 }
 
 function renderInboxFacebookNameRefresh(conversation) {
@@ -11609,6 +11707,8 @@ function bindEvents() {
     button.addEventListener("click", () => {
       inboxActiveView = button.dataset.inboxView || "needs_reply";
       inboxSelectedConversationId = "";
+      inboxMobileThreadOpen = false;
+      inboxActiveModal = "";
       inboxDetail = null;
       inboxSendState = { status: "none" };
       inboxCloseConfirmId = "";
@@ -11619,10 +11719,31 @@ function bindEvents() {
   });
 
   document.querySelectorAll("[data-inbox-conversation]").forEach((button) => {
-    button.addEventListener("click", () => loadInboxConversationDetail(button.dataset.inboxConversation));
+    button.addEventListener("click", () => {
+      inboxMobileThreadOpen = true;
+      loadInboxConversationDetail(button.dataset.inboxConversation);
+    });
   });
 
   document.querySelector("[data-inbox-refresh]")?.addEventListener("click", () => loadInboxConversations());
+  document.querySelector("[data-inbox-back-to-list]")?.addEventListener("click", () => {
+    inboxMobileThreadOpen = false;
+    inboxActiveModal = "";
+    render();
+  });
+  document.querySelectorAll("[data-inbox-open-modal]").forEach((button) => {
+    button.addEventListener("click", () => {
+      inboxActiveModal = button.dataset.inboxOpenModal || "";
+      inboxMutationError = "";
+      render();
+    });
+  });
+  document.querySelectorAll("[data-inbox-close-modal]").forEach((button) => {
+    button.addEventListener("click", () => {
+      inboxActiveModal = "";
+      render();
+    });
+  });
   document.querySelector("[data-inbox-search]")?.addEventListener("input", (event) => {
     inboxSearchQuery = event.target.value;
     render();
