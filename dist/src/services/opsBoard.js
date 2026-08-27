@@ -69,15 +69,15 @@ export async function getOpsBoardInquiries(
   }
 }
 
-async function addInboxLineageToInquiries(inquiries, accessToken) {
+export async function addInboxLineageToInquiries(inquiries, accessToken, readTable = readSupabaseTableWithAuth) {
   const ids = inquiries.map((inquiry) => inquiry.id).filter(Boolean);
   if (!ids.length) return inquiries;
 
-  const links = await readSupabaseTableWithAuth(
+  const links = await readTable(
     INBOX_INQUIRY_LINKS_TABLE,
     {
       select: "conversation_id,inquiry_id,converted_at",
-      inquiry_id: `in.(${ids.join(",")})`,
+      inquiry_id: `in.(${ids.map(formatPostgrestInValue).join(",")})`,
     },
     accessToken
   );
@@ -91,6 +91,10 @@ async function addInboxLineageToInquiries(inquiries, accessToken) {
       inboxConvertedAt: link.converted_at || "",
     };
   });
+}
+
+function formatPostgrestInValue(value) {
+  return `"${String(value).replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`;
 }
 
 export async function createOpsBoardInquiry(

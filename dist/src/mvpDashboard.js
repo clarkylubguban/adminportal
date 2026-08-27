@@ -449,6 +449,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return drawer("inquiry locked", item, QUOTE_STAGES[stage], `
       <section class="mvp-inquiry-locked-shell">
         ${inquiryLockedHeader(item, stage)}
+        ${inquiryConversationAction(item)}
         ${inquiryTabs(activeTab)}
         ${inquiryTabPanels(item, activeTab, renderQuote, renderArtwork)}
         ${workflowPanel}
@@ -459,6 +460,13 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function inquiryLockedHeader(item, stage) {
     const stamp = inquiryTimestamp(item);
     return `<div class="mvp-inquiry-locked-header"><div class="mvp-inquiry-header-top"><span class="mvp-inquiry-status-pill ${stage}">${html(QUOTE_STAGES[stage])}</span></div><div class="mvp-inquiry-number-row"><h2>${html(item.id)}</h2>${copyButton("COPY", item.id, "inquiry number")}</div><strong class="mvp-inquiry-customer">${html(item.customer || "Unnamed customer")}</strong><div class="mvp-inquiry-meta"><span>${html(item.contact || "No contact")}</span><i></i><span>${html(stamp.date)}</span><i></i><span>via ${html(sourceLabel(item))}</span></div></div>`;
+  }
+
+  function inquiryConversationAction(item) {
+    if (item.inboxConversationId) {
+      return `<section class="mvp-inquiry-next-panel"><div><span>FACEBOOK INBOX</span><strong>Linked Messenger conversation</strong><small>Conversation history remains in Inbox.</small></div><button type="button" class="mvp-secondary-action" data-mvp-view-inbox="${html(item.inboxConversationId)}">VIEW INBOX</button></section>`;
+    }
+    return `<section class="mvp-inquiry-next-panel"><div><span>MESSENGER</span><strong>Customer conversation</strong><small>No Inbox lineage is linked to this Inquiry.</small></div><button type="button" class="mvp-secondary-action" data-mvp-open-messenger>Open Messenger</button></section>`;
   }
 
   function inquiryCompactSummary(item, stage) {
