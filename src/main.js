@@ -1914,12 +1914,16 @@ async function convertSelectedInboxConversationToInquiry() {
 
 async function openInboxInquiry(inquiryId) {
   if (!inquiryId) return;
-  navigateTo("/inquiries");
+  const canonicalInquiryId = String(inquiryId).trim();
+  navigateTo(`/inquiries?inquiry=${encodeURIComponent(canonicalInquiryId)}`);
+  mvpDashboard.state.inquiryId = canonicalInquiryId;
+  mvpDashboard.state.inquiryTab = null;
+  mvpDashboard.state.inquiryActionId = null;
   if (shouldLoadSupabaseOps) {
     hasLoadedOpsInquiries = false;
     await loadOpsBoardInquiries();
   }
-  expandedOpsInquiryId = inquiryId;
+  expandedOpsInquiryId = canonicalInquiryId;
   render();
 }
 
@@ -3905,12 +3909,21 @@ function renderOverviewPage() {
 }
 
 function renderMvpInquiriesPage() {
+  const items = getMvpDashboardItems();
+  syncMvpInquiryDeepLinkSelection(items);
   return mvpDashboard.renderInquiries({
-    items: getMvpDashboardItems(),
+    items,
     notices: renderOpsPersistenceNotice(),
     renderQuote: renderOpsQuoteStage,
     renderArtwork: renderMvpArtworkAction,
   });
+}
+
+function syncMvpInquiryDeepLinkSelection(items) {
+  if (getRoutePath() !== "/inquiries") return;
+  const inquiryId = new URLSearchParams(window.location.search).get("inquiry") || "";
+  if (!inquiryId) return;
+  mvpDashboard.state.inquiryId = items.some((item) => item.id === inquiryId) ? inquiryId : null;
 }
 
 function renderMvpOrdersPage() {

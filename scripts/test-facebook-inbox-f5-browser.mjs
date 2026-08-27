@@ -21,7 +21,7 @@ assert.ok(main.includes("CONVERTING..."), "Conversion progress label missing");
 assert.ok(main.includes("VIEW INQUIRY"), "Post-conversion view action missing");
 assert.ok(main.includes("data-inbox-view-inquiry"), "View Inquiry data hook missing");
 assert.ok(main.includes("openInboxInquiry"), "View Inquiry handler missing");
-assert.ok(main.includes('navigateTo("/inquiries")'), "View Inquiry must open canonical Inquiry surface");
+assert.ok(main.includes("navigateTo(`/inquiries?inquiry=${encodeURIComponent(canonicalInquiryId)}`)"), "View Inquiry must open the canonical Inquiry surface and exact drawer");
 assert.ok(main.includes('inboxActiveView = "converted"'), "Successful conversion should keep the converted conversation visible");
 assert.equal(main.includes('title="Available in F5"'), false, "F5 must replace the disabled placeholder");
 

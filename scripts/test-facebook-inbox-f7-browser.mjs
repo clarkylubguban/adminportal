@@ -17,11 +17,20 @@ assert.ok(main.includes('if (path === "/inbox" && !canViewInboxRoute()) return d
 assert.ok(main.includes('window.history.replaceState({}, "", "/inbox")'), "Manual Inbox view changes must clear stale conversation deep links");
 assert.ok(main.includes("data-ops-view-inbox"), "Classic Ops drawer must support linked Inquiry -> Inbox navigation");
 assert.ok(main.includes("openInbox: openInboxConversation"), "MVP dashboard must receive the Inbox navigation callback");
+assert.ok(main.includes("async function openInboxInquiry"), "Inbox VIEW INQUIRY handler must exist");
+assert.ok(main.includes("navigateTo(`/inquiries?inquiry=${encodeURIComponent(canonicalInquiryId)}`)"), "Inbox VIEW INQUIRY must carry the exact Inquiry identity in the URL");
+assert.ok(main.includes("mvpDashboard.state.inquiryId = canonicalInquiryId"), "Inbox VIEW INQUIRY must select the exact MVP Inquiry drawer");
+assert.ok(main.includes("mvpDashboard.state.inquiryTab = null"), "Inbox VIEW INQUIRY must open the normal drawer state");
+assert.ok(main.includes("syncMvpInquiryDeepLinkSelection(items)"), "Inquiries page must sync direct deep links during render");
+assert.ok(main.includes('new URLSearchParams(window.location.search).get("inquiry")'), "Inquiries page must support /inquiries?inquiry=<id>");
+assert.ok(main.includes("items.some((item) => item.id === inquiryId) ? inquiryId : null"), "Invalid Inquiry deep links must clear selection instead of opening an unrelated drawer");
 
 assert.ok(dashboard.includes("item.inboxConversationId\n      ? `<button type=\"button\" data-mvp-view-inbox="), "Linked inquiries must replace the generic Messenger action with VIEW INBOX");
 assert.ok(dashboard.includes(': `<button type="button" data-mvp-open-messenger>Open Messenger</button>`'), "Unlinked inquiries must not get VIEW INBOX");
 assert.ok(dashboard.includes("await openInbox?.(button.dataset.mvpViewInbox)"), "VIEW INBOX must call the internal app route callback");
 assert.ok(dashboard.includes("data-mvp-open-messenger") && dashboard.includes("window.open(\"https://www.messenger.com/\""), "Existing generic Messenger fallback must remain available for unlinked inquiries");
+assert.ok(dashboard.includes('const selected = inquiries.find((item) => item.id === (state.inquiryId || query("inquiry")))'), "Existing MVP Inquiry drawer must open from state or canonical query");
+assert.ok(dashboard.includes('priority(item, "Customer follow-up due"') && dashboard.includes('`/inquiries?inquiry=${encodeURIComponent(item.id)}`'), "Existing normal Inquiry deep-link navigation must remain unchanged");
 
 assert.ok(main.includes("CONVERT INQUIRY"), "F5 CONVERT INQUIRY label must remain unchanged");
 assert.ok(main.includes("CONVERTING..."), "F5 converting state must remain unchanged");
