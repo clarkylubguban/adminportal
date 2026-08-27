@@ -10,6 +10,7 @@ import {
 } from "./nativeOrderStatus.js";
 
 export const OPS_INQUIRIES_TABLE = "ops_inquiries";
+export const INBOX_INQUIRY_LINKS_TABLE = "inbox_inquiry_links";
 
 // Database schema and RLS policies must be managed in Supabase,
 // not embedded inside the Admin Portal frontend.
@@ -30,19 +31,21 @@ export async function getOpsBoardInquiries(
   }
 
   try {
+    const accessToken = getAccessToken(authSession);
     const rows = await readSupabaseTableWithAuth(
       OPS_INQUIRIES_TABLE,
       {
         select: "*",
         order: "created_at.desc",
       },
-      getAccessToken(authSession)
+      accessToken
     );
+    const inquiries = Array.isArray(rows)
+      ? await addInboxLineageToInquiries(rows.map(mapOpsRowToInquiry), accessToken)
+      : [];
 
     return {
-      inquiries: Array.isArray(rows)
-        ? rows.map(mapOpsRowToInquiry)
-        : [],
+      inquiries,
       status: rows?.length ? "success" : "empty",
       source: "supabase",
       error: null,
@@ -64,6 +67,30 @@ export async function getOpsBoardInquiries(
       sql: null,
     };
   }
+}
+
+async function addInboxLineageToInquiries(inquiries, accessToken) {
+  const ids = inquiries.map((inquiry) => inquiry.id).filter(Boolean);
+  if (!ids.length) return inquiries;
+
+  const links = await readSupabaseTableWithAuth(
+    INBOX_INQUIRY_LINKS_TABLE,
+    {
+      select: "conversation_id,inquiry_id,converted_at",
+      inquiry_id: `in.(${ids.join(",")})`,
+    },
+    accessToken
+  );
+  const linksByInquiry = new Map((Array.isArray(links) ? links : []).map((link) => [link.inquiry_id, link]));
+  return inquiries.map((inquiry) => {
+    const link = linksByInquiry.get(inquiry.id);
+    if (!link?.conversation_id) return inquiry;
+    return {
+      ...inquiry,
+      inboxConversationId: link.conversation_id,
+      inboxConvertedAt: link.converted_at || "",
+    };
+  });
 }
 
 export async function createOpsBoardInquiry(
@@ -171,6 +198,8 @@ export function mapOpsRowToInquiry(row) {
     code: getFirstValue(row, ["code"]),
     sourceInquiryId: getFirstValue(row, ["source_inquiry_id", "sourceInquiryId", "inquiry_id", "inquiryId"]),
     sourceInquiryReference: getFirstValue(row, ["source_inquiry_reference", "sourceInquiryReference", "inquiry_reference", "inquiryReference", "converted_from", "convertedFrom"]),
+    inboxConversationId: getFirstValue(row, ["inbox_conversation_id", "inboxConversationId"]),
+    inboxConvertedAt: getFirstValue(row, ["inbox_converted_at", "inboxConvertedAt"]),
     customer: getFirstValue(row, [
       "customer_name",
       "customer",

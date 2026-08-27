@@ -1810,13 +1810,21 @@ async function loadInboxConversations({ silent = false } = {}) {
     inboxConversations = await getAdminInboxConversationRows(adminAuthSession);
     inboxLoadState = inboxConversations.length ? "ready" : "empty";
     inboxLoadError = "";
+    const requestedConversationId = getInboxDeepLinkConversationId();
+    const requestedConversation = requestedConversationId
+      ? inboxConversations.find((conversation) => conversation.id === requestedConversationId)
+      : null;
+    if (requestedConversation) {
+      inboxActiveView = getInboxViewKeyForConversation(requestedConversation);
+      if (inboxSelectedConversationId !== requestedConversation.id) {
+        inboxSelectedConversationId = requestedConversation.id;
+        resetInboxSelectionDetailState("idle");
+      }
+    }
     const visible = getVisibleInboxConversations();
-    if (!visible.some((conversation) => conversation.id === inboxSelectedConversationId)) {
+    if (!requestedConversation && !visible.some((conversation) => conversation.id === inboxSelectedConversationId)) {
       inboxSelectedConversationId = visible[0]?.id || "";
-      inboxDetail = null;
-      inboxSendState = { status: "none" };
-      inboxCloseConfirmId = "";
-      inboxDetailState = inboxSelectedConversationId ? "idle" : "empty";
+      resetInboxSelectionDetailState(inboxSelectedConversationId ? "idle" : "empty");
     }
     if (inboxSelectedConversationId && inboxDetailState === "idle") {
       window.setTimeout(() => loadInboxConversationDetail(inboxSelectedConversationId), 0);
@@ -1913,6 +1921,14 @@ async function openInboxInquiry(inquiryId) {
   }
   expandedOpsInquiryId = inquiryId;
   render();
+}
+
+async function openInboxConversation(conversationId) {
+  if (!isUuid(conversationId) || !canViewInboxRoute()) return;
+  inboxSelectedConversationId = conversationId;
+  resetInboxSelectionDetailState("idle");
+  navigateTo(`/inbox?conversation=${encodeURIComponent(conversationId)}`);
+  await loadInboxConversations({ silent: inboxLoadState !== "idle" });
 }
 
 async function submitInboxReply() {
@@ -2040,6 +2056,29 @@ function getVisibleInboxConversations() {
 
 function getSelectedInboxConversation() {
   return inboxConversations.find((conversation) => conversation.id === inboxSelectedConversationId) || null;
+}
+
+function getInboxDeepLinkConversationId() {
+  if (window.location.pathname.replace(/\/+$/, "") !== "/inbox") return "";
+  const conversationId = new URLSearchParams(window.location.search).get("conversation") || "";
+  return isUuid(conversationId) ? conversationId : "";
+}
+
+function isUuid(value) {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(String(value || ""));
+}
+
+function getInboxViewKeyForConversation(conversation) {
+  const state = String(conversation?.state || "");
+  if (INBOX_VIEWS.some((view) => view.key === state)) return state;
+  return "all";
+}
+
+function resetInboxSelectionDetailState(nextState = "idle") {
+  inboxDetail = null;
+  inboxSendState = { status: "none" };
+  inboxCloseConfirmId = "";
+  inboxDetailState = nextState;
 }
 
 function getInboxComposerState(conversation) {
@@ -4029,7 +4068,12 @@ function renderOpsInquiryDrawer() {
   const status = opsStatus[item.status] ?? opsStatus.new;
   const currentTask = getOpsInquiryCurrentTask(item);
 
-  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2><mark>${escapeHtml(status.label)}</mark></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content"><section class="ops-next-task-card"><span>NEXT ACTION</span><strong>${escapeHtml(currentTask.text)}</strong></section>${renderOpsInquiryDetails(item)}${renderOpsStageOverview(item)}${renderOpsCurrentStageSections(item)}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+  return `<div class="ops-drawer-backdrop" data-ops-close-details></div><aside class="ops-detail-drawer" aria-label="Inquiry details"><header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer)}</h2><mark>${escapeHtml(status.label)}</mark></div><button class="ops-drawer-close" data-ops-close-details type="button" aria-label="Close inquiry details">X</button></header><div class="ops-drawer-content"><section class="ops-next-task-card"><span>NEXT ACTION</span><strong>${escapeHtml(currentTask.text)}</strong></section>${renderOpsInquiryDetails(item)}${renderOpsInboxLineageAction(item)}${renderOpsStageOverview(item)}${renderOpsCurrentStageSections(item)}${renderOpsStaffActions(item, item.status)}</div></aside>`;
+}
+
+function renderOpsInboxLineageAction(item) {
+  if (!item?.inboxConversationId || !canViewInboxRoute()) return "";
+  return `<section class="ops-next-task-card"><span>FACEBOOK INBOX</span><strong>Linked Messenger conversation</strong><button type="button" data-ops-view-inbox="${escapeHtml(item.inboxConversationId)}">VIEW INBOX</button></section>`;
 }
 
 function getOpsNormalizedCustomerState(item) {
@@ -11452,6 +11496,7 @@ function bindEvents() {
       inboxSendState = { status: "none" };
       inboxCloseConfirmId = "";
       inboxDetailState = "empty";
+      if (getRoutePath() === "/inbox" && window.location.search) window.history.replaceState({}, "", "/inbox");
       render();
     });
   });
@@ -11485,6 +11530,7 @@ function bindEvents() {
   document.querySelector("[data-inbox-close-confirm]")?.addEventListener("click", () => confirmInboxClose());
   document.querySelector("[data-inbox-convert-to-inquiry]")?.addEventListener("click", () => convertSelectedInboxConversationToInquiry());
   document.querySelector("[data-inbox-view-inquiry]")?.addEventListener("click", (event) => openInboxInquiry(event.currentTarget.dataset.inboxViewInquiry));
+  document.querySelector("[data-ops-view-inbox]")?.addEventListener("click", (event) => openInboxConversation(event.currentTarget.dataset.opsViewInbox));
 
   document.querySelectorAll("[data-copy-value]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -11499,6 +11545,7 @@ function bindEvents() {
     navigate: navigateTo,
     copy: copyToClipboard,
     createOrder: createNativeOrderFromInquiry,
+    openInbox: openInboxConversation,
     saveProduction: saveMvpProductionFields,
     approveOrderArtwork: approveMvpOrderArtwork,
     confirmPayment: confirmMvpOrderPayment,

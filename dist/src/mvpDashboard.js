@@ -585,7 +585,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function customerCommunication(item) {
     const link = customerLink(item);
     const message = "We'll continue assisting you here on Messenger.\n\nIf no one has replied yet,\nyou may also check your inquiry progress using the customer link.";
-    return `<section class="mvp-customer-comm"><h3>Conversation</h3><div class="mvp-comm-row"><span>Customer Link</span><div class="mvp-comm-value"><strong>${html(link)}</strong>${copyButton("Copy", link, "customer link")}</div></div><p>${html(message)}</p><div class="mvp-comm-actions"><button type="button" data-mvp-copy="${html(message)}"><span>Copy Customer Message</span></button><button type="button" data-mvp-open-messenger>Open Messenger</button></div><label class="mvp-comm-check"><input type="checkbox" /> <span>Mark message as sent</span></label></section>`;
+    const conversationAction = item.inboxConversationId
+      ? `<button type="button" data-mvp-view-inbox="${html(item.inboxConversationId)}">VIEW INBOX</button>`
+      : `<button type="button" data-mvp-open-messenger>Open Messenger</button>`;
+    return `<section class="mvp-customer-comm"><h3>Conversation</h3><div class="mvp-comm-row"><span>Customer Link</span><div class="mvp-comm-value"><strong>${html(link)}</strong>${copyButton("Copy", link, "customer link")}</div></div><p>${html(message)}</p><div class="mvp-comm-actions"><button type="button" data-mvp-copy="${html(message)}"><span>Copy Customer Message</span></button>${conversationAction}</div><label class="mvp-comm-check"><input type="checkbox" /> <span>Mark message as sent</span></label></section>`;
   }
 
   function inquirySecondaryActions(item) {
@@ -593,7 +596,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return [
       `<button type="button" data-mvp-copy="${html(item.id)}">Copy Inquiry Number</button>`,
       link ? `<button type="button" data-mvp-copy="${html(link)}">Copy Customer Link</button>` : "",
-      `<button type="button" data-mvp-open-messenger>Open Messenger</button>`,
+      item.inboxConversationId
+        ? `<button type="button" data-mvp-view-inbox="${html(item.inboxConversationId)}">VIEW INBOX</button>`
+        : `<button type="button" data-mvp-open-messenger>Open Messenger</button>`,
     ].filter(Boolean);
   }
 
@@ -2230,7 +2235,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, approveOrderArtwork, confirmPayment, saveFulfillment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
+  function bind({ root = document, rerender, navigate, copy, createOrder, openInbox, saveProduction, approveOrderArtwork, confirmPayment, saveFulfillment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
     bindInquiryMoreDismiss(root);
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { closeInquiryMoreMenus(root); navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
@@ -2326,6 +2331,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       }
     }));
     root.querySelectorAll("[data-mvp-open-messenger]").forEach((button) => button.addEventListener("click", (event) => { event.stopPropagation(); closeInquiryMoreMenus(root); window.open("https://www.messenger.com/", "_blank", "noopener,noreferrer"); }));
+    root.querySelectorAll("[data-mvp-view-inbox]").forEach((button) => button.addEventListener("click", async (event) => { event.stopPropagation(); closeInquiryMoreMenus(root); await openInbox?.(button.dataset.mvpViewInbox); }));
     root.querySelectorAll('[data-mvp-note-toggle]').forEach((button) => button.addEventListener('click', (event) => { event.stopPropagation(); const wrap = button.closest('.mvp-note-wrap'); const expanded = wrap?.classList.toggle('expanded'); button.textContent = expanded ? 'SHOW LESS' : 'SHOW FULL NOTE'; }));
     root.querySelectorAll('[data-mvp-follow-preset]').forEach((button) => button.addEventListener('click', (event) => {
       event.stopPropagation();

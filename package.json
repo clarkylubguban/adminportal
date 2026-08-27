@@ -54,6 +54,9 @@
     "test:facebook-inbox-f6-db": "node scripts/test-facebook-inbox-f6-db.mjs",
     "test:facebook-inbox-f6-actions": "node scripts/test-facebook-inbox-f6-actions.mjs",
     "test:facebook-inbox-f6-browser": "node scripts/test-facebook-inbox-f6-browser.mjs",
+    "test:facebook-inbox-f7-lineage": "node scripts/test-facebook-inbox-f7-lineage.mjs",
+    "test:facebook-inbox-f7-browser": "node scripts/test-facebook-inbox-f7-browser.mjs",
+    "test:facebook-inbox-f7-db": "node scripts/test-facebook-inbox-f7-db.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
     "preview": "node scripts/local-dev.mjs"
   },
