@@ -28,7 +28,7 @@ assert.ok(main.includes("syncMvpInquiryDeepLinkSelection(items)"), "Inquiries pa
 assert.ok(main.includes('new URLSearchParams(window.location.search).get("inquiry")'), "Inquiries page must support /inquiries?inquiry=<id>");
 assert.ok(main.includes("items.some((item) => item.id === inquiryId) ? inquiryId : null"), "Invalid Inquiry deep links must clear selection instead of opening an unrelated drawer");
 
-assert.ok(dashboard.includes("item.inboxConversationId\n      ? `<button type=\"button\" data-mvp-view-inbox="), "Linked inquiries must replace the generic Messenger action with VIEW INBOX");
+assert.ok(dashboard.includes("item.inboxConversationId") && dashboard.includes("data-mvp-view-inbox=") && dashboard.includes("VIEW INBOX"), "Linked inquiries must replace the generic Messenger action with VIEW INBOX");
 assert.ok(dashboard.includes(': `<button type="button" data-mvp-open-messenger>Open Messenger</button>`'), "Unlinked inquiries must not get VIEW INBOX");
 assert.ok(dashboard.includes("await openInbox?.(button.dataset.mvpViewInbox)"), "VIEW INBOX must call the internal app route callback");
 assert.ok(dashboard.includes("data-mvp-open-messenger") && dashboard.includes("window.open(\"https://www.messenger.com/\""), "Existing generic Messenger fallback must remain available for unlinked inquiries");

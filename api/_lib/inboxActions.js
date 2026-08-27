@@ -1,9 +1,11 @@
 import { adminLegacyRoleToAccessRole, getAuthorizedAdmin, getBearerToken, hasAdminActionPermission, readJsonBody, sendJson } from "./adminAccess.js";
 import { validateAssignmentUser } from "./adminAssignments.js";
 import { cleanReplyText, getMetaReplyCapability, sendMetaTextMessage } from "./metaSend.js";
+import { createSupabaseMetaInboxRepository } from "./metaInboxIngestion.js";
+import { refreshMetaProfileForConversation } from "./metaProfileEnrichment.js";
 import { createServerSupabaseClient } from "./supabaseServer.js";
 
-const ACTIONS = new Set(["reply", "assign", "note", "follow-up", "close", "convert-to-inquiry", "capability", "send-state"]);
+const ACTIONS = new Set(["reply", "assign", "note", "follow-up", "close", "convert-to-inquiry", "capability", "send-state", "refresh-profile"]);
 
 export async function handleInboxAction(request, response, dependencies = {}) {
   const route = parseInboxRoute(request.url || "/");
@@ -28,10 +30,34 @@ export async function handleInboxAction(request, response, dependencies = {}) {
     if (route.action === "follow-up") return handleFollowUp({ response, supabase, actor, conversationId: route.id, body });
     if (route.action === "close") return handleClose({ response, supabase, actor, conversationId: route.id, body });
     if (route.action === "convert-to-inquiry") return handleConvertToInquiry({ response, supabase, actor, conversationId: route.id, body });
+    if (route.action === "refresh-profile") return handleRefreshProfile({ response, supabase, actor, conversationId: route.id, body, dependencies });
   } catch (error) {
     console.error("Inbox action failed.", { message: error?.message, code: error?.code });
     return sendJson(response, 500, { ok: false, error: "inbox action failed" });
   }
+}
+
+async function handleRefreshProfile({ response, supabase, actor, conversationId, body, dependencies }) {
+  if (!await canAccessInbox(supabase, actor)) return sendJson(response, 403, { ok: false, error: "inbox access required" });
+
+  const result = await refreshMetaProfileForConversation(conversationId, {
+    repository: createSupabaseMetaInboxRepository(supabase),
+    env: dependencies.env || process.env,
+    fetchImpl: dependencies.fetchImpl || globalThis.fetch,
+    timeoutMs: dependencies.profileTimeoutMs,
+    force: body?.force === true,
+  });
+
+  if (result.ok) {
+    return sendJson(response, 200, {
+      ok: true,
+      status: result.status,
+      displayName: result.displayName || "",
+      profilePictureAvailable: Boolean(result.profilePictureUrl),
+      fields: result.fields || {},
+    });
+  }
+  return sendJson(response, 409, { ok: false, error: result.errorCode || "META_PROFILE_ENRICHMENT_BLOCKED" });
 }
 
 async function handleSendState({ response, supabase, actor, conversationId }) {

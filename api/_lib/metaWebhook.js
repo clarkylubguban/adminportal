@@ -36,7 +36,13 @@ export async function handleMetaWebhook(request, response, dependencies = {}) {
 
     const repository = dependencies.repository
       || createSupabaseMetaInboxRepository(dependencies.client || createServerSupabaseClient());
-    await ingestMetaWebhookPayload(payload, { repository, receivedAt: dependencies.receivedAt || new Date() });
+    await ingestMetaWebhookPayload(payload, {
+      repository,
+      receivedAt: dependencies.receivedAt || new Date(),
+      env: dependencies.env || process.env,
+      fetchImpl: dependencies.fetchImpl || globalThis.fetch,
+      profileTimeoutMs: dependencies.profileTimeoutMs,
+    });
     return sendText(response, 200, "EVENT_RECEIVED");
   } catch (error) {
     return sendMetaError(response, mapMetaError(error));

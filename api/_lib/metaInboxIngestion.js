@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { cleanReplyText } from "./metaSend.js";
+import { enrichMetaProfilesForEvents, persistMetaProfileEnrichment } from "./metaProfileEnrichment.js";
 
 const CHANNEL = "facebook_messenger";
 const OPEN_STATES = new Set(["needs_reply", "waiting", "follow_up", "converted"]);
@@ -10,12 +11,20 @@ export async function ingestMetaWebhookPayload(payload, options) {
   const receivedAt = options.receivedAt || new Date();
   const events = extractMessagingEvents(payload);
   if (typeof repository.ingestNormalizedEvents === "function") {
-    const normalized = events.map((event) => serializeNormalizedEvent(normalizeMessagingEvent(event)));
+    const normalized = events.map((event) => normalizeMessagingEvent(event));
+    const enrichment = await enrichMetaProfilesForEvents(normalized, {
+      repository,
+      env: options.env,
+      fetchImpl: options.fetchImpl,
+      now: receivedAt,
+      timeoutMs: options.profileTimeoutMs,
+    }).catch(() => ({ successes: [], failures: [], skipped: normalized.length }));
     await repository.ingestNormalizedEvents({
-      events: normalized,
+      events: normalized.map(serializeNormalizedEvent),
       receivedAt,
       objectType: payload.object || "page",
     });
+    await persistMetaProfileEnrichment(enrichment, { repository, now: receivedAt }).catch(() => null);
     return;
   }
   for (const event of events) {
@@ -388,6 +397,92 @@ class SupabaseMetaInboxRepository {
     if (error) throw error;
     return data;
   }
+
+  async getProfileEnrichmentTarget({ pageId, channel, externalUserId }) {
+    const page = await this.single("meta_page_connections", "page_id", pageId);
+    if (!page) return null;
+    const identity = await this.findIdentity(page.id, channel, externalUserId);
+    if (!identity) return null;
+    const contact = identity.contact_id ? await this.single("inbox_contacts", "id", identity.contact_id) : null;
+    return normalizeProfileTarget({ page, identity, contact });
+  }
+
+  async getProfileEnrichmentTargetForConversation(conversationId) {
+    const conversation = await this.single("inbox_conversations", "id", conversationId);
+    if (!conversation) return null;
+    const identity = await this.single("inbox_channel_identities", "id", conversation.channel_identity_id);
+    if (!identity) return null;
+    const page = await this.single("meta_page_connections", "id", identity.page_connection_id);
+    const contact = identity.contact_id ? await this.single("inbox_contacts", "id", identity.contact_id) : null;
+    return normalizeProfileTarget({ page, identity, contact });
+  }
+
+  async applyProfileEnrichment({ pageId, channel, externalUserId, target = null, profile, now }) {
+    const found = target?.identityId
+      ? target
+      : await this.getProfileEnrichmentTarget({ pageId, channel, externalUserId });
+    if (!found?.identityId || !profile?.displayName) return { ok: false };
+
+    const currentMetadata = found.metadata && typeof found.metadata === "object" ? found.metadata : {};
+    const profileStatus = {
+      status: "success",
+      last_attempt_at: now.toISOString(),
+      last_success_at: now.toISOString(),
+      fields: profile.fields || {},
+    };
+    const identityUpdates = {
+      display_name: found.displayName || profile.displayName,
+      profile_picture_url: found.profilePictureUrl || profile.profilePictureUrl || null,
+      metadata: { ...currentMetadata, profile_enrichment: profileStatus },
+    };
+    const identityResult = await this.client.from("inbox_channel_identities").update(identityUpdates).eq("id", found.identityId);
+    if (identityResult.error) throw identityResult.error;
+
+    if (found.contactId && !found.contactDisplayName) {
+      const contactMetadata = found.contactMetadata && typeof found.contactMetadata === "object" ? found.contactMetadata : {};
+      const contactResult = await this.client.from("inbox_contacts").update({
+        display_name: profile.displayName,
+        metadata: { ...contactMetadata, profile_enrichment: profileStatus },
+      }).eq("id", found.contactId);
+      if (contactResult.error) throw contactResult.error;
+    }
+    return { ok: true };
+  }
+
+  async recordProfileEnrichmentFailure({ pageId, channel, externalUserId, target = null, errorCode, now }) {
+    const found = target?.identityId
+      ? target
+      : await this.getProfileEnrichmentTarget({ pageId, channel, externalUserId });
+    if (!found?.identityId) return { ok: false };
+    const currentMetadata = found.metadata && typeof found.metadata === "object" ? found.metadata : {};
+    const { error } = await this.client.from("inbox_channel_identities").update({
+      metadata: {
+        ...currentMetadata,
+        profile_enrichment: {
+          status: "failed",
+          last_attempt_at: now.toISOString(),
+          safe_error_code: errorCode || "META_PROFILE_FAILED",
+        },
+      },
+    }).eq("id", found.identityId);
+    if (error) throw error;
+    return { ok: true };
+  }
+}
+
+function normalizeProfileTarget({ page, identity, contact }) {
+  return {
+    pageId: page?.page_id || "",
+    channel: identity?.channel || CHANNEL,
+    externalUserId: identity?.external_user_id || "",
+    identityId: identity?.id || "",
+    contactId: identity?.contact_id || "",
+    displayName: cleanText(identity?.display_name, 240),
+    contactDisplayName: cleanText(contact?.display_name, 200),
+    profilePictureUrl: cleanText(identity?.profile_picture_url, 2048),
+    metadata: identity?.metadata || {},
+    contactMetadata: contact?.metadata || {},
+  };
 }
 
 function serializeNormalizedEvent(event) {
