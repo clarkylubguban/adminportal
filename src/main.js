@@ -657,6 +657,7 @@ let inboxDetailState = "idle";
 let inboxDetailError = "";
 let inboxSelectedConversationId = "";
 let inboxActiveView = "needs_reply";
+let inboxSearchQuery = "";
 let inboxActionPermissions = createInboxActionPermissions();
 let inboxReplyCapability = { replyConfigured: false };
 let inboxAssignmentUsers = [];
@@ -2085,7 +2086,16 @@ async function runInboxMutation(work) {
 }
 
 function getVisibleInboxConversations() {
-  return filterInboxConversations(inboxConversations, inboxActiveView, getCurrentAdminUserId());
+  const rows = filterInboxConversations(inboxConversations, inboxActiveView, getCurrentAdminUserId());
+  const query = inboxSearchQuery.trim().toLowerCase();
+  if (!query) return rows;
+  return rows.filter((conversation) => [
+    conversation.customerLabel,
+    conversation.pageName,
+    conversation.lastMessageSnippet,
+    conversation.campaignName,
+    conversation.inquiryId,
+  ].some((value) => String(value || "").toLowerCase().includes(query)));
 }
 
 function getSelectedInboxConversation() {
@@ -2170,22 +2180,34 @@ function renderInboxPage() {
 
   return `
     <main class="inbox-page">
-      <section class="inbox-toolbar">
-        <div><span>FACEBOOK INBOX</span><h1>Customer Inbox</h1></div>
-        <button class="inbox-refresh" data-inbox-refresh type="button">${renderIcon("circle-check", "ops-button-icon")}Refresh</button>
-      </section>
-      <section class="inbox-work-tabs" aria-label="Inbox work views">
-        ${INBOX_WORK_VIEWS.map((view) => renderInboxViewTab(view)).join("")}
+      <section class="inbox-page-header">
+        <div class="inbox-title-stack">
+          <nav class="inbox-breadcrumb" aria-label="Breadcrumb"><span>Home</span><span>Inbox</span></nav>
+          <h1>Inbox</h1>
+          <p>Handle Facebook conversations, qualify leads, and convert them into inquiries.</p>
+        </div>
+        <div class="inbox-page-meta">
+          <span>${escapeHtml(getInboxPageStatusLabel(selected))}</span>
+          <button class="inbox-refresh" data-inbox-refresh type="button">${renderIcon("refresh-cw", "ops-button-icon")}Refresh</button>
+        </div>
       </section>
       ${renderInboxLoadNotice()}
-      <section class="inbox-grid">
-        <aside class="inbox-list" aria-label="Conversation list">
+      <section class="inbox-workspace-shell inbox-grid">
+        <aside class="inbox-list-panel inbox-list" aria-label="Conversation list">
+          <header class="inbox-list-heading">
+            <div><h2>Conversations</h2><span>${getInboxOpenConversationCount()} open</span></div>
+            <input data-inbox-search type="search" value="${escapeHtml(inboxSearchQuery)}" placeholder="Search customer or message…" aria-label="Search customer or message" />
+          </header>
+          <section class="inbox-work-chip-groups" aria-label="Inbox work views">
+            <div>${INBOX_WORK_VIEWS.slice(0, 3).map((view) => renderInboxViewTab(view)).join("")}</div>
+            <div>${INBOX_WORK_VIEWS.slice(3).map((view) => renderInboxViewTab(view)).join("")}</div>
+          </section>
           ${renderInboxConversationList(visible)}
         </aside>
-        <section class="inbox-thread" aria-label="Conversation thread">
+        <section class="inbox-thread-panel inbox-thread" aria-label="Conversation thread">
           ${renderInboxThread(selected)}
         </section>
-        <aside class="inbox-detail-panel" aria-label="Conversation details">
+        <aside class="inbox-context-panel inbox-detail-panel" aria-label="Customer and operations">
           ${renderInboxDetailPanel(selected)}
         </aside>
       </section>
@@ -2195,7 +2217,7 @@ function renderInboxPage() {
 
 function renderInboxViewTab(view) {
   const count = filterInboxConversations(inboxConversations, view.key, getCurrentAdminUserId()).length;
-  return `<button class="${inboxActiveView === view.key ? "active" : ""}" data-inbox-view="${escapeHtml(view.key)}" type="button"><span>${escapeHtml(view.label)}</span><strong>${count}</strong></button>`;
+  return `<button class="inbox-work-chip ${inboxActiveView === view.key ? "active" : ""}" data-inbox-view="${escapeHtml(view.key)}" type="button"><span>${escapeHtml(view.label)}</span><strong>${count}</strong></button>`;
 }
 
 function renderInboxLoadNotice() {
@@ -2204,20 +2226,34 @@ function renderInboxLoadNotice() {
   return "";
 }
 
+function getInboxPageStatusLabel(selected) {
+  const pageName = selected?.pageName || inboxConversations.find((conversation) => conversation.pageName)?.pageName || "TRRY Apparel";
+  return `${pageName} • Facebook`;
+}
+
+function getInboxOpenConversationCount() {
+  return inboxConversations.filter((conversation) => conversation.state !== "closed").length;
+}
+
+function renderInboxAvatar(conversation, className = "inbox-avatar") {
+  const url = conversation?.profilePictureUrl || "";
+  const initial = escapeHtml(getInboxInitial(conversation?.customerLabel));
+  const image = url ? `<img src="${escapeHtml(url)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.hidden=true" />` : "";
+  return `<span class="${className}" aria-hidden="true"><span>${initial}</span>${image}</span>`;
+}
+
 function renderInboxConversationList(conversations) {
   if (inboxLoadState === "loading") return `<div class="inbox-empty-column">Loading conversations...</div>`;
   if (!conversations.length) return `<div class="inbox-empty-column">No conversations in this view.</div>`;
   return conversations.map((conversation) => {
     const selected = conversation.id === inboxSelectedConversationId;
-    const reply = getInboxReplyWindowState(conversation.replyWindowExpiresAt);
     return `<button class="inbox-conversation-card ${selected ? "active" : ""} ${conversation.state}" data-inbox-conversation="${escapeHtml(conversation.id)}" type="button">
-      <span class="inbox-avatar" aria-hidden="true">${escapeHtml(getInboxInitial(conversation.customerLabel))}</span>
+      ${renderInboxAvatar(conversation, "inbox-avatar")}
       <span class="inbox-card-main">
-        <strong>${escapeHtml(conversation.customerLabel)}</strong>
-        <small>${escapeHtml(conversation.pageName || "Facebook Page")} / ${escapeHtml(conversation.customerSecondary)}</small>
-        <em>${escapeHtml(formatInboxState(conversation.state))} / ${escapeHtml(formatTaskDateTime(conversation.lastMessageAt || conversation.openedAt))}</em>
+        <span class="inbox-card-topline"><strong>${escapeHtml(conversation.customerLabel)}</strong><time>${escapeHtml(formatInboxRelativeTime(conversation.lastMessageAt || conversation.openedAt))}</time></span>
+        <small>${escapeHtml(conversation.lastMessageSnippet || "No messages captured yet.")}</small>
+        <em>${escapeHtml(formatInboxState(conversation.state))}</em>
       </span>
-      <span class="inbox-reply-pill ${reply.tone}">${escapeHtml(reply.label)}</span>
     </button>`;
   }).join("");
 }
@@ -2232,15 +2268,30 @@ function renderInboxThread(conversation) {
   }
   const messages = inboxDetail?.messages || [];
   const composerState = getInboxComposerState(conversation);
+  const reply = getInboxReplyWindowState(conversation.replyWindowExpiresAt);
+  const canReassign = inboxActionPermissions.inbox_reassign === true;
+  const canTakeOwnership = inboxActionPermissions.inbox_take_ownership === true;
+  const isUnassigned = !conversation.ownerUserId;
+  const canAssignSelf = isUnassigned && canTakeOwnership;
   return `
     <header class="inbox-thread-header">
-      <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>${escapeHtml(conversation.pageName || "Facebook Page")}</span></div>
-      <span>${escapeHtml(formatInboxState(conversation.state))}</span>
+      <div class="inbox-thread-person">
+        ${renderInboxAvatar(conversation, "inbox-avatar large")}
+        <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>Facebook Messenger • ${escapeHtml(formatInboxState(conversation.state))}</span></div>
+      </div>
+      <div class="inbox-thread-actions">
+        <span class="inbox-reply-pill ${reply.tone}">${escapeHtml(reply.label)}</span>
+        <button ${canAssignSelf && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-assign-me type="button">Assign</button>
+        <select ${canReassign && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-reassign aria-label="Reassign conversation">
+          <option value="">Reassign</option>
+          ${inboxAssignmentUsers.map((user) => `<option value="${escapeHtml(user.userId)}" ${user.userId === conversation.ownerUserId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}
+        </select>
+      </div>
     </header>
     <div class="inbox-message-list">
       ${messages.length ? messages.map(renderInboxMessage).join("") : `<div class="inbox-empty-column">No messages captured yet.</div>`}
     </div>
-    <footer class="inbox-reply-disabled ${composerState.enabled ? "active" : ""}">
+    <footer class="inbox-composer ${composerState.enabled ? "active" : ""}">
       <textarea ${composerState.enabled ? "" : "disabled"} rows="2" maxlength="2000" data-inbox-reply-draft placeholder="${escapeHtml(composerState.placeholder)}">${escapeHtml(inboxReplyDraft)}</textarea>
       <div class="inbox-composer-actions">
         <span>${Math.min(inboxReplyDraft.trim().length, 2000)}/2000</span>
@@ -2258,11 +2309,11 @@ function renderInboxMessage(message) {
     ? `<div class="inbox-attachments">${message.attachments.map(renderInboxAttachment).join("")}</div>`
     : "";
   const status = direction === "outbound" && message.statusLabel ? `<small>${escapeHtml(message.statusLabel)}</small>` : "";
-  return `<article class="inbox-message ${direction}">
+  return `<article class="inbox-message-row ${direction}"><div class="inbox-message ${direction}">
     <p>${escapeHtml(message.body || getInboxMessageFallback(message.messageType))}</p>
     ${attachments}
     <footer><span>${escapeHtml(formatTaskDateTime(message.sentAt))}</span>${status}</footer>
-  </article>`;
+  </div></article>`;
 }
 
 function renderInboxAttachment(attachment) {
@@ -2275,54 +2326,49 @@ function renderInboxDetailPanel(conversation) {
   if (!conversation) return `<div class="inbox-empty-column">No details to show.</div>`;
   const reply = getInboxReplyWindowState(conversation.replyWindowExpiresAt);
   const link = inboxDetail?.inquiryLink || (conversation.inquiryId ? { inquiryId: conversation.inquiryId, convertedAt: conversation.convertedAt } : null);
-  const canReassign = inboxActionPermissions.inbox_reassign === true;
   const canManageState = inboxActionPermissions.inbox_manage_state === true;
-  const canTakeOwnership = inboxActionPermissions.inbox_take_ownership === true;
   const canNote = inboxActionPermissions.inbox_internal_note === true;
   const canConvert = inboxActionPermissions.inbox_convert_to_inquiry === true;
-  const isUnassigned = !conversation.ownerUserId;
   const ownedByMe = conversation.ownerUserId && conversation.ownerUserId === getCurrentAdminUserId();
-  const canAssignSelf = isUnassigned && canTakeOwnership;
   return `
     <header class="inbox-detail-heading">
       <div><h2>Customer & Operations</h2><span>${escapeHtml(link ? "Linked inquiry" : "Not yet an inquiry")}</span></div>
       <strong>${escapeHtml(reply.label)}</strong>
     </header>
     ${inboxMutationError ? `<div class="inbox-notice error" role="alert">${escapeHtml(inboxMutationError)}</div>` : ""}
-    <section class="inbox-detail-card">
-      <h2>Customer</h2>
+    <section class="inbox-customer-summary">
+      ${renderInboxAvatar(conversation, "inbox-avatar xlarge")}
+      <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>${escapeHtml(conversation.pageName || "TRRY Apparel")} • Facebook Messenger</span></div>
       ${renderInboxFact("Name", conversation.customerLabel)}
       ${renderInboxFacebookNameRefresh(conversation)}
+    </section>
+    <section class="inbox-detail-card">
+      <h2>Core</h2>
+      ${renderInboxFact("Channel", "Facebook Messenger")}
+      ${renderInboxFact("Entry source", conversation.entrySource || "Not yet captured")}
+      ${renderInboxFact("Owner", conversation.ownerUserId ? getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }) : "Unassigned")}
+      ${renderInboxFact("Reply window", reply.label)}
+      ${renderInboxFact("Campaign", conversation.campaignName || conversation.campaignId || "Not yet captured")}
+    </section>
+    <section class="inbox-detail-card">
+      <h2>Customer Details</h2>
       ${renderInboxFact("Phone", conversation.primaryPhone || "Not yet captured")}
       ${renderInboxFact("Email", conversation.primaryEmail || "Not yet captured")}
       ${renderInboxFact("Company", conversation.companyName || "Not yet captured")}
     </section>
     <section class="inbox-detail-card">
-      <h2>Conversation</h2>
-      ${renderInboxFact("Owner", conversation.ownerUserId ? getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }) : "Unassigned")}
-      ${renderInboxFact("Opened", formatTaskDateTime(conversation.openedAt))}
-      ${renderInboxFact("Last inbound", formatTaskDateTime(conversation.lastInboundAt))}
-      ${renderInboxFact("Last outbound", formatTaskDateTime(conversation.lastOutboundAt))}
-      ${renderInboxFact("Reply window", reply.label)}
-    </section>
-    <section class="inbox-detail-card">
-      <h2>Attribution</h2>
-      ${renderInboxFact("Entry", conversation.entrySource || "Not yet captured")}
-      ${renderInboxFact("Referral", conversation.referralRef || "Not yet captured")}
-      ${renderInboxFact("Campaign", conversation.campaignName || conversation.campaignId || "Not yet captured")}
-      ${renderInboxFact("Ad", conversation.adName || conversation.adId || "Not yet captured")}
-    </section>
-    <section class="inbox-detail-card">
-      <h2>Inquiry Link</h2>
+      <h2>Lead Status</h2>
       ${link ? renderInboxFact("Inquiry", link.inquiryId) + renderInboxFact("Converted", formatTaskDateTime(link.convertedAt)) : renderInboxFact("Status", "Not yet an inquiry")}
       ${renderInboxInquiryAction(conversation, link, canConvert)}
     </section>
     <section class="inbox-detail-card">
-      <h2>Internal Notes</h2>
-      ${renderInboxNotes(inboxDetail?.notes || [])}
+      <h2>Linked Records</h2>
+      ${link ? renderInboxFact("Inquiry", link.inquiryId) : renderInboxFact("Inquiry", "Not linked")}
+      ${renderInboxFact("Order", conversation.orderId || "Not linked")}
     </section>
     <section class="inbox-detail-card">
-      <h2>Add Internal Note</h2>
+      <h2>Internal Notes</h2>
+      ${renderInboxNotes(inboxDetail?.notes || [])}
       <textarea ${canNote ? "" : "disabled"} data-inbox-note-draft maxlength="4000" rows="3" placeholder="Add an internal note">${escapeHtml(inboxNoteDraft)}</textarea>
       <button ${canNote && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-add-note type="button">Add Note</button>
     </section>
@@ -2333,11 +2379,6 @@ function renderInboxDetailPanel(conversation) {
       <button ${canManageState && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-follow-up type="button">Follow-up</button>
     </section>
     <section class="inbox-detail-actions">
-      <button ${canAssignSelf && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-assign-me type="button">Assign to me</button>
-      <select ${canReassign && inboxMutationState !== "saving" ? "" : "disabled"} data-inbox-reassign>
-        <option value="">Reassign</option>
-        ${inboxAssignmentUsers.map((user) => `<option value="${escapeHtml(user.userId)}" ${user.userId === conversation.ownerUserId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}
-      </select>
       ${renderInboxCloseControl(conversation, canManageState)}
       <span>${ownedByMe ? "Owned by you" : conversation.ownerUserId ? `Owned by ${escapeHtml(getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }))}` : "Unassigned"}</span>
     </section>
@@ -2402,6 +2443,21 @@ function renderInboxFact(label, value) {
 
 function formatInboxState(state) {
   return String(state || "needs_reply").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function formatInboxRelativeTime(value) {
+  const date = new Date(value || "");
+  const time = date.getTime();
+  if (!Number.isFinite(time)) return "No activity";
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - time) / 1000));
+  if (diffSeconds < 60) return "Now";
+  const diffMinutes = Math.floor(diffSeconds / 60);
+  if (diffMinutes < 60) return `${diffMinutes}m`;
+  const diffHours = Math.floor(diffMinutes / 60);
+  if (diffHours < 24) return `${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d`;
+  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
 }
 
 function getInboxInitial(label) {
@@ -11567,6 +11623,10 @@ function bindEvents() {
   });
 
   document.querySelector("[data-inbox-refresh]")?.addEventListener("click", () => loadInboxConversations());
+  document.querySelector("[data-inbox-search]")?.addEventListener("input", (event) => {
+    inboxSearchQuery = event.target.value;
+    render();
+  });
   document.querySelector("[data-inbox-reply-draft]")?.addEventListener("input", (event) => {
     inboxReplyDraft = event.target.value;
     render();

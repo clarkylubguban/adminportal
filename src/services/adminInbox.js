@@ -93,12 +93,30 @@ export async function getAdminInboxConversationRows(authSession, { limit = 100 }
         token
       )
     : [];
+  const latestMessages = conversationIds.length
+    ? await readSupabaseTableWithAuth(
+        "inbox_messages",
+        {
+          select: "conversation_id,body,message_type,sent_at,created_at",
+          conversation_id: `in.(${conversationIds.join(",")})`,
+          order: "sent_at.desc.nullslast,created_at.desc",
+          limit: String(Math.min(Math.max(conversationIds.length * 4, 40), 250)),
+        },
+        token
+      )
+    : [];
 
   const byId = (rows) => new Map(rows.map((row) => [row.id, row]));
   const identitiesById = byId(identities);
   const contactsById = byId(contacts);
   const pagesById = byId(pages);
   const linksByConversation = new Map(links.map((row) => [row.conversation_id, row]));
+  const latestMessageByConversation = new Map();
+  latestMessages.forEach((message) => {
+    if (!latestMessageByConversation.has(message.conversation_id)) {
+      latestMessageByConversation.set(message.conversation_id, message);
+    }
+  });
 
   return sortInboxConversations(conversations.map((conversation) => {
     const identity = identitiesById.get(conversation.channel_identity_id) || null;
@@ -108,6 +126,7 @@ export async function getAdminInboxConversationRows(authSession, { limit = 100 }
       contact: identity ? contactsById.get(identity.contact_id) || null : null,
       page: identity ? pagesById.get(identity.page_connection_id) || null : null,
       inquiryLink: linksByConversation.get(conversation.id) || null,
+      latestMessage: latestMessageByConversation.get(conversation.id) || null,
     });
   }));
 }
@@ -221,7 +240,7 @@ export async function refreshInboxFacebookProfile(authSession, conversationId, {
   }
 }
 
-export function normalizeInboxConversationRow({ conversation, identity = null, contact = null, page = null, inquiryLink = null }) {
+export function normalizeInboxConversationRow({ conversation, identity = null, contact = null, page = null, inquiryLink = null, latestMessage = null }) {
   return {
     id: conversation.id,
     state: conversation.state || "needs_reply",
@@ -246,6 +265,7 @@ export function normalizeInboxConversationRow({ conversation, identity = null, c
     externalUserId: identity?.external_user_id || "",
     externalUsername: identity?.external_username || "",
     identityDisplayName: identity?.display_name || "",
+    profilePictureUrl: getSafeProfilePictureUrl(identity?.profile_picture_url),
     contactName: contact?.display_name || "",
     primaryPhone: contact?.primary_phone || "",
     primaryEmail: contact?.primary_email || "",
@@ -256,6 +276,7 @@ export function normalizeInboxConversationRow({ conversation, identity = null, c
     convertedAt: inquiryLink?.converted_at || "",
     customerLabel: formatInboxCustomerName({ identity, contact }),
     customerSecondary: getSafeIdentitySecondary(identity),
+    lastMessageSnippet: formatInboxLastMessageSnippet(latestMessage, conversation),
   };
 }
 
@@ -326,9 +347,22 @@ export function formatInboxCustomerName({ identity = null, contact = null } = {}
 }
 
 export function getSafeIdentitySecondary(identity = null) {
-  const id = safeText(identity?.external_username) || safeText(identity?.external_user_id);
+  const id = safeText(identity?.external_username);
   if (!id) return "Messenger";
   return id.length <= 10 ? id : `${id.slice(0, 4)}...${id.slice(-4)}`;
+}
+
+export function getSafeProfilePictureUrl(value) {
+  const url = safeText(value);
+  return /^https:\/\/[^\s"'<>]+$/i.test(url) ? url : "";
+}
+
+export function formatInboxLastMessageSnippet(message = null, conversation = null) {
+  const body = safeText(message?.body);
+  if (body) return body.length > 140 ? `${body.slice(0, 137)}...` : body;
+  const type = safeText(message?.message_type);
+  if (type && type !== "text") return `${type.replace(/_/g, " ")} message`;
+  return safeText(conversation?.referral_ref) || safeText(conversation?.entry_source) || "No messages captured yet.";
 }
 
 export function getInboxOutboundStatus(message) {

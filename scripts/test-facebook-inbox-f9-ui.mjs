@@ -1,0 +1,92 @@
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import {
+  formatInboxLastMessageSnippet,
+  getSafeIdentitySecondary,
+  getSafeProfilePictureUrl,
+  normalizeInboxConversationRow,
+} from "../src/services/adminInbox.js";
+
+const main = await read("src/main.js");
+const styles = await read("src/styles.css");
+const pkg = JSON.parse(await read("package.json"));
+
+assert.equal(pkg.scripts["test:facebook-inbox-f9-ui"], "node scripts/test-facebook-inbox-f9-ui.mjs", "F9 UI test script must be registered");
+assert.equal(pkg.scripts["test:facebook-inbox-f9-browser"], "node scripts/test-facebook-inbox-f9-browser.mjs", "F9 browser test script must be registered");
+
+assert.ok(main.includes("inbox-workspace-shell inbox-grid"), "F9 Inbox must render the reconciled workspace while preserving legacy layout hooks");
+assert.ok(main.includes("inbox-list-panel inbox-list"), "F9 must keep the left conversation list surface");
+assert.ok(main.includes("inbox-thread-panel inbox-thread"), "F9 must keep the central Messenger thread surface");
+assert.ok(main.includes("inbox-context-panel inbox-detail-panel"), "F9 must keep the right operations surface");
+assert.ok(main.includes("<nav class=\"inbox-breadcrumb\""), "F9 header must render Home > Inbox breadcrumb");
+assert.ok(main.includes("<h1>Inbox</h1>"), "F9 header title must be Inbox");
+assert.ok(main.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), "F9 subtitle must match the approved copy");
+assert.ok(main.includes("Search customer or message…"), "F9 list search placeholder must match the approved copy");
+assert.ok(main.includes("INBOX_WORK_VIEWS.slice(0, 3)") && main.includes("INBOX_WORK_VIEWS.slice(3)"), "F9 work views must render as compact primary and secondary rows");
+assert.ok(main.includes("renderInboxAvatar(conversation"), "F9 must render safe avatars in the list/thread/panel");
+assert.ok(main.includes("conversation.lastMessageSnippet"), "F9 list rows must show the last captured message snippet");
+assert.equal(extractFunctionSource("renderInboxPage").includes("FACEBOOK INBOX"), false, "F9 must remove the old oversized Facebook Inbox page header copy");
+assert.equal(/externalUserId[\s\S]{0,160}inbox-card-main/.test(main), false, "F9 conversation rows must not expose raw PSIDs");
+
+assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0, 680px) minmax(300px, 350px)"), "F9 desktop columns must match the Figma proportions");
+assert.ok(styles.includes("height: min(792px, calc(100vh - 156px))"), "F9 workspace must target the approved desktop height without viewport overflow");
+assert.ok(styles.includes(".inbox-work-chip-groups"), "F9 compact work view chip styling missing");
+assert.ok(styles.includes(".inbox-message-row.inbound") && styles.includes(".inbox-message-row.outbound"), "F9 must preserve left inbound and right outbound message alignment");
+assert.ok(styles.includes(".inbox-context-panel"), "F9 right customer and operations panel styling missing");
+assert.ok(styles.includes("@media (max-width: 1320px)") && styles.includes("@media (max-width: 1040px)"), "F9 desktop responsiveness must include 1366-safe and smaller fallbacks");
+
+const normalized = normalizeInboxConversationRow({
+  conversation: {
+    id: "013a937a-c902-4f00-9356-2d132618730d",
+    state: "needs_reply",
+    owner_user_id: "",
+    opened_at: "2026-08-27T01:00:00Z",
+    last_message_at: "2026-08-27T01:29:30Z",
+    entry_source: "click_to_messenger_ad",
+  },
+  identity: {
+    channel: "facebook_messenger",
+    external_user_id: "1234567890123456",
+    display_name: "Juan Dela Cruz",
+    profile_picture_url: "https://example.invalid/profile.jpg",
+  },
+  contact: {},
+  page: { page_name: "TRRY Apparel" },
+  latestMessage: { body: "Hi, can I ask about shirt printing?", message_type: "text" },
+});
+
+assert.equal(normalized.customerLabel, "Juan Dela Cruz", "F9 must keep F8 profile name priority");
+assert.equal(normalized.customerSecondary, "Messenger", "F9 must not expose raw PSID as the conversation secondary label");
+assert.equal(normalized.profilePictureUrl, "https://example.invalid/profile.jpg", "F9 must pass through safe HTTPS profile pictures");
+assert.equal(normalized.lastMessageSnippet, "Hi, can I ask about shirt printing?", "F9 rows must expose latest message snippets");
+
+assert.equal(getSafeProfilePictureUrl("http://example.invalid/profile.jpg"), "", "profile avatars must require HTTPS");
+assert.equal(getSafeProfilePictureUrl("javascript:alert(1)"), "", "unsafe avatar URLs must be rejected");
+assert.equal(getSafeIdentitySecondary({ external_user_id: "PSID-123456789012" }), "Messenger", "raw PSIDs must not appear as customer secondary text");
+assert.equal(getSafeIdentitySecondary({ external_username: "juan.delacruz" }), "juan...cruz", "safe usernames may be shortened");
+assert.equal(formatInboxLastMessageSnippet({ body: "x".repeat(160) }).length, 140, "long snippets must be compact");
+
+console.log("PASS Facebook Inbox F9 UI source/layout contract");
+
+async function read(path) {
+  return readFile(new URL(`../${path}`, import.meta.url), "utf8");
+}
+
+function extractFunctionSource(name) {
+  let start = main.indexOf(`function ${name}`);
+  if (start === -1) start = main.indexOf(`async function ${name}`);
+  assert.notEqual(start, -1, `${name} function missing`);
+  const signature = new RegExp(`(?:async\\s+)?function\\s+${name}\\s*\\([\\s\\S]*?\\)\\s*\\{`, "m");
+  const match = signature.exec(main.slice(start));
+  assert.ok(match, `${name} function signature not found`);
+  const open = start + match[0].length - 1;
+  let depth = 0;
+  for (let index = open; index < main.length; index += 1) {
+    if (main[index] === "{") depth += 1;
+    if (main[index] === "}") {
+      depth -= 1;
+      if (depth === 0) return main.slice(start, index + 1);
+    }
+  }
+  throw new Error(`${name} function body not found`);
+}
