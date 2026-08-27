@@ -1457,6 +1457,18 @@
   overflow-wrap: anywhere;
 }
 
+.inbox-modal-error {
+  background: #fee8e8;
+  border: 1px solid #f1b4b4;
+  border-radius: 8px;
+  color: #991b1b;
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.4;
+  margin: 0;
+  padding: 10px 12px;
+}
+
 .inbox-modal-footer {
   background: #ffffff;
   border-top: 1px solid #dbe0e8;

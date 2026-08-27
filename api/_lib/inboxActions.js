@@ -5,7 +5,7 @@ import { createSupabaseMetaInboxRepository } from "./metaInboxIngestion.js";
 import { refreshMetaProfileForConversation } from "./metaProfileEnrichment.js";
 import { createServerSupabaseClient } from "./supabaseServer.js";
 
-const ACTIONS = new Set(["reply", "assign", "note", "follow-up", "close", "convert-to-inquiry", "capability", "send-state", "refresh-profile"]);
+const ACTIONS = new Set(["reply", "assign", "note", "follow-up", "close", "convert-to-inquiry", "capability", "send-state", "refresh-profile", "update-contact"]);
 
 export async function handleInboxAction(request, response, dependencies = {}) {
   const route = parseInboxRoute(request.url || "/");
@@ -31,10 +31,65 @@ export async function handleInboxAction(request, response, dependencies = {}) {
     if (route.action === "close") return handleClose({ response, supabase, actor, conversationId: route.id, body });
     if (route.action === "convert-to-inquiry") return handleConvertToInquiry({ response, supabase, actor, conversationId: route.id, body });
     if (route.action === "refresh-profile") return handleRefreshProfile({ response, supabase, actor, conversationId: route.id, body, dependencies });
+    if (route.action === "update-contact") return handleUpdateContact({ response, supabase, actor, conversationId: route.id, body });
   } catch (error) {
     console.error("Inbox action failed.", { message: error?.message, code: error?.code });
     return sendJson(response, 500, { ok: false, error: "inbox action failed" });
   }
+}
+
+async function handleUpdateContact({ response, supabase, actor, conversationId, body }) {
+  if (!await canAccessInbox(supabase, actor)) return sendJson(response, 403, { ok: false, error: "inbox access required" });
+
+  const allowed = new Set(["displayName", "primaryPhone", "primaryEmail", "companyName"]);
+  const unknown = Object.keys(body || {}).filter((key) => !allowed.has(key) && key !== "idempotencyKey" && key !== "idempotency_key");
+  if (unknown.length) return sendJson(response, 400, { ok: false, error: "UNSUPPORTED_CONTACT_FIELD" });
+
+  const { data: conversation, error: conversationError } = await supabase
+    .from("inbox_conversations")
+    .select("id,channel_identity_id,state,owner_user_id,reply_window_expires_at")
+    .eq("id", conversationId)
+    .maybeSingle();
+  if (conversationError) throw conversationError;
+  if (!conversation?.channel_identity_id) return sendJson(response, 404, { ok: false, error: "CONVERSATION_NOT_FOUND" });
+
+  const { data: identity, error: identityError } = await supabase
+    .from("inbox_channel_identities")
+    .select("id,contact_id")
+    .eq("id", conversation.channel_identity_id)
+    .maybeSingle();
+  if (identityError) throw identityError;
+  if (!identity?.contact_id) return sendJson(response, 404, { ok: false, error: "CONTACT_NOT_FOUND" });
+
+  const update = {};
+  if (Object.hasOwn(body || {}, "displayName")) {
+    const displayName = normalizeOptionalText(body.displayName, 200);
+    if (!displayName) return sendJson(response, 400, { ok: false, error: "DISPLAY_NAME_REQUIRED" });
+    update.display_name = displayName;
+  }
+  if (Object.hasOwn(body || {}, "primaryPhone")) update.primary_phone = normalizeOptionalText(body.primaryPhone, 40);
+  if (Object.hasOwn(body || {}, "primaryEmail")) update.primary_email = normalizeOptionalText(body.primaryEmail, 254);
+  if (Object.hasOwn(body || {}, "companyName")) update.company_name = normalizeOptionalText(body.companyName, 200);
+  if (!Object.keys(update).length) return sendJson(response, 400, { ok: false, error: "CONTACT_UPDATE_REQUIRED" });
+
+  const { data: contact, error: updateError } = await supabase
+    .from("inbox_contacts")
+    .update(update)
+    .eq("id", identity.contact_id)
+    .select("display_name,primary_phone,primary_email,company_name")
+    .maybeSingle();
+  if (updateError) throw updateError;
+  if (!contact) return sendJson(response, 404, { ok: false, error: "CONTACT_NOT_FOUND" });
+
+  return sendJson(response, 200, {
+    ok: true,
+    contact: {
+      displayName: contact.display_name || "",
+      primaryPhone: contact.primary_phone || "",
+      primaryEmail: contact.primary_email || "",
+      companyName: contact.company_name || "",
+    },
+  });
 }
 
 async function handleRefreshProfile({ response, supabase, actor, conversationId, body, dependencies }) {
@@ -255,6 +310,11 @@ function parseInboxRoute(rawUrl) {
 
 function getIdempotencyKey(body) {
   return String(body?.idempotencyKey || body?.idempotency_key || "").trim();
+}
+
+function normalizeOptionalText(value, maxLength) {
+  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+  return normalized ? normalized.slice(0, maxLength) : null;
 }
 
 async function sha256Hex(value) {

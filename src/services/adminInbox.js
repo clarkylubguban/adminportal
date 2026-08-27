@@ -240,6 +240,22 @@ export async function refreshInboxFacebookProfile(authSession, conversationId, {
   }
 }
 
+export async function updateInboxContact(authSession, conversationId, contact = {}) {
+  const result = await postInboxAction(authSession, conversationId, "update-contact", {
+    displayName: contact.displayName,
+    primaryPhone: contact.primaryPhone,
+    primaryEmail: contact.primaryEmail,
+    companyName: contact.companyName,
+  });
+  return {
+    ok: result?.ok === true,
+    displayName: result?.contact?.displayName || "",
+    primaryPhone: result?.contact?.primaryPhone || "",
+    primaryEmail: result?.contact?.primaryEmail || "",
+    companyName: result?.contact?.companyName || "",
+  };
+}
+
 export function normalizeInboxConversationRow({ conversation, identity = null, contact = null, page = null, inquiryLink = null, latestMessage = null }) {
   return {
     id: conversation.id,

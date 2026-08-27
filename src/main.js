@@ -58,6 +58,7 @@ import {
   refreshInboxFacebookProfile,
   scheduleInboxFollowUp,
   sendInboxReply,
+  updateInboxContact,
 } from "./services/adminInbox.js";
 import {
   getAdminAssignmentUsers,
@@ -675,6 +676,9 @@ let inboxConversionState = "idle";
 let inboxSendStatusRefreshState = "idle";
 let inboxProfileRefreshState = "idle";
 let inboxProfileRefreshMessage = "";
+let inboxContactDraft = { displayName: "", primaryPhone: "", primaryEmail: "", companyName: "" };
+let inboxContactSaveState = "idle";
+let inboxContactSaveError = "";
 
 const routes = {
   "/": "Overview",
@@ -2072,6 +2076,49 @@ async function refreshSelectedInboxFacebookProfile() {
   }
 }
 
+async function saveInboxCustomerDetails() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxContactSaveState === "saving") return;
+  inboxContactSaveState = "saving";
+  inboxContactSaveError = "";
+  render();
+  try {
+    await updateInboxContact(adminAuthSession, conversation.id, inboxContactDraft);
+    inboxSelectedConversationId = conversation.id;
+    inboxActiveModal = "";
+    inboxContactSaveState = "idle";
+    await refreshInboxSelection();
+  } catch (error) {
+    inboxContactSaveState = "idle";
+    inboxContactSaveError = error?.message || "Unable to save customer details.";
+  } finally {
+    render();
+  }
+}
+
+function openInboxModal(modalKey) {
+  const conversation = getSelectedInboxConversation();
+  inboxActiveModal = modalKey || "";
+  inboxMutationError = "";
+  inboxContactSaveError = "";
+  if (conversation && inboxActiveModal === "customer_details") {
+    inboxContactDraft = {
+      displayName: conversation.customerLabel === "Facebook customer" ? "" : conversation.customerLabel,
+      primaryPhone: conversation.primaryPhone || "",
+      primaryEmail: conversation.primaryEmail || "",
+      companyName: conversation.companyName || "",
+    };
+  }
+  render();
+}
+
+function closeInboxModal() {
+  inboxActiveModal = "";
+  inboxContactSaveState = "idle";
+  inboxContactSaveError = "";
+  render();
+}
+
 async function runInboxMutation(work) {
   inboxMutationState = "saving";
   inboxMutationError = "";
@@ -2386,6 +2433,7 @@ function renderInboxCustomerDetailsModal(conversation) {
   const link = inboxDetail?.inquiryLink || (conversation.inquiryId ? { inquiryId: conversation.inquiryId, convertedAt: conversation.convertedAt } : null);
   const profileName = conversation.customerLabel === "Facebook customer" ? "Not captured" : "Available";
   const profilePhoto = conversation.profilePictureUrl ? "Available" : "Not captured";
+  const saving = inboxContactSaveState === "saving";
   return `<section class="inbox-modal-scrim" role="dialog" aria-modal="true" aria-labelledby="inbox-customer-details-title">
     <div class="inbox-centered-modal inbox-customer-details-modal">
       <header class="inbox-modal-header">
@@ -2398,23 +2446,20 @@ function renderInboxCustomerDetailsModal(conversation) {
         <section class="inbox-modal-card">
           <h3>CUSTOMER CONTACT</h3>
           <div class="inbox-modal-field-grid">
-            ${renderInboxModalField("Customer Name", conversation.customerLabel)}
-            ${renderInboxModalField("Mobile Number", conversation.primaryPhone || "Not provided")}
-            ${renderInboxModalField("Email", conversation.primaryEmail || "Not provided")}
-            ${renderInboxModalField("Company", conversation.companyName || "Not provided")}
-            ${renderInboxModalField("Address", "Not supported yet")}
-            ${renderInboxModalField("City", "Not supported yet")}
-            ${renderInboxModalField("State", "Not supported yet")}
-            ${renderInboxModalField("ZIP / Postal Code", "Not supported yet")}
+            ${renderInboxModalField("Customer Name", "displayName", inboxContactDraft.displayName, { disabled: saving, required: true })}
+            ${renderInboxModalField("Mobile Number", "primaryPhone", inboxContactDraft.primaryPhone, { disabled: saving })}
+            ${renderInboxModalField("Email", "primaryEmail", inboxContactDraft.primaryEmail, { disabled: saving, type: "email" })}
+            ${renderInboxModalField("Company", "companyName", inboxContactDraft.companyName, { disabled: saving })}
           </div>
           <label class="inbox-modal-textarea"><span>Customer Notes</span><textarea disabled rows="3">Optional internal context about this customer. Keep Messenger conversation history separate.</textarea></label>
-          <div class="inbox-profile-summary"><span>Facebook Profile</span><strong>Profile name ${profileName} • Profile photo ${profilePhoto}</strong></div>
+          <div class="inbox-profile-summary"><span>Facebook Profile</span><strong>Profile name ${profileName} • Profile photo ${profilePhoto} • Channel Facebook Messenger</strong></div>
           <div class="inbox-profile-summary linked"><span>Linked Records</span><strong>Inquiry ${link?.inquiryId || "not linked"} • Order ${conversation.orderId || "not linked"}</strong></div>
+          ${inboxContactSaveError ? `<p class="inbox-modal-error" role="alert">${escapeHtml(inboxContactSaveError)}</p>` : ""}
         </section>
       </div>
       <footer class="inbox-modal-footer">
         <button data-inbox-close-modal type="button">Cancel</button>
-        <button disabled type="button" title="Customer detail update API is not available in this UI phase.">Save Details</button>
+        <button ${saving ? "disabled" : ""} data-inbox-save-customer-details type="button">${saving ? "SAVING..." : "Save Details"}</button>
       </footer>
     </div>
   </section>`;
@@ -2464,8 +2509,9 @@ function renderInboxFollowUpModal(conversation) {
   </section>`;
 }
 
-function renderInboxModalField(label, value) {
-  return `<label class="inbox-modal-input"><span>${escapeHtml(label)}</span><input disabled value="${escapeHtml(value || "Not provided")}" /></label>`;
+function renderInboxModalField(label, field, value, options = {}) {
+  const type = options.type || "text";
+  return `<label class="inbox-modal-input"><span>${escapeHtml(label)}</span><input ${options.disabled ? "disabled" : ""} ${options.required ? "required" : ""} data-inbox-contact-field="${escapeHtml(field)}" type="${escapeHtml(type)}" value="${escapeHtml(value || "")}" placeholder="Not provided" /></label>`;
 }
 
 function getInboxCustomerDetailsSummary(conversation) {
@@ -11733,17 +11779,22 @@ function bindEvents() {
   });
   document.querySelectorAll("[data-inbox-open-modal]").forEach((button) => {
     button.addEventListener("click", () => {
-      inboxActiveModal = button.dataset.inboxOpenModal || "";
-      inboxMutationError = "";
-      render();
+      openInboxModal(button.dataset.inboxOpenModal || "");
     });
   });
   document.querySelectorAll("[data-inbox-close-modal]").forEach((button) => {
     button.addEventListener("click", () => {
-      inboxActiveModal = "";
-      render();
+      closeInboxModal();
     });
   });
+  document.querySelectorAll("[data-inbox-contact-field]").forEach((input) => {
+    input.addEventListener("input", (event) => {
+      const field = event.target.dataset.inboxContactField;
+      if (Object.hasOwn(inboxContactDraft, field)) inboxContactDraft = { ...inboxContactDraft, [field]: event.target.value };
+      inboxContactSaveError = "";
+    });
+  });
+  document.querySelector("[data-inbox-save-customer-details]")?.addEventListener("click", () => saveInboxCustomerDetails());
   document.querySelector("[data-inbox-search]")?.addEventListener("input", (event) => {
     inboxSearchQuery = event.target.value;
     render();

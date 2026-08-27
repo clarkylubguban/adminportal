@@ -17,11 +17,13 @@ assert.ok(customerModal.includes("Customer Name"), "Customer Details modal must 
 assert.ok(customerModal.includes("Mobile Number"), "Customer Details modal must show mobile number");
 assert.ok(customerModal.includes("Email"), "Customer Details modal must show email");
 assert.ok(customerModal.includes("Company"), "Customer Details modal must show company");
-assert.ok(customerModal.includes("Address") && customerModal.includes("City") && customerModal.includes("State") && customerModal.includes("ZIP / Postal Code"), "Customer Details modal must acknowledge unsupported address fields");
-assert.ok(customerModal.includes("Not supported yet"), "Address fields must not fake persistence when schema is absent");
+assert.equal(customerModal.includes('renderInboxModalField("Address"'), false, "Address must be deferred until schema support exists");
+assert.equal(customerModal.includes('renderInboxModalField("City"'), false, "City must be deferred until schema support exists");
+assert.equal(customerModal.includes('renderInboxModalField("State"'), false, "State must be deferred until schema support exists");
+assert.equal(customerModal.includes('renderInboxModalField("ZIP / Postal Code"'), false, "ZIP must be deferred until schema support exists");
 assert.ok(customerModal.includes("Facebook Profile"), "Customer Details modal must summarize F8 profile data");
 assert.ok(customerModal.includes("Linked Records"), "Customer Details modal must keep linked records compact");
-assert.ok(customerModal.includes("Save Details") && customerModal.includes("disabled"), "Save Details must be disabled until a canonical update API/schema exists");
+assert.ok(customerModal.includes("data-inbox-save-customer-details") && customerModal.includes("SAVING..."), "Save Details must persist supported contact fields");
 assert.equal(/PSID|externalUserId|META_PAGE_ACCESS_TOKEN|META_APP_SECRET|service_role|Bearer/.test(customerModal), false, "Customer Details modal must not expose PSIDs or secrets");
 
 assert.ok(notesModal.includes("inbox-centered-modal small"), "Notes must use a small centered modal");
