@@ -46,6 +46,11 @@ assert.equal(INBOX_WORK_VIEWS.some((view) => /Needs Review|Needs Reply/.test(vie
 assert.ok(main.includes("FETCH FACEBOOK NAME"), "F9 must keep the F8 missing-name action");
 assert.ok(main.includes("CHECKING FACEBOOK..."), "F9 must keep the F8 loading state");
 assert.ok(main.includes("if (!conversation || conversation.customerLabel !== \"Facebook customer\" || !canViewInboxRoute()) return \"\";"), "F9 must hide fetch name for enriched customers or unauthorized users");
+assert.ok(main.includes("data-inbox-attach-file"), "F9.6 composer must expose a clear Attach control");
+assert.ok(main.includes("data-inbox-attachment-remove"), "F9.6 attachment tray must expose a Remove action");
+assert.ok(main.includes("data-inbox-attachment-retry"), "F9.6 failed attachment tray must expose a Retry action");
+assert.ok(main.includes("Messenger upload failed - file remains local"), "F9.6 failed attachment state must preserve typed reply text and avoid hidden uploads");
+assert.equal(/postInboxAction[\s\S]{0,240}attachment|storage_path[\s\S]{0,240}insert/i.test(extractFunctionSource("submitInboxReply")), false, "F9.6 composer attachment fallback must not auto-create Supabase storage copies");
 
 assert.ok(main.includes("VIEW INQUIRY"), "F9 must keep linked Inquiry navigation");
 assert.ok(main.includes("CONVERT INQUIRY"), "F9 must keep F5 pre-conversion action copy");
@@ -69,7 +74,7 @@ assert.match(viewModel, /https:\/\/example\.invalid\/profile\.jpg/, "rendered ro
 assert.equal(/123456789|PSID|externalUserId/.test(viewModel), false, "rendered row must not expose PSID-like identifiers");
 
 assert.ok(styles.includes("overflow: hidden") && styles.includes("overflow-y: auto"), "F9 workspace must avoid page overflow while allowing column scroll");
-assert.ok(styles.includes(".inbox-composer") && styles.includes("grid-template-rows: 92px minmax(0, 1fr) 104px"), "F9 composer must remain visible at the bottom of the thread column");
+assert.ok(styles.includes(".inbox-composer") && styles.includes("grid-template-rows: 92px minmax(0, 1fr) auto"), "F9 composer must remain visible at the bottom of the thread column while allowing an attachment tray");
 assert.ok(styles.includes("box-shadow: inset 4px 0 0 #baff16"), "F9 selected conversation must use the Figma active rail");
 assert.ok(styles.includes("grid-auto-rows: max-content"), "Conversation list rows must stay content-sized instead of filling available height");
 assert.ok(styles.includes("align-self: start") && styles.includes("max-height: 110px") && styles.includes("min-height: 96px"), "Selected conversation row must stay compact around 96-110px");
@@ -81,6 +86,8 @@ assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0,
 assert.ok(styles.includes(".inbox-thread-actions .inbox-thread-details") && styles.includes("background: #1877f2"), "DETAILS must remain a blue active control");
 assert.ok(styles.includes(".inbox-message.outbound") && styles.includes("background: #1877f2"), "Outgoing bubble must remain blue");
 assert.ok(styles.includes(".inbox-composer-actions button:last-child") && styles.includes("border-color: #1877f2"), "Send button must remain blue");
+assert.ok(styles.includes(".inbox-attachment-card") && styles.includes(".inbox-attachment-card.saved"), "F9.6 must render distinct incoming Meta-only and saved attachment cards");
+assert.ok(styles.includes(".inbox-attachment-tray") && styles.includes(".inbox-attach-action"), "F9.6 composer must render an attach action and selected attachment tray");
 
 for (const viewportWidth of [1366, 1920]) {
   const leftColumn = 330;
@@ -91,6 +98,30 @@ for (const viewportWidth of [1366, 1920]) {
 }
 assert.ok(styles.includes("max-width: none"), "Desktop shell must not be clamped below the available viewport width");
 assert.ok(styles.includes(".inbox-work-chip span") && styles.includes("text-overflow: clip"), "Filter chips must keep labels and counts readable");
+
+const incomingAttachment = renderF9AttachmentCard({
+  filename: "mika-logo-final.png",
+  type: "image",
+  sizeBytes: 1887437,
+  storagePath: "",
+  ingestionStatus: "pending",
+}, "inbound");
+assert.match(incomingAttachment, /mika-logo-final\.png/, "Incoming attachment card must show the filename");
+assert.match(incomingAttachment, /1\.8 MB · Image from Messenger/, "Incoming attachment card must show file size and Messenger source");
+assert.match(incomingAttachment, /META ONLY/, "Incoming attachment card must identify Meta-only storage state");
+assert.match(incomingAttachment, /Visible in Inbox · not copied to Supabase/, "Incoming Meta attachment must not imply permanent storage");
+assert.match(incomingAttachment, /Save to Inquiry/, "Incoming Meta attachment must expose explicit Save to Inquiry action text");
+assert.match(incomingAttachment, /disabled type="button" title="Save to Inquiry requires explicit attachment persistence support"/, "Save to Inquiry must stay explicit and disabled until persistence support exists");
+
+const savedAttachment = renderF9AttachmentCard({
+  filename: "customer-artwork.png",
+  type: "image",
+  sizeBytes: 1024,
+  storagePath: "inquiries/TRY-1/customer-artwork.png",
+}, "inbound");
+assert.match(savedAttachment, /SAVED/, "Saved attachment card must show confirmed saved state");
+assert.match(savedAttachment, /Permanent copy linked to Inquiry Artwork/, "Saved attachment must only claim permanence when storage path exists");
+assert.match(savedAttachment, /Open Inquiry/, "Saved attachment must point operators to the linked Inquiry");
 
 console.log("PASS Facebook Inbox F9 browser behavior/source contract");
 
@@ -112,6 +143,25 @@ function renderF9ConversationCard(conversation) {
     const renderInboxAvatar = ${avatarSource};
     return (${source})([conversation]);`,
   )(conversation);
+}
+
+function renderF9AttachmentCard(attachment, direction) {
+  const source = extractFunctionSource("renderInboxAttachment");
+  const fileSizeSource = extractFunctionSource("formatInboxFileSize");
+  const attachmentSource = extractFunctionSource("formatInboxAttachmentSource");
+  const attachmentStatusSource = extractFunctionSource("formatInboxAttachmentStatus");
+  return Function(
+    "attachment",
+    "direction",
+    `"use strict";
+    const inboxDetail = { inquiryLink: { inquiryId: "TRY-20260827012930" } };
+    const escapeHtml = (value) => String(value || "").replace(/[&<>"']/g, (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "\\"": "&quot;", "'": "&#39;" }[char]));
+    const renderIcon = () => "<svg></svg>";
+    const formatInboxFileSize = ${fileSizeSource};
+    const formatInboxAttachmentSource = ${attachmentSource};
+    const formatInboxAttachmentStatus = ${attachmentStatusSource};
+    return (${source})(attachment, direction);`,
+  )(attachment, direction);
 }
 
 function extractFunctionSource(name) {

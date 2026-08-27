@@ -665,6 +665,8 @@ let inboxActionPermissions = createInboxActionPermissions();
 let inboxReplyCapability = { replyConfigured: false };
 let inboxAssignmentUsers = [];
 let inboxReplyDraft = "";
+let inboxComposerAttachment = null;
+let inboxComposerAttachmentMessage = "";
 let inboxNoteDraft = "";
 let inboxFollowUpDraft = "";
 let inboxFollowUpReason = "";
@@ -1797,6 +1799,8 @@ function resetInboxState() {
   inboxReplyCapability = { replyConfigured: false };
   inboxAssignmentUsers = [];
   inboxReplyDraft = "";
+  inboxComposerAttachment = null;
+  inboxComposerAttachmentMessage = "";
   inboxNoteDraft = "";
   inboxFollowUpDraft = "";
   inboxFollowUpReason = "";
@@ -1853,6 +1857,10 @@ async function loadInboxConversations({ silent = false } = {}) {
 
 async function loadInboxConversationDetail(conversationId) {
   if (!canViewInboxRoute() || !adminAuthSession?.access_token || !conversationId) return;
+  if (inboxSelectedConversationId !== conversationId) {
+    inboxComposerAttachment = null;
+    inboxComposerAttachmentMessage = "";
+  }
   inboxSelectedConversationId = conversationId;
   inboxCloseConfirmId = "";
   inboxDetailState = "loading";
@@ -1948,6 +1956,12 @@ async function openInboxConversation(conversationId) {
 async function submitInboxReply() {
   const conversation = getSelectedInboxConversation();
   if (!conversation || inboxMutationState === "saving") return;
+  if (inboxComposerAttachment) {
+    inboxComposerAttachment = { ...inboxComposerAttachment, status: "failed" };
+    inboxComposerAttachmentMessage = "Messenger upload failed - file remains local";
+    render();
+    return;
+  }
   inboxMutationState = "saving";
   inboxMutationError = "";
   render();
@@ -2116,6 +2130,31 @@ function closeInboxModal() {
   inboxActiveModal = "";
   inboxContactSaveState = "idle";
   inboxContactSaveError = "";
+  render();
+}
+
+function setInboxComposerAttachment(file) {
+  if (!file) return;
+  inboxComposerAttachment = {
+    name: file.name || "Attachment",
+    size: Number.isFinite(file.size) ? file.size : null,
+    type: file.type || "file",
+    status: "ready",
+  };
+  inboxComposerAttachmentMessage = "";
+  render();
+}
+
+function removeInboxComposerAttachment() {
+  inboxComposerAttachment = null;
+  inboxComposerAttachmentMessage = "";
+  render();
+}
+
+function retryInboxComposerAttachment() {
+  if (!inboxComposerAttachment) return;
+  inboxComposerAttachment = { ...inboxComposerAttachment, status: "ready" };
+  inboxComposerAttachmentMessage = "";
   render();
 }
 
@@ -2338,6 +2377,11 @@ function renderInboxThread(conversation) {
       ${messages.length ? messages.map(renderInboxMessage).join("") : `<div class="inbox-empty-column">No messages captured yet.</div>`}
     </div>
     <footer class="inbox-composer ${composerState.enabled ? "active" : ""}">
+      ${renderInboxComposerAttachmentTray(composerState)}
+      <label class="inbox-attach-action ${composerState.enabled ? "" : "disabled"}">
+        <span>Attach</span>
+        <input ${composerState.enabled ? "" : "disabled"} data-inbox-attach-file type="file" aria-label="Attach file" />
+      </label>
       <textarea ${composerState.enabled ? "" : "disabled"} rows="2" maxlength="2000" data-inbox-reply-draft placeholder="${escapeHtml(composerState.placeholder)}">${escapeHtml(inboxReplyDraft)}</textarea>
       <div class="inbox-composer-actions">
         <span>${Math.min(inboxReplyDraft.trim().length, 2000)}/2000</span>
@@ -2349,10 +2393,28 @@ function renderInboxThread(conversation) {
   `;
 }
 
+function renderInboxComposerAttachmentTray(composerState) {
+  if (!inboxComposerAttachment) {
+    return `<div class="inbox-attachment-note">Messenger response window active · Attachments stay on Meta unless saved</div>`;
+  }
+  const failed = inboxComposerAttachment.status === "failed";
+  const status = failed
+    ? inboxComposerAttachmentMessage || "Messenger upload failed - file remains local"
+    : `${formatInboxFileSize(inboxComposerAttachment.size)} · Ready to send`;
+  return `<div class="inbox-attachment-tray ${failed ? "failed" : "ready"}">
+    <div>
+      <strong>${escapeHtml(inboxComposerAttachment.name)}</strong>
+      <span>${escapeHtml(status)}</span>
+    </div>
+    ${failed ? `<button ${composerState.enabled ? "" : "disabled"} data-inbox-attachment-retry type="button">Retry</button>` : ""}
+    <button ${composerState.enabled ? "" : "disabled"} data-inbox-attachment-remove type="button">Remove</button>
+  </div>`;
+}
+
 function renderInboxMessage(message) {
   const direction = message.direction === "outbound" ? "outbound" : message.direction === "inbound" ? "inbound" : "system";
   const attachments = message.attachments?.length
-    ? `<div class="inbox-attachments">${message.attachments.map(renderInboxAttachment).join("")}</div>`
+    ? `<div class="inbox-attachments">${message.attachments.map((attachment) => renderInboxAttachment(attachment, direction)).join("")}</div>`
     : "";
   const status = direction === "outbound" && message.statusLabel ? `<small>${escapeHtml(message.statusLabel)}</small>` : "";
   return `<article class="inbox-message-row ${direction}"><div class="inbox-message ${direction}">
@@ -2362,10 +2424,58 @@ function renderInboxMessage(message) {
   </div></article>`;
 }
 
-function renderInboxAttachment(attachment) {
-  const name = attachment.filename || attachment.mimeType || attachment.type || "Attachment";
-  const stored = attachment.storagePath ? "stored privately" : attachment.ingestionStatus || "pending";
-  return `<span class="inbox-attachment">${renderIcon("file-text", "ops-button-icon")}${escapeHtml(name)} / ${escapeHtml(stored)}</span>`;
+function renderInboxAttachment(attachment, direction = "inbound") {
+  const name = attachment.filename || attachment.mimeType || `${attachment.type || "Messenger"} attachment`;
+  const saved = Boolean(attachment.storagePath);
+  const status = saved ? "SAVED" : direction === "inbound" ? "META ONLY" : formatInboxAttachmentStatus(attachment.ingestionStatus);
+  const detail = saved
+    ? "Permanent copy linked to Inquiry Artwork"
+    : direction === "inbound"
+      ? "Visible in Inbox · not copied to Supabase"
+      : "Messenger file reference";
+  const meta = `${formatInboxFileSize(attachment.sizeBytes)} · ${formatInboxAttachmentSource(attachment, direction)}`;
+  const saveAction = saved
+    ? `<button ${inboxDetail?.inquiryLink?.inquiryId ? `data-inbox-view-inquiry="${escapeHtml(inboxDetail.inquiryLink.inquiryId)}"` : "disabled"} type="button">Open Inquiry</button>`
+    : `<button disabled type="button" title="Save to Inquiry requires explicit attachment persistence support">Save to Inquiry</button>`;
+  return `<article class="inbox-attachment-card ${saved ? "saved" : "meta-only"}">
+    <div class="inbox-attachment-main">
+      ${renderIcon("file-text", "ops-button-icon")}
+      <div>
+        <strong>${escapeHtml(name)}</strong>
+        <span>${escapeHtml(meta)}</span>
+      </div>
+    </div>
+    <p>${escapeHtml(detail)}</p>
+    <footer>
+      <em>${escapeHtml(status)}</em>
+      <div>
+        <button disabled type="button">View</button>
+        ${saveAction}
+      </div>
+    </footer>
+  </article>`;
+}
+
+function formatInboxAttachmentSource(attachment, direction = "inbound") {
+  const type = String(attachment?.type || attachment?.mimeType || "file").toLowerCase();
+  const label = type.includes("image") ? "Image" : type.includes("video") ? "Video" : "File";
+  return direction === "inbound" ? `${label} from Messenger` : `${label} for Messenger`;
+}
+
+function formatInboxAttachmentStatus(value) {
+  const status = String(value || "pending").toLowerCase();
+  if (status === "failed") return "FAILED";
+  if (status === "stored" || status === "saved") return "SAVED";
+  if (status === "uploading") return "UPLOADING";
+  return "META ONLY";
+}
+
+function formatInboxFileSize(value) {
+  const size = Number(value);
+  if (!Number.isFinite(size) || size <= 0) return "File";
+  if (size >= 1048576) return `${(size / 1048576).toFixed(size >= 10485760 ? 0 : 1)} MB`;
+  if (size >= 1024) return `${Math.round(size / 1024)} KB`;
+  return `${Math.round(size)} B`;
 }
 
 function renderInboxDetailPanel(conversation) {
@@ -11746,6 +11856,8 @@ function bindEvents() {
       inboxMobileThreadOpen = false;
       inboxActiveModal = "";
       inboxDetail = null;
+      inboxComposerAttachment = null;
+      inboxComposerAttachmentMessage = "";
       inboxSendState = { status: "none" };
       inboxCloseConfirmId = "";
       inboxDetailState = "empty";
@@ -11794,6 +11906,11 @@ function bindEvents() {
     render();
   });
   document.querySelector("[data-inbox-check-send-status]")?.addEventListener("click", () => checkInboxSendStatus());
+  document.querySelector("[data-inbox-attach-file]")?.addEventListener("change", (event) => {
+    setInboxComposerAttachment(event.target.files?.[0] || null);
+  });
+  document.querySelector("[data-inbox-attachment-remove]")?.addEventListener("click", () => removeInboxComposerAttachment());
+  document.querySelector("[data-inbox-attachment-retry]")?.addEventListener("click", () => retryInboxComposerAttachment());
   document.querySelector("[data-inbox-send-reply]")?.addEventListener("click", () => submitInboxReply());
   document.querySelector("[data-inbox-assign-me]")?.addEventListener("click", () => assignInboxToMe());
   document.querySelector("[data-inbox-reassign]")?.addEventListener("change", (event) => reassignInboxConversation(event.target.value));
@@ -11812,7 +11929,9 @@ function bindEvents() {
   document.querySelector("[data-inbox-close-cancel]")?.addEventListener("click", () => cancelInboxClose());
   document.querySelector("[data-inbox-close-confirm]")?.addEventListener("click", () => confirmInboxClose());
   document.querySelector("[data-inbox-convert-to-inquiry]")?.addEventListener("click", () => convertSelectedInboxConversationToInquiry());
-  document.querySelector("[data-inbox-view-inquiry]")?.addEventListener("click", (event) => openInboxInquiry(event.currentTarget.dataset.inboxViewInquiry));
+  document.querySelectorAll("[data-inbox-view-inquiry]").forEach((button) => {
+    button.addEventListener("click", (event) => openInboxInquiry(event.currentTarget.dataset.inboxViewInquiry));
+  });
   document.querySelector("[data-inbox-refresh-facebook-profile]")?.addEventListener("click", () => refreshSelectedInboxFacebookProfile());
   document.querySelector("[data-ops-view-inbox]")?.addEventListener("click", (event) => openInboxConversation(event.currentTarget.dataset.opsViewInbox));
 
