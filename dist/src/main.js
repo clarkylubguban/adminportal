@@ -2074,7 +2074,7 @@ function isUuid(value) {
 
 function getInboxViewKeyForConversation(conversation) {
   const state = String(conversation?.state || "");
-  if (INBOX_VIEWS.some((view) => view.key === state)) return state;
+  if (INBOX_WORK_VIEWS.some((view) => view.key === state)) return state;
   return "all";
 }
 
