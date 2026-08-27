@@ -16,7 +16,7 @@ assert.ok(actions.includes("convert_inbox_conversation_to_inquiry"), "F5 API mus
 assert.ok(main.includes("inbox_convert_to_inquiry"), "Inbox UI must load convert action permission");
 assert.ok(main.includes("convertSelectedInboxConversationToInquiry"), "Convert click handler missing");
 assert.ok(main.includes("data-inbox-convert-to-inquiry"), "Convert button data hook missing");
-assert.ok(main.includes("CONVERT TO INQUIRY"), "Pre-conversion button label missing");
+assert.ok(main.includes("CONVERT INQUIRY"), "Pre-conversion button label missing");
 assert.ok(main.includes("CONVERTING..."), "Conversion progress label missing");
 assert.ok(main.includes("VIEW INQUIRY"), "Post-conversion view action missing");
 assert.ok(main.includes("data-inbox-view-inquiry"), "View Inquiry data hook missing");

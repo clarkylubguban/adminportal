@@ -2247,7 +2247,7 @@ function renderInboxInquiryAction(conversation, link, canConvert) {
     return `<button data-inbox-view-inquiry="${escapeHtml(link.inquiryId)}" type="button">VIEW INQUIRY</button>`;
   }
   const canStartConversion = canConvert && conversation.state !== "closed" && inboxMutationState !== "saving" && inboxConversionState !== "saving";
-  const label = inboxConversionState === "saving" ? "CONVERTING..." : "CONVERT TO INQUIRY";
+  const label = inboxConversionState === "saving" ? "CONVERTING..." : "CONVERT INQUIRY";
   return `<button ${canStartConversion ? "" : "disabled"} data-inbox-convert-to-inquiry type="button">${label}</button>`;
 }
 
