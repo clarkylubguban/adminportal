@@ -1179,10 +1179,18 @@
   white-space: normal;
 }
 
-.inbox-thread-details {
+.inbox-thread-actions .inbox-thread-details {
   background: #1877f2;
   border-color: #1877f2;
   color: #ffffff;
+}
+
+.inbox-work-chip span,
+.inbox-work-chip strong {
+  flex: 0 0 auto;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
 }
 
 .inbox-profile-refresh .mvp-secondary-action {

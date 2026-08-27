@@ -3,7 +3,7 @@ import { readSupabaseTableWithAuth } from "../lib/supabaseClient.js";
 export const INBOX_MODULE_KEY = "inbox";
 
 export const INBOX_WORK_VIEWS = [
-  { key: "needs_reply", label: "Needs Reply", state: "needs_reply" },
+  { key: "needs_reply", label: "New", state: "needs_reply" },
   { key: "waiting", label: "Waiting", state: "waiting" },
   { key: "follow_up", label: "Follow-up", state: "follow_up" },
   { key: "assigned_to_me", label: "Assigned to me" },

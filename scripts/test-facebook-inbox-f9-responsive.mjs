@@ -25,7 +25,8 @@ const tablet = block("@media (min-width: 768px) and (max-width: 1199px)");
 assert.ok(tablet.includes("clamp(260px, 36vw, 290px) minmax(0, 1fr)"), "Tablet must use Conversation List | Messenger Thread");
 assert.ok(tablet.includes(".inbox-context-panel") && tablet.includes("display: none"), "Tablet must hide the permanent third panel");
 assert.ok(tablet.includes(".inbox-thread-details") && tablet.includes("display: inline-flex"), "Tablet must expose DETAILS in the thread header");
-assert.ok(styles.includes(".inbox-thread-details") && styles.includes("background: #1877f2"), "DETAILS must be a prominent blue action");
+assert.ok(styles.includes(".inbox-thread-actions .inbox-thread-details") && styles.includes("background: #1877f2"), "DETAILS must be a prominent blue action");
+assert.ok(styles.includes(".inbox-work-chip span") && styles.includes("white-space: nowrap"), "Filter chips must keep New and counts readable across supported widths");
 
 const mobile = block("@media (max-width: 767px)");
 assert.ok(mobile.includes("grid-template-columns: minmax(0, 1fr)"), "Mobile must use one-pane layout");

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  INBOX_WORK_VIEWS,
   formatInboxLastMessageSnippet,
   getSafeIdentitySecondary,
   getSafeProfilePictureUrl,
@@ -25,6 +26,10 @@ assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Inbox page title mus
 assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Inbox subtitle must be removed from the Inbox header");
 assert.equal(pageSource.includes("data-inbox-refresh"), false, "Visible Inbox Refresh button must be removed from the header");
 assert.ok(pageSource.includes("getInboxPageStatusLabel(selected)"), "F9 cleanup must keep the channel/account pill");
+assert.equal(INBOX_WORK_VIEWS[0].key, "needs_reply", "F9.4 must preserve the underlying needs_reply filter key");
+assert.equal(INBOX_WORK_VIEWS[0].state, "needs_reply", "F9.4 must preserve the underlying needs_reply state filter");
+assert.equal(INBOX_WORK_VIEWS[0].label, "New", "F9.4 must display the first Inbox filter as New");
+assert.equal(INBOX_WORK_VIEWS.some((view) => /Needs Review|Needs Reply/.test(view.label)), false, "F9.4 Inbox filter labels must not show the old review/reply copy");
 assert.ok(main.includes("Search customer or message…"), "F9 list search placeholder must match the approved copy");
 assert.ok(main.includes("INBOX_WORK_VIEWS.slice(0, 3)") && main.includes("INBOX_WORK_VIEWS.slice(3)"), "F9 work views must render as compact primary and secondary rows");
 assert.ok(main.includes("renderInboxAvatar(conversation"), "F9 must render safe avatars in the list/thread/panel");

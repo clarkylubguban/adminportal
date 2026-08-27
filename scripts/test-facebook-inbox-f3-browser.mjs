@@ -66,7 +66,7 @@ try {
   assert.equal(authorizedShell.hasInboxNav, true, "authorized account sees Inbox navigation");
   assert.equal(authorizedShell.hasDetailPanel, true, "authorized Inbox has Customer & Operations detail panel");
 
-  await verifyView(cdp, "needs_reply", ["Facebook customer", "Needs Reply", "Sent", "Not yet an inquiry", "Not yet captured"]);
+  await verifyView(cdp, "needs_reply", ["Facebook customer", "New", "Sent", "Not yet an inquiry", "Not yet captured"]);
   await verifyView(cdp, "waiting", ["TRRY_F3_QA Waiting Customer", "Waiting", "Delivered", "TRRY_F3_QA_REF_WAITING"]);
   await verifyView(cdp, "follow_up", ["TRRY_F3_QA Follow Up Customer", "Follow-up", "Seen", "TRRY_F3_QA_attachment.jpg", "pending"]);
   await verifyView(cdp, "converted", ["TRRY_F3_QA Converted Customer", "Converted", "Inquiry Link", "TRRY-NKC8675V"]);
