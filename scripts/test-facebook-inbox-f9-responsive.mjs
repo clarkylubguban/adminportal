@@ -11,10 +11,15 @@ assert.ok(main.includes("inboxMobileThreadOpen = true"), "Conversation selection
 assert.ok(main.includes("inboxMobileThreadOpen = false"), "Back/view changes must return to the mobile list pane");
 assert.ok(main.includes("data-inbox-open-modal=\"customer_details\""), "Tablet/mobile thread must be able to open Details modal without the right panel");
 assert.equal(extractFunctionSource("renderInboxDetailPanel").includes("VIEW CUSTOMER DETAILS"), false, "Responsive details access must use the thread header only");
+const pageSource = extractFunctionSource("renderInboxPage");
+assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Responsive Inbox must not reserve space for the removed title");
+assert.equal(pageSource.includes("data-inbox-refresh"), false, "Responsive Inbox must not reserve space for the removed Refresh button");
 
 const desktop = block("@media (min-width: 1200px) and (max-width: 1439px)");
 assert.ok(desktop.includes("clamp(250px, 22vw, 300px) minmax(0, 1fr) clamp(260px, 22vw, 310px)"), "1200-1439 desktop must keep three fluid columns");
 assert.ok(desktop.includes("width: 100%"), "1200-1439 desktop must not hard-lock workspace overflow");
+assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0, 1fr) minmax(300px, 350px)"), "Default desktop must use a flexible center chat column");
+assert.ok(styles.includes("max-width: none"), "Desktop workspace must not leave a large unused right-side area from max-width clamping");
 
 const tablet = block("@media (min-width: 768px) and (max-width: 1199px)");
 assert.ok(tablet.includes("clamp(260px, 36vw, 290px) minmax(0, 1fr)"), "Tablet must use Conversation List | Messenger Thread");

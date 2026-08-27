@@ -2230,14 +2230,8 @@ function renderInboxPage() {
   return `
     <main class="inbox-page ${inboxMobileThreadOpen ? "inbox-mobile-thread-open" : ""}">
       <section class="inbox-page-header">
-        <div class="inbox-title-stack">
-          <nav class="inbox-breadcrumb" aria-label="Breadcrumb"><span>Home</span><span>Inbox</span></nav>
-          <h1>Inbox</h1>
-          <p>Handle Facebook conversations, qualify leads, and convert them into inquiries.</p>
-        </div>
         <div class="inbox-page-meta">
           <span>${escapeHtml(getInboxPageStatusLabel(selected))}</span>
-          <button class="inbox-refresh" data-inbox-refresh type="button">${renderIcon("refresh-cw", "ops-button-icon")}Refresh</button>
         </div>
       </section>
       ${renderInboxLoadNotice()}

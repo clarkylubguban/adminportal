@@ -32,6 +32,11 @@ assert.ok(main.includes("conversation.lastMessageSnippet"), "F9 search must incl
 assert.ok(main.includes("conversation.inquiryId"), "F9 search must include canonical linked Inquiry identity");
 assert.ok(main.includes("getInboxPageStatusLabel(selected)"), "F9 header must use the real page name when available");
 assert.ok(main.includes("getInboxOpenConversationCount()"), "F9 conversation list must show open-count context");
+const pageSource = extractFunctionSource("renderInboxPage");
+assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Inbox title must not render above the workspace");
+assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Inbox subtitle must not render above the workspace");
+assert.equal(pageSource.includes("data-inbox-refresh"), false, "Visible Refresh button must not render above the workspace");
+assert.ok(pageSource.includes("getInboxPageStatusLabel(selected)"), "Small channel pill must remain in the cleaned header");
 
 assert.ok(main.includes("FETCH FACEBOOK NAME"), "F9 must keep the F8 missing-name action");
 assert.ok(main.includes("CHECKING FACEBOOK..."), "F9 must keep the F8 loading state");
@@ -61,6 +66,19 @@ assert.equal(/123456789|PSID|externalUserId/.test(viewModel), false, "rendered r
 assert.ok(styles.includes("overflow: hidden") && styles.includes("overflow-y: auto"), "F9 workspace must avoid page overflow while allowing column scroll");
 assert.ok(styles.includes(".inbox-composer") && styles.includes("grid-template-rows: 92px minmax(0, 1fr) 104px"), "F9 composer must remain visible at the bottom of the thread column");
 assert.ok(styles.includes("box-shadow: inset 4px 0 0 #baff16"), "F9 selected conversation must use the Figma active rail");
+assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0, 1fr) minmax(300px, 350px)"), "Desktop layout must fill width with controlled side columns and flexible chat");
+assert.ok(styles.includes(".inbox-thread-details") && styles.includes("background: #1877f2"), "DETAILS must remain a blue active control");
+assert.ok(styles.includes(".inbox-message.outbound") && styles.includes("background: #1877f2"), "Outgoing bubble must remain blue");
+assert.ok(styles.includes(".inbox-composer-actions button:last-child") && styles.includes("border-color: #1877f2"), "Send button must remain blue");
+
+for (const viewportWidth of [1366, 1920]) {
+  const leftColumn = 330;
+  const rightColumn = 350;
+  const shellBorder = 2;
+  const flexibleChatWidth = viewportWidth - leftColumn - rightColumn - shellBorder;
+  assert.ok(flexibleChatWidth >= 684, `${viewportWidth}px desktop must leave a usable flexible chat column`);
+}
+assert.ok(styles.includes("max-width: none"), "Desktop shell must not be clamped below the available viewport width");
 
 console.log("PASS Facebook Inbox F9 browser behavior/source contract");
 

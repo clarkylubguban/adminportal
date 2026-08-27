@@ -20,9 +20,11 @@ assert.ok(main.includes("inbox-workspace-shell inbox-grid"), "F9 Inbox must rend
 assert.ok(main.includes("inbox-list-panel inbox-list"), "F9 must keep the left conversation list surface");
 assert.ok(main.includes("inbox-thread-panel inbox-thread"), "F9 must keep the central Messenger thread surface");
 assert.ok(main.includes("inbox-context-panel inbox-detail-panel"), "F9 must keep the right operations surface");
-assert.ok(main.includes("<nav class=\"inbox-breadcrumb\""), "F9 header must render Home > Inbox breadcrumb");
-assert.ok(main.includes("<h1>Inbox</h1>"), "F9 header title must be Inbox");
-assert.ok(main.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), "F9 subtitle must match the approved copy");
+const pageSource = extractFunctionSource("renderInboxPage");
+assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Inbox page title must be removed from the Inbox header");
+assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Inbox subtitle must be removed from the Inbox header");
+assert.equal(pageSource.includes("data-inbox-refresh"), false, "Visible Inbox Refresh button must be removed from the header");
+assert.ok(pageSource.includes("getInboxPageStatusLabel(selected)"), "F9 cleanup must keep the channel/account pill");
 assert.ok(main.includes("Search customer or message…"), "F9 list search placeholder must match the approved copy");
 assert.ok(main.includes("INBOX_WORK_VIEWS.slice(0, 3)") && main.includes("INBOX_WORK_VIEWS.slice(3)"), "F9 work views must render as compact primary and secondary rows");
 assert.ok(main.includes("renderInboxAvatar(conversation"), "F9 must render safe avatars in the list/thread/panel");
@@ -33,11 +35,12 @@ assert.ok(threadSource.includes('data-inbox-open-modal="customer_details"') && t
 assert.equal(detailPanelSource.includes("VIEW CUSTOMER DETAILS"), false, "F9.3 right panel must remove side-panel Customer Details access");
 assert.ok(main.includes("ADD NOTE / VIEW NOTES"), "F9.1 summary panel must move notes behind an action");
 assert.ok(main.includes("renderInboxModal(selected)"), "F9.1 must render centered modal families from the Inbox page");
-assert.equal(extractFunctionSource("renderInboxPage").includes("FACEBOOK INBOX"), false, "F9 must remove the old oversized Facebook Inbox page header copy");
+assert.equal(pageSource.includes("FACEBOOK INBOX"), false, "F9 must remove the old oversized Facebook Inbox page header copy");
 assert.equal(/externalUserId[\s\S]{0,160}inbox-card-main/.test(main), false, "F9 conversation rows must not expose raw PSIDs");
 
-assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0, 680px) minmax(300px, 350px)"), "F9 desktop columns must match the Figma proportions");
-assert.ok(styles.includes("height: min(792px, calc(100vh - 156px))"), "F9 workspace must target the approved desktop height without viewport overflow");
+assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0, 1fr) minmax(300px, 350px)"), "Inbox desktop shell must use a flexible center chat column");
+assert.ok(styles.includes("height: min(820px, calc(100vh - 96px))"), "Inbox workspace must use the vertical space released by removing the title/subtitle");
+assert.ok(styles.includes("max-width: none") && styles.includes("width: 100%"), "Inbox workspace must fill available desktop width");
 assert.ok(styles.includes(".inbox-work-chip-groups"), "F9 compact work view chip styling missing");
 assert.ok(styles.includes(".inbox-message-row.inbound") && styles.includes(".inbox-message-row.outbound"), "F9 must preserve left inbound and right outbound message alignment");
 assert.ok(styles.includes(".inbox-context-panel"), "F9 right customer and operations panel styling missing");
