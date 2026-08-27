@@ -480,6 +480,19 @@
   margin: 0;
 }
 
+.inbox-profile-refresh {
+  align-items: start;
+  display: grid;
+  gap: 6px;
+  justify-items: start;
+}
+
+.inbox-profile-refresh-message {
+  color: #8b5a2b;
+  font-size: 11px;
+  font-weight: 850;
+}
+
 .inbox-note-list {
   display: grid;
   gap: 8px;

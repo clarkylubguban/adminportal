@@ -198,6 +198,29 @@ export async function convertInboxConversationToInquiry(authSession, conversatio
   return postInboxAction(authSession, conversationId, "convert-to-inquiry", { idempotencyKey });
 }
 
+export async function refreshInboxFacebookProfile(authSession, conversationId, { force = true } = {}) {
+  try {
+    const result = await postInboxAction(authSession, conversationId, "refresh-profile", { force });
+    return {
+      ok: result?.ok === true,
+      status: result?.status || "",
+      displayName: result?.displayName || "",
+      profilePictureAvailable: result?.profilePictureAvailable === true,
+      fields: result?.fields || {},
+      error: "",
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      status: "blocked",
+      displayName: "",
+      profilePictureAvailable: false,
+      fields: {},
+      error: String(error?.code || error?.message || "META_PROFILE_UNAVAILABLE").slice(0, 120),
+    };
+  }
+}
+
 export function normalizeInboxConversationRow({ conversation, identity = null, contact = null, page = null, inquiryLink = null }) {
   return {
     id: conversation.id,

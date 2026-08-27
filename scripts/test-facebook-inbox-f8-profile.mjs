@@ -7,7 +7,7 @@ import {
   normalizeMetaProfile,
   refreshMetaProfileForConversation,
 } from "../api/_lib/metaProfileEnrichment.js";
-import { normalizeInboxConversationRow } from "../src/services/adminInbox.js";
+import { normalizeInboxConversationRow, refreshInboxFacebookProfile } from "../src/services/adminInbox.js";
 
 const SECRET = "synthetic-meta-app-secret-at-least-32-characters";
 const PAGE_ID = "PAGE-100";
@@ -120,6 +120,67 @@ test("authorized server backfill enriches existing identity without mutating mes
   assert.equal(repo.contact.display_name, "Juan Dela Cruz");
   assert.equal(repo.messagesStored, 3);
   assert.equal(repo.linksStored, 1);
+});
+
+test("browser service wrapper posts authenticated refresh-profile and returns safe fields", async () => {
+  const originalFetch = globalThis.fetch;
+  let requestUrl = "";
+  let requestOptions = null;
+  globalThis.fetch = async (url, options) => {
+    requestUrl = url;
+    requestOptions = options;
+    return {
+      ok: true,
+      status: 200,
+      async json() {
+        return {
+          ok: true,
+          status: "updated",
+          displayName: "Juan Dela Cruz",
+          profilePictureAvailable: true,
+          fields: { first_name: true, last_name: true, profile_pic: true },
+        };
+      },
+    };
+  };
+  try {
+    const result = await refreshInboxFacebookProfile({ access_token: "browser-session-token" }, CONVERSATION_ID, { force: true });
+    assert.equal(requestUrl, `/api/inbox/${encodeURIComponent(CONVERSATION_ID)}/refresh-profile`);
+    assert.equal(requestOptions.method, "POST");
+    assert.equal(requestOptions.headers.Authorization, "Bearer browser-session-token");
+    assert.equal(JSON.parse(requestOptions.body).force, true);
+    assert.deepEqual(result, {
+      ok: true,
+      status: "updated",
+      displayName: "Juan Dela Cruz",
+      profilePictureAvailable: true,
+      fields: { first_name: true, last_name: true, profile_pic: true },
+      error: "",
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test("browser service wrapper maps denied Meta profile refresh to safe error only", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({
+    ok: false,
+    status: 409,
+    async json() {
+      return { ok: false, error: "2018247" };
+    },
+  });
+  try {
+    const result = await refreshInboxFacebookProfile({ access_token: "browser-session-token" }, CONVERSATION_ID, { force: true });
+    assert.equal(result.ok, false);
+    assert.equal(result.status, "blocked");
+    assert.equal(result.displayName, "");
+    assert.equal(result.profilePictureAvailable, false);
+    assert.equal(result.error, "2018247");
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
 });
 
 test("future conversion naturally uses enriched contact display name", () => {

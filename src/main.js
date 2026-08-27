@@ -55,6 +55,7 @@ import {
   getInboxReplyCapability,
   getInboxReplyWindowState,
   getInboxSendState,
+  refreshInboxFacebookProfile,
   scheduleInboxFollowUp,
   sendInboxReply,
 } from "./services/adminInbox.js";
@@ -669,6 +670,8 @@ let inboxMutationState = "idle";
 let inboxMutationError = "";
 let inboxConversionState = "idle";
 let inboxSendStatusRefreshState = "idle";
+let inboxProfileRefreshState = "idle";
+let inboxProfileRefreshMessage = "";
 
 const routes = {
   "/": "Overview",
@@ -2039,6 +2042,33 @@ async function confirmInboxClose() {
   }
 }
 
+async function refreshSelectedInboxFacebookProfile() {
+  const conversation = getSelectedInboxConversation();
+  if (!conversation || inboxProfileRefreshState === "loading") return;
+  inboxProfileRefreshState = "loading";
+  inboxProfileRefreshMessage = "";
+  inboxMutationError = "";
+  render();
+  try {
+    const result = await refreshInboxFacebookProfile(adminAuthSession, conversation.id, { force: true });
+    if (!result.ok) {
+      inboxProfileRefreshState = "blocked";
+      inboxProfileRefreshMessage = formatInboxProfileRefreshError(result.error);
+      render();
+      return;
+    }
+    inboxProfileRefreshState = "idle";
+    inboxProfileRefreshMessage = "";
+    inboxSelectedConversationId = conversation.id;
+    await refreshInboxSelection();
+  } catch (error) {
+    inboxProfileRefreshState = "blocked";
+    inboxProfileRefreshMessage = formatInboxProfileRefreshError(error?.code || error?.message);
+  } finally {
+    render();
+  }
+}
+
 async function runInboxMutation(work) {
   inboxMutationState = "saving";
   inboxMutationError = "";
@@ -2076,6 +2106,11 @@ function getInboxViewKeyForConversation(conversation) {
   const state = String(conversation?.state || "");
   if (INBOX_WORK_VIEWS.some((view) => view.key === state)) return state;
   return "all";
+}
+
+function formatInboxProfileRefreshError(value) {
+  const code = String(value || "").replace(/[^A-Za-z0-9_.:-]/g, "").slice(0, 80);
+  return code ? `Facebook name unavailable (${code})` : "Facebook name unavailable";
 }
 
 function resetInboxSelectionDetailState(nextState = "idle") {
@@ -2257,6 +2292,7 @@ function renderInboxDetailPanel(conversation) {
     <section class="inbox-detail-card">
       <h2>Customer</h2>
       ${renderInboxFact("Name", conversation.customerLabel)}
+      ${renderInboxFacebookNameRefresh(conversation)}
       ${renderInboxFact("Phone", conversation.primaryPhone || "Not yet captured")}
       ${renderInboxFact("Email", conversation.primaryEmail || "Not yet captured")}
       ${renderInboxFact("Company", conversation.companyName || "Not yet captured")}
@@ -2306,6 +2342,18 @@ function renderInboxDetailPanel(conversation) {
       <span>${ownedByMe ? "Owned by you" : conversation.ownerUserId ? `Owned by ${escapeHtml(getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }))}` : "Unassigned"}</span>
     </section>
   `;
+}
+
+function renderInboxFacebookNameRefresh(conversation) {
+  if (!conversation || conversation.customerLabel !== "Facebook customer" || !canViewInboxRoute()) return "";
+  const loading = inboxProfileRefreshState === "loading";
+  const notice = inboxProfileRefreshState === "blocked" && inboxProfileRefreshMessage
+    ? `<small class="inbox-profile-refresh-message" role="status">${escapeHtml(inboxProfileRefreshMessage)}</small>`
+    : "";
+  return `<div class="inbox-profile-refresh">
+    <button class="mvp-secondary-action" ${loading ? "disabled" : ""} data-inbox-refresh-facebook-profile type="button">${loading ? "CHECKING FACEBOOK..." : "FETCH FACEBOOK NAME"}</button>
+    ${notice}
+  </div>`;
 }
 
 function renderInboxInquiryAction(conversation, link, canConvert) {
@@ -11543,6 +11591,7 @@ function bindEvents() {
   document.querySelector("[data-inbox-close-confirm]")?.addEventListener("click", () => confirmInboxClose());
   document.querySelector("[data-inbox-convert-to-inquiry]")?.addEventListener("click", () => convertSelectedInboxConversationToInquiry());
   document.querySelector("[data-inbox-view-inquiry]")?.addEventListener("click", (event) => openInboxInquiry(event.currentTarget.dataset.inboxViewInquiry));
+  document.querySelector("[data-inbox-refresh-facebook-profile]")?.addEventListener("click", () => refreshSelectedInboxFacebookProfile());
   document.querySelector("[data-ops-view-inbox]")?.addEventListener("click", (event) => openInboxConversation(event.currentTarget.dataset.opsViewInbox));
 
   document.querySelectorAll("[data-copy-value]").forEach((button) => {

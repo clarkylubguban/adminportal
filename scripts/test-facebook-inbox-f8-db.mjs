@@ -10,6 +10,7 @@ const pkg = JSON.parse(await read("package.json"));
 const migrations = await readdir(new URL("../supabase/migrations/", import.meta.url));
 
 assert.ok(pkg.scripts["test:facebook-inbox-f8-profile"], "F8 profile test script must be registered");
+assert.ok(pkg.scripts["test:facebook-inbox-f8-browser"], "F8.1 browser/source test script must be registered");
 assert.ok(pkg.scripts["test:facebook-inbox-f8-db"], "F8 DB contract test script must be registered");
 assert.equal(
   migrations.some((file) => /facebook_inbox_f8/i.test(file)),
@@ -38,6 +39,8 @@ assert.ok(inboxActions.includes("canAccessInbox"), "profile refresh must preserv
 assert.ok(inboxActions.includes("refreshMetaProfileForConversation"), "profile refresh must run server-side enrichment");
 assert.equal(inboxActions.includes("external_user_id") && inboxActions.includes("sendJson(response, 200"), false, "profile refresh response must not expose PSID");
 
+assert.ok(adminInbox.includes("refreshInboxFacebookProfile"), "Inbox service must export authenticated profile refresh wrapper");
+assert.ok(adminInbox.includes('postInboxAction(authSession, conversationId, "refresh-profile", { force })'), "Inbox service wrapper must use existing postInboxAction pattern");
 assert.ok(adminInbox.includes("formatInboxCustomerName({ identity, contact })"), "Inbox read model must keep using canonical identity/contact names");
 assert.ok(adminInbox.includes("safeText(contact?.display_name) || safeText(identity?.display_name) || \"Facebook customer\""), "Inbox fallback priority must remain contact > identity > fallback");
 assert.ok(f5Migration.includes("coalesce(nullif(btrim(contact_row.display_name), ''), nullif(btrim(identity_row.display_name), ''), 'Facebook customer')"), "F5 conversion must naturally use enriched contact/identity names");
