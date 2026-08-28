@@ -24354,7 +24354,7 @@ body,
 .app-shell:has(.mvp-page) .sidebar nav,
 .app-shell:has(.admin-saas-page) .sidebar nav,
 .app-shell.admin-saas-shell .sidebar nav {
-  gap: 5px;
+  gap: 6px;
 }
 
 .sidebar a,
@@ -24376,11 +24376,11 @@ body,
   color: #d9dde4;
   display: flex;
   font-family: var(--trry-font-ui);
-  gap: 11px;
-  min-height: 42px;
-  padding: 0 12px;
+  gap: 10px;
+  min-height: 40px;
+  padding: 0 11px;
   text-transform: none;
-  transition: background-color 140ms ease, color 140ms ease;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 .sidebar a .nav-label,
@@ -24397,9 +24397,10 @@ body,
 .app-shell.admin-saas-shell .sidebar-phase-item .nav-label {
   color: inherit;
   font-family: var(--trry-font-ui);
-  font-size: 14px;
-  font-weight: 550;
+  font-size: 13px;
+  font-weight: 650;
   letter-spacing: 0;
+  line-height: 1;
   text-transform: none;
 }
 
@@ -24427,6 +24428,7 @@ body,
   background: var(--trry-shell-raised);
   border: 0;
   color: var(--trry-surface);
+  transform: translateX(1px);
 }
 
 .sidebar a.active,
@@ -24435,6 +24437,7 @@ body,
 .app-shell.admin-saas-shell .sidebar a.active {
   background: var(--trry-lime);
   color: var(--trry-text);
+  font-weight: 750;
 }
 
 .sidebar a.active::before {
@@ -24446,6 +24449,28 @@ body,
 .app-shell:has(.admin-saas-page) .sidebar a.active .nav-icon.lucide-icon,
 .app-shell.admin-saas-shell .sidebar a.active .nav-icon.lucide-icon {
   color: var(--trry-text);
+}
+
+.sidebar .nav-icon.lucide-icon,
+.app-shell:has(.mvp-page) .sidebar .nav-icon.lucide-icon,
+.app-shell:has(.admin-saas-page) .sidebar .nav-icon.lucide-icon,
+.app-shell.admin-saas-shell .sidebar .nav-icon.lucide-icon {
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
+}
+
+.sidebar-section-label,
+.app-shell:has(.mvp-page) .sidebar-section-label,
+.app-shell:has(.admin-saas-page) .sidebar-section-label,
+.app-shell.admin-saas-shell .sidebar-section-label {
+  color: #9ca6b4;
+  font-family: var(--trry-font-ui);
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.08em;
+  margin: 18px 11px 7px;
+  text-transform: uppercase;
 }
 
 .sidebar-phase-item,
