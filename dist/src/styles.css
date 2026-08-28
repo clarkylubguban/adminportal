@@ -13643,7 +13643,7 @@ body,
 
 /* Professional SaaS visual system handoff */
 .app-shell:has(.mvp-page),
-.app-shell:has(.inbox-page) {
+.app-shell.canonical-admin-shell {
   --saas-bg: var(--trry-workspace);
   --saas-surface: var(--trry-surface);
   --saas-surface-soft: var(--trry-surface-soft);
@@ -13675,9 +13675,9 @@ body,
 }
 
 .app-shell:has(.mvp-page),
-.app-shell:has(.inbox-page),
+.app-shell.canonical-admin-shell,
 .app-shell:has(.mvp-page) .workspace,
-.app-shell:has(.inbox-page) .workspace,
+.app-shell.canonical-admin-shell .workspace,
 .app-shell:has(.mvp-page) .mvp-page {
   max-width: 100vw;
   min-width: 0;
@@ -13685,7 +13685,7 @@ body,
 }
 
 .app-shell:has(.mvp-page) .sidebar,
-.app-shell:has(.inbox-page) .sidebar {
+.app-shell.canonical-admin-shell .sidebar {
   background: linear-gradient(180deg, #111318 0%, #0e1015 100%);
   border-right: 1px solid #242833;
   box-shadow: none;
@@ -13697,7 +13697,7 @@ body,
 }
 
 .app-shell:has(.mvp-page) .brand-lockup,
-.app-shell:has(.inbox-page) .brand-lockup {
+.app-shell.canonical-admin-shell .brand-lockup {
   border: 0;
   display: grid;
   gap: 2px;
@@ -13709,7 +13709,7 @@ body,
 }
 
 .app-shell:has(.mvp-page) .brand-lockup strong,
-.app-shell:has(.inbox-page) .brand-lockup strong {
+.app-shell.canonical-admin-shell .brand-lockup strong {
   color: #ffffff;
   font-family: var(--saas-font);
   font-size: 27px;
@@ -13719,13 +13719,13 @@ body,
 }
 
 .app-shell:has(.mvp-page) .brand-lockup strong::after,
-.app-shell:has(.inbox-page) .brand-lockup strong::after {
+.app-shell.canonical-admin-shell .brand-lockup strong::after {
   color: var(--saas-lime);
   content: ".";
 }
 
 .app-shell:has(.mvp-page) .brand-lockup span,
-.app-shell:has(.inbox-page) .brand-lockup span {
+.app-shell.canonical-admin-shell .brand-lockup span {
   color: var(--saas-lime);
   display: block;
   font-family: var(--saas-mono);
@@ -13737,12 +13737,12 @@ body,
 }
 
 .app-shell:has(.mvp-page) .sidebar nav,
-.app-shell:has(.inbox-page) .sidebar nav {
+.app-shell.canonical-admin-shell .sidebar nav {
   gap: 5px;
 }
 
 .app-shell:has(.mvp-page) .sidebar a,
-.app-shell:has(.inbox-page) .sidebar a,
+.app-shell.canonical-admin-shell .sidebar a,
 .app-shell:has(.mvp-page) .sidebar-phase-item {
   background: transparent;
   border: 0;
@@ -13756,7 +13756,7 @@ body,
 }
 
 .app-shell:has(.mvp-page) .sidebar a .nav-label,
-.app-shell:has(.inbox-page) .sidebar a .nav-label,
+.app-shell.canonical-admin-shell .sidebar a .nav-label,
 .app-shell:has(.mvp-page) .sidebar-phase-item .nav-label {
   color: inherit;
   font-family: var(--saas-font);
@@ -13768,28 +13768,28 @@ body,
 
 .app-shell:has(.mvp-page) .sidebar a:hover,
 .app-shell:has(.mvp-page) .sidebar a:focus-visible,
-.app-shell:has(.inbox-page) .sidebar a:hover,
-.app-shell:has(.inbox-page) .sidebar a:focus-visible {
+.app-shell.canonical-admin-shell .sidebar a:hover,
+.app-shell.canonical-admin-shell .sidebar a:focus-visible {
   background: var(--saas-sidebar-soft);
   border: 0;
   color: #ffffff;
 }
 
 .app-shell:has(.mvp-page) .sidebar a.active,
-.app-shell:has(.inbox-page) .sidebar a.active {
+.app-shell.canonical-admin-shell .sidebar a.active {
   background: var(--saas-lime);
   color: #111318;
 }
 
 .app-shell:has(.mvp-page) .sidebar a.active .nav-icon.lucide-icon,
-.app-shell:has(.inbox-page) .sidebar a.active .nav-icon.lucide-icon {
+.app-shell.canonical-admin-shell .sidebar a.active .nav-icon.lucide-icon {
   color: #111318;
 }
 
 .app-shell:has(.mvp-page) .nav-icon.lucide-icon,
-.app-shell:has(.inbox-page) .nav-icon.lucide-icon,
+.app-shell.canonical-admin-shell .nav-icon.lucide-icon,
 .app-shell:has(.mvp-page) .sidebar .nav-icon.lucide-icon,
-.app-shell:has(.inbox-page) .sidebar .nav-icon.lucide-icon {
+.app-shell.canonical-admin-shell .sidebar .nav-icon.lucide-icon {
   height: 17px;
   width: 17px;
 }
@@ -13810,7 +13810,7 @@ body,
 }
 
 .app-shell:has(.mvp-page) .system-card,
-.app-shell:has(.inbox-page) .system-card {
+.app-shell.canonical-admin-shell .system-card {
   background: transparent;
   border: 0;
   border-top: 1px solid #2a2f3a;
@@ -13823,7 +13823,7 @@ body,
 }
 
 .app-shell:has(.mvp-page) .system-card .shield-icon.lucide-icon,
-.app-shell:has(.inbox-page) .system-card .shield-icon.lucide-icon {
+.app-shell.canonical-admin-shell .system-card .shield-icon.lucide-icon {
   background: var(--saas-lime);
   border-radius: 999px;
   color: #111318;
@@ -13833,7 +13833,7 @@ body,
 }
 
 .app-shell:has(.mvp-page) .system-card strong,
-.app-shell:has(.inbox-page) .system-card strong {
+.app-shell.canonical-admin-shell .system-card strong {
   color: #ffffff;
   font-family: var(--saas-font);
   font-size: 13px;
@@ -13841,14 +13841,14 @@ body,
 }
 
 .app-shell:has(.mvp-page) .system-card p,
-.app-shell:has(.inbox-page) .system-card p {
+.app-shell.canonical-admin-shell .system-card p {
   color: #9aa3af;
   font-family: var(--saas-font);
   font-size: 12px;
 }
 
 .workspace:has(.mvp-page),
-.workspace:has(.inbox-page) {
+.app-shell.canonical-admin-shell .workspace {
   background: var(--saas-bg);
 }
 
@@ -30774,7 +30774,7 @@ pre,
 /* Brand Foundation UI correction: global sidebar hierarchy and Brand directory fit. */
 .sidebar .brand-lockup,
 .app-shell:has(.mvp-page) .sidebar .brand-lockup,
-.app-shell:has(.inbox-page) .sidebar .brand-lockup,
+.app-shell.canonical-admin-shell .sidebar .brand-lockup,
 .app-shell:has(.admin-saas-page) .sidebar .brand-lockup,
 .app-shell.admin-saas-shell .sidebar .brand-lockup {
   border-bottom: 1px solid var(--trry-shell-border);
@@ -30784,7 +30784,7 @@ pre,
 
 .sidebar nav,
 .app-shell:has(.mvp-page) .sidebar nav,
-.app-shell:has(.inbox-page) .sidebar nav,
+.app-shell.canonical-admin-shell .sidebar nav,
 .app-shell:has(.admin-saas-page) .sidebar nav,
 .app-shell.admin-saas-shell .sidebar nav {
   gap: 4px;
@@ -30809,7 +30809,7 @@ pre,
 .sidebar a,
 .catalog-supply-link,
 .app-shell:has(.mvp-page) .sidebar a,
-.app-shell:has(.inbox-page) .sidebar a,
+.app-shell.canonical-admin-shell .sidebar a,
 .app-shell:has(.admin-saas-page) .sidebar a,
 .app-shell.admin-saas-shell .sidebar a {
   border-radius: 8px;
@@ -30822,7 +30822,7 @@ pre,
 .sidebar a .nav-label,
 .catalog-supply-link .nav-label,
 .app-shell:has(.mvp-page) .sidebar a .nav-label,
-.app-shell:has(.inbox-page) .sidebar a .nav-label,
+.app-shell.canonical-admin-shell .sidebar a .nav-label,
 .app-shell:has(.admin-saas-page) .sidebar a .nav-label,
 .app-shell.admin-saas-shell .sidebar a .nav-label {
   font-weight: 500;
@@ -30834,7 +30834,7 @@ pre,
 
 .sidebar a.active,
 .app-shell:has(.mvp-page) .sidebar a.active,
-.app-shell:has(.inbox-page) .sidebar a.active,
+.app-shell.canonical-admin-shell .sidebar a.active,
 .app-shell:has(.admin-saas-page) .sidebar a.active,
 .app-shell.admin-saas-shell .sidebar a.active {
   background: var(--trry-shell-raised);
@@ -30844,7 +30844,7 @@ pre,
 
 .sidebar a.active .nav-label,
 .app-shell:has(.mvp-page) .sidebar a.active .nav-label,
-.app-shell:has(.inbox-page) .sidebar a.active .nav-label,
+.app-shell.canonical-admin-shell .sidebar a.active .nav-label,
 .app-shell:has(.admin-saas-page) .sidebar a.active .nav-label,
 .app-shell.admin-saas-shell .sidebar a.active .nav-label {
   font-weight: 650;
@@ -30852,7 +30852,7 @@ pre,
 
 .sidebar a.active .nav-icon.lucide-icon,
 .app-shell:has(.mvp-page) .sidebar a.active .nav-icon.lucide-icon,
-.app-shell:has(.inbox-page) .sidebar a.active .nav-icon.lucide-icon,
+.app-shell.canonical-admin-shell .sidebar a.active .nav-icon.lucide-icon,
 .app-shell:has(.admin-saas-page) .sidebar a.active .nav-icon.lucide-icon,
 .app-shell.admin-saas-shell .sidebar a.active .nav-icon.lucide-icon {
   color: var(--trry-lime);

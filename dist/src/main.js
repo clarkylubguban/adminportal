@@ -772,6 +772,7 @@ function render() {
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
   const isAdminSaasRoute = currentRoute === "Catalog";
+  const isCanonicalAdminShellRoute = ["Inbox", "Inquiries", "Orders", "Production", "My Tasks", "Calendar", "Workboard"].includes(currentRoute);
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
@@ -781,7 +782,7 @@ function render() {
   if (getRoutePath() === "/catalog/suppliers" && supplierLoadState === "idle") window.setTimeout(loadSuppliers, 0);
 
   document.getElementById("root").innerHTML = `
-    <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
+    <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""} ${isCanonicalAdminShellRoute ? "canonical-admin-shell" : ""}">
       ${renderMobileTopBar()}
       ${renderSidebar(currentRoute)}
       <button class="sidebar-backdrop" type="button" aria-label="Close navigation"></button>
