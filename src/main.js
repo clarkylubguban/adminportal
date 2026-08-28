@@ -772,7 +772,6 @@ function render() {
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
   const isAdminSaasRoute = currentRoute === "Catalog";
-  const isCanonicalAdminShellRoute = ["Inbox", "Inquiries", "Orders", "Production", "My Tasks", "Calendar", "Workboard"].includes(currentRoute);
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
@@ -782,7 +781,7 @@ function render() {
   if (getRoutePath() === "/catalog/suppliers" && supplierLoadState === "idle") window.setTimeout(loadSuppliers, 0);
 
   document.getElementById("root").innerHTML = `
-    <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""} ${isCanonicalAdminShellRoute ? "canonical-admin-shell" : ""}">
+    <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
       ${renderMobileTopBar()}
       ${renderSidebar(currentRoute)}
       <button class="sidebar-backdrop" type="button" aria-label="Close navigation"></button>
@@ -2251,7 +2250,7 @@ function getInboxComposerState(conversation) {
 
 function renderInboxPage() {
   if (!canViewInboxRoute()) {
-    return `<main class="inbox-page"><section class="inbox-empty-state"><strong>Inbox access is restricted</strong><span>Your account does not have access to the Inbox module.</span></section></main>`;
+    return `<main class="mvp-page ops-board-page inbox-page"><section class="inbox-empty-state"><strong>Inbox access is restricted</strong><span>Your account does not have access to the Inbox module.</span></section></main>`;
   }
 
   const visible = getVisibleInboxConversations();
@@ -2269,12 +2268,11 @@ function renderInboxPage() {
   }
 
   return `
-    <main class="inbox-page ${inboxMobileThreadOpen ? "inbox-mobile-thread-open" : ""}">
-      <section class="inbox-page-header">
-        <div class="inbox-page-meta">
-          <span>${escapeHtml(getInboxPageStatusLabel(selected))}</span>
-        </div>
-      </section>
+    <main class="mvp-page ops-board-page inbox-page ${inboxMobileThreadOpen ? "inbox-mobile-thread-open" : ""}">
+      <header class="mvp-page-title inbox-page-title">
+        <div><span>HOME / INBOX</span><h1>Inbox</h1><p>Manage Facebook conversations, ownership, and inquiry handoff.</p></div>
+        <strong>${escapeHtml(getInboxPageStatusLabel(selected))}</strong>
+      </header>
       ${renderInboxLoadNotice()}
       <section class="inbox-workspace-shell inbox-grid">
         <aside class="inbox-list-panel inbox-list" aria-label="Conversation list">

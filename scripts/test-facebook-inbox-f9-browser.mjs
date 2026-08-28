@@ -34,8 +34,10 @@ assert.ok(main.includes("conversation.inquiryId"), "F9 search must include canon
 assert.ok(main.includes("getInboxPageStatusLabel(selected)"), "F9 header must use the real page name when available");
 assert.ok(main.includes("getInboxOpenConversationCount()"), "F9 conversation list must show open-count context");
 const pageSource = extractFunctionSource("renderInboxPage");
-assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Inbox title must not render above the workspace");
-assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Inbox subtitle must not render above the workspace");
+assert.ok(pageSource.includes('class="mvp-page ops-board-page inbox-page'), "Inbox must render inside the canonical MVP admin page shell");
+assert.ok(pageSource.includes('class="mvp-page-title inbox-page-title"'), "Inbox must use the canonical MVP page title wrapper");
+assert.ok(pageSource.includes("<h1>Inbox</h1>"), "Inbox title must render through the canonical MVP page title");
+assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Old oversized Inbox subtitle must not render above the workspace");
 assert.equal(pageSource.includes("data-inbox-refresh"), false, "Visible Refresh button must not render above the workspace");
 assert.ok(pageSource.includes("getInboxPageStatusLabel(selected)"), "Small channel pill must remain in the cleaned header");
 assert.equal(INBOX_WORK_VIEWS[0].label, "All", "Inbox first work filter must display All so staging does not open on an empty state");

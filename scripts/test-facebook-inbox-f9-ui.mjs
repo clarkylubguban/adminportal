@@ -23,8 +23,10 @@ assert.ok(main.includes("inbox-list-panel inbox-list"), "F9 must keep the left c
 assert.ok(main.includes("inbox-thread-panel inbox-thread"), "F9 must keep the central Messenger thread surface");
 assert.ok(main.includes("inbox-context-panel inbox-detail-panel"), "F9 must keep the right operations surface");
 const pageSource = extractFunctionSource("renderInboxPage");
-assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Inbox page title must be removed from the Inbox header");
-assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Inbox subtitle must be removed from the Inbox header");
+assert.ok(pageSource.includes('class="mvp-page ops-board-page inbox-page'), "Inbox must join the canonical MVP admin page shell");
+assert.ok(pageSource.includes('class="mvp-page-title inbox-page-title"'), "Inbox must use the canonical MVP page title wrapper");
+assert.ok(pageSource.includes("<h1>Inbox</h1>"), "Inbox page title must render through the canonical MVP page title");
+assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Old oversized Inbox subtitle must remain removed");
 assert.equal(pageSource.includes("data-inbox-refresh"), false, "Visible Inbox Refresh button must be removed from the header");
 assert.ok(pageSource.includes("getInboxPageStatusLabel(selected)"), "F9 cleanup must keep the channel/account pill");
 assert.equal(INBOX_WORK_VIEWS[0].key, "all", "F9.7 must default Inbox to All so staging opens with a selectable conversation");
