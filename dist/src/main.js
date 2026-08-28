@@ -44,6 +44,7 @@ import {
   getApprovedAdminUser,
 } from "./services/adminUsers.js";
 import {
+  INBOX_VISIBLE_WORK_VIEWS,
   INBOX_WORK_VIEWS,
   addInboxInternalNote,
   assignInboxConversation,
@@ -2281,8 +2282,7 @@ function renderInboxPage() {
             <input data-inbox-search type="search" value="${escapeHtml(inboxSearchQuery)}" placeholder="Search customer or message…" aria-label="Search customer or message" />
           </header>
           <section class="inbox-work-chip-groups" aria-label="Inbox work views">
-            <div>${INBOX_WORK_VIEWS.slice(0, 4).map((view) => renderInboxViewTab(view)).join("")}</div>
-            <div>${INBOX_WORK_VIEWS.slice(4).map((view) => renderInboxViewTab(view)).join("")}</div>
+            <div>${INBOX_VISIBLE_WORK_VIEWS.map((view) => renderInboxViewTab(view)).join("")}</div>
           </section>
           ${renderInboxConversationList(visible)}
         </aside>
@@ -2330,12 +2330,13 @@ function renderInboxConversationList(conversations) {
   if (!conversations.length) return `<div class="inbox-empty-column">No conversations in this view.</div>`;
   return conversations.map((conversation) => {
     const selected = conversation.id === inboxSelectedConversationId;
-    return `<button class="inbox-conversation-card ${selected ? "active" : ""} ${conversation.state}" data-inbox-conversation="${escapeHtml(conversation.id)}" type="button">
+    const unread = conversation.state === "needs_reply";
+    return `<button class="inbox-conversation-card ${selected ? "active" : ""} ${unread ? "unread" : "read"} ${conversation.state}" data-inbox-conversation="${escapeHtml(conversation.id)}" type="button">
       ${renderInboxAvatar(conversation, "inbox-avatar")}
       <span class="inbox-card-main">
-        <span class="inbox-card-topline"><strong>${escapeHtml(conversation.customerLabel)}</strong><time>${escapeHtml(formatInboxRelativeTime(conversation.lastMessageAt || conversation.openedAt))}</time></span>
-        <small>${escapeHtml(conversation.lastMessageSnippet || "No messages captured yet.")}</small>
-        <em>${escapeHtml(formatInboxState(conversation.state))}</em>
+        <span class="inbox-card-topline"><strong class="inbox-card-name">${escapeHtml(conversation.customerLabel)}</strong><time>${escapeHtml(formatInboxRelativeTime(conversation.lastMessageAt || conversation.openedAt))}</time></span>
+        <small class="inbox-card-preview">${escapeHtml(conversation.lastMessageSnippet || "No messages captured yet.")}</small>
+        <em class="inbox-card-state">${escapeHtml(formatInboxState(conversation.state))}</em>
       </span>
     </button>`;
   }).join("");

@@ -12,6 +12,12 @@ export const INBOX_WORK_VIEWS = [
   { key: "closed", label: "Closed", state: "closed" },
 ];
 
+export const INBOX_VISIBLE_WORK_VIEWS = [
+  { key: "all", label: "All" },
+  { key: "follow_up", label: "Follow Up", state: "follow_up" },
+  { key: "assigned_to_me", label: "Mine" },
+];
+
 const CONVERSATION_SELECT = [
   "id",
   "channel_identity_id",

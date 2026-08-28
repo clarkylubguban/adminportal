@@ -66,11 +66,15 @@ try {
   assert.equal(authorizedShell.hasInboxNav, true, "authorized account sees Inbox navigation");
   assert.equal(authorizedShell.hasDetailPanel, true, "authorized Inbox has Customer & Operations detail panel");
 
-  await verifyView(cdp, "needs_reply", ["Facebook customer", "New", "Sent", "Not yet an inquiry", "Not yet captured"]);
-  await verifyView(cdp, "waiting", ["TRRY_F3_QA Waiting Customer", "Waiting", "Delivered", "TRRY_F3_QA_REF_WAITING"]);
-  await verifyView(cdp, "follow_up", ["TRRY_F3_QA Follow Up Customer", "Follow-up", "Seen", "TRRY_F3_QA_attachment.jpg", "pending"]);
-  await verifyView(cdp, "converted", ["TRRY_F3_QA Converted Customer", "Converted", "Inquiry Link", "TRRY-NKC8675V"]);
-  await verifyView(cdp, "closed", ["TRRY_F3_QA Closed Customer", "Closed"]);
+  const visibleViews = await evaluate(cdp, `[...document.querySelectorAll("[data-inbox-view]")].map((node) => ({ key: node.dataset.inboxView, text: node.innerText }))`);
+  assert.deepEqual(visibleViews.map((view) => view.key), ["all", "follow_up", "assigned_to_me"], "F9.7A visible Inbox filters are All, Follow Up, and Mine");
+  assert.equal(visibleViews.some((view) => /\\bNew\\b|\\bWaiting\\b|\\bAssigned\\b|\\bConverted\\b|\\bClosed\\b/.test(view.text)), false, "F9.7A old status filters are hidden from the list UI");
+
+  await verifySearchResult(cdp, "Facebook customer", ["Facebook customer", "Sent", "Not yet an inquiry", "Not yet captured"]);
+  await verifySearchResult(cdp, "TRRY_F3_QA Waiting Customer", ["TRRY_F3_QA Waiting Customer", "Waiting", "Delivered", "TRRY_F3_QA_REF_WAITING"]);
+  await verifyView(cdp, "follow_up", ["TRRY_F3_QA Follow Up Customer", "Follow Up", "Seen", "TRRY_F3_QA_attachment.jpg", "pending"]);
+  await verifySearchResult(cdp, "TRRY_F3_QA Converted Customer", ["TRRY_F3_QA Converted Customer", "Converted", "Inquiry Link", "TRRY-NKC8675V"]);
+  await verifySearchResult(cdp, "TRRY_F3_QA Closed Customer", ["TRRY_F3_QA Closed Customer", "Closed"]);
 
   await clickView(cdp, "assigned_to_me");
   await waitForText(cdp, "No conversations in this view.");
@@ -127,6 +131,18 @@ try {
 
 async function verifyView(cdp, viewKey, expectedTexts) {
   await clickView(cdp, viewKey);
+  await waitFor(cdp, `document.querySelector('[data-inbox-conversation]')`);
+  await evaluate(cdp, `document.querySelector('[data-inbox-conversation]')?.click()`);
+  for (const text of expectedTexts) await waitForText(cdp, text);
+}
+
+async function verifySearchResult(cdp, query, expectedTexts) {
+  await clickView(cdp, "all");
+  await evaluate(cdp, `(() => {
+    const input = document.querySelector("[data-inbox-search]");
+    input.value = ${JSON.stringify(query)};
+    input.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: input.value }));
+  })()`);
   await waitFor(cdp, `document.querySelector('[data-inbox-conversation]')`);
   await evaluate(cdp, `document.querySelector('[data-inbox-conversation]')?.click()`);
   for (const text of expectedTexts) await waitForText(cdp, text);

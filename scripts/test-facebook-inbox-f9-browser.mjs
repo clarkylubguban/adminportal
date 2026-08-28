@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
-import { INBOX_WORK_VIEWS, filterInboxConversations } from "../src/services/adminInbox.js";
+import { INBOX_VISIBLE_WORK_VIEWS, INBOX_WORK_VIEWS, filterInboxConversations } from "../src/services/adminInbox.js";
 
 const main = await read("src/main.js");
 const styles = await read("src/styles.css");
@@ -42,8 +42,12 @@ assert.equal(INBOX_WORK_VIEWS[0].label, "All", "Inbox first work filter must dis
 assert.equal(INBOX_WORK_VIEWS[0].key, "all", "Inbox first work filter must be the all landing view");
 assert.equal(INBOX_WORK_VIEWS[1].label, "New", "Inbox second work filter must display as New");
 assert.equal(INBOX_WORK_VIEWS[1].key, "needs_reply", "Inbox New work filter must keep the needs_reply key");
+assert.deepEqual(INBOX_VISIBLE_WORK_VIEWS.map((view) => view.label), ["All", "Follow Up", "Mine"], "Visible Inbox filters must be simplified to All, Follow Up, and Mine");
+assert.equal(INBOX_VISIBLE_WORK_VIEWS.some((view) => ["New", "Waiting", "Assigned", "Converted", "Closed"].includes(view.label)), false, "Old status filters must not remain visible in the list UI");
 assert.deepEqual(filterInboxConversations([{ id: "n", state: "needs_reply" }, { id: "f", state: "follow_up" }], "all", "user-1").map((row) => row.id), ["n", "f"], "All filter must expose available conversations for the default landing view");
 assert.deepEqual(filterInboxConversations([{ id: "n", state: "needs_reply" }], INBOX_WORK_VIEWS[1].key, "user-1").map((row) => row.id), ["n"], "New filter must still query needs_reply conversations");
+assert.deepEqual(filterInboxConversations([{ id: "f", state: "follow_up" }, { id: "w", state: "waiting" }], "follow_up", "user-1").map((row) => row.id), ["f"], "Follow Up visible filter must keep follow_up state behavior");
+assert.deepEqual(filterInboxConversations([{ id: "mine", ownerUserId: "user-1" }, { id: "theirs", ownerUserId: "user-2" }], "assigned_to_me", "user-1").map((row) => row.id), ["mine"], "Mine visible filter must keep assigned-to-me behavior");
 assert.equal(INBOX_WORK_VIEWS.some((view) => /Needs Review|Needs Reply/.test(view.label)), false, "Old Needs Review/Needs Reply filter label must not remain visible");
 
 assert.ok(main.includes("FETCH FACEBOOK NAME"), "F9 must keep the F8 missing-name action");
@@ -102,8 +106,12 @@ for (const viewportWidth of [1366, 1920]) {
 }
 assert.ok(styles.includes("max-width: none"), "Desktop shell must not be clamped below the available viewport width");
 assert.ok(styles.includes(".inbox-work-chip span") && styles.includes("text-overflow: clip"), "Filter chips must keep labels and counts readable");
+assert.ok(styles.includes(".inbox-work-chip-groups > div") && styles.includes("display: flex"), "F9.7A simplified filter bar must use a compact single-row tab layout");
+assert.ok(styles.includes(".inbox-conversation-card.unread .inbox-card-preview") && styles.includes(".inbox-conversation-card.read .inbox-card-preview"), "F9.7A rows must distinguish unread and read states without relying only on color");
+assert.ok(styles.includes(".inbox-card-state") && styles.includes("font-size: 9.5px"), "F9.7A status labels such as FOLLOW UP must consume less space");
 assert.ok(main.includes("let inboxActiveView = \"all\""), "Inbox must default to All so a non-New staging conversation can render the composer");
-assert.ok(pageSource.includes("INBOX_WORK_VIEWS.slice(0, 4)") && pageSource.includes("INBOX_WORK_VIEWS.slice(4)"), "Work-view chips must render All/New/Waiting/Follow-up and Assigned/Converted/Closed rows");
+assert.ok(pageSource.includes("INBOX_VISIBLE_WORK_VIEWS.map((view) => renderInboxViewTab(view))"), "Work-view chips must render only All, Follow Up, and Mine");
+assert.equal(pageSource.includes("INBOX_WORK_VIEWS.slice(0, 4)") || pageSource.includes("INBOX_WORK_VIEWS.slice(4)"), false, "Old All/New/Waiting/Follow-up and Assigned/Converted/Closed chip rows must be removed");
 
 const incomingAttachment = renderF9AttachmentCard({
   filename: "mika-logo-final.png",

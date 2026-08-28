@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import {
+  INBOX_VISIBLE_WORK_VIEWS,
   INBOX_WORK_VIEWS,
   formatInboxLastMessageSnippet,
   getSafeIdentitySecondary,
@@ -32,10 +33,15 @@ assert.equal(INBOX_WORK_VIEWS[1].key, "needs_reply", "F9.4 must preserve the und
 assert.equal(INBOX_WORK_VIEWS[1].state, "needs_reply", "F9.4 must preserve the underlying needs_reply state filter");
 assert.equal(INBOX_WORK_VIEWS[1].label, "New", "F9.4 must display the needs_reply filter as New");
 assert.equal(INBOX_WORK_VIEWS.some((view) => /Needs Review|Needs Reply/.test(view.label)), false, "F9.4 Inbox filter labels must not show the old review/reply copy");
+assert.deepEqual(INBOX_VISIBLE_WORK_VIEWS.map((view) => view.label), ["All", "Follow Up", "Mine"], "F9.7A visible Inbox filters must be simplified to All, Follow Up, and Mine");
+assert.deepEqual(INBOX_VISIBLE_WORK_VIEWS.map((view) => view.key), ["all", "follow_up", "assigned_to_me"], "F9.7A visible filters must preserve existing internal view keys");
 assert.ok(main.includes("Search customer or message…"), "F9 list search placeholder must match the approved copy");
-assert.ok(main.includes("INBOX_WORK_VIEWS.slice(0, 4)") && main.includes("INBOX_WORK_VIEWS.slice(4)"), "F9 work views must render All/New/Waiting/Follow-up and Assigned/Converted/Closed rows");
+assert.ok(main.includes("INBOX_VISIBLE_WORK_VIEWS.map((view) => renderInboxViewTab(view))"), "F9.7A must render the simplified visible work views");
+assert.equal(pageSource.includes("INBOX_WORK_VIEWS.slice(0, 4)") || pageSource.includes("INBOX_WORK_VIEWS.slice(4)"), false, "F9.7A must remove the old two-row filter chip group from the visible Inbox");
 assert.ok(main.includes("renderInboxAvatar(conversation"), "F9 must render safe avatars in the list/thread/panel");
 assert.ok(main.includes("conversation.lastMessageSnippet"), "F9 list rows must show the last captured message snippet");
+assert.ok(main.includes('const unread = conversation.state === "needs_reply"'), "F9.7A must promote new/unread conversations directly in list rows");
+assert.ok(main.includes('unread ? "unread" : "read"'), "F9.7A rows must expose unread/read classes for typography distinction");
 const threadSource = extractFunctionSource("renderInboxThread");
 const detailPanelSource = extractFunctionSource("renderInboxDetailPanel");
 assert.ok(threadSource.includes('data-inbox-open-modal="customer_details"') && threadSource.includes("DETAILS"), "F9.3 top DETAILS button must open the customer details modal");
@@ -52,6 +58,9 @@ assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0,
 assert.ok(styles.includes("height: min(820px, calc(100vh - 128px))"), "Inbox workspace must keep the composer visible in staging viewport heights");
 assert.ok(styles.includes("max-width: none") && styles.includes("width: 100%"), "Inbox workspace must fill available desktop width");
 assert.ok(styles.includes(".inbox-work-chip-groups"), "F9 compact work view chip styling missing");
+assert.ok(styles.includes("background: #111827") && styles.includes(".inbox-work-chip.active"), "F9.7A simplified tabs must have a clear compact selected state");
+assert.ok(styles.includes(".inbox-conversation-card.unread .inbox-card-name") && styles.includes(".inbox-conversation-card.read .inbox-card-preview"), "F9.7A must distinguish unread and read rows with typography");
+assert.ok(styles.includes("font-size: 10.5px") && styles.includes("font-size: 9.5px"), "F9.7A preview and status text must be tightened");
 assert.ok(styles.includes(".inbox-message-row.inbound") && styles.includes(".inbox-message-row.outbound"), "F9 must preserve left inbound and right outbound message alignment");
 assert.ok(styles.includes(".inbox-context-panel"), "F9 right customer and operations panel styling missing");
 assert.ok(styles.includes("background: #1877f2"), "F9.3 must use Messenger blue for primary Inbox actions and outbound bubbles");

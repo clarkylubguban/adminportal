@@ -26,7 +26,8 @@ assert.ok(tablet.includes("clamp(260px, 36vw, 290px) minmax(0, 1fr)"), "Tablet m
 assert.ok(tablet.includes(".inbox-context-panel") && tablet.includes("display: none"), "Tablet must hide the permanent third panel");
 assert.ok(tablet.includes(".inbox-thread-details") && tablet.includes("display: inline-flex"), "Tablet must expose DETAILS in the thread header");
 assert.ok(styles.includes(".inbox-thread-actions .inbox-thread-details") && styles.includes("background: #1877f2"), "DETAILS must be a prominent blue action");
-assert.ok(styles.includes(".inbox-work-chip span") && styles.includes("white-space: nowrap"), "Filter chips must keep New and counts readable across supported widths");
+assert.ok(styles.includes(".inbox-work-chip span") && styles.includes("white-space: nowrap"), "Filter chips must keep All, Follow Up, Mine, and counts readable across supported widths");
+assert.ok(styles.includes(".inbox-work-chip-groups > div") && styles.includes("display: flex"), "Simplified filter bar must remain compact across supported widths");
 
 const mobile = block("@media (max-width: 767px)");
 assert.ok(mobile.includes("grid-template-columns: minmax(0, 1fr)"), "Mobile must use one-pane layout");
@@ -41,6 +42,7 @@ assert.ok(styles.includes("overflow-wrap: anywhere"), "Long messages and URLs mu
 assert.ok(styles.includes("min-width: 0"), "Responsive Inbox must apply min-width:0 safety");
 assert.ok(styles.includes("overflow: hidden") && styles.includes("text-overflow: ellipsis"), "Conversation list text must truncate safely");
 assert.ok(styles.includes("grid-auto-rows: max-content") && styles.includes("max-height: 110px"), "Conversation rows must remain compact across responsive breakpoints");
+assert.ok(styles.includes("max-height: 106px") && styles.includes("min-height: 92px"), "F9.7A conversation rows must stay compact after typography tightening");
 assert.ok(styles.includes("grid-template-rows: 92px minmax(0, 1fr) auto"), "Desktop composer must stay bottom-aligned and expand for an attachment tray");
 assert.ok(styles.includes("height: min(820px, calc(100vh - 128px))") && styles.includes("min-height: min(650px, calc(100vh - 128px))"), "Desktop shell must not force the composer below short staging viewports");
 assert.ok(styles.includes("grid-template-rows: auto minmax(0, 1fr) auto"), "Mobile composer must stay reachable in the thread pane");
