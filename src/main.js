@@ -657,7 +657,7 @@ let inboxLoadError = "";
 let inboxDetailState = "idle";
 let inboxDetailError = "";
 let inboxSelectedConversationId = "";
-let inboxActiveView = "needs_reply";
+let inboxActiveView = "all";
 let inboxSearchQuery = "";
 let inboxMobileThreadOpen = false;
 let inboxActiveModal = "";
@@ -1794,7 +1794,7 @@ function resetInboxState() {
   inboxDetailState = "idle";
   inboxDetailError = "";
   inboxSelectedConversationId = "";
-  inboxActiveView = "needs_reply";
+  inboxActiveView = "all";
   inboxActionPermissions = createInboxActionPermissions();
   inboxReplyCapability = { replyConfigured: false };
   inboxAssignmentUsers = [];
@@ -2281,8 +2281,8 @@ function renderInboxPage() {
             <input data-inbox-search type="search" value="${escapeHtml(inboxSearchQuery)}" placeholder="Search customer or message…" aria-label="Search customer or message" />
           </header>
           <section class="inbox-work-chip-groups" aria-label="Inbox work views">
-            <div>${INBOX_WORK_VIEWS.slice(0, 3).map((view) => renderInboxViewTab(view)).join("")}</div>
-            <div>${INBOX_WORK_VIEWS.slice(3).map((view) => renderInboxViewTab(view)).join("")}</div>
+            <div>${INBOX_WORK_VIEWS.slice(0, 4).map((view) => renderInboxViewTab(view)).join("")}</div>
+            <div>${INBOX_WORK_VIEWS.slice(4).map((view) => renderInboxViewTab(view)).join("")}</div>
           </section>
           ${renderInboxConversationList(visible)}
         </aside>
@@ -11851,7 +11851,7 @@ function bindEvents() {
 
   document.querySelectorAll("[data-inbox-view]").forEach((button) => {
     button.addEventListener("click", () => {
-      inboxActiveView = button.dataset.inboxView || "needs_reply";
+      inboxActiveView = button.dataset.inboxView || "all";
       inboxSelectedConversationId = "";
       inboxMobileThreadOpen = false;
       inboxActiveModal = "";

@@ -38,9 +38,12 @@ assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Inbox title must not
 assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Inbox subtitle must not render above the workspace");
 assert.equal(pageSource.includes("data-inbox-refresh"), false, "Visible Refresh button must not render above the workspace");
 assert.ok(pageSource.includes("getInboxPageStatusLabel(selected)"), "Small channel pill must remain in the cleaned header");
-assert.equal(INBOX_WORK_VIEWS[0].label, "New", "Inbox first work filter must display as New");
-assert.equal(INBOX_WORK_VIEWS[0].key, "needs_reply", "Inbox first work filter must keep the needs_reply key");
-assert.deepEqual(filterInboxConversations([{ id: "n", state: "needs_reply" }], INBOX_WORK_VIEWS[0].key, "user-1").map((row) => row.id), ["n"], "New filter must still query needs_reply conversations");
+assert.equal(INBOX_WORK_VIEWS[0].label, "All", "Inbox first work filter must display All so staging does not open on an empty state");
+assert.equal(INBOX_WORK_VIEWS[0].key, "all", "Inbox first work filter must be the all landing view");
+assert.equal(INBOX_WORK_VIEWS[1].label, "New", "Inbox second work filter must display as New");
+assert.equal(INBOX_WORK_VIEWS[1].key, "needs_reply", "Inbox New work filter must keep the needs_reply key");
+assert.deepEqual(filterInboxConversations([{ id: "n", state: "needs_reply" }, { id: "f", state: "follow_up" }], "all", "user-1").map((row) => row.id), ["n", "f"], "All filter must expose available conversations for the default landing view");
+assert.deepEqual(filterInboxConversations([{ id: "n", state: "needs_reply" }], INBOX_WORK_VIEWS[1].key, "user-1").map((row) => row.id), ["n"], "New filter must still query needs_reply conversations");
 assert.equal(INBOX_WORK_VIEWS.some((view) => /Needs Review|Needs Reply/.test(view.label)), false, "Old Needs Review/Needs Reply filter label must not remain visible");
 
 assert.ok(main.includes("FETCH FACEBOOK NAME"), "F9 must keep the F8 missing-name action");
@@ -83,6 +86,7 @@ const finalListPanelRule = lastRule(".inbox-list-panel");
 assert.equal(/height:\s*100%/.test(finalConversationCardRule), false, "Final conversation card rule must not use height:100%");
 assert.equal(/grid-template-rows:\s*auto\s+auto\s+minmax\(0,\s*1fr\)/.test(finalListPanelRule), false, "Final conversation list rule must not stretch the final row to fill the panel");
 assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0, 1fr) minmax(300px, 350px)"), "Desktop layout must fill width with controlled side columns and flexible chat");
+assert.ok(styles.includes("height: min(820px, calc(100vh - 128px))") && styles.includes("min-height: min(650px, calc(100vh - 128px))"), "Desktop layout must keep the composer inside shorter staging viewports");
 assert.ok(styles.includes(".inbox-thread-actions .inbox-thread-details") && styles.includes("background: #1877f2"), "DETAILS must remain a blue active control");
 assert.ok(styles.includes(".inbox-message.outbound") && styles.includes("background: #1877f2"), "Outgoing bubble must remain blue");
 assert.ok(styles.includes(".inbox-composer-actions button:last-child") && styles.includes("border-color: #1877f2"), "Send button must remain blue");
@@ -98,6 +102,8 @@ for (const viewportWidth of [1366, 1920]) {
 }
 assert.ok(styles.includes("max-width: none"), "Desktop shell must not be clamped below the available viewport width");
 assert.ok(styles.includes(".inbox-work-chip span") && styles.includes("text-overflow: clip"), "Filter chips must keep labels and counts readable");
+assert.ok(main.includes("let inboxActiveView = \"all\""), "Inbox must default to All so a non-New staging conversation can render the composer");
+assert.ok(pageSource.includes("INBOX_WORK_VIEWS.slice(0, 4)") && pageSource.includes("INBOX_WORK_VIEWS.slice(4)"), "Work-view chips must render All/New/Waiting/Follow-up and Assigned/Converted/Closed rows");
 
 const incomingAttachment = renderF9AttachmentCard({
   filename: "mika-logo-final.png",

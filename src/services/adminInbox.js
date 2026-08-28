@@ -3,10 +3,11 @@ import { readSupabaseTableWithAuth } from "../lib/supabaseClient.js";
 export const INBOX_MODULE_KEY = "inbox";
 
 export const INBOX_WORK_VIEWS = [
+  { key: "all", label: "All" },
   { key: "needs_reply", label: "New", state: "needs_reply" },
   { key: "waiting", label: "Waiting", state: "waiting" },
   { key: "follow_up", label: "Follow-up", state: "follow_up" },
-  { key: "assigned_to_me", label: "Assigned to me" },
+  { key: "assigned_to_me", label: "Assigned" },
   { key: "converted", label: "Converted", state: "converted" },
   { key: "closed", label: "Closed", state: "closed" },
 ];
@@ -344,6 +345,7 @@ export function normalizeInboxConversationDetail({ messages = [], attachments = 
 
 export function filterInboxConversations(conversations, viewKey, currentUserId = "") {
   const view = INBOX_WORK_VIEWS.find((item) => item.key === viewKey) || INBOX_WORK_VIEWS[0];
+  if (view.key === "all") return conversations;
   if (view.key === "assigned_to_me") {
     return conversations.filter((conversation) => conversation.ownerUserId && conversation.ownerUserId === currentUserId);
   }

@@ -26,12 +26,14 @@ assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Inbox page title mus
 assert.equal(pageSource.includes("Handle Facebook conversations, qualify leads, and convert them into inquiries."), false, "Inbox subtitle must be removed from the Inbox header");
 assert.equal(pageSource.includes("data-inbox-refresh"), false, "Visible Inbox Refresh button must be removed from the header");
 assert.ok(pageSource.includes("getInboxPageStatusLabel(selected)"), "F9 cleanup must keep the channel/account pill");
-assert.equal(INBOX_WORK_VIEWS[0].key, "needs_reply", "F9.4 must preserve the underlying needs_reply filter key");
-assert.equal(INBOX_WORK_VIEWS[0].state, "needs_reply", "F9.4 must preserve the underlying needs_reply state filter");
-assert.equal(INBOX_WORK_VIEWS[0].label, "New", "F9.4 must display the first Inbox filter as New");
+assert.equal(INBOX_WORK_VIEWS[0].key, "all", "F9.7 must default Inbox to All so staging opens with a selectable conversation");
+assert.equal(INBOX_WORK_VIEWS[0].label, "All", "F9.7 must display the first Inbox filter as All");
+assert.equal(INBOX_WORK_VIEWS[1].key, "needs_reply", "F9.4 must preserve the underlying needs_reply filter key");
+assert.equal(INBOX_WORK_VIEWS[1].state, "needs_reply", "F9.4 must preserve the underlying needs_reply state filter");
+assert.equal(INBOX_WORK_VIEWS[1].label, "New", "F9.4 must display the needs_reply filter as New");
 assert.equal(INBOX_WORK_VIEWS.some((view) => /Needs Review|Needs Reply/.test(view.label)), false, "F9.4 Inbox filter labels must not show the old review/reply copy");
 assert.ok(main.includes("Search customer or message…"), "F9 list search placeholder must match the approved copy");
-assert.ok(main.includes("INBOX_WORK_VIEWS.slice(0, 3)") && main.includes("INBOX_WORK_VIEWS.slice(3)"), "F9 work views must render as compact primary and secondary rows");
+assert.ok(main.includes("INBOX_WORK_VIEWS.slice(0, 4)") && main.includes("INBOX_WORK_VIEWS.slice(4)"), "F9 work views must render All/New/Waiting/Follow-up and Assigned/Converted/Closed rows");
 assert.ok(main.includes("renderInboxAvatar(conversation"), "F9 must render safe avatars in the list/thread/panel");
 assert.ok(main.includes("conversation.lastMessageSnippet"), "F9 list rows must show the last captured message snippet");
 const threadSource = extractFunctionSource("renderInboxThread");
@@ -47,7 +49,7 @@ assert.equal(pageSource.includes("FACEBOOK INBOX"), false, "F9 must remove the o
 assert.equal(/externalUserId[\s\S]{0,160}inbox-card-main/.test(main), false, "F9 conversation rows must not expose raw PSIDs");
 
 assert.ok(styles.includes("grid-template-columns: minmax(286px, 330px) minmax(0, 1fr) minmax(300px, 350px)"), "Inbox desktop shell must use a flexible center chat column");
-assert.ok(styles.includes("height: min(820px, calc(100vh - 96px))"), "Inbox workspace must use the vertical space released by removing the title/subtitle");
+assert.ok(styles.includes("height: min(820px, calc(100vh - 128px))"), "Inbox workspace must keep the composer visible in staging viewport heights");
 assert.ok(styles.includes("max-width: none") && styles.includes("width: 100%"), "Inbox workspace must fill available desktop width");
 assert.ok(styles.includes(".inbox-work-chip-groups"), "F9 compact work view chip styling missing");
 assert.ok(styles.includes(".inbox-message-row.inbound") && styles.includes(".inbox-message-row.outbound"), "F9 must preserve left inbound and right outbound message alignment");

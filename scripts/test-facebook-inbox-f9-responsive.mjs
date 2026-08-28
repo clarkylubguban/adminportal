@@ -42,6 +42,7 @@ assert.ok(styles.includes("min-width: 0"), "Responsive Inbox must apply min-widt
 assert.ok(styles.includes("overflow: hidden") && styles.includes("text-overflow: ellipsis"), "Conversation list text must truncate safely");
 assert.ok(styles.includes("grid-auto-rows: max-content") && styles.includes("max-height: 110px"), "Conversation rows must remain compact across responsive breakpoints");
 assert.ok(styles.includes("grid-template-rows: 92px minmax(0, 1fr) auto"), "Desktop composer must stay bottom-aligned and expand for an attachment tray");
+assert.ok(styles.includes("height: min(820px, calc(100vh - 128px))") && styles.includes("min-height: min(650px, calc(100vh - 128px))"), "Desktop shell must not force the composer below short staging viewports");
 assert.ok(styles.includes("grid-template-rows: auto minmax(0, 1fr) auto"), "Mobile composer must stay reachable in the thread pane");
 assert.ok(styles.includes(".inbox-attach-action") && styles.includes("min-height: 34px"), "Mobile attachment action must stay compact inside the composer");
 assert.ok(styles.includes(".inbox-attachment-card") && styles.includes("min-width: min(280px, 100%)"), "Attachment cards must fit narrow mobile message bubbles");
