@@ -30763,17 +30763,20 @@ pre,
 .app-shell:has(.mvp-page) .sidebar nav,
 .app-shell:has(.admin-saas-page) .sidebar nav,
 .app-shell.admin-saas-shell .sidebar nav {
-  gap: 4px;
+  gap: 6px;
   overflow-x: hidden;
 }
 
-.sidebar-section-label {
-  color: #7f8792;
-  font-family: var(--trry-font-mono);
+.sidebar-section-label,
+.app-shell:has(.mvp-page) .sidebar-section-label,
+.app-shell:has(.admin-saas-page) .sidebar-section-label,
+.app-shell.admin-saas-shell .sidebar-section-label {
+  color: #9ca6b4;
+  font-family: var(--trry-font-ui);
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 750;
   letter-spacing: 0.08em;
-  margin: 13px 10px 5px;
+  margin: 18px 11px 7px;
   text-transform: uppercase;
 }
 
@@ -30787,11 +30790,21 @@ pre,
 .app-shell:has(.mvp-page) .sidebar a,
 .app-shell:has(.admin-saas-page) .sidebar a,
 .app-shell.admin-saas-shell .sidebar a {
-  border-radius: 8px;
-  color: #c9ced7;
-  font-weight: 500;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: var(--trry-radius);
+  color: #d9dde4;
+  display: flex;
+  font-family: var(--trry-font-ui);
+  gap: 10px;
+  font-weight: 650;
+  min-height: 40px;
   min-width: 0;
+  padding: 0 11px;
   position: relative;
+  text-transform: none;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
 }
 
 .sidebar a .nav-label,
@@ -30799,34 +30812,64 @@ pre,
 .app-shell:has(.mvp-page) .sidebar a .nav-label,
 .app-shell:has(.admin-saas-page) .sidebar a .nav-label,
 .app-shell.admin-saas-shell .sidebar a .nav-label {
-  font-weight: 500;
+  color: inherit;
+  font-family: var(--trry-font-ui);
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
+  text-transform: none;
   white-space: nowrap;
+}
+
+.sidebar a:hover,
+.sidebar a:focus-visible,
+.app-shell:has(.mvp-page) .sidebar a:hover,
+.app-shell:has(.mvp-page) .sidebar a:focus-visible,
+.app-shell:has(.admin-saas-page) .sidebar a:hover,
+.app-shell:has(.admin-saas-page) .sidebar a:focus-visible,
+.app-shell.admin-saas-shell .sidebar a:hover,
+.app-shell.admin-saas-shell .sidebar a:focus-visible {
+  background: var(--trry-shell-raised);
+  border: 0;
+  color: var(--trry-surface);
+  transform: translateX(1px);
 }
 
 .sidebar a.active,
 .app-shell:has(.mvp-page) .sidebar a.active,
 .app-shell:has(.admin-saas-page) .sidebar a.active,
 .app-shell.admin-saas-shell .sidebar a.active {
-  background: var(--trry-shell-raised);
-  box-shadow: inset 3px 0 0 var(--trry-lime), 0 7px 18px rgba(0, 0, 0, 0.18);
-  color: var(--trry-lime);
+  background: var(--trry-lime);
+  box-shadow: none;
+  color: var(--trry-text);
+  font-weight: 750;
 }
 
 .sidebar a.active .nav-label,
 .app-shell:has(.mvp-page) .sidebar a.active .nav-label,
 .app-shell:has(.admin-saas-page) .sidebar a.active .nav-label,
 .app-shell.admin-saas-shell .sidebar a.active .nav-label {
-  font-weight: 650;
+  font-weight: 750;
 }
 
 .sidebar a.active .nav-icon.lucide-icon,
 .app-shell:has(.mvp-page) .sidebar a.active .nav-icon.lucide-icon,
 .app-shell:has(.admin-saas-page) .sidebar a.active .nav-icon.lucide-icon,
 .app-shell.admin-saas-shell .sidebar a.active .nav-icon.lucide-icon {
-  color: var(--trry-lime);
+  color: var(--trry-text);
+}
+
+.sidebar .nav-icon.lucide-icon,
+.app-shell:has(.mvp-page) .sidebar .nav-icon.lucide-icon,
+.app-shell:has(.admin-saas-page) .sidebar .nav-icon.lucide-icon,
+.app-shell.admin-saas-shell .sidebar .nav-icon.lucide-icon {
+  flex: 0 0 auto;
+  height: 16px;
+  width: 16px;
 }
 
 .catalog-supply-link {
