@@ -13642,7 +13642,8 @@ body,
 }
 
 /* Professional SaaS visual system handoff */
-.app-shell:has(.mvp-page) {
+.app-shell:has(.mvp-page),
+.app-shell:has(.inbox-page) {
   --saas-bg: var(--trry-workspace);
   --saas-surface: var(--trry-surface);
   --saas-surface-soft: var(--trry-surface-soft);
@@ -13674,14 +13675,17 @@ body,
 }
 
 .app-shell:has(.mvp-page),
+.app-shell:has(.inbox-page),
 .app-shell:has(.mvp-page) .workspace,
+.app-shell:has(.inbox-page) .workspace,
 .app-shell:has(.mvp-page) .mvp-page {
   max-width: 100vw;
   min-width: 0;
   overflow-x: clip;
 }
 
-.app-shell:has(.mvp-page) .sidebar {
+.app-shell:has(.mvp-page) .sidebar,
+.app-shell:has(.inbox-page) .sidebar {
   background: linear-gradient(180deg, #111318 0%, #0e1015 100%);
   border-right: 1px solid #242833;
   box-shadow: none;
@@ -13692,7 +13696,8 @@ body,
   width: 236px;
 }
 
-.app-shell:has(.mvp-page) .brand-lockup {
+.app-shell:has(.mvp-page) .brand-lockup,
+.app-shell:has(.inbox-page) .brand-lockup {
   border: 0;
   display: grid;
   gap: 2px;
@@ -13703,7 +13708,8 @@ body,
   width: 100%;
 }
 
-.app-shell:has(.mvp-page) .brand-lockup strong {
+.app-shell:has(.mvp-page) .brand-lockup strong,
+.app-shell:has(.inbox-page) .brand-lockup strong {
   color: #ffffff;
   font-family: var(--saas-font);
   font-size: 27px;
@@ -13712,12 +13718,14 @@ body,
   line-height: 0.95;
 }
 
-.app-shell:has(.mvp-page) .brand-lockup strong::after {
+.app-shell:has(.mvp-page) .brand-lockup strong::after,
+.app-shell:has(.inbox-page) .brand-lockup strong::after {
   color: var(--saas-lime);
   content: ".";
 }
 
-.app-shell:has(.mvp-page) .brand-lockup span {
+.app-shell:has(.mvp-page) .brand-lockup span,
+.app-shell:has(.inbox-page) .brand-lockup span {
   color: var(--saas-lime);
   display: block;
   font-family: var(--saas-mono);
@@ -13728,11 +13736,13 @@ body,
   text-transform: uppercase;
 }
 
-.app-shell:has(.mvp-page) .sidebar nav {
+.app-shell:has(.mvp-page) .sidebar nav,
+.app-shell:has(.inbox-page) .sidebar nav {
   gap: 5px;
 }
 
 .app-shell:has(.mvp-page) .sidebar a,
+.app-shell:has(.inbox-page) .sidebar a,
 .app-shell:has(.mvp-page) .sidebar-phase-item {
   background: transparent;
   border: 0;
@@ -13746,6 +13756,7 @@ body,
 }
 
 .app-shell:has(.mvp-page) .sidebar a .nav-label,
+.app-shell:has(.inbox-page) .sidebar a .nav-label,
 .app-shell:has(.mvp-page) .sidebar-phase-item .nav-label {
   color: inherit;
   font-family: var(--saas-font);
@@ -13756,23 +13767,29 @@ body,
 }
 
 .app-shell:has(.mvp-page) .sidebar a:hover,
-.app-shell:has(.mvp-page) .sidebar a:focus-visible {
+.app-shell:has(.mvp-page) .sidebar a:focus-visible,
+.app-shell:has(.inbox-page) .sidebar a:hover,
+.app-shell:has(.inbox-page) .sidebar a:focus-visible {
   background: var(--saas-sidebar-soft);
   border: 0;
   color: #ffffff;
 }
 
-.app-shell:has(.mvp-page) .sidebar a.active {
+.app-shell:has(.mvp-page) .sidebar a.active,
+.app-shell:has(.inbox-page) .sidebar a.active {
   background: var(--saas-lime);
   color: #111318;
 }
 
-.app-shell:has(.mvp-page) .sidebar a.active .nav-icon.lucide-icon {
+.app-shell:has(.mvp-page) .sidebar a.active .nav-icon.lucide-icon,
+.app-shell:has(.inbox-page) .sidebar a.active .nav-icon.lucide-icon {
   color: #111318;
 }
 
 .app-shell:has(.mvp-page) .nav-icon.lucide-icon,
-.app-shell:has(.mvp-page) .sidebar .nav-icon.lucide-icon {
+.app-shell:has(.inbox-page) .nav-icon.lucide-icon,
+.app-shell:has(.mvp-page) .sidebar .nav-icon.lucide-icon,
+.app-shell:has(.inbox-page) .sidebar .nav-icon.lucide-icon {
   height: 17px;
   width: 17px;
 }
@@ -13792,7 +13809,8 @@ body,
   padding: 2px 5px;
 }
 
-.app-shell:has(.mvp-page) .system-card {
+.app-shell:has(.mvp-page) .system-card,
+.app-shell:has(.inbox-page) .system-card {
   background: transparent;
   border: 0;
   border-top: 1px solid #2a2f3a;
@@ -13804,7 +13822,8 @@ body,
   padding: 16px 10px 0;
 }
 
-.app-shell:has(.mvp-page) .system-card .shield-icon.lucide-icon {
+.app-shell:has(.mvp-page) .system-card .shield-icon.lucide-icon,
+.app-shell:has(.inbox-page) .system-card .shield-icon.lucide-icon {
   background: var(--saas-lime);
   border-radius: 999px;
   color: #111318;
@@ -13813,20 +13832,23 @@ body,
   width: 34px;
 }
 
-.app-shell:has(.mvp-page) .system-card strong {
+.app-shell:has(.mvp-page) .system-card strong,
+.app-shell:has(.inbox-page) .system-card strong {
   color: #ffffff;
   font-family: var(--saas-font);
   font-size: 13px;
   font-weight: 600;
 }
 
-.app-shell:has(.mvp-page) .system-card p {
+.app-shell:has(.mvp-page) .system-card p,
+.app-shell:has(.inbox-page) .system-card p {
   color: #9aa3af;
   font-family: var(--saas-font);
   font-size: 12px;
 }
 
-.workspace:has(.mvp-page) {
+.workspace:has(.mvp-page),
+.workspace:has(.inbox-page) {
   background: var(--saas-bg);
 }
 
@@ -30752,6 +30774,7 @@ pre,
 /* Brand Foundation UI correction: global sidebar hierarchy and Brand directory fit. */
 .sidebar .brand-lockup,
 .app-shell:has(.mvp-page) .sidebar .brand-lockup,
+.app-shell:has(.inbox-page) .sidebar .brand-lockup,
 .app-shell:has(.admin-saas-page) .sidebar .brand-lockup,
 .app-shell.admin-saas-shell .sidebar .brand-lockup {
   border-bottom: 1px solid var(--trry-shell-border);
@@ -30761,6 +30784,7 @@ pre,
 
 .sidebar nav,
 .app-shell:has(.mvp-page) .sidebar nav,
+.app-shell:has(.inbox-page) .sidebar nav,
 .app-shell:has(.admin-saas-page) .sidebar nav,
 .app-shell.admin-saas-shell .sidebar nav {
   gap: 4px;
@@ -30785,6 +30809,7 @@ pre,
 .sidebar a,
 .catalog-supply-link,
 .app-shell:has(.mvp-page) .sidebar a,
+.app-shell:has(.inbox-page) .sidebar a,
 .app-shell:has(.admin-saas-page) .sidebar a,
 .app-shell.admin-saas-shell .sidebar a {
   border-radius: 8px;
@@ -30797,6 +30822,7 @@ pre,
 .sidebar a .nav-label,
 .catalog-supply-link .nav-label,
 .app-shell:has(.mvp-page) .sidebar a .nav-label,
+.app-shell:has(.inbox-page) .sidebar a .nav-label,
 .app-shell:has(.admin-saas-page) .sidebar a .nav-label,
 .app-shell.admin-saas-shell .sidebar a .nav-label {
   font-weight: 500;
@@ -30808,6 +30834,7 @@ pre,
 
 .sidebar a.active,
 .app-shell:has(.mvp-page) .sidebar a.active,
+.app-shell:has(.inbox-page) .sidebar a.active,
 .app-shell:has(.admin-saas-page) .sidebar a.active,
 .app-shell.admin-saas-shell .sidebar a.active {
   background: var(--trry-shell-raised);
@@ -30817,6 +30844,7 @@ pre,
 
 .sidebar a.active .nav-label,
 .app-shell:has(.mvp-page) .sidebar a.active .nav-label,
+.app-shell:has(.inbox-page) .sidebar a.active .nav-label,
 .app-shell:has(.admin-saas-page) .sidebar a.active .nav-label,
 .app-shell.admin-saas-shell .sidebar a.active .nav-label {
   font-weight: 650;
@@ -30824,149 +30852,10 @@ pre,
 
 .sidebar a.active .nav-icon.lucide-icon,
 .app-shell:has(.mvp-page) .sidebar a.active .nav-icon.lucide-icon,
+.app-shell:has(.inbox-page) .sidebar a.active .nav-icon.lucide-icon,
 .app-shell:has(.admin-saas-page) .sidebar a.active .nav-icon.lucide-icon,
 .app-shell.admin-saas-shell .sidebar a.active .nav-icon.lucide-icon {
   color: var(--trry-lime);
-}
-
-.app-shell:has(.inbox-page) .sidebar nav {
-  gap: 6px;
-}
-
-.app-shell:has(.inbox-page) .sidebar-section-label {
-  color: #9ca6b4;
-  font-family: var(--trry-font-ui);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  margin: 18px 11px 7px;
-  text-transform: uppercase;
-}
-
-.app-shell:has(.inbox-page) .sidebar a {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  border-radius: var(--trry-radius);
-  color: #d9dde4;
-  display: flex;
-  font-family: var(--trry-font-ui);
-  gap: 10px;
-  font-weight: 650;
-  min-height: 40px;
-  min-width: 0;
-  padding: 0 11px;
-  position: relative;
-  text-transform: none;
-  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
-}
-
-.app-shell:has(.inbox-page) .sidebar a .nav-label {
-  color: inherit;
-  font-family: var(--trry-font-ui);
-  font-size: 13px;
-  font-weight: 650;
-  letter-spacing: 0;
-  line-height: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  text-transform: none;
-  white-space: nowrap;
-}
-
-.app-shell:has(.inbox-page) .sidebar a:hover,
-.app-shell:has(.inbox-page) .sidebar a:focus-visible {
-  background: var(--trry-shell-raised);
-  border: 0;
-  color: var(--trry-surface);
-  transform: translateX(1px);
-}
-
-.app-shell:has(.inbox-page) .sidebar a.active {
-  background: var(--trry-shell-raised);
-  box-shadow: inset 3px 0 0 var(--trry-lime), 0 7px 18px rgba(0, 0, 0, 0.18);
-  color: var(--trry-lime);
-  font-weight: 650;
-}
-
-.app-shell:has(.inbox-page) .sidebar a.active .nav-label {
-  font-weight: 650;
-}
-
-.app-shell:has(.inbox-page) .sidebar a.active .nav-icon.lucide-icon {
-  color: var(--trry-lime);
-}
-
-.app-shell:has(.inbox-page) .sidebar .nav-icon.lucide-icon {
-  flex: 0 0 auto;
-  height: 16px;
-  width: 16px;
-}
-
-.app-shell:has(.inbox-page) .sidebar .brand-lockup {
-  align-items: start;
-  border: 0;
-  display: grid;
-  gap: 4px;
-  height: auto;
-  justify-items: start;
-  margin: 0 0 24px;
-  padding: 0 10px;
-  width: 100%;
-}
-
-.app-shell:has(.inbox-page) .sidebar .brand-lockup strong {
-  color: var(--trry-surface);
-  display: block;
-  font-family: var(--trry-font-ui);
-  font-size: 28px;
-  font-weight: 800;
-  letter-spacing: 0;
-  line-height: 0.95;
-}
-
-.app-shell:has(.inbox-page) .sidebar .brand-lockup span {
-  color: var(--trry-lime);
-  display: block;
-  font-family: var(--trry-font-mono);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.12em;
-  line-height: 1.2;
-  margin-top: 0;
-  text-transform: uppercase;
-}
-
-.app-shell:has(.inbox-page) .sidebar .system-card {
-  align-items: center;
-  background: transparent;
-  border: 0;
-  color: var(--trry-surface);
-  display: flex;
-  gap: 10px;
-  height: auto;
-  margin-top: auto;
-  min-height: 54px;
-  min-width: 0;
-  padding: 0 10px;
-  width: 100%;
-}
-
-.app-shell:has(.inbox-page) .sidebar .system-card .shield-icon.lucide-icon {
-  background: var(--trry-lime);
-  border-radius: 999px;
-  color: var(--trry-text);
-  flex: 0 0 42px;
-  height: 42px;
-  padding: 12px;
-  width: 42px;
-}
-
-.app-shell:has(.inbox-page) .sidebar .system-card strong,
-.app-shell:has(.inbox-page) .sidebar .system-card p {
-  color: var(--trry-surface);
-  white-space: normal;
 }
 
 .catalog-supply-link {
