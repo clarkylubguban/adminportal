@@ -30884,18 +30884,18 @@ pre,
 }
 
 .app-shell:has(.inbox-page) .sidebar a.active {
-  background: var(--trry-lime);
-  box-shadow: none;
-  color: var(--trry-text);
-  font-weight: 750;
+  background: var(--trry-shell-raised);
+  box-shadow: inset 3px 0 0 var(--trry-lime), 0 7px 18px rgba(0, 0, 0, 0.18);
+  color: var(--trry-lime);
+  font-weight: 650;
 }
 
 .app-shell:has(.inbox-page) .sidebar a.active .nav-label {
-  font-weight: 750;
+  font-weight: 650;
 }
 
 .app-shell:has(.inbox-page) .sidebar a.active .nav-icon.lucide-icon {
-  color: var(--trry-text);
+  color: var(--trry-lime);
 }
 
 .app-shell:has(.inbox-page) .sidebar .nav-icon.lucide-icon {
