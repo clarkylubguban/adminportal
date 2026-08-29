@@ -54,7 +54,7 @@ assert.equal(INBOX_WORK_VIEWS.some((view) => /Needs Review|Needs Reply/.test(vie
 
 assert.ok(main.includes("FETCH FACEBOOK NAME"), "F9 must keep the F8 missing-name action");
 assert.ok(main.includes("CHECKING FACEBOOK..."), "F9 must keep the F8 loading state");
-assert.ok(main.includes('conversation.channel !== "facebook_messenger"') && main.includes('conversation.customerLabel !== "Facebook customer"') && main.includes("!canViewInboxRoute()"), "F9 must hide fetch name for non-Facebook, enriched, or unauthorized users");
+assert.ok(main.includes('const channel = conversation?.channel || "facebook_messenger"') && main.includes('channel !== "facebook_messenger"') && main.includes('conversation.customerLabel !== "Facebook customer"') && main.includes("!canViewInboxRoute()"), "F9 must hide fetch name for non-Facebook, enriched, or unauthorized users");
 assert.ok(main.includes("data-inbox-attach-file"), "F9.6 composer must expose a clear Attach control");
 assert.ok(main.includes("data-inbox-attachment-remove"), "F9.6 attachment tray must expose a Remove action");
 assert.ok(main.includes("data-inbox-attachment-retry"), "F9.6 failed attachment tray must expose a Retry action");

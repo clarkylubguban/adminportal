@@ -10,17 +10,16 @@ export async function sendMetaTextMessage({
   timeoutMs = Number(env.META_SEND_TIMEOUT_MS || DEFAULT_SEND_TIMEOUT_MS),
 } = {}) {
   const graphVersion = cleanGraphVersion(env.META_GRAPH_API_VERSION || DEFAULT_GRAPH_VERSION);
-  const configuredPageId = cleanText(env.META_PAGE_ID, 200);
-  const token = String(env.META_PAGE_ACCESS_TOKEN || "").trim();
   const safePageId = cleanText(pageId, 200);
+  const credential = resolveMetaPageCredential(safePageId, env);
   const safeRecipient = cleanText(recipientPsid, 240);
   const bodyText = cleanReplyText(text);
 
-  if (!configuredPageId || !token || !graphVersion) {
-    return { ok: false, status: 503, errorCode: "META_SEND_NOT_CONFIGURED" };
-  }
-  if (safePageId !== configuredPageId) {
+  if (credential.pageId && safePageId !== credential.pageId) {
     return { ok: false, status: 409, errorCode: "META_PAGE_MISMATCH" };
+  }
+  if (!credential.token || !graphVersion) {
+    return { ok: false, status: 503, errorCode: "META_SEND_NOT_CONFIGURED" };
   }
   if (!safeRecipient) {
     return { ok: false, status: 400, errorCode: "META_RECIPIENT_REQUIRED" };
@@ -34,13 +33,13 @@ export async function sendMetaTextMessage({
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), Math.max(1, Number(timeoutMs) || DEFAULT_SEND_TIMEOUT_MS));
-  const endpoint = `https://graph.facebook.com/${encodeURIComponent(graphVersion)}/${encodeURIComponent(configuredPageId)}/messages`;
+  const endpoint = `https://graph.facebook.com/${encodeURIComponent(graphVersion)}/${encodeURIComponent(safePageId)}/messages`;
 
   try {
     const response = await fetchImpl(endpoint, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: `Bearer ${credential.token}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
@@ -80,10 +79,29 @@ export function getMetaReplyCapability(env = process.env) {
   return {
     replyConfigured: Boolean(
       cleanGraphVersion(env.META_GRAPH_API_VERSION || DEFAULT_GRAPH_VERSION)
-      && cleanText(env.META_PAGE_ID, 200)
-      && String(env.META_PAGE_ACCESS_TOKEN || "").trim()
+      && hasConfiguredMetaPageCredential(env)
     ),
   };
+}
+
+export function resolveMetaPageCredential(pageId, env = process.env) {
+  const safePageId = cleanText(pageId, 200);
+  const byPage = parsePageTokenMap(env.META_PAGE_ACCESS_TOKENS_JSON);
+  if (safePageId && byPage.has(safePageId)) return { pageId: safePageId, token: byPage.get(safePageId), source: "map" };
+
+  const keyedToken = String(env[`META_PAGE_ACCESS_TOKEN_${envKeyForPageId(safePageId)}`] || "").trim();
+  if (safePageId && keyedToken) return { pageId: safePageId, token: keyedToken, source: "keyed" };
+
+  const configuredPageId = cleanText(env.META_PAGE_ID, 200);
+  const token = String(env.META_PAGE_ACCESS_TOKEN || "").trim();
+  if (safePageId && configuredPageId && safePageId !== configuredPageId) return { pageId: configuredPageId, token: "", source: "legacy_mismatch" };
+  return { pageId: configuredPageId || safePageId, token, source: "legacy" };
+}
+
+export function hasConfiguredMetaPageCredential(env = process.env) {
+  if (parsePageTokenMap(env.META_PAGE_ACCESS_TOKENS_JSON).size) return true;
+  if (Object.keys(env).some((key) => /^META_PAGE_ACCESS_TOKEN_[A-Z0-9_]+$/.test(key) && String(env[key] || "").trim())) return true;
+  return Boolean(cleanText(env.META_PAGE_ID, 200) && String(env.META_PAGE_ACCESS_TOKEN || "").trim());
 }
 
 export function cleanReplyText(value) {
@@ -100,6 +118,40 @@ function cleanGraphVersion(value) {
 
 function cleanText(value, max) {
   return String(value || "").trim().slice(0, max);
+}
+
+function parsePageTokenMap(value) {
+  const parsed = parseJsonObject(value);
+  const map = new Map();
+  if (!parsed) return map;
+  if (Array.isArray(parsed)) {
+    for (const item of parsed) {
+      const pageId = cleanText(item?.pageId || item?.page_id || item?.id, 200);
+      const token = String(item?.token || item?.accessToken || item?.access_token || "").trim();
+      if (pageId && token) map.set(pageId, token);
+    }
+    return map;
+  }
+  for (const [pageId, token] of Object.entries(parsed)) {
+    const safePageId = cleanText(pageId, 200);
+    const safeToken = String(token || "").trim();
+    if (safePageId && safeToken) map.set(safePageId, safeToken);
+  }
+  return map;
+}
+
+function parseJsonObject(value) {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(String(value));
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function envKeyForPageId(pageId) {
+  return cleanText(pageId, 200).replace(/[^A-Za-z0-9]/g, "_").toUpperCase();
 }
 
 function safeMetaErrorCode(value) {

@@ -1,3 +1,5 @@
+import { resolveMetaPageCredential } from "./metaSend.js";
+
 const CHANNEL = "facebook_messenger";
 const DEFAULT_GRAPH_VERSION = "v23.0";
 const DEFAULT_PROFILE_TIMEOUT_MS = 1200;
@@ -104,15 +106,15 @@ export async function refreshMetaProfileForConversation(conversationId, options 
 
 export async function lookupMetaProfile(candidate, options = {}) {
   const env = options.env || process.env;
-  const token = String(env.META_PAGE_ACCESS_TOKEN || "").trim();
   const graphVersion = cleanGraphVersion(env.META_GRAPH_API_VERSION || DEFAULT_GRAPH_VERSION);
+  const credential = resolveMetaPageCredential(candidate?.pageId, env);
   const psid = cleanText(candidate.externalUserId, 240);
-  if (!token || !graphVersion || !psid) return { ok: false, errorCode: "META_PROFILE_NOT_CONFIGURED" };
+  if (!credential.token || !graphVersion || !psid) return { ok: false, errorCode: "META_PROFILE_NOT_CONFIGURED" };
 
   const key = `${graphVersion}:${candidate.pageId}:${psid}`;
   if (inflightLookups.has(key)) return inflightLookups.get(key);
 
-  const promise = fetchMetaProfile({ graphVersion, psid, token, ...options })
+  const promise = fetchMetaProfile({ graphVersion, psid, token: credential.token, ...options })
     .finally(() => inflightLookups.delete(key));
   inflightLookups.set(key, promise);
   return promise;

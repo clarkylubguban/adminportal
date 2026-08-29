@@ -18,7 +18,7 @@ assert.equal(
   "F8 must not add a Supabase migration when existing display/profile fields are sufficient"
 );
 
-assert.ok(profile.includes("META_PAGE_ACCESS_TOKEN"), "profile lookup must use the existing server-side Page access token");
+assert.ok(profile.includes("resolveMetaPageCredential"), "profile lookup must use the existing server-side Page access token resolver");
 assert.ok(profile.includes("META_GRAPH_API_VERSION"), "profile lookup must use existing Graph version configuration");
 assert.equal(profile.includes("VITE_META"), false, "Meta secrets must not use VITE/browser environment variables");
 assert.ok(profile.includes("AbortController"), "profile lookup must have a bounded timeout");
