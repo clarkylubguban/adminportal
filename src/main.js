@@ -253,6 +253,8 @@ const products = [
 ];
 
 const imageAngleLabels = ["Front", "Back", "Detail", "Size Chart"];
+const catalogVariantSizeOptions = ["S", "M", "L", "XL", "XXL"];
+const catalogVariantColorOptions = ["Black", "White"];
 
 let productImages = products.flatMap((product) =>
   imageAngleLabels.map((angleLabel, index) => ({
@@ -7969,6 +7971,7 @@ function renderCatalogEditorVariants(draft, disabled = false) {
         <button class="note-button catalog-add-variant-button" type="button" data-catalog-add-variant ${canAddVariant ? "" : "disabled"} title="${escapeHtml(addVariantMessage)}">${variants.length ? "Add Variant" : "Add First Variant"}</button>
       </header>
       ${canAddVariant ? "" : `<p class="catalog-editor-helper">${escapeHtml(addVariantMessage)}</p>`}
+      ${renderCatalogVariantGenerator(draft, variants, disabled || !canWrite)}
       <div class="catalog-variant-attributes">
         <div>
           <span>Available Sizes</span>
@@ -7987,6 +7990,46 @@ function renderCatalogEditorVariants(draft, disabled = false) {
           </div>`
         : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Add size and color combinations for this product.</span></div>`}
     </article>
+  `;
+}
+
+function renderCatalogVariantGenerator(draft, variants, disabled = false) {
+  const selectedSizes = new Set(uniqueList([...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(draft.availableSizesText)]).map(normalizeVariantToken));
+  const selectedColors = new Set(uniqueList([...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(draft.availableColorsText)]).map(normalizeVariantToken));
+  const sizeOptions = uniqueList([...catalogVariantSizeOptions, ...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(draft.availableSizesText)]);
+  const colorOptions = uniqueList([...catalogVariantColorOptions, ...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(draft.availableColorsText)]);
+  const generatedCount = selectedSizes.size * selectedColors.size;
+
+  return `
+    <div class="catalog-variant-generator" aria-label="Variant generator">
+      <div class="catalog-variant-generator-copy">
+        <span>Size x Color Generator</span>
+        <strong>${generatedCount ? `${generatedCount} combinations selected` : "Select sizes and colors"}</strong>
+      </div>
+      <div class="catalog-variant-generator-options">
+        <div>
+          <span>Sizes</span>
+          <div class="catalog-variant-option-list">
+            ${sizeOptions.map((size) => renderCatalogVariantOption("size", size, selectedSizes.has(normalizeVariantToken(size)), disabled)).join("")}
+          </div>
+        </div>
+        <div>
+          <span>Colors</span>
+          <div class="catalog-variant-option-list">
+            ${colorOptions.map((color) => renderCatalogVariantOption("color", color, selectedColors.has(normalizeVariantToken(color)), disabled)).join("")}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCatalogVariantOption(type, value, selected, disabled = false) {
+  return `
+    <label class="catalog-variant-option ${selected ? "selected" : ""}">
+      <input data-catalog-variant-generator="${escapeHtml(type)}" value="${escapeHtml(value)}" type="checkbox" ${selected ? "checked" : ""} ${disabled ? "disabled" : ""} />
+      <span>${escapeHtml(value)}</span>
+    </label>
   `;
 }
 
@@ -8215,6 +8258,56 @@ function deleteCatalogVariantDraft(index) {
   render();
 }
 
+function updateCatalogVariantGeneratorSelection(type, value, checked) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  const currentSizes = uniqueList([...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(catalogDraft.availableSizesText)]);
+  const currentColors = uniqueList([...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(catalogDraft.availableColorsText)]);
+  const nextSizes = updateCatalogVariantOptionList(currentSizes, value, checked);
+  const nextColors = updateCatalogVariantOptionList(currentColors, value, checked);
+  const selectedSizes = type === "size" ? nextSizes : currentSizes;
+  const selectedColors = type === "color" ? nextColors : currentColors;
+  const nextVariants = buildCatalogVariantMatrixDraft(catalogDraft, variants, selectedSizes, selectedColors);
+
+  catalogDraft = {
+    ...catalogDraft,
+    variants: nextVariants,
+    availableSizesText: selectedSizes.join(", "),
+    availableColorsText: selectedColors.join(", "),
+  };
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+  catalogSaveError = "";
+  catalogValidationError = "";
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
+}
+
+function updateCatalogVariantOptionList(values, value, checked) {
+  const normalizedValue = normalizeVariantToken(value);
+  const withoutValue = values.filter((item) => normalizeVariantToken(item) !== normalizedValue);
+  return checked ? uniqueList([...withoutValue, String(value || "").trim()]) : withoutValue;
+}
+
+function buildCatalogVariantMatrixDraft(draft, variants, sizes, colors) {
+  if (!sizes.length || !colors.length) return [];
+  const existingByCombination = new Map();
+  variants.forEach((variant) => {
+    existingByCombination.set(getCatalogVariantCombinationKey(variant), variant);
+  });
+  return colors.flatMap((color) => sizes.map((size) => {
+    const existing = existingByCombination.get(getCatalogVariantCombinationKey({ color, size }));
+    return {
+      ...(existing || {}),
+      size,
+      color,
+      sellingPrice: existing?.sellingPrice ?? draft.startingPrice ?? 0,
+      unitCost: existing?.unitCost ?? draft.unitCost ?? 0,
+      variantType: existing?.variantType || getCatalogVariantType(draft.productType),
+      active: true,
+    };
+  }));
+}
+
 function getCatalogDraftVariantRows(draft) {
   const supplied = Array.isArray(draft.variants) ? draft.variants.filter((variant) => variant?.active !== false) : [];
   if (supplied.length) {
@@ -8226,20 +8319,20 @@ function getCatalogDraftVariantRows(draft) {
       unitCost: variant.unitCost ?? draft.unitCost ?? 0,
       variantType: variant.variantType || getCatalogVariantType(draft.productType),
       active: true,
-    })).slice(0, 6);
+    }));
   }
 
   const sizes = splitCatalogList(draft.availableSizesText);
   const colors = splitCatalogList(draft.availableColorsText);
   if (!sizes.length && !colors.length) return [];
-  return (sizes.length ? sizes : [""]).flatMap((size) => (colors.length ? colors : [""]).map((color) => ({
+  return (colors.length ? colors : [""]).flatMap((color) => (sizes.length ? sizes : [""]).map((size) => ({
     size,
     color,
     sellingPrice: draft.startingPrice || 0,
     unitCost: draft.unitCost || 0,
     variantType: getCatalogVariantType(draft.productType),
     active: true,
-  }))).slice(0, 6);
+  })));
 }
 
 function groupCatalogVariantsByColor(variants) {
@@ -8271,6 +8364,10 @@ function getCatalogVariantType(productType) {
 
 function normalizeVariantToken(value) {
   return String(value || "").trim().toLowerCase();
+}
+
+function getCatalogVariantCombinationKey(variant) {
+  return `${normalizeVariantToken(variant?.color)}\u0000${normalizeVariantToken(variant?.size)}`;
 }
 
 function renderCatalogEditorStatusCard(draft, disabled = false) {
@@ -11403,6 +11500,12 @@ function bindEvents() {
   document.querySelector("[data-catalog-add-variant]")?.addEventListener("click", (event) => {
     event.preventDefault();
     addCatalogVariantDraft();
+  });
+
+  document.querySelectorAll("[data-catalog-variant-generator]").forEach((field) => {
+    field.addEventListener("change", () => {
+      updateCatalogVariantGeneratorSelection(field.dataset.catalogVariantGenerator, field.value, field.checked);
+    });
   });
 
   document.querySelectorAll("[data-catalog-variant-field]").forEach((field) => {

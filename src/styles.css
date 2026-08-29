@@ -13820,6 +13820,95 @@ body,
   gap: 12px;
 }
 
+.catalog-variant-generator {
+  background: var(--saas-surface-soft);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 220px minmax(0, 1fr);
+  padding: 12px;
+}
+
+.catalog-variant-generator-copy {
+  display: grid;
+  gap: 4px;
+  align-content: start;
+}
+
+.catalog-variant-generator-copy span,
+.catalog-variant-generator-options > div > span {
+  color: var(--saas-muted);
+  font-family: var(--saas-mono);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.catalog-variant-generator-copy strong {
+  color: var(--saas-ink);
+  font-family: var(--saas-font);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.catalog-variant-generator-options {
+  display: grid;
+  gap: 10px;
+}
+
+.catalog-variant-generator-options > div {
+  display: grid;
+  gap: 8px;
+}
+
+.catalog-variant-option-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.catalog-variant-option {
+  align-items: center;
+  background: var(--saas-surface);
+  border: 1px solid var(--saas-border);
+  border-radius: var(--saas-radius);
+  color: var(--saas-ink);
+  cursor: pointer;
+  display: inline-flex;
+  font-family: var(--saas-font);
+  font-size: 12px;
+  font-weight: 700;
+  gap: 7px;
+  min-height: 32px;
+  padding: 0 10px;
+  white-space: nowrap;
+}
+
+.catalog-variant-option.selected {
+  background: #fbfff0;
+  border-color: #b8ef2d;
+}
+
+.catalog-variant-option input {
+  accent-color: var(--saas-ink);
+  flex: 0 0 auto;
+  height: 14px;
+  margin: 0;
+  width: 14px;
+}
+
+.catalog-variant-option:focus-within {
+  border-color: var(--saas-ink);
+  box-shadow: 0 0 0 3px var(--trry-focus-ring);
+}
+
+.catalog-variant-option:has(input:disabled) {
+  background: #f0f2f3;
+  color: #9aa3af;
+  cursor: not-allowed;
+}
+
 .catalog-variant-row-stack {
   background: var(--saas-surface-soft);
   border: 1px solid var(--saas-border);
@@ -14309,6 +14398,7 @@ body,
   .admin-saas-page .compact-grid,
   .catalog-form-grid,
   .catalog-variant-attributes,
+  .catalog-variant-generator,
   .catalog-variant-inline-row {
     grid-template-columns: 1fr;
   }
