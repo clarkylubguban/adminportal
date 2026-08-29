@@ -130,7 +130,7 @@ function mapBarcodeRow(row = {}) {
     id: row.id,
     variantId: row.variant_id ?? row.variantId ?? "",
     code: row.code ?? "",
-    symbology: row.symbology ?? "CODE128",
+    symbology: row.symbology ?? "EAN8",
     source: row.source ?? "INTERNAL",
     isPrimary: row.is_primary === true || row.isPrimary === true,
     active: row.active !== false,
@@ -143,7 +143,7 @@ function mapLookupPayload(row = {}) {
   return {
     barcodeId: row.barcode_id ?? row.barcodeId ?? "",
     barcode: row.barcode ?? row.code ?? "",
-    symbology: row.symbology ?? "CODE128",
+    symbology: row.symbology ?? "EAN8",
     source: row.source ?? "",
     variantId: row.variant_id ?? row.variantId ?? "",
     productId: row.product_id ?? row.productId ?? "",
