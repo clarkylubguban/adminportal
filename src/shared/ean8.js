@@ -59,10 +59,11 @@ export function getEan8Pattern(value) {
   return `101${left}01010${right}101`;
 }
 
-export function renderEan8Svg(value, { width = 320, height = 86, showText = true } = {}) {
+export function renderEan8Svg(value, { width = 81, height = 41, showText = true } = {}) {
   const text = String(value ?? "");
   const pattern = getEan8Pattern(text);
-  const barHeight = showText ? height - 22 : height;
+  const textReserve = showText ? 8 : 0;
+  const barHeight = height - textReserve;
   let bars = "";
 
   pattern.split("").forEach((module, index) => {
@@ -71,7 +72,7 @@ export function renderEan8Svg(value, { width = 320, height = 86, showText = true
     }
   });
 
-  return `<svg class="ean8-svg" viewBox="0 0 ${EAN8_RENDERED_MODULES} ${height}" width="${width}" height="${height}" role="img" aria-label="EAN-8 ${escapeSvg(text)}" xmlns="http://www.w3.org/2000/svg"><g fill="#111111">${bars}</g>${showText ? `<text x="${EAN8_RENDERED_MODULES / 2}" y="${height - 5}" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" letter-spacing="0">${escapeSvg(text)}</text>` : ""}</svg>`;
+  return `<svg class="ean8-svg" viewBox="0 0 ${EAN8_RENDERED_MODULES} ${height}" width="${width}" height="${height}" role="img" aria-label="EAN-8 ${escapeSvg(text)}" xmlns="http://www.w3.org/2000/svg"><g fill="#111111" shape-rendering="crispEdges">${bars}</g>${showText ? `<text x="${EAN8_RENDERED_MODULES / 2}" y="${height - 1.5}" text-anchor="middle" font-family="Arial, sans-serif" font-size="6" letter-spacing="0">${escapeSvg(text)}</text>` : ""}</svg>`;
 }
 
 function escapeSvg(value) {

@@ -87,6 +87,10 @@ assert.equal(ean8Pattern.slice(31, 36), "01010", "EAN-8 center guard mismatch");
 assert.equal(ean8Pattern.slice(-3), "101", "EAN-8 end guard mismatch");
 assert.ok(renderEan8Svg("20000028").includes("viewBox=\"0 0 81"), "EAN-8 SVG must render 81 modules including quiet zones");
 assert.ok(renderEan8Svg("20000028").includes("20000028"), "printed SVG must include human-readable 8-digit value");
+assert.ok(renderEan8Svg("20000028").includes("viewBox=\"0 0 81 41\""), "EAN-8 SVG must use compact 81x41 print geometry");
+assert.ok(renderEan8Svg("20000028").includes("shape-rendering=\"crispEdges\""), "EAN-8 SVG bars must use crispEdges for thermal print sharpness");
+assert.ok(renderEan8Svg("20000028").includes("font-size=\"6\""), "human-readable EAN-8 text must remain visible but small");
+assert.equal(renderEan8Svg("20000028").includes("preserveAspectRatio=\"none\""), false, "EAN-8 SVG must preserve its natural aspect ratio");
 assert.ok(ean8.includes("LEFT_PATTERNS") && ean8.includes("RIGHT_PATTERNS"), "actual EAN-8 encoding tables missing");
 
 assert.equal(canManageBarcodesForRole("owner"), true, "Owner can manage");
@@ -207,6 +211,13 @@ assert.equal(barcodeUi.includes("50 x 30 mm"), false, "50x30 preset must be abse
 assert.equal(barcodeUi.includes("50 x 25 mm"), false, "50x25 preset must be absent from Barcode UI");
 assert.ok(barcodeUi.includes("@page { size: 30mm 20mm; margin: 0; }"), "30x20 @page rule missing");
 assert.ok(barcodeUi.includes("width: ${LABEL_SIZE.width}mm; height: ${LABEL_SIZE.height}mm"), "30x20 physical label dimensions missing");
+assert.ok(barcodeUi.includes("padding: 0.4mm"), "30x20 label padding must be <= 0.5mm");
+assert.ok(barcodeUi.includes("justify-content: flex-start"), "30x20 label must prioritize barcode from the top");
+assert.ok(barcodeUi.includes(".label strong { font-size: 4px"), "product name font must be <= 4px");
+assert.ok(barcodeUi.includes(".label span { font-size: 3.5px"), "variant label font must be <= 3.5px");
+assert.ok(barcodeUi.includes(".label .barcode { margin: 0.25mm 0 0; width: 100%; }"), "barcode container must use minimal top margin and full width");
+assert.ok(barcodeUi.includes(".label svg { width: 100%; height: auto; display: block; }"), "EAN-8 SVG must scale full width without cropping quiet zones");
+assert.ok(barcodeUi.includes("renderEan8Svg(barcode.code, { width: 81, height: 41, showText: true })"), "EAN-8 print call must use compact 81x41 geometry");
 assert.ok(barcodeUi.includes("window.open") && barcodeUi.includes(".print()"), "browser print path missing");
 assert.ok(barcodeUi.includes("page-break-after: always"), "one print document must create physical labels");
 assert.ok(barcodeUi.includes("Generate, scan, print, and reprint never change inventory."), "stock boundary copy missing");

@@ -281,11 +281,11 @@ function printRows(variantIds) {
       @page { size: 30mm 20mm; margin: 0; }
       * { box-sizing: border-box; }
       body { margin: 0; color: #111; font-family: Arial, sans-serif; }
-      .label { width: ${LABEL_SIZE.width}mm; height: ${LABEL_SIZE.height}mm; page-break-after: always; padding: 1mm; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-      .label strong { font-size: 6px; line-height: 1; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .label span { font-size: 5px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-      .label .barcode { margin: 0.7mm 0 0.3mm; width: 100%; }
-      .label svg { width: 100%; height: 9mm; display: block; }
+      .label { width: ${LABEL_SIZE.width}mm; height: ${LABEL_SIZE.height}mm; page-break-after: always; padding: 0.4mm; display: flex; flex-direction: column; justify-content: flex-start; overflow: hidden; }
+      .label strong { font-size: 4px; line-height: 1; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .label span { font-size: 3.5px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .label .barcode { margin: 0.25mm 0 0; width: 100%; }
+      .label svg { width: 100%; height: auto; display: block; }
     </style></head><body>${labels.map((row) => `
       <section class="label">
         <strong>${escapeHtml(row.productName)}</strong>
@@ -302,7 +302,7 @@ function printRows(variantIds) {
 function renderBarcodeSvg(barcode) {
   const symbology = String(barcode?.symbology || "").trim().toUpperCase();
   if (symbology === "EAN8" || symbology === "EAN-8") {
-    return renderEan8Svg(barcode.code, { width: 260, height: 54, showText: true });
+    return renderEan8Svg(barcode.code, { width: 81, height: 41, showText: true });
   }
   return renderCode128Svg(barcode?.code || "", { width: 260, height: 54, showText: true });
 }
