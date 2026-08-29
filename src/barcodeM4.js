@@ -13,6 +13,14 @@ import { renderCode128Svg } from "./shared/code128.js";
 import { renderEan8Svg } from "./shared/ean8.js";
 
 const LABEL_SIZE = { width: 30, height: 20 };
+const INVENTORY_SEARCH_PLACEHOLDER = "Search product, variant, SKU, or scan barcode...";
+const INVENTORY_DEFAULT_FEEDBACK = "Inventory scan is read-only.";
+const STOCK_COUNT_SCANNER_TITLE = "STOCK COUNT SCANNER READY / POSTING BLOCKED BY MISSING COUNT AUTHORITY";
+
+let enhancementFrameId = 0;
+let enhancementRunning = false;
+let enhancementQueued = false;
+let enhancementForce = false;
 
 const state = {
   session: null,
@@ -42,7 +50,41 @@ createBarcodeScanner({
 });
 
 function scheduleEnhance(force = false) {
-  queueMicrotask(() => enhanceM4(force).catch((error) => console.warn("M4 barcode enhancement unavailable.", error)));
+  enhancementForce = enhancementForce || force;
+  if (enhancementRunning) {
+    enhancementQueued = true;
+    return;
+  }
+  if (enhancementFrameId) return;
+
+  const requestFrame = globalThis.requestAnimationFrame || ((callback) => globalThis.setTimeout(callback, 16));
+  enhancementFrameId = requestFrame(() => {
+    enhancementFrameId = 0;
+    const shouldForce = enhancementForce;
+    enhancementForce = false;
+    runEnhancement(shouldForce);
+  });
+}
+
+async function runEnhancement(force = false) {
+  if (enhancementRunning) {
+    enhancementQueued = true;
+    enhancementForce = enhancementForce || force;
+    return;
+  }
+
+  enhancementRunning = true;
+  try {
+    await enhanceM4(force);
+  } catch (error) {
+    console.warn("M4 barcode enhancement unavailable.", error);
+  } finally {
+    enhancementRunning = false;
+    if (enhancementQueued) {
+      enhancementQueued = false;
+      scheduleEnhance(enhancementForce);
+    }
+  }
 }
 
 async function enhanceM4(force = false) {
@@ -93,21 +135,29 @@ function patchCatalog(page) {
 
 function patchInventory(page) {
   const input = page.querySelector("#inventory-search");
-  if (input) input.placeholder = "Search product, variant, SKU, or scan barcode...";
+  if (input && input.placeholder !== INVENTORY_SEARCH_PLACEHOLDER) {
+    input.placeholder = INVENTORY_SEARCH_PLACEHOLDER;
+  }
+
+  const nextFeedback = state.inventoryFeedback || INVENTORY_DEFAULT_FEEDBACK;
   if (!page.querySelector(".m4-inventory-scanner")) {
     const tabs = page.querySelector(".inventory-tabs");
     tabs?.insertAdjacentHTML("afterend", `
       <section class="m4-inventory-scanner" aria-label="Inventory barcode scanner">
         <strong>USB SCANNER READY</strong>
-        <span data-m4-inventory-feedback>${escapeHtml(state.inventoryFeedback || "Inventory scan is read-only.")}</span>
+        <span data-m4-inventory-feedback>${escapeHtml(nextFeedback)}</span>
       </section>
     `);
   } else {
     const feedback = page.querySelector("[data-m4-inventory-feedback]");
-    if (feedback) feedback.textContent = state.inventoryFeedback || "Inventory scan is read-only.";
+    if (feedback && feedback.textContent !== nextFeedback) {
+      feedback.textContent = nextFeedback;
+    }
   }
   const stockCount = page.querySelector('[data-inventory-parked="stock-count"]');
-  if (stockCount) stockCount.title = "STOCK COUNT SCANNER READY / POSTING BLOCKED BY MISSING COUNT AUTHORITY";
+  if (stockCount && stockCount.title !== STOCK_COUNT_SCANNER_TITLE) {
+    stockCount.title = STOCK_COUNT_SCANNER_TITLE;
+  }
 }
 
 async function openBarcodeManager() {
