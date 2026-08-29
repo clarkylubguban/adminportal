@@ -418,28 +418,36 @@ async function replaceProductVariants(savedProduct, product, accessToken) {
     { select: "*", product_id: `eq.${savedProduct.id}`, order: "created_at.asc" },
     accessToken
   );
-  const activeExisting = (Array.isArray(existingRows) ? existingRows : []).filter((row) => row.active !== false && !row.archived_at);
 
-  for (let index = 0; index < desiredVariants.length; index += 1) {
-    const desired = desiredVariants[index];
-    const existing = activeExisting[index];
-    if (existing) {
-      await updateSupabaseRowsWithAuth(
-        PRODUCT_VARIANTS_TABLE,
-        { id: `eq.${existing.id}` },
-        mapVariantToRow(desired, product, { update: true }),
-        accessToken
-      );
-    } else {
-      await createSupabaseRowWithAuth(
-        PRODUCT_VARIANTS_TABLE,
-        mapVariantToRow(desired, product, { productId: savedProduct.id }),
-        accessToken
-      );
-    }
+  const plan = buildVariantReconciliationPlan(existingRows, desiredVariants);
+
+  for (const match of plan.updates) {
+    await updateSupabaseRowsWithAuth(
+      PRODUCT_VARIANTS_TABLE,
+      { id: `eq.${match.existing.id}` },
+      mapVariantToRow(match.desired, product, { update: true }),
+      accessToken
+    );
   }
 
-  for (const stale of activeExisting.slice(desiredVariants.length)) {
+  for (const match of plan.reactivations) {
+    await updateSupabaseRowsWithAuth(
+      PRODUCT_VARIANTS_TABLE,
+      { id: `eq.${match.existing.id}` },
+      mapVariantToRow(match.desired, product, { update: true }),
+      accessToken
+    );
+  }
+
+  for (const desired of plan.inserts) {
+    await createSupabaseRowWithAuth(
+      PRODUCT_VARIANTS_TABLE,
+      mapVariantToRow(desired, product, { productId: savedProduct.id }),
+      accessToken
+    );
+  }
+
+  for (const stale of plan.archives) {
     await updateSupabaseRowsWithAuth(
       PRODUCT_VARIANTS_TABLE,
       { id: `eq.${stale.id}` },
@@ -458,6 +466,8 @@ function buildDesiredVariants(product) {
   const supplied = Array.isArray(product.variants) ? product.variants.filter((variant) => variant?.active !== false) : [];
   if (supplied.length) {
     return supplied.map((variant) => ({
+      id: variant.id || "",
+      masterVariantId: variant.masterVariantId || variant.master_variant_id || "",
       size: variant.size || "",
       color: variant.color || "",
       sellingPrice: variant.sellingPrice ?? product.startingPrice ?? 0,
@@ -469,6 +479,8 @@ function buildDesiredVariants(product) {
   const sizes = Array.isArray(product.availableSizes) && product.availableSizes.length ? product.availableSizes : [""];
   const colors = Array.isArray(product.availableColors) && product.availableColors.length ? product.availableColors : [""];
   return sizes.flatMap((size) => colors.map((color) => ({
+    id: "",
+    masterVariantId: "",
     size,
     color,
     sellingPrice: product.startingPrice || 0,
@@ -477,12 +489,143 @@ function buildDesiredVariants(product) {
   })));
 }
 
-function mapVariantToRow(variant, product, options = {}) {
+export function buildVariantReconciliationPlan(existingRows, desiredVariants) {
+  const rows = Array.isArray(existingRows) ? existingRows : [];
+  const activeRows = rows.filter(isActiveVariantRow);
+  const archivedRows = rows.filter((row) => !isActiveVariantRow(row));
+  const desiredRows = Array.isArray(desiredVariants) ? desiredVariants : [];
+
+  assertUniqueDesiredVariantCombinations(desiredRows);
+
+  const activeById = indexRowsByValue(activeRows, (row) => row.id);
+  const activeByMasterVariantId = indexRowsByValue(activeRows, (row) => row.master_variant_id);
+  const activeByCombination = indexRowsByValue(activeRows, getVariantCombinationKey, { unique: true });
+  const archivedById = indexRowsByValue(archivedRows, (row) => row.id);
+  const archivedByMasterVariantId = indexRowsByValue(archivedRows, (row) => row.master_variant_id);
+  const archivedByCombination = indexRowsByValue(archivedRows, getVariantCombinationKey, { unique: true });
+  const matchedActiveIds = new Set();
+  const matchedArchivedIds = new Set();
+  const updates = [];
+  const reactivations = [];
+  const inserts = [];
+
+  for (const desired of desiredRows) {
+    const match = findVariantMatch(desired, {
+      activeById,
+      activeByMasterVariantId,
+      activeByCombination,
+      archivedById,
+      archivedByMasterVariantId,
+      archivedByCombination,
+    });
+
+    if (match) {
+      assertVariantMatchIsSafe(match, desired);
+      if (matchedActiveIds.has(match.id) || matchedArchivedIds.has(match.id)) {
+        throw new Error("Duplicate Variant identity in Product editor draft.");
+      }
+      if (isActiveVariantRow(match)) {
+        matchedActiveIds.add(match.id);
+        updates.push({ existing: match, desired });
+      } else {
+        matchedArchivedIds.add(match.id);
+        reactivations.push({ existing: match, desired });
+      }
+    } else {
+      inserts.push(desired);
+    }
+  }
+
+  const archives = activeRows.filter((row) => !matchedActiveIds.has(row.id));
+  return { updates, reactivations, inserts, archives };
+}
+
+function findVariantMatch(desired, indexes) {
+  const id = String(desired.id || "").trim();
+  const masterVariantId = String(desired.masterVariantId || desired.master_variant_id || "").trim();
+  const combinationKey = getVariantCombinationKey(desired);
+  const idMatch = id ? indexes.activeById.get(id) ?? indexes.archivedById.get(id) : null;
+  const masterMatch = masterVariantId ? indexes.activeByMasterVariantId.get(masterVariantId) ?? indexes.archivedByMasterVariantId.get(masterVariantId) : null;
+
+  if (id && !idMatch) {
+    throw new Error("Variant ID was not found for this Product.");
+  }
+  if (masterVariantId && !masterMatch) {
+    throw new Error("Master Variant ID was not found for this Product.");
+  }
+  if (idMatch && masterMatch && idMatch.id !== masterMatch.id) {
+    throw new Error("Variant ID and Master Variant ID refer to different persisted variants.");
+  }
+  const activeCombinationMatch = indexes.activeByCombination.get(combinationKey);
+  if (idMatch && !isActiveVariantRow(idMatch) && activeCombinationMatch && activeCombinationMatch.id !== idMatch.id) {
+    throw new Error("Archived Variant identity cannot be restored over an active matching combination.");
+  }
+  if (masterMatch && !isActiveVariantRow(masterMatch) && activeCombinationMatch && activeCombinationMatch.id !== masterMatch.id) {
+    throw new Error("Archived Master Variant identity cannot be restored over an active matching combination.");
+  }
+  if (idMatch) return idMatch;
+  if (masterMatch) return masterMatch;
+  return activeCombinationMatch ?? indexes.archivedByCombination.get(combinationKey) ?? null;
+}
+
+function assertUniqueDesiredVariantCombinations(variants) {
+  const seen = new Map();
+  for (const variant of variants) {
+    const key = getVariantCombinationKey(variant);
+    if (seen.has(key)) {
+      throw new Error("Duplicate size and color combination in Product editor draft.");
+    }
+    seen.set(key, variant);
+  }
+}
+
+function assertVariantMatchIsSafe(existing, desired) {
+  if (getVariantCombinationKey(existing) !== getVariantCombinationKey(desired)) {
+    const existingLabel = formatVariantCombination(existing);
+    const desiredLabel = formatVariantCombination(desired);
+    throw new Error(`Variant identity conflict: persisted ${existingLabel} cannot be saved as ${desiredLabel}.`);
+  }
+}
+
+function indexRowsByValue(rows, getValue, { unique = false } = {}) {
+  const index = new Map();
+  const duplicateValues = new Set();
+  for (const row of rows) {
+    const value = String(getValue(row) || "").trim();
+    if (!value) continue;
+    if (index.has(value)) duplicateValues.add(value);
+    index.set(value, row);
+  }
+  if (unique && duplicateValues.size) {
+    throw new Error("Duplicate persisted Variant size and color combination requires manual cleanup before save.");
+  }
+  return index;
+}
+
+function isActiveVariantRow(row) {
+  return row?.active !== false && !row?.archived_at && !row?.archivedAt;
+}
+
+function getVariantCombinationKey(variant) {
+  return `${normalizeVariantIdentityToken(variant?.color)}\u0000${normalizeVariantIdentityToken(variant?.size)}`;
+}
+
+function normalizeVariantIdentityToken(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function formatVariantCombination(variant) {
+  const color = String(variant?.color || "").trim() || "blank color";
+  const size = String(variant?.size || "").trim() || "blank size";
+  return `${color}/${size}`;
+}
+
+export function mapVariantToRow(variant, product, options = {}) {
   const row = cleanRow({
     product_id: options.productId,
-    master_variant_id: options.update ? undefined : null,
-    sku: options.update ? undefined : null,
-    global_sku: options.update ? undefined : null,
+    master_variant_id: undefined,
+    sku: undefined,
+    global_sku: undefined,
     size: emptyToNull(variant.size),
     color: emptyToNull(variant.color),
     selling_price: Number(variant.sellingPrice || 0),
