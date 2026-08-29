@@ -10,6 +10,7 @@ import {
 } from "./services/adminBarcodes.js";
 import { createBarcodeScanner } from "./shared/barcodeScanner.js";
 import { renderCode128Svg } from "./shared/code128.js";
+import { renderEan8Svg } from "./shared/ean8.js";
 
 const LABEL_SIZE = { width: 30, height: 20 };
 
@@ -123,7 +124,7 @@ async function openBarcodeManager() {
         <div>
           <span>MASTER CATALOG · BARCODE & LABELS</span>
           <h2>Barcode & Labels</h2>
-          <p>XPrinter XP-236B · CODE128 · browser print through Windows driver</p>
+          <p>XPrinter XP-236B · EAN-8 / RCN-8 · browser print through Windows driver</p>
         </div>
         <button class="m4-icon-button" data-m4-close type="button" aria-label="Close">X</button>
       </header>
@@ -239,13 +240,21 @@ function printRows(variantIds) {
       <section class="label">
         <strong>${escapeHtml(row.productName)}</strong>
         <span>${escapeHtml(row.variantLabel)}</span>
-        <div class="barcode">${renderCode128Svg(row.barcode.code, { width: 260, height: 54, showText: true })}</div>
+        <div class="barcode">${renderBarcodeSvg(row.barcode)}</div>
       </section>
     `).join("")}</body></html>
   `);
   printWindow.document.close();
   printWindow.focus();
   printWindow.print();
+}
+
+function renderBarcodeSvg(barcode) {
+  const symbology = String(barcode?.symbology || "").trim().toUpperCase();
+  if (symbology === "EAN8" || symbology === "EAN-8") {
+    return renderEan8Svg(barcode.code, { width: 260, height: 54, showText: true });
+  }
+  return renderCode128Svg(barcode?.code || "", { width: 260, height: 54, showText: true });
 }
 
 async function handleInventoryScan(code) {
