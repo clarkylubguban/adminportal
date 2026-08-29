@@ -2300,7 +2300,7 @@ function renderInboxPage() {
   return `
     <main class="mvp-page ops-board-page inbox-page ${inboxMobileThreadOpen ? "inbox-mobile-thread-open" : ""}">
       <header class="mvp-page-title inbox-page-title">
-        <div><span>HOME / INBOX</span><h1>Inbox</h1><p>Manage Facebook conversations, ownership, and inquiry handoff.</p></div>
+        <div><span>HOME / INBOX</span><h1>Inbox</h1><p>Manage customer conversations, ownership, and inquiry handoff.</p></div>
         <strong>${escapeHtml(getInboxPageStatusLabel(selected))}</strong>
       </header>
       ${renderInboxLoadNotice()}
@@ -2339,10 +2339,10 @@ function renderInboxViewTab(view) {
 function renderInboxChannelAccountFilters() {
   const accountOptions = getInboxAccountOptionsForCurrentChannel();
   return `<div class="inbox-channel-account-filters" aria-label="Inbox channel and account filters">
-    <label><span>Channel</span><select data-inbox-channel-filter aria-label="Filter Inbox channel">
+    <label><select data-inbox-channel-filter aria-label="Filter Inbox channel">
       ${INBOX_CHANNEL_FILTERS.map((channel) => `<option value="${escapeHtml(channel.key)}" ${inboxChannelFilter === channel.key ? "selected" : ""}>${escapeHtml(channel.label)}</option>`).join("")}
     </select></label>
-    <label><span>Account</span><select data-inbox-account-filter aria-label="Filter Inbox account">
+    <label><select data-inbox-account-filter aria-label="Filter Inbox account">
       <option value="all" ${inboxAccountFilter === "all" ? "selected" : ""}>All Accounts</option>
       ${accountOptions.map((account) => `<option value="${escapeHtml(account.key)}" ${inboxAccountFilter === account.key ? "selected" : ""}>${escapeHtml(account.label)}</option>`).join("")}
     </select></label>

@@ -941,16 +941,17 @@
 
 .inbox-work-chip-groups {
   border-bottom: 1px solid #e7e4dc;
-  display: flex;
-  gap: 0;
-  overflow-x: auto;
-  padding: 0 16px 12px;
+  display: grid;
+  gap: 8px;
+  overflow: visible;
+  padding: 0 14px 12px;
 }
 
 .inbox-work-chip-groups > div {
   align-items: center;
-  display: flex;
+  display: grid;
   gap: 6px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   min-width: 0;
 }
 
@@ -959,9 +960,9 @@
   border: 1px solid #e2e5ea;
   border-radius: 7px;
   color: #4a505b;
-  flex: 0 0 auto;
   gap: 5px;
   min-height: 30px;
+  min-width: 0;
   padding: 0 10px;
 }
 
@@ -988,22 +989,13 @@
 .inbox-channel-account-filters {
   display: grid;
   gap: 6px;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr);
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   width: 100%;
 }
 
 .inbox-channel-account-filters label {
-  display: grid;
-  gap: 3px;
+  display: block;
   min-width: 0;
-}
-
-.inbox-channel-account-filters label span {
-  color: #8a9099;
-  font-size: 9px;
-  font-weight: 780;
-  letter-spacing: 0;
-  text-transform: uppercase;
 }
 
 .inbox-channel-account-filters select {
@@ -1013,9 +1005,10 @@
   color: #252a32;
   font-size: 11px;
   font-weight: 720;
-  height: 30px;
+  height: 32px;
   min-width: 0;
   padding: 0 8px;
+  width: 100%;
 }
 
 .inbox-conversation-card {
@@ -2012,17 +2005,17 @@
   }
 
   .inbox-work-chip-groups > div {
-    display: flex;
-    overflow-x: auto;
-    scrollbar-width: none;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    overflow: visible;
   }
 
-  .inbox-work-chip-groups > div::-webkit-scrollbar {
-    display: none;
+  .inbox-channel-account-filters {
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .inbox-work-chip {
-    flex: 0 0 auto;
+    padding: 0 7px;
   }
 
   .inbox-modal-scrim {
