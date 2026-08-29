@@ -21,7 +21,7 @@ assert.equal(customerModal.includes('renderInboxModalField("Address"'), false, "
 assert.equal(customerModal.includes('renderInboxModalField("City"'), false, "City must be deferred until schema support exists");
 assert.equal(customerModal.includes('renderInboxModalField("State"'), false, "State must be deferred until schema support exists");
 assert.equal(customerModal.includes('renderInboxModalField("ZIP / Postal Code"'), false, "ZIP must be deferred until schema support exists");
-assert.ok(customerModal.includes("Facebook Profile"), "Customer Details modal must summarize F8 profile data");
+assert.ok(customerModal.includes("conversation.channelLabel") && customerModal.includes("Profile name") && customerModal.includes("Profile photo"), "Customer Details modal must summarize F8 profile data with channel-aware labels");
 assert.ok(customerModal.includes("Linked Records"), "Customer Details modal must keep linked records compact");
 assert.ok(customerModal.includes("data-inbox-save-customer-details") && customerModal.includes("SAVING..."), "Save Details must persist supported contact fields");
 assert.equal(/PSID|externalUserId|META_PAGE_ACCESS_TOKEN|META_APP_SECRET|service_role|Bearer/.test(customerModal), false, "Customer Details modal must not expose PSIDs or secrets");
@@ -35,7 +35,7 @@ assert.equal(detailPanel.includes("VIEW CUSTOMER DETAILS"), false, "Right summar
 assert.ok(detailPanel.includes("ADD NOTE / VIEW NOTES"), "Right summary panel must not permanently render the full notes form");
 assert.equal(detailPanel.includes("<h2>Customer Details</h2>"), false, "Right panel must not permanently render the old Customer Details card");
 assert.equal(detailPanel.includes("<h2>Customer Details</h2>") && detailPanel.includes("primaryPhone"), false, "Right panel must not permanently stack full contact fields");
-assert.ok(detailPanel.includes('renderInboxFact("Channel", "Facebook Messenger")'), "Core card must include Channel");
+assert.ok(detailPanel.includes('renderInboxFact("Channel", conversation.channelFullLabel || "Facebook Messenger")'), "Core card must include Channel");
 assert.ok(detailPanel.includes('renderInboxFact("Lead State"'), "Core card must include Lead State");
 assert.ok(detailPanel.includes('renderInboxFact("Owner"'), "Core card must include Owner");
 assert.ok(detailPanel.includes('renderInboxFact("Reply Window"'), "Core card must include Reply Window");

@@ -44,6 +44,7 @@ import {
   getApprovedAdminUser,
 } from "./services/adminUsers.js";
 import {
+  INBOX_CHANNEL_FILTERS,
   INBOX_VISIBLE_WORK_VIEWS,
   INBOX_WORK_VIEWS,
   addInboxInternalNote,
@@ -53,6 +54,8 @@ import {
   filterInboxConversations,
   getAdminInboxConversationDetail,
   getAdminInboxConversationRows,
+  getInboxAccountFilterOptions,
+  getInboxConversationAccountKey,
   getInboxReplyCapability,
   getInboxReplyWindowState,
   getInboxSendState,
@@ -660,6 +663,8 @@ let inboxDetailError = "";
 let inboxSelectedConversationId = "";
 let inboxActiveView = "all";
 let inboxSearchQuery = "";
+let inboxChannelFilter = "all";
+let inboxAccountFilter = "all";
 let inboxMobileThreadOpen = false;
 let inboxActiveModal = "";
 let inboxActionPermissions = createInboxActionPermissions();
@@ -1796,6 +1801,9 @@ function resetInboxState() {
   inboxDetailError = "";
   inboxSelectedConversationId = "";
   inboxActiveView = "all";
+  inboxSearchQuery = "";
+  inboxChannelFilter = "all";
+  inboxAccountFilter = "all";
   inboxActionPermissions = createInboxActionPermissions();
   inboxReplyCapability = { replyConfigured: false };
   inboxAssignmentUsers = [];
@@ -1823,6 +1831,7 @@ async function loadInboxConversations({ silent = false } = {}) {
 
   try {
     inboxConversations = await getAdminInboxConversationRows(adminAuthSession);
+    normalizeInboxAccountFilter();
     inboxLoadState = inboxConversations.length ? "ready" : "empty";
     inboxLoadError = "";
     const requestedConversationId = getInboxDeepLinkConversationId();
@@ -2118,7 +2127,7 @@ function openInboxModal(modalKey) {
   inboxContactSaveError = "";
   if (conversation && inboxActiveModal === "customer_details") {
     inboxContactDraft = {
-      displayName: conversation.customerLabel === "Facebook customer" ? "" : conversation.customerLabel,
+      displayName: isInboxPlaceholderCustomerName(conversation) ? "" : conversation.customerLabel,
       primaryPhone: conversation.primaryPhone || "",
       primaryEmail: conversation.primaryEmail || "",
       companyName: conversation.companyName || "",
@@ -2175,16 +2184,37 @@ async function runInboxMutation(work) {
 }
 
 function getVisibleInboxConversations() {
-  const rows = filterInboxConversations(inboxConversations, inboxActiveView, getCurrentAdminUserId());
+  const rows = filterInboxConversations(inboxConversations, inboxActiveView, getCurrentAdminUserId(), {
+    channel: inboxChannelFilter,
+    account: inboxAccountFilter,
+  });
   const query = inboxSearchQuery.trim().toLowerCase();
   if (!query) return rows;
   return rows.filter((conversation) => [
     conversation.customerLabel,
+    conversation.channelLabel,
+    conversation.channelFullLabel,
+    conversation.accountLabel,
     conversation.pageName,
     conversation.lastMessageSnippet,
     conversation.campaignName,
     conversation.inquiryId,
   ].some((value) => String(value || "").toLowerCase().includes(query)));
+}
+
+function getInboxAccountOptionsForCurrentChannel() {
+  const rows = inboxChannelFilter === "all"
+    ? inboxConversations
+    : inboxConversations.filter((conversation) => conversation.channel === inboxChannelFilter);
+  return getInboxAccountFilterOptions(rows);
+}
+
+function normalizeInboxAccountFilter() {
+  if (inboxAccountFilter === "all") return;
+  const options = getInboxAccountOptionsForCurrentChannel();
+  if (!options.some((option) => option.key === inboxAccountFilter)) {
+    inboxAccountFilter = "all";
+  }
 }
 
 function getSelectedInboxConversation() {
@@ -2282,6 +2312,7 @@ function renderInboxPage() {
           </header>
           <section class="inbox-work-chip-groups" aria-label="Inbox work views">
             <div>${INBOX_VISIBLE_WORK_VIEWS.map((view) => renderInboxViewTab(view)).join("")}</div>
+            ${renderInboxChannelAccountFilters()}
           </section>
           ${renderInboxConversationList(visible)}
         </aside>
@@ -2298,8 +2329,24 @@ function renderInboxPage() {
 }
 
 function renderInboxViewTab(view) {
-  const count = filterInboxConversations(inboxConversations, view.key, getCurrentAdminUserId()).length;
+  const count = filterInboxConversations(inboxConversations, view.key, getCurrentAdminUserId(), {
+    channel: inboxChannelFilter,
+    account: inboxAccountFilter,
+  }).length;
   return `<button class="inbox-work-chip ${inboxActiveView === view.key ? "active" : ""}" data-inbox-view="${escapeHtml(view.key)}" type="button"><span>${escapeHtml(view.label)}</span><strong>${count}</strong></button>`;
+}
+
+function renderInboxChannelAccountFilters() {
+  const accountOptions = getInboxAccountOptionsForCurrentChannel();
+  return `<div class="inbox-channel-account-filters" aria-label="Inbox channel and account filters">
+    <label><span>Channel</span><select data-inbox-channel-filter aria-label="Filter Inbox channel">
+      ${INBOX_CHANNEL_FILTERS.map((channel) => `<option value="${escapeHtml(channel.key)}" ${inboxChannelFilter === channel.key ? "selected" : ""}>${escapeHtml(channel.label)}</option>`).join("")}
+    </select></label>
+    <label><span>Account</span><select data-inbox-account-filter aria-label="Filter Inbox account">
+      <option value="all" ${inboxAccountFilter === "all" ? "selected" : ""}>All Accounts</option>
+      ${accountOptions.map((account) => `<option value="${escapeHtml(account.key)}" ${inboxAccountFilter === account.key ? "selected" : ""}>${escapeHtml(account.label)}</option>`).join("")}
+    </select></label>
+  </div>`;
 }
 
 function renderInboxLoadNotice() {
@@ -2309,8 +2356,9 @@ function renderInboxLoadNotice() {
 }
 
 function getInboxPageStatusLabel(selected) {
-  const pageName = selected?.pageName || inboxConversations.find((conversation) => conversation.pageName)?.pageName || "TRRY Apparel";
-  return `${pageName} • Facebook`;
+  const pageName = selected?.accountLabel || selected?.pageName || inboxConversations.find((conversation) => conversation.accountLabel || conversation.pageName)?.accountLabel || inboxConversations.find((conversation) => conversation.pageName)?.pageName || "TRRY Apparel";
+  const channel = selected?.channelLabel || "Facebook";
+  return `${pageName} • ${channel}`;
 }
 
 function getInboxOpenConversationCount() {
@@ -2335,7 +2383,7 @@ function renderInboxConversationList(conversations) {
       <span class="inbox-card-main">
         <span class="inbox-card-topline"><strong class="inbox-card-name">${escapeHtml(conversation.customerLabel)}</strong><time>${escapeHtml(formatInboxRelativeTime(conversation.lastMessageAt || conversation.openedAt))}</time></span>
         <small class="inbox-card-preview">${escapeHtml(conversation.lastMessageSnippet || "No messages captured yet.")}</small>
-        <em class="inbox-card-state">${escapeHtml(formatInboxState(conversation.state))}</em>
+        <span class="inbox-card-meta"><em class="inbox-card-state">${escapeHtml(formatInboxState(conversation.state))}</em><small>${escapeHtml(getInboxConversationSourceLabel(conversation))}</small></span>
       </span>
     </button>`;
   }).join("");
@@ -2361,7 +2409,7 @@ function renderInboxThread(conversation) {
       <div class="inbox-thread-person">
         <button class="inbox-thread-back" data-inbox-back-to-list type="button" aria-label="Back to conversations">Back</button>
         ${renderInboxAvatar(conversation, "inbox-avatar large")}
-        <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>Facebook Messenger • ${escapeHtml(formatInboxState(conversation.state))}</span></div>
+        <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>${escapeHtml(conversation.channelFullLabel || "Facebook Messenger")} • ${escapeHtml(formatInboxState(conversation.state))}</span></div>
       </div>
       <div class="inbox-thread-actions">
         <span class="inbox-reply-pill ${reply.tone}">${escapeHtml(reply.label)}</span>
@@ -2494,11 +2542,11 @@ function renderInboxDetailPanel(conversation) {
     ${inboxMutationError ? `<div class="inbox-notice error" role="alert">${escapeHtml(inboxMutationError)}</div>` : ""}
     <section class="inbox-customer-summary">
       ${renderInboxAvatar(conversation, "inbox-avatar xlarge")}
-      <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>${escapeHtml(conversation.pageName || "TRRY Apparel")} • Facebook Messenger</span></div>
+      <div><strong>${escapeHtml(conversation.customerLabel)}</strong><span>${escapeHtml(conversation.accountLabel || conversation.pageName || "TRRY Apparel")} • ${escapeHtml(conversation.channelFullLabel || "Facebook Messenger")}</span></div>
       ${renderInboxFacebookNameRefresh(conversation)}
     </section>
     <section class="inbox-detail-card">
-      ${renderInboxFact("Channel", "Facebook Messenger")}
+      ${renderInboxFact("Channel", conversation.channelFullLabel || "Facebook Messenger")}
       ${renderInboxFact("Lead State", link ? "Converted to inquiry" : "Not yet an inquiry")}
       ${renderInboxFact("Owner", conversation.ownerUserId ? getAssignmentUserLabel(getAssignmentUserById(conversation.ownerUserId) || { userId: conversation.ownerUserId, displayName: conversation.ownerUserId }) : "Unassigned")}
       ${renderInboxFact("Reply Window", reply.label)}
@@ -2531,7 +2579,7 @@ function renderInboxModal(conversation) {
 
 function renderInboxCustomerDetailsModal(conversation) {
   const link = inboxDetail?.inquiryLink || (conversation.inquiryId ? { inquiryId: conversation.inquiryId, convertedAt: conversation.convertedAt } : null);
-  const profileName = conversation.customerLabel === "Facebook customer" ? "Not captured" : "Available";
+  const profileName = isInboxPlaceholderCustomerName(conversation) ? "Not captured" : "Available";
   const profilePhoto = conversation.profilePictureUrl ? "Available" : "Not captured";
   const saving = inboxContactSaveState === "saving";
   return `<section class="inbox-modal-scrim" role="dialog" aria-modal="true" aria-labelledby="inbox-customer-details-title">
@@ -2539,7 +2587,7 @@ function renderInboxCustomerDetailsModal(conversation) {
       <header class="inbox-modal-header">
         <div class="inbox-modal-topline"><span>DETAILS</span><button data-inbox-close-modal type="button" aria-label="Close customer details">×</button></div>
         <h2 id="inbox-customer-details-title">Customer Details</h2>
-        <strong>${escapeHtml(conversation.customerLabel)} • Facebook Messenger</strong>
+        <strong>${escapeHtml(conversation.customerLabel)} • ${escapeHtml(conversation.channelFullLabel || "Facebook Messenger")}</strong>
         <p>Edit only missing customer information</p>
       </header>
       <div class="inbox-modal-body">
@@ -2552,7 +2600,7 @@ function renderInboxCustomerDetailsModal(conversation) {
             ${renderInboxModalField("Company", "companyName", inboxContactDraft.companyName, { disabled: saving })}
           </div>
           <label class="inbox-modal-textarea"><span>Customer Notes</span><textarea disabled rows="3">Optional internal context about this customer. Keep Messenger conversation history separate.</textarea></label>
-          <div class="inbox-profile-summary"><span>Facebook Profile</span><strong>Profile name ${profileName} • Profile photo ${profilePhoto} • Channel Facebook Messenger</strong></div>
+          <div class="inbox-profile-summary"><span>${escapeHtml(conversation.channelLabel || "Channel")} Profile</span><strong>Profile name ${profileName} • Profile photo ${profilePhoto} • Channel ${escapeHtml(conversation.channelFullLabel || "Facebook Messenger")}</strong></div>
           <div class="inbox-profile-summary linked"><span>Linked Records</span><strong>Inquiry ${link?.inquiryId || "not linked"} • Order ${conversation.orderId || "not linked"}</strong></div>
           ${inboxContactSaveError ? `<p class="inbox-modal-error" role="alert">${escapeHtml(inboxContactSaveError)}</p>` : ""}
         </section>
@@ -2572,7 +2620,7 @@ function renderInboxNotesModal(conversation) {
       <header class="inbox-modal-header">
         <div class="inbox-modal-topline"><span>NOTES</span><button data-inbox-close-modal type="button" aria-label="Close notes">×</button></div>
         <h2 id="inbox-notes-title">Internal Notes</h2>
-        <strong>${escapeHtml(conversation.customerLabel)} • Facebook Messenger</strong>
+        <strong>${escapeHtml(conversation.customerLabel)} • ${escapeHtml(conversation.channelFullLabel || "Facebook Messenger")}</strong>
         <p>Keep internal context separate from Messenger messages.</p>
       </header>
       <div class="inbox-modal-body">
@@ -2594,7 +2642,7 @@ function renderInboxFollowUpModal(conversation) {
       <header class="inbox-modal-header">
         <div class="inbox-modal-topline"><span>FOLLOW-UP</span><button data-inbox-close-modal type="button" aria-label="Close follow-up">×</button></div>
         <h2 id="inbox-follow-up-title">Snooze / Follow-up</h2>
-        <strong>${escapeHtml(conversation.customerLabel)} • Facebook Messenger</strong>
+        <strong>${escapeHtml(conversation.customerLabel)} • ${escapeHtml(conversation.channelFullLabel || "Facebook Messenger")}</strong>
         <p>Schedule a follow-up without changing Messenger history.</p>
       </header>
       <div class="inbox-modal-body">
@@ -2630,7 +2678,8 @@ function getInboxLatestNoteSummary(notes) {
 }
 
 function renderInboxFacebookNameRefresh(conversation) {
-  if (!conversation || conversation.customerLabel !== "Facebook customer" || !canViewInboxRoute()) return "";
+  const channel = conversation?.channel || "facebook_messenger";
+  if (!conversation || channel !== "facebook_messenger" || conversation.customerLabel !== "Facebook customer" || !canViewInboxRoute()) return "";
   const loading = inboxProfileRefreshState === "loading";
   const notice = inboxProfileRefreshState === "blocked" && inboxProfileRefreshMessage
     ? `<small class="inbox-profile-refresh-message" role="status">${escapeHtml(inboxProfileRefreshMessage)}</small>`
@@ -2689,6 +2738,17 @@ function formatInboxState(state) {
   return String(state || "needs_reply").replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
 }
 
+function getInboxConversationSourceLabel(conversation) {
+  const channel = conversation?.channelLabel || "Channel";
+  const account = conversation?.accountLabel || conversation?.pageName || "Account";
+  return `${channel} · ${account}`;
+}
+
+function isInboxPlaceholderCustomerName(conversation) {
+  const label = String(conversation?.customerLabel || "").trim();
+  return !label || label === "Customer" || label === `${conversation?.channelLabel || ""} customer`;
+}
+
 function formatInboxRelativeTime(value) {
   const date = new Date(value || "");
   const time = date.getTime();
@@ -2705,7 +2765,7 @@ function formatInboxRelativeTime(value) {
 }
 
 function getInboxInitial(label) {
-  return String(label || "Facebook customer").trim().charAt(0).toUpperCase() || "F";
+  return String(label || "Customer").trim().charAt(0).toUpperCase() || "C";
 }
 
 function getInboxMessageFallback(messageType) {
@@ -11899,6 +11959,21 @@ function bindEvents() {
   document.querySelector("[data-inbox-save-customer-details]")?.addEventListener("click", () => saveInboxCustomerDetails());
   document.querySelector("[data-inbox-search]")?.addEventListener("input", (event) => {
     inboxSearchQuery = event.target.value;
+    render();
+  });
+  document.querySelector("[data-inbox-channel-filter]")?.addEventListener("change", (event) => {
+    inboxChannelFilter = event.target.value || "all";
+    inboxAccountFilter = "all";
+    inboxSelectedConversationId = "";
+    resetInboxSelectionDetailState("empty");
+    if (getRoutePath() === "/inbox" && window.location.search) window.history.replaceState({}, "", "/inbox");
+    render();
+  });
+  document.querySelector("[data-inbox-account-filter]")?.addEventListener("change", (event) => {
+    inboxAccountFilter = event.target.value || "all";
+    inboxSelectedConversationId = "";
+    resetInboxSelectionDetailState("empty");
+    if (getRoutePath() === "/inbox" && window.location.search) window.history.replaceState({}, "", "/inbox");
     render();
   });
   document.querySelector("[data-inbox-reply-draft]")?.addEventListener("input", (event) => {

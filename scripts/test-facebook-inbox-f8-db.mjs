@@ -41,8 +41,8 @@ assert.equal(inboxActions.includes("external_user_id") && inboxActions.includes(
 
 assert.ok(adminInbox.includes("refreshInboxFacebookProfile"), "Inbox service must export authenticated profile refresh wrapper");
 assert.ok(adminInbox.includes('postInboxAction(authSession, conversationId, "refresh-profile", { force })'), "Inbox service wrapper must use existing postInboxAction pattern");
-assert.ok(adminInbox.includes("formatInboxCustomerName({ identity, contact })"), "Inbox read model must keep using canonical identity/contact names");
-assert.ok(adminInbox.includes("safeText(contact?.display_name) || safeText(identity?.display_name) || \"Facebook customer\""), "Inbox fallback priority must remain contact > identity > fallback");
+assert.ok(adminInbox.includes("formatInboxCustomerName({ identity, contact, channel })"), "Inbox read model must keep using canonical identity/contact names with channel context");
+assert.ok(adminInbox.includes("safeText(contact?.display_name) || safeText(identity?.display_name)") && adminInbox.includes("`${channelLabel} customer`"), "Inbox fallback priority must remain contact > identity > channel-aware fallback");
 assert.ok(f5Migration.includes("coalesce(nullif(btrim(contact_row.display_name), ''), nullif(btrim(identity_row.display_name), ''), 'Facebook customer')"), "F5 conversion must naturally use enriched contact/identity names");
 
 assert.equal(profile.includes("META_APP_SECRET"), false, "profile helper must not touch the webhook app secret");

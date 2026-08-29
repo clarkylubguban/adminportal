@@ -138,6 +138,7 @@ async function verifyOutboundEchoDeliveryReadAndStaffReplyDoNotExtendWindow() {
 }
 
 async function verifyReserveGuardAllowsBeforeExpiry() {
+  await execSql(`update public.inbox_conversations set reply_window_expires_at = now() + interval '1 hour' where id = '${conversation}'`);
   const result = await rpc("reserve_inbox_reply", {
     p_conversation_id: conversation,
     p_actor_user_id: admin,

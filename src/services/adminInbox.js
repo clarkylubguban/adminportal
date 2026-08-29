@@ -18,6 +18,16 @@ export const INBOX_VISIBLE_WORK_VIEWS = [
   { key: "assigned_to_me", label: "Mine" },
 ];
 
+export const INBOX_CHANNEL_FILTERS = [
+  { key: "all", label: "All Channels", fullLabel: "All Channels" },
+  { key: "facebook_messenger", label: "Facebook", fullLabel: "Facebook Messenger" },
+  { key: "instagram_dm", label: "Instagram", fullLabel: "Instagram DM" },
+];
+
+const INBOX_CHANNEL_PRESENTATION = new Map(INBOX_CHANNEL_FILTERS
+  .filter((channel) => channel.key !== "all")
+  .map((channel) => [channel.key, channel]));
+
 const CONVERSATION_SELECT = [
   "id",
   "channel_identity_id",
@@ -264,6 +274,9 @@ export async function updateInboxContact(authSession, conversationId, contact = 
 }
 
 export function normalizeInboxConversationRow({ conversation, identity = null, contact = null, page = null, inquiryLink = null, latestMessage = null }) {
+  const channel = identity?.channel || "facebook_messenger";
+  const channelPresentation = getInboxChannelPresentation(channel);
+  const account = getInboxAccountPresentation({ identity, page });
   return {
     id: conversation.id,
     state: conversation.state || "needs_reply",
@@ -284,7 +297,11 @@ export function normalizeInboxConversationRow({ conversation, identity = null, c
     adId: conversation.ad_id || "",
     adName: conversation.ad_name || "",
     externalThreadId: conversation.external_thread_id || "",
-    channel: identity?.channel || "facebook_messenger",
+    channel,
+    channelLabel: channelPresentation.label,
+    channelFullLabel: channelPresentation.fullLabel,
+    accountId: account.id,
+    accountLabel: account.label,
     externalUserId: identity?.external_user_id || "",
     externalUsername: identity?.external_username || "",
     identityDisplayName: identity?.display_name || "",
@@ -297,7 +314,7 @@ export function normalizeInboxConversationRow({ conversation, identity = null, c
     pageId: page?.page_id || "",
     inquiryId: inquiryLink?.inquiry_id || "",
     convertedAt: inquiryLink?.converted_at || "",
-    customerLabel: formatInboxCustomerName({ identity, contact }),
+    customerLabel: formatInboxCustomerName({ identity, contact, channel }),
     customerSecondary: getSafeIdentitySecondary(identity),
     lastMessageSnippet: formatInboxLastMessageSnippet(latestMessage, conversation),
   };
@@ -349,13 +366,57 @@ export function normalizeInboxConversationDetail({ messages = [], attachments = 
   };
 }
 
-export function filterInboxConversations(conversations, viewKey, currentUserId = "") {
+export function filterInboxConversations(conversations, viewKey, currentUserId = "", filters = {}) {
   const view = INBOX_WORK_VIEWS.find((item) => item.key === viewKey) || INBOX_WORK_VIEWS[0];
-  if (view.key === "all") return conversations;
+  let rows = conversations;
   if (view.key === "assigned_to_me") {
-    return conversations.filter((conversation) => conversation.ownerUserId && conversation.ownerUserId === currentUserId);
+    rows = rows.filter((conversation) => conversation.ownerUserId && conversation.ownerUserId === currentUserId);
+  } else if (view.key !== "all") {
+    rows = rows.filter((conversation) => conversation.state === view.state);
   }
-  return conversations.filter((conversation) => conversation.state === view.state);
+  const channelFilter = safeText(filters.channel || "all");
+  if (channelFilter && channelFilter !== "all") {
+    rows = rows.filter((conversation) => conversation.channel === channelFilter);
+  }
+  const accountFilter = safeText(filters.account || "all");
+  if (accountFilter && accountFilter !== "all") {
+    rows = rows.filter((conversation) => getInboxConversationAccountKey(conversation) === accountFilter);
+  }
+  return rows;
+}
+
+export function getInboxChannelPresentation(channel) {
+  const key = safeText(channel) || "facebook_messenger";
+  return INBOX_CHANNEL_PRESENTATION.get(key) || {
+    key,
+    label: key ? key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Channel",
+    fullLabel: key ? key.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()) : "Unknown Channel",
+  };
+}
+
+export function getInboxAccountPresentation({ identity = null, page = null } = {}) {
+  const id = safeText(page?.page_id) || safeText(page?.id) || safeText(identity?.page_connection_id);
+  const label = safeText(page?.page_name) || safeText(page?.display_name) || safeText(page?.name) || (id ? "Connected Account" : "Account");
+  return { id, label };
+}
+
+export function getInboxConversationAccountKey(conversation = {}) {
+  return safeText(conversation.accountId) || safeText(conversation.pageId) || safeText(conversation.accountLabel) || "unassigned";
+}
+
+export function getInboxAccountFilterOptions(conversations = []) {
+  const seen = new Set();
+  return conversations
+    .map((conversation) => ({
+      key: getInboxConversationAccountKey(conversation),
+      label: safeText(conversation.accountLabel) || safeText(conversation.pageName) || "Account",
+    }))
+    .filter((option) => {
+      if (!option.key || seen.has(option.key)) return false;
+      seen.add(option.key);
+      return true;
+    })
+    .sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key));
 }
 
 export function sortInboxConversations(conversations) {
@@ -366,8 +427,9 @@ export function sortInboxConversations(conversations) {
   });
 }
 
-export function formatInboxCustomerName({ identity = null, contact = null } = {}) {
-  return safeText(contact?.display_name) || safeText(identity?.display_name) || "Facebook customer";
+export function formatInboxCustomerName({ identity = null, contact = null, channel = identity?.channel } = {}) {
+  const channelLabel = getInboxChannelPresentation(channel).label;
+  return safeText(contact?.display_name) || safeText(identity?.display_name) || (channelLabel ? `${channelLabel} customer` : "Customer");
 }
 
 export function getSafeIdentitySecondary(identity = null) {

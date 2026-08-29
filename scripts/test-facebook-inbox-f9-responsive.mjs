@@ -12,7 +12,7 @@ assert.ok(main.includes("inboxMobileThreadOpen = false"), "Back/view changes mus
 assert.ok(main.includes("data-inbox-open-modal=\"customer_details\""), "Tablet/mobile thread must be able to open Details modal without the right panel");
 assert.equal(extractFunctionSource("renderInboxDetailPanel").includes("VIEW CUSTOMER DETAILS"), false, "Responsive details access must use the thread header only");
 const pageSource = extractFunctionSource("renderInboxPage");
-assert.equal(pageSource.includes("<h1>Inbox</h1>"), false, "Responsive Inbox must not reserve space for the removed title");
+assert.equal(pageSource.includes("FACEBOOK INBOX"), false, "Responsive Inbox must not reserve space for the removed oversized title");
 assert.equal(pageSource.includes("data-inbox-refresh"), false, "Responsive Inbox must not reserve space for the removed Refresh button");
 
 const desktop = block("@media (min-width: 1200px) and (max-width: 1439px)");
