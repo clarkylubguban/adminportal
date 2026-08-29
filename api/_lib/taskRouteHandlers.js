@@ -1,4 +1,5 @@
 import { runTaskApi, TaskApiError } from "./taskApi.js";
+import { requireEffectiveModuleAccess } from "./effectiveAccess.js";
 import {
   parseApproveBody,
   parseApproveAndAssignBody,
@@ -24,12 +25,14 @@ export function handleTaskCollection(request, response, dependencies = {}) {
   return runTaskApi(request, response, {
     methods: ["GET", "POST"],
     handler: async (context) => {
-      requireManager(context.actor);
       if (request.method === "GET") {
+        const supabase = dependencies.effectiveAccessClient || context.authClient || context.service.client;
+        await requireEffectiveModuleAccess(supabase, context.actor, "workboard");
         const { filters, pagination } = parseTaskListQuery(request);
-        return context.service.listTasks(filters, pagination);
+        return context.service.listTasks(filters, pagination, { assignedToCaller: context.actor.role === "staff" });
       }
 
+      requireManager(context.actor);
       const body = parseCreateTask(await context.readBody(request));
       const idempotencyKey = requireIdempotencyKey(request);
       const result = await context.service.execute("task_create", {
@@ -69,7 +72,11 @@ export function handleMyTasks(request, response, dependencies = {}) {
 export function handleTaskCalendar(request, response, dependencies = {}) {
   return runTaskApi(request, response, {
     methods: ["GET"],
-    handler: async ({ service }) => service.listCalendarEvents(parseTaskCalendarQuery(request)),
+    handler: async ({ actor, authClient, service }) => {
+      const supabase = dependencies.effectiveAccessClient || authClient || service.client;
+      await requireEffectiveModuleAccess(supabase, actor, "calendar");
+      return service.listCalendarEvents(parseTaskCalendarQuery(request));
+    },
   }, dependencies);
 }
 

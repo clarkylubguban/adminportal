@@ -44,6 +44,7 @@ export function createTaskService(client, actor, options = {}) {
   const profileClient = options.profileClient || client;
 
   return {
+    client,
     actor,
     async isFeatureEnabled() {
       const { data, error } = await client.rpc("task_domain_enabled");

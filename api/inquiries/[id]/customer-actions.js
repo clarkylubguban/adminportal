@@ -1,3 +1,4 @@
+import { getEffectiveModuleAccess, requireEffectiveModuleAccess } from "../../_lib/effectiveAccess.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
 const ARTWORK_BUCKET = "inquiry-artworks";
@@ -7,8 +8,17 @@ const PROOF_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
 const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
 const READ_ROLES = new Set(["owner", "admin", "staff"]);
 const ARTWORK_APPROVAL_ROLES = new Set(["owner", "admin"]);
+const DESIGN_ARTWORK_ASSETS = new Set(["customer-artwork", "artwork-proof"]);
+const DESIGN_ARTWORK_ACTIONS = new Set([
+  "prepare_artwork_proof_upload",
+  "finalize_artwork_proof_upload",
+  "mark_artwork_under_review",
+  "mark_artwork_usable",
+  "publish_artwork",
+]);
 const CUSTOMER_ACTION_SELECT = [
   "id",
+  "assigned_user_id",
   "contact",
   "status",
   "production_stage",
@@ -77,9 +87,11 @@ export default async function handler(request, response) {
       });
       return;
     }
+    let access = null;
 
     if (request.method === "GET") {
-      await handleAssetRequest(request, response, supabase, inquiryReference);
+      access = await resolveCustomerActionAccess(supabase, adminUser, getRequestedAsset(request));
+      await handleAssetRequest(request, response, supabase, inquiryReference, access, adminUser);
       return;
     }
 
@@ -95,6 +107,7 @@ export default async function handler(request, response) {
 
     const body = await readJsonBody(request);
     const action = cleanText(body.action, 80);
+    access = await resolveCustomerActionAccess(supabase, adminUser, action);
     const { data: inquiry, error: lookupError } = await supabase
       .from("ops_inquiries")
       .select(CUSTOMER_ACTION_SELECT)
@@ -104,6 +117,12 @@ export default async function handler(request, response) {
     if (lookupError) throw lookupError;
     if (!inquiry) {
       sendJson(response, 404, { ok: false, error: "inquiry not found" });
+      return;
+    }
+
+    const boundary = enforceTemporaryDesignArtworkBoundary(access, adminUser, action, inquiry);
+    if (!boundary.ok) {
+      sendJson(response, boundary.status, { ok: false, error: boundary.error });
       return;
     }
 
@@ -166,6 +185,10 @@ export default async function handler(request, response) {
       inquiry: getSafeInquiry(updated),
     });
   } catch (error) {
+    if (error?.status) {
+      sendJson(response, error.status, { ok: false, error: { code: error.code || "FORBIDDEN", message: error.message } });
+      return;
+    }
     console.error("Admin customer action failed.", {
       message: error?.message,
       code: error?.code,
@@ -210,6 +233,38 @@ function normalizeAdminUser(adminUser) {
   if (!adminUser || adminUser.is_active === false) return null;
   const role = String(adminUser.role || "").trim().toLowerCase();
   return { ...adminUser, role };
+}
+
+async function resolveCustomerActionAccess(supabase, adminUser, actionOrAsset) {
+  const inquiriesAccess = await getEffectiveModuleAccess(supabase, adminUser, "inquiries");
+  if (inquiriesAccess.allowed) return inquiriesAccess;
+
+  if (DESIGN_ARTWORK_ACTIONS.has(actionOrAsset) || DESIGN_ARTWORK_ASSETS.has(actionOrAsset)) {
+    const designAccess = await getEffectiveModuleAccess(supabase, adminUser, "design_artwork");
+    if (designAccess.allowed) return designAccess;
+  }
+
+  return requireEffectiveModuleAccess(supabase, adminUser, "inquiries");
+}
+
+function enforceTemporaryDesignArtworkBoundary(access, adminUser, actionOrAsset, inquiry) {
+  if (access?.module !== "design_artwork" || access?.source !== "temporary" || adminUser?.role !== "staff") {
+    return { ok: true };
+  }
+
+  if (!DESIGN_ARTWORK_ACTIONS.has(actionOrAsset) && !DESIGN_ARTWORK_ASSETS.has(actionOrAsset)) {
+    return { ok: false, status: 403, error: "Design & Artwork action is restricted." };
+  }
+
+  if (String(inquiry?.assigned_user_id || "").toLowerCase() !== String(adminUser?.user_id || "").toLowerCase()) {
+    return { ok: false, status: 404, error: "inquiry not found" };
+  }
+
+  if (String(inquiry?.artwork_status || "").toLowerCase() === "approved" || inquiry?.artwork_approved_at) {
+    return { ok: false, status: 403, error: "Approved artwork is restricted." };
+  }
+
+  return { ok: true };
 }
 
 function isMissingAdminProfileColumn(error) {
@@ -429,18 +484,23 @@ function isPastDate(dateText) {
   const date = new Date(`${dateText}T00:00:00`);
   return !Number.isFinite(date.getTime()) || date < today;
 }
-async function handleAssetRequest(request, response, supabase, inquiryReference) {
-  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
-  const asset = String(url.searchParams.get("asset") || "");
+async function handleAssetRequest(request, response, supabase, inquiryReference, access, adminUser) {
+  const asset = getRequestedAsset(request);
   const { data: inquiry, error } = await supabase
     .from("ops_inquiries")
-    .select("id,artwork_status,artwork_url,payment_proof_path")
+    .select("id,assigned_user_id,artwork_status,artwork_url,payment_proof_path")
     .eq("id", inquiryReference)
     .maybeSingle();
 
   if (error) throw error;
   if (!inquiry) {
     sendJson(response, 404, { ok: false, error: "inquiry not found" });
+    return;
+  }
+
+  const boundary = enforceTemporaryDesignArtworkBoundary(access, adminUser, asset, inquiry);
+  if (!boundary.ok) {
+    sendJson(response, boundary.status, { ok: false, error: boundary.error });
     return;
   }
 
@@ -475,6 +535,11 @@ async function handleAssetRequest(request, response, supabase, inquiryReference)
 
   if (signedError || !signed?.signedUrl) throw signedError || new Error("Signed URL missing.");
   sendJson(response, 200, { ok: true, signedUrl: signed.signedUrl, uploadedAt });
+}
+
+function getRequestedAsset(request) {
+  const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
+  return String(url.searchParams.get("asset") || "");
 }
 
 async function findCustomerArtworkPath(supabase, inquiry) {

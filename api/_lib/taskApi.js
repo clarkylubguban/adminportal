@@ -37,6 +37,8 @@ export async function runTaskApi(request, response, config, dependencies = {}) {
     const result = await config.handler({
       request,
       actor: context.actor,
+      authClient: context.authClient,
+      callerClient: context.callerClient,
       service,
       readBody: dependencies.readBody || readTaskJsonBody,
     });
@@ -58,7 +60,7 @@ export async function authenticateTaskRequest(request, dependencies = {}) {
 
   const { data: account, error: accountError } = await authClient
     .from("admin_users")
-    .select("user_id,role,is_active")
+    .select("id,user_id,role,is_active")
     .eq("user_id", userData.user.id)
     .maybeSingle();
   if (accountError) throw accountError;
@@ -68,7 +70,7 @@ export async function authenticateTaskRequest(request, dependencies = {}) {
   const role = String(account.role || "").trim().toLowerCase();
   if (!ACTIVE_ROLES.has(role)) throw new TaskApiError("FORBIDDEN", 403, "Task access is not permitted.");
   return {
-    actor: { userId: account.user_id, role, isActive: true },
+    actor: { id: account.id, userId: account.user_id, role, isActive: true },
     authClient,
     callerClient: dependencies.callerClient || createTaskCallerClient(token),
   };

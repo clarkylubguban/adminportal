@@ -1,4 +1,4 @@
-import { createServerSupabaseClient } from "../_lib/supabaseServer.js";
+import { createServerSupabaseClient } from "./supabaseServer.js";
 import {
   allowedUpdateRole,
   canManageTarget,
@@ -12,7 +12,7 @@ import {
   readJsonBody,
   sanitizeAdminUser,
   sendJson,
-} from "../_lib/adminAccess.js";
+} from "./adminAccess.js";
 
 export default async function handler(request, response) {
   if (request.method !== "PATCH") return sendJson(response, 405, { ok: false, error: "method not allowed" });
