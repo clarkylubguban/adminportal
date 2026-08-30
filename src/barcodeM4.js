@@ -264,7 +264,7 @@ async function generateMissingBarcodes() {
   openBarcodeManager();
 }
 
-function printRows(variantIds) {
+async function printRows(variantIds) {
   const qty = Math.max(1, Number.parseInt(state.labelQty || "1", 10) || 1);
   const rows = variantIds.map((id) => state.rows.find((row) => row.variantId === id)).filter((row) => row?.barcode?.code);
   if (!rows.length) {
@@ -295,8 +295,52 @@ function printRows(variantIds) {
     `).join("")}</body></html>
   `);
   printWindow.document.close();
+  const ready = await waitForPrintWindowReady(printWindow, labels.length);
+  if (!ready) {
+    state.feedback = "Print preview could not finish rendering. Please try again.";
+    if (!printWindow.closed) printWindow.close();
+    openBarcodeManager();
+    return;
+  }
   printWindow.focus();
   printWindow.print();
+}
+
+async function waitForPrintWindowReady(printWindow, expectedLabels) {
+  const deadline = Date.now() + 3000;
+
+  while (Date.now() < deadline) {
+    if (printWindow.closed) return false;
+
+    const doc = printWindow.document;
+    const labels = [...doc.querySelectorAll(".label")];
+    const svgs = [...doc.querySelectorAll(".label svg")];
+    const rendered =
+      doc.readyState === "complete" &&
+      labels.length === expectedLabels &&
+      svgs.length === expectedLabels &&
+      svgs.every((svg) => {
+        const rect = svg.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+      });
+
+    if (rendered) {
+      await nextPrintFrame(printWindow);
+      await nextPrintFrame(printWindow);
+      return true;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+
+  return false;
+}
+
+function nextPrintFrame(printWindow) {
+  return new Promise((resolve) => {
+    const raf = printWindow.requestAnimationFrame || ((callback) => printWindow.setTimeout(callback, 16));
+    raf(() => resolve());
+  });
 }
 
 function renderBarcodeSvg(barcode) {
