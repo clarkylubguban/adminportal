@@ -28,7 +28,7 @@ try {
 
   console.log(`PASS Phase 13-R5 native Order payment guard verified in disposable Postgres container ${CONTAINER}`);
 } finally {
-  if (started) docker(["rm", "-f", CONTAINER], { allowFailure: true });
+  if (started) docker(["rm", "-f", CONTAINER], { allowFailure: true, timeout: 30_000 });
 }
 
 async function verifyNativePaymentWithoutProofOrArtwork() {
@@ -384,11 +384,12 @@ function psql(args, input = null) {
 }
 
 function waitForPostgres() {
-  const startedAt = Date.now();
-  while (Date.now() - startedAt < 30000) {
-    const result = docker(["exec", CONTAINER, "pg_isready", "-U", "postgres"], { allowFailure: true });
-    if (result.status === 0) return;
-    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
+  const deadline = Date.now() + 90_000;
+  while (Date.now() < deadline) {
+    const ready = docker(["exec", CONTAINER, "pg_isready", "-U", "postgres", "-d", DB], { allowFailure: true });
+    const query = docker(["exec", CONTAINER, "psql", "-U", "postgres", "-d", DB, "-X", "-t", "-A", "-c", "select 1"], { allowFailure: true });
+    if (ready.status === 0 && query.status === 0 && query.stdout.trim() === "1") return;
+    Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 1000);
   }
   throw new Error("Postgres container did not become ready.");
 }
@@ -398,6 +399,7 @@ function docker(args, options = {}) {
     encoding: "utf8",
     input: options.input ?? undefined,
     maxBuffer: 1024 * 1024 * 20,
+    timeout: options.timeout || 0,
   });
   if (result.status !== 0 && !options.allowFailure) {
     throw new Error(`docker ${args.join(" ")} failed\n${result.stderr || result.stdout}`);
@@ -407,7 +409,8 @@ function docker(args, options = {}) {
 
 function harnessSql() {
   return `
-    create extension if not exists pgcrypto;
+    create schema if not exists extensions;
+    create extension if not exists pgcrypto with schema extensions;
     do $$
     begin
       if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;

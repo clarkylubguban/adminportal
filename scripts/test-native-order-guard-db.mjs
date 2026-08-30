@@ -27,7 +27,7 @@ try {
 
   console.log(`PASS Native Order guard/Odoo decoupling verified in disposable Postgres container ${CONTAINER}`);
 } finally {
-  if (started) docker(["rm", "-f", CONTAINER], { allowFailure: true });
+  if (started) docker(["rm", "-f", CONTAINER], { allowFailure: true, timeout: 30_000 });
 }
 
 async function applyFullMigrationChain() {
@@ -244,6 +244,7 @@ function docker(args, options = {}) {
     encoding: "utf8",
     input: options.input,
     maxBuffer: 10 * 1024 * 1024,
+    timeout: options.timeout || 0,
   });
   if (result.status !== 0 && !options.allowFailure) throw new Error(`${result.stderr || result.stdout}`.trim());
   return result;
@@ -251,7 +252,8 @@ function docker(args, options = {}) {
 
 function supabaseHarnessSql() {
   return `
-    create extension if not exists pgcrypto;
+    create schema if not exists extensions;
+    create extension if not exists pgcrypto with schema extensions;
     do $$
     begin
       if not exists (select 1 from pg_roles where rolname = 'anon') then create role anon; end if;

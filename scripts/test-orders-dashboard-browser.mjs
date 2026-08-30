@@ -23,9 +23,10 @@ const browser = spawn(edgePath, [
   "about:blank",
 ], { stdio: "ignore" });
 
+let cdp;
 try {
   const wsUrl = await waitForBrowser(remotePort);
-  const cdp = await createCdp(wsUrl);
+  cdp = await createCdp(wsUrl);
   const page = await newPage(remotePort);
   await cdp.send("Target.attachToTarget", { targetId: page.id, flatten: true }).then((result) => cdp.sessionId = result.sessionId);
   await cdp.send("Runtime.enable");
@@ -136,6 +137,7 @@ try {
 
   console.log("PASS Orders dashboard browser layout, drawer, identity, and compatibility route checks");
 } finally {
+  cdp?.close();
   browser.kill();
   await new Promise((resolve) => server.close(resolve));
 }
@@ -244,6 +246,11 @@ async function createCdp(wsUrl) {
       if (this.sessionId && !method.startsWith("Target.")) message.sessionId = this.sessionId;
       socket.send(JSON.stringify(message));
       return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    },
+    close() {
+      for (const { reject } of pending.values()) reject(new Error("CDP connection closed."));
+      pending.clear();
+      socket.close();
     },
   };
 }

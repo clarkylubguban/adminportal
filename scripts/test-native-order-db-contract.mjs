@@ -27,7 +27,7 @@ try {
 
   console.log(`PASS Native Order database contract verified in disposable Postgres container ${CONTAINER}`);
 } finally {
-  if (started) docker(["rm", "-f", CONTAINER], { allowFailure: true });
+  if (started) docker(["rm", "-f", CONTAINER], { allowFailure: true, timeout: 30_000 });
 }
 
 async function verifyTableContract() {
@@ -367,6 +367,7 @@ function docker(args, options = {}) {
     encoding: "utf8",
     input: options.input,
     maxBuffer: 10 * 1024 * 1024,
+    timeout: options.timeout || 0,
   });
   if (result.status !== 0 && !options.allowFailure) {
     throw new Error(`${result.stderr || result.stdout}`.trim());

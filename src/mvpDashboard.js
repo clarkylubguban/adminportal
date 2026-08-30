@@ -994,6 +994,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderProductionDashboardLabel(item) {
     const production = productionDisplay(item);
     if (productionBlocker(item)) return "BLOCKED";
+    if (production.key === "queued" && production.label === "QUEUED FOR PRODUCTION") return production.label;
     if (productionStage(item) === "queued") return readyForProduction(item) ? "READY" : "NOT READY";
     if (["printing", "embroidery", "screen_printing"].includes(production.key)) return "IN PRODUCTION";
     return production.label;
@@ -1001,6 +1002,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function orderProductionDashboardTone(item, production) {
     if (productionBlocker(item)) return "overdue";
+    if (production?.key === "queued" && production.label === "QUEUED FOR PRODUCTION") return production.tone;
     if (productionStage(item) === "queued") return readyForProduction(item) ? "ready" : "queued";
     return production.tone;
   }
@@ -1388,8 +1390,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return detailSection("Payment", [["Payment State", payment.label], ["Payment Method", paymentMethodLabel(item.paymentMethod)], ["Payment Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Quote Total", money(total)], ["Amount Due", money(dueAmount)], ["Amount Verified", money(paid)], ["Balance", money(balance)], ["Verified At", dateTime(item.paymentVerifiedAt || item.paymentConfirmedAt)]]);
   }
   function productionDisplay(item) {
+    const rawStage = productionStage(item);
     const stage = displayProductionStage(item);
     const block = blockedReason(item);
+    if (FIRST_PRODUCTION_STATIONS.includes(rawStage) && !productionStarted(item)) return { key: "queued", label: "QUEUED FOR PRODUCTION", tone: "queued" };
     if (stage === "queued") {
       const gate = productionGate(item);
       if (gate.length) return { key: "blocked", label: "BLOCKED", tone: "overdue", detail: gate.join(", ") };
@@ -1679,7 +1683,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function productionDrawerTabs() {
-    return ["overview", "workflow", "assignment", "fulfillment", "history"];
+    return ["overview", "workflow", "assignment", "history"];
   }
 
   function productionDrawerTabBar(tabs, activeTab) {

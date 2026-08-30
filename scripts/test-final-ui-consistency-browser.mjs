@@ -31,9 +31,10 @@ const browser = spawn(edgePath, [
   "about:blank",
 ], { stdio: "ignore" });
 
+let cdp;
 try {
   const wsUrl = await waitForBrowser(remotePort);
-  const cdp = await createCdp(wsUrl);
+  cdp = await createCdp(wsUrl);
   const page = await newPage(remotePort);
   await cdp.send("Target.attachToTarget", { targetId: page.id, flatten: true }).then((result) => cdp.sessionId = result.sessionId);
   await cdp.send("Runtime.enable");
@@ -43,7 +44,7 @@ try {
     await setViewport(cdp, viewport);
     await verifyDashboard(cdp, viewport, "/inquiries", "Inquiry", "CODE|CUSTOMER|ITEM|REQUEST|SERVICE|QTY|QUOTE STATUS|FOLLOW-UP|OWNER|ACTION");
     await verifyDashboard(cdp, viewport, "/orders", "Orders", "ORDER|CUSTOMER|SUMMARY|AMOUNT|PAYMENT|PRODUCTION|DUE|OWNER|NEXT ACTION|ACTION");
-    await verifyDashboard(cdp, viewport, "/production", "Production", "JOB|CUSTOMER|SUMMARY|METHOD|MATERIALS|ARTWORK|DUE|STAFF|STAGE|ACTION");
+    await verifyDashboard(cdp, viewport, "/production", "Production", "JOB|CUSTOMER|SUMMARY|METHOD|DUE|STAFF|STAGE|ACTION");
     await verifyDrawers(cdp, viewport);
   }
 
@@ -54,6 +55,7 @@ try {
 
   console.log("PASS Final UI consistency browser matrix for Inquiry, Orders, Production, drawers, identity, ownership, and legacy routing");
 } finally {
+  cdp?.close();
   browser.kill();
   await new Promise((resolve) => server.close(resolve));
 }
@@ -120,8 +122,9 @@ async function verifyOrderDrawer(cdp, viewport, order, expectedText) {
   await navigate(cdp, `http://127.0.0.1:${port}/orders?order=${encodeURIComponent(order)}`);
   await waitForText(cdp, expectedText);
   const result = await drawerSnapshot(cdp, ".mvp-drawer.order");
+  const expectedMaxWidth = viewport.width <= 768 ? viewport.width : Math.min(390, viewport.width);
   assert.equal(result.open, true, `Order drawer opens ${order} at ${viewport.name}`);
-  assert.equal(result.width <= Math.min(390, viewport.width), true, `Order drawer width is viewport-safe at ${viewport.name}`);
+  assert.equal(result.width <= expectedMaxWidth, true, `Order drawer width is viewport-safe at ${viewport.name}`);
   assert.equal(result.tabs, "Overview|Requirements|Payment|Fulfillment|History", `Order tab order at ${viewport.name}`);
   assert.equal(result.text.includes(order), true, `Order drawer uses order reference ${order} at ${viewport.name}`);
   if (expectedText === "AWAITING PAYMENT") {
@@ -137,8 +140,9 @@ async function verifyProductionDrawer(cdp, viewport, order, expectedText, expect
   await navigate(cdp, `http://127.0.0.1:${port}/production?order=${encodeURIComponent(order)}`);
   await waitForText(cdp, expectedText);
   const result = await drawerSnapshot(cdp, ".mvp-drawer.production");
+  const expectedMaxWidth = viewport.width <= 768 ? viewport.width : Math.min(408, viewport.width);
   assert.equal(result.open, true, `Production drawer opens ${order} at ${viewport.name}`);
-  assert.equal(result.width <= Math.min(408, viewport.width), true, `Production drawer width is viewport-safe at ${viewport.name}`);
+  assert.equal(result.width <= expectedMaxWidth, true, `Production drawer width is viewport-safe at ${viewport.name}`);
   assert.equal(result.text.includes(order), true, `Production drawer uses linked order identity ${order} at ${viewport.name}`);
   assert.equal(/Pay Online|Pay at Shop|Confirm Payment|Messenger/i.test(result.text), false, `Production drawer has no payment/Messenger action at ${viewport.name}`);
   assert.equal(/Order completed|completed and delivered|Customer picked up/i.test(result.text), false, `Production drawer does not fake order fulfillment at ${viewport.name}`);
@@ -305,6 +309,11 @@ async function createCdp(wsUrl) {
       if (this.sessionId && !method.startsWith("Target.")) message.sessionId = this.sessionId;
       socket.send(JSON.stringify(message));
       return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    },
+    close() {
+      for (const { reject } of pending.values()) reject(new Error("CDP connection closed."));
+      pending.clear();
+      socket.close();
     },
   };
 }

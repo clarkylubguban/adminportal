@@ -23,9 +23,10 @@ const browser = spawn(edgePath, [
   "about:blank",
 ], { stdio: "ignore" });
 
+let cdp;
 try {
   const wsUrl = await waitForBrowser(remotePort);
-  const cdp = await createCdp(wsUrl);
+  cdp = await createCdp(wsUrl);
   const page = await newPage(remotePort);
   await cdp.send("Target.attachToTarget", { targetId: page.id, flatten: true }).then((result) => cdp.sessionId = result.sessionId);
   await cdp.send("Runtime.enable");
@@ -211,7 +212,7 @@ try {
     assert.equal(startedDrawer.hasDrawer, true, `IN PRODUCTION drawer renders at ${viewport.width}`);
     assert.ok(startedDrawer.width <= Math.min(390, viewport.width), `drawer width is viewport-safe at ${viewport.width}`);
     assert.ok(startedDrawer.rightOverflow <= 1, `drawer avoids horizontal overflow at ${viewport.width}`);
-    assert.equal(startedDrawer.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `tab order matches owner gate at ${viewport.width}`);
+    assert.equal(startedDrawer.tabs, "Overview|Workflow|Assignment|History", `tab order matches Production drawer boundary at ${viewport.width}`);
     assert.equal(startedDrawer.hasQcAction, true, `started drawer exposes QC action at ${viewport.width}`);
     assert.equal(startedDrawer.hasPaymentAction, false, `started drawer has no payment/Messenger action at ${viewport.width}`);
     assert.equal(startedDrawer.surface, "rgb(255, 255, 255)", `started drawer surface is opaque at ${viewport.width}`);
@@ -255,7 +256,7 @@ try {
     assert.equal(qcDrawer.hasDrawer, true, `QUALITY CHECK drawer renders at ${viewport.width}`);
     assert.ok(qcDrawer.width <= Math.min(390, viewport.width), `QC drawer width is viewport-safe at ${viewport.width}`);
     assert.ok(qcDrawer.rightOverflow <= 1, `QC drawer avoids horizontal overflow at ${viewport.width}`);
-    assert.equal(qcDrawer.tabs, "Overview|Workflow|Assignment|Fulfillment|History", `QC tab order matches owner gate at ${viewport.width}`);
+    assert.equal(qcDrawer.tabs, "Overview|Workflow|Assignment|History", `QC tab order matches Production drawer boundary at ${viewport.width}`);
     assert.equal(qcDrawer.hasReadyAction, true, `QC drawer exposes Complete QC action at ${viewport.width}`);
     assert.equal(qcDrawer.hasPaymentAction, false, `QC drawer has no payment/Messenger action at ${viewport.width}`);
     assert.equal(qcDrawer.surface, "rgb(255, 255, 255)", `QC drawer surface is opaque at ${viewport.width}`);
@@ -328,6 +329,7 @@ try {
 
   console.log("PASS Production dashboard browser layout, responsive table/card behavior, filters, drawer reachability, and release boundary");
 } finally {
+  cdp?.close();
   browser.kill();
   await new Promise((resolve) => server.close(resolve));
 }
@@ -468,6 +470,11 @@ async function createCdp(wsUrl) {
       if (this.sessionId && !method.startsWith("Target.")) message.sessionId = this.sessionId;
       socket.send(JSON.stringify(message));
       return new Promise((resolve, reject) => pending.set(id, { resolve, reject }));
+    },
+    close() {
+      for (const { reject } of pending.values()) reject(new Error("CDP connection closed."));
+      pending.clear();
+      socket.close();
     },
   };
 }

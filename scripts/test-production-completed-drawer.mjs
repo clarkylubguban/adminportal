@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
-import { readFile } from "node:fs/promises";
+import { readFile, rm } from "node:fs/promises";
 import { extname, join } from "node:path";
-import { spawn } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { createMvpDashboard } from "../src/mvpDashboard.js";
 
@@ -172,6 +172,7 @@ async function verifyResponsiveCompletedDrawer() {
   const port = Number(process.env.PRODUCTION_COMPLETED_BROWSER_PORT || 58269);
   const remotePort = port + 100;
   const edgePath = process.env.EDGE_PATH || "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe";
+  const userDataDir = join(tmpdir(), `trry-completed-drawer-edge-${Date.now()}`);
   const server = createServer(async (request, response) => {
     const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
     if (url.pathname === "/qa-completed.html") {
@@ -200,15 +201,19 @@ async function verifyResponsiveCompletedDrawer() {
   const browser = spawn(edgePath, [
     "--headless=new",
     `--remote-debugging-port=${remotePort}`,
-    `--user-data-dir=${join(tmpdir(), `trry-completed-drawer-edge-${Date.now()}`)}`,
+    `--user-data-dir=${userDataDir}`,
     "--disable-gpu",
+    "--disable-background-networking",
+    "--disable-component-update",
+    "--disable-extensions",
     "--no-first-run",
     "--no-default-browser-check",
     "about:blank",
   ], { stdio: "ignore" });
+  let cdp;
   try {
     const wsUrl = await waitForBrowser(remotePort);
-    const cdp = await createCdp(wsUrl);
+    cdp = await createCdp(wsUrl);
     const page = await newPage(remotePort);
     await cdp.send("Target.attachToTarget", { targetId: page.id, flatten: true }).then((result) => cdp.sessionId = result.sessionId);
     await cdp.send("Runtime.enable");
@@ -220,7 +225,7 @@ async function verifyResponsiveCompletedDrawer() {
     ]) {
       await cdp.send("Emulation.setDeviceMetricsOverride", { ...viewport, deviceScaleFactor: 1, mobile: viewport.width < 600 });
       await navigate(cdp, `http://127.0.0.1:${port}/qa-completed.html?order=TRRY-ORD-COMPLETE11`);
-      await waitForText(cdp, "Production completed");
+      await waitForText(cdp, "Production Completed");
       await delay(300);
       const result = await evaluate(cdp, `(() => {
         const drawer = document.querySelector(".mvp-production-drawer.completed-production");
@@ -248,8 +253,10 @@ async function verifyResponsiveCompletedDrawer() {
       assert.equal(result.hasOrderCompletedCopy, false, `no fake Order completion copy at ${viewport.width}`);
     }
   } finally {
-    browser.kill();
-    server.close();
+    cdp?.close();
+    await stopBrowser(browser);
+    await new Promise((resolve) => server.close(resolve));
+    await rm(userDataDir, { recursive: true, force: true }).catch(() => {});
   }
 }
 
@@ -300,6 +307,11 @@ async function createCdp(wsUrl) {
       ws.send(JSON.stringify(message));
       return new Promise((resolve, reject) => pending.set(callId, { resolve, reject }));
     },
+    close() {
+      for (const { reject } of pending.values()) reject(new Error("CDP connection closed."));
+      pending.clear();
+      ws.close();
+    },
   };
 }
 
@@ -330,4 +342,17 @@ async function evaluate(cdp, expression) {
 
 function delay(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function stopBrowser(browser) {
+  if (!browser || browser.exitCode !== null) return;
+  if (process.platform === "win32") {
+    spawnSync("taskkill", ["/pid", String(browser.pid), "/t", "/f"], { stdio: "ignore" });
+  } else {
+    browser.kill();
+  }
+  await Promise.race([
+    new Promise((resolve) => browser.once("exit", resolve)),
+    delay(3000),
+  ]);
 }
