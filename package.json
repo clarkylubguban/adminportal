@@ -67,6 +67,7 @@
     "test:facebook-inbox-f9-modal": "node scripts/test-facebook-inbox-f9-modal.mjs",
     "test:facebook-inbox-f9-contact": "node scripts/test-facebook-inbox-f9-contact.mjs",
     "test:facebook-inbox-f9-reply-window-db": "node scripts/test-facebook-inbox-f9-reply-window-db.mjs",
+    "test:inbox-production-gate": "node scripts/test-inbox-production-gate.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
     "preview": "node scripts/local-dev.mjs",
     "test:grouped-sidebar": "node scripts/test-grouped-sidebar-nav.mjs"

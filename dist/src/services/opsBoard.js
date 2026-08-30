@@ -18,7 +18,8 @@ export const OPS_INQUIRIES_SQL = null;
 
 export async function getOpsBoardInquiries(
   fallbackInquiries = [],
-  authSession
+  authSession,
+  { includeInboxLineage = true } = {}
 ) {
   if (!isSupabaseReady()) {
     return {
@@ -40,9 +41,10 @@ export async function getOpsBoardInquiries(
       },
       accessToken
     );
-    const inquiries = Array.isArray(rows)
-      ? await addInboxLineageToInquiries(rows.map(mapOpsRowToInquiry), accessToken)
-      : [];
+    const mappedInquiries = Array.isArray(rows) ? rows.map(mapOpsRowToInquiry) : [];
+    const inquiries = includeInboxLineage
+      ? await addInboxLineageToInquiries(mappedInquiries, accessToken)
+      : mappedInquiries;
 
     return {
       inquiries,

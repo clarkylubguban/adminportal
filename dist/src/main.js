@@ -1234,7 +1234,7 @@ async function approveAdminSession(session) {
     }
 
     adminUser = approvedUser;
-    inboxAccessState = await getInboxAccessState(session);
+    inboxAccessState = isInboxUiEnabled() ? await getInboxAccessState(session) : "denied";
     adminAuthStatus = "approved";
     adminAuthMessage = "";
     startAdminDataLoading();
@@ -1285,7 +1285,7 @@ async function initializeAdminAuth() {
     if (isLocalTaskQaMode()) {
       adminAuthSession = createLocalTaskQaSession();
       adminUser = createLocalTaskQaUser();
-      inboxAccessState = "allowed";
+      inboxAccessState = isInboxUiEnabled() ? "allowed" : "denied";
       adminAuthStatus = "approved";
       adminAuthMessage = "";
       startAdminDataLoading();
@@ -1725,7 +1725,9 @@ async function loadOpsBoardInquiries() {
   hasLoadedOpsInquiries = true;
 
   const [result, nativeResult] = await Promise.all([
-    getOpsBoardInquiries(localOpsInquiries, adminAuthSession),
+    getOpsBoardInquiries(localOpsInquiries, adminAuthSession, {
+      includeInboxLineage: isInboxUiEnabled(),
+    }),
     getNativeOrderRows(adminAuthSession),
   ]);
   opsInquiries = result.inquiries;
@@ -1783,12 +1785,16 @@ function isFeatureFlagEnabled(...names) {
   return names.some((name) => ["1", "true", "yes", "on"].includes(String(window.TRRY_ADMIN_ENV?.[name] ?? "false").trim().toLowerCase()));
 }
 
+function isInboxUiEnabled() {
+  return isFeatureFlagEnabled("VITE_ENABLE_INBOX", "VITE_INBOX_ENABLED");
+}
+
 function canViewMyTasksRoute() {
   return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_MY_TASKS", "VITE_MY_TASKS_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
 }
 
 function canViewInboxRoute() {
-  return adminAuthStatus === "approved" && inboxAccessState === "allowed";
+  return isInboxUiEnabled() && adminAuthStatus === "approved" && inboxAccessState === "allowed";
 }
 
 function getCurrentAdminUserId() {
