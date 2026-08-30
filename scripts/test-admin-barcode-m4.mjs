@@ -125,6 +125,14 @@ assert.ok(index.includes("/src/barcodeM4.css"), "M4 CSS must load");
 assert.ok(index.includes("/src/barcodeM4.js"), "M4 JS must load after M3");
 assert.ok(pkg.scripts["test:admin-barcode-m4"], "package script missing");
 
+const observerSource = barcodeUi.slice(barcodeUi.indexOf("new MutationObserver"), barcodeUi.indexOf('window.addEventListener("popstate"'));
+assert.ok(observerSource.includes("subtree: false"), "M4 observer must watch root replacements only");
+assert.equal(observerSource.includes("subtree: true"), false, "M4 observer must not react to its own descendant patches");
+assert.ok(barcodeUi.includes("enhanceScheduled: false") && barcodeUi.includes("pendingForce: false"), "M4 scheduler must coalesce enhancement passes");
+assert.ok(barcodeUi.includes("requestAnimationFrame") && !barcodeUi.includes("queueMicrotask"), "M4 enhancement must yield between DOM patch passes");
+assert.ok(barcodeUi.includes("if (state.loading) return state.loading"), "M4 duplicate data refreshes must share an in-flight load");
+assert.ok(barcodeUi.includes("feedback.textContent !== nextFeedback"), "M4 Inventory feedback must avoid identical text rewrites");
+
 assert.ok(barcodeUi.includes("Barcode & Labels"), "Master Catalog action missing");
 assert.ok(barcodeUi.includes("Generate Missing"), "Generate Missing action missing");
 assert.ok(barcodeUi.includes("Print Selected"), "Print Selected action missing");

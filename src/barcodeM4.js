@@ -24,11 +24,16 @@ const state = {
   feedback: "",
   savingVariantId: "",
   inventoryFeedback: "",
+  loading: null,
+  enhancing: false,
+  enhanceScheduled: false,
+  pendingForce: false,
 };
 
 const root = document.querySelector("#root");
 if (root) {
-  new MutationObserver(() => scheduleEnhance()).observe(root, { childList: true, subtree: true });
+  const observer = new MutationObserver(() => scheduleEnhance());
+  observer.observe(root, { childList: true, subtree: false });
 }
 window.addEventListener("popstate", () => scheduleEnhance(true));
 window.addEventListener("focus", () => scheduleEnhance(true));
@@ -41,7 +46,24 @@ createBarcodeScanner({
 });
 
 function scheduleEnhance(force = false) {
-  queueMicrotask(() => enhanceM4(force).catch((error) => console.warn("M4 barcode enhancement unavailable.", error)));
+  state.pendingForce = state.pendingForce || force;
+  if (state.enhanceScheduled) return;
+  state.enhanceScheduled = true;
+  const frame = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 16);
+  frame(async () => {
+    const runForce = state.pendingForce;
+    state.enhanceScheduled = false;
+    state.pendingForce = false;
+    if (state.enhancing) return;
+    state.enhancing = true;
+    try {
+      await enhanceM4(runForce);
+    } catch (error) {
+      console.warn("M4 barcode enhancement unavailable.", error);
+    } finally {
+      state.enhancing = false;
+    }
+  });
 }
 
 async function enhanceM4(force = false) {
@@ -55,25 +77,35 @@ async function enhanceM4(force = false) {
 }
 
 async function ensureData(force = false) {
-  if (!force && state.loadState === "success" && state.rows.length >= 0) return;
-  state.loadState = "loading";
-  state.error = "";
-  const session = await getCurrentAdminAuthSession();
-  state.session = session;
-  if (!session?.access_token) {
-    state.user = null;
-    state.rows = [];
-    state.loadState = "empty";
-    return;
+  if (!force && ["success", "missing", "empty"].includes(state.loadState)) return;
+  if (state.loading) return state.loading;
+
+  state.loading = (async () => {
+    state.loadState = "loading";
+    state.error = "";
+    const session = await getCurrentAdminAuthSession();
+    state.session = session;
+    if (!session?.access_token) {
+      state.user = null;
+      state.rows = [];
+      state.loadState = "empty";
+      return;
+    }
+    const [user, result] = await Promise.all([
+      getApprovedAdminUser(session),
+      getBarcodeManagerRows(session),
+    ]);
+    state.user = user;
+    state.rows = result.rows ?? [];
+    state.loadState = result.status === "missing" ? "missing" : "success";
+    state.error = result.error?.message ?? "";
+  })();
+
+  try {
+    await state.loading;
+  } finally {
+    state.loading = null;
   }
-  const [user, result] = await Promise.all([
-    getApprovedAdminUser(session),
-    getBarcodeManagerRows(session),
-  ]);
-  state.user = user;
-  state.rows = result.rows ?? [];
-  state.loadState = result.status === "missing" ? "missing" : "success";
-  state.error = result.error?.message ?? "";
 }
 
 function patchCatalog(page) {
@@ -92,7 +124,8 @@ function patchCatalog(page) {
 
 function patchInventory(page) {
   const input = page.querySelector("#inventory-search");
-  if (input) input.placeholder = "Search product, variant, SKU, or scan barcode...";
+  const searchPlaceholder = "Search product, variant, SKU, or scan barcode...";
+  if (input && input.placeholder !== searchPlaceholder) input.placeholder = searchPlaceholder;
   if (!page.querySelector(".m4-inventory-scanner")) {
     const tabs = page.querySelector(".inventory-tabs");
     tabs?.insertAdjacentHTML("afterend", `
@@ -103,10 +136,12 @@ function patchInventory(page) {
     `);
   } else {
     const feedback = page.querySelector("[data-m4-inventory-feedback]");
-    if (feedback) feedback.textContent = state.inventoryFeedback || "Inventory scan is read-only.";
+    const nextFeedback = state.inventoryFeedback || "Inventory scan is read-only.";
+    if (feedback && feedback.textContent !== nextFeedback) feedback.textContent = nextFeedback;
   }
   const stockCount = page.querySelector('[data-inventory-parked="stock-count"]');
-  if (stockCount) stockCount.title = "STOCK COUNT SCANNER READY / POSTING BLOCKED BY MISSING COUNT AUTHORITY";
+  const stockCountTitle = "STOCK COUNT SCANNER READY / POSTING BLOCKED BY MISSING COUNT AUTHORITY";
+  if (stockCount && stockCount.title !== stockCountTitle) stockCount.title = stockCountTitle;
 }
 
 async function openBarcodeManager() {
