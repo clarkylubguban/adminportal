@@ -31,6 +31,7 @@ const checks = [
   ["Settings appears after workflows", sidebar.includes('{ label: "Settings", path: "/settings", icon: "settings" }')],
   ["Legacy Catalog & Supply heading removed", !sidebar.includes("CATALOG &amp; SUPPLY") && !sidebar.includes("sidebar-section-label")],
   ["Group toggle binding exists", bindEvents.includes('data-sidebar-group-toggle') && bindEvents.includes('master-catalog') && bindEvents.includes('supply-inventory')],
+  ["Parent rows open their landing routes", bindEvents.includes('group === "master-catalog" ? "/catalog" : "/catalog/suppliers"') && bindEvents.includes("navigateTo(targetPath)")],
   ["Leaving a group clears manual expansion", bindEvents.includes("MASTER_CATALOG_PATHS.includes(targetPath)") && bindEvents.includes("SUPPLY_INVENTORY_PATHS.includes(targetPath)")],
   ["Settings renders real Settings page", main.includes('currentRoute === "Settings"') && main.includes("renderSettingsPage()")],
   ["Figma parent height", styles.includes(".sidebar .sidebar-group-toggle") && styles.includes("min-height: 44px")],

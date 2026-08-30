@@ -10902,8 +10902,11 @@ function bindEvents() {
   document.querySelectorAll("[data-sidebar-group-toggle]").forEach((button) => {
     button.addEventListener("click", () => {
       const group = button.dataset.sidebarGroupToggle;
-      if (group === "master-catalog") isMasterCatalogNavExpanded = !isMasterCatalogNavExpanded;
-      if (group === "supply-inventory") isSupplyInventoryNavExpanded = !isSupplyInventoryNavExpanded;
+      const targetPath = group === "master-catalog" ? "/catalog" : "/catalog/suppliers";
+      isMasterCatalogNavExpanded = group === "master-catalog";
+      isSupplyInventoryNavExpanded = group === "supply-inventory";
+      navigateTo(targetPath);
+      isMobileSidebarOpen = false;
       render();
     });
   });
