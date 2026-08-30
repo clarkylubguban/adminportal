@@ -22773,8 +22773,55 @@ body,
     background: var(--trry-shell);
     border-right: 1px solid var(--trry-shell-border);
     max-width: calc(100vw - 36px);
+    overflow: hidden;
     padding: 16px 14px;
     width: 286px;
+  }
+
+  .app-shell .sidebar nav,
+  .app-shell:has(.mvp-page) .sidebar nav,
+  .app-shell:has(.admin-saas-page) .sidebar nav,
+  .app-shell.admin-saas-shell .sidebar nav {
+    align-items: stretch;
+    display: grid;
+    gap: 8px;
+    justify-items: stretch;
+    min-width: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    width: 100%;
+  }
+
+  .app-shell .sidebar a,
+  .app-shell:has(.mvp-page) .sidebar a,
+  .app-shell:has(.admin-saas-page) .sidebar a,
+  .app-shell.admin-saas-shell .sidebar a,
+  .app-shell .sidebar .sidebar-group-toggle,
+  .app-shell:has(.mvp-page) .sidebar .sidebar-group-toggle,
+  .app-shell:has(.admin-saas-page) .sidebar .sidebar-group-toggle,
+  .app-shell.admin-saas-shell .sidebar .sidebar-group-toggle {
+    justify-content: flex-start;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .app-shell .sidebar .nav-label,
+  .app-shell:has(.mvp-page) .sidebar .nav-label,
+  .app-shell:has(.admin-saas-page) .sidebar .nav-label,
+  .app-shell.admin-saas-shell .sidebar .nav-label {
+    display: inline-flex;
+    min-width: 0;
+  }
+
+  .app-shell .sidebar .sidebar-group,
+  .app-shell:has(.mvp-page) .sidebar .sidebar-group,
+  .app-shell:has(.admin-saas-page) .sidebar .sidebar-group,
+  .app-shell.admin-saas-shell .sidebar .sidebar-group,
+  .app-shell .sidebar .sidebar-group-children,
+  .app-shell:has(.mvp-page) .sidebar .sidebar-group-children,
+  .app-shell:has(.admin-saas-page) .sidebar .sidebar-group-children,
+  .app-shell.admin-saas-shell .sidebar .sidebar-group-children {
+    width: 100%;
   }
 
   .mobile-top-bar {
