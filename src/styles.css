@@ -32461,7 +32461,6 @@ pre,
   outline: none;
 }
 
-.sidebar .sidebar-group-toggle.expanded,
 .sidebar .sidebar-group-toggle.active {
   background: var(--trry-shell-raised, #111318);
 }
@@ -32532,6 +32531,7 @@ pre,
 .sidebar .sidebar-group-child.active {
   background: transparent;
   color: var(--trry-lime, #adff05);
+  font-weight: 600;
   transform: none;
 }
 
@@ -32542,6 +32542,21 @@ pre,
 .sidebar .sidebar-group-child.active .nav-label {
   color: var(--trry-lime, #adff05);
   font-weight: 600;
+}
+
+.sidebar a.sidebar-group-child.active,
+.app-shell:has(.mvp-page) .sidebar a.sidebar-group-child.active,
+.app-shell:has(.admin-saas-page) .sidebar a.sidebar-group-child.active,
+.app-shell.admin-saas-shell .sidebar a.sidebar-group-child.active {
+  background: transparent;
+  color: var(--trry-lime, #adff05);
+}
+
+.sidebar a.sidebar-group-child.active::before,
+.app-shell:has(.mvp-page) .sidebar a.sidebar-group-child.active::before,
+.app-shell:has(.admin-saas-page) .sidebar a.sidebar-group-child.active::before,
+.app-shell.admin-saas-shell .sidebar a.sidebar-group-child.active::before {
+  display: none;
 }
 
 .sidebar.is-collapsed .sidebar-group-toggle {
