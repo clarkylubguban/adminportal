@@ -43,7 +43,8 @@
     "test:admin-purchasing-m3": "node scripts/test-admin-purchasing-m3.mjs",
     "test:admin-barcode-m4": "node scripts/test-admin-barcode-m4.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
-    "preview": "node scripts/local-dev.mjs"
+    "preview": "node scripts/local-dev.mjs",
+    "test:grouped-sidebar": "node scripts/test-grouped-sidebar-nav.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
