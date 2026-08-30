@@ -15,6 +15,11 @@ const bindStart = main.indexOf("function bindEvents()");
 assert.ok(bindStart >= 0, "bindEvents source must be discoverable");
 const bindEvents = main.slice(bindStart);
 
+const activeChildStart = styles.indexOf(".sidebar a.sidebar-group-child.active,");
+const activeChildEnd = styles.indexOf(".sidebar a.sidebar-group-child.active::before", activeChildStart);
+assert.ok(activeChildStart >= 0 && activeChildEnd > activeChildStart, "Active child styles must be discoverable");
+const activeChildStyles = styles.slice(activeChildStart, activeChildEnd);
+
 const masterOrder = ["Products", "Brands", "Categories"].map((label) => sidebar.indexOf(`{ label: "${label}"`));
 const supplyOrder = ["Suppliers", "Purchasing", "Inventory"].map((label) => sidebar.indexOf(`{ label: "${label}"`));
 
@@ -37,6 +42,7 @@ const checks = [
   ["Figma parent height", styles.includes(".sidebar .sidebar-group-toggle") && styles.includes("min-height: 44px")],
   ["Figma child height", styles.includes(".sidebar .sidebar-group-child") && styles.includes("min-height: 32px")],
   ["Active parent has lime rail", styles.includes(".sidebar .sidebar-group-toggle.active::before") && styles.includes("height: 22px")],
+  ["Active child uses text highlight only", activeChildStyles.includes("background: transparent") && activeChildStyles.includes("box-shadow: none") && activeChildStyles.includes("color: var(--trry-lime")],
   ["Grouped sidebar marker exists", styles.includes("TRRY GROUPED SIDEBAR — FIGMA SOURCE OF TRUTH")],
 ];
 
