@@ -30584,9 +30584,17 @@ pre,
 
 .sidebar .sidebar-group-toggle:hover,
 .sidebar .sidebar-group-toggle:focus-visible {
-  background: var(--trry-shell-raised, #111318);
   color: #ffffff;
   outline: none;
+}
+
+.sidebar .sidebar-group-toggle:hover {
+  background: color-mix(in srgb, var(--trry-shell-raised, #111318) 52%, transparent);
+}
+
+.sidebar .sidebar-group-toggle:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--trry-lime, #adff05) 58%, transparent);
+  outline-offset: 2px;
 }
 
 .sidebar .sidebar-group-toggle.active {
