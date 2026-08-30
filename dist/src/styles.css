@@ -32351,3 +32351,168 @@ pre,
     padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
   }
 }
+
+/* TRRY GROUPED SIDEBAR — FIGMA SOURCE OF TRUTH */
+/*
+  Parent rows are the expand/collapse control. Intentionally no chevron.
+  Child pages are iconless and indented. Active route keeps its group open.
+*/
+.sidebar .sidebar-group {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+
+.sidebar .sidebar-group-toggle {
+  appearance: none;
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: #dfe4ef;
+  cursor: pointer;
+  display: flex;
+  font-family: var(--trry-font-ui);
+  gap: 12px;
+  min-height: 44px;
+  padding: 0 12px;
+  position: relative;
+  text-align: left;
+  transition: background-color 140ms ease, color 140ms ease, transform 140ms ease;
+  width: 100%;
+}
+
+.sidebar .sidebar-group-toggle .nav-icon.lucide-icon {
+  flex: 0 0 18px;
+  height: 18px;
+  width: 18px;
+}
+
+.sidebar .sidebar-group-toggle .nav-label {
+  color: inherit;
+  font-family: var(--trry-font-ui);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+  line-height: 18px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.sidebar .sidebar-group-toggle[data-sidebar-group-toggle="supply-inventory"] .nav-label {
+  font-size: 12px;
+}
+
+.sidebar .sidebar-group-toggle:hover,
+.sidebar .sidebar-group-toggle:focus-visible {
+  background: var(--trry-shell-raised, #111318);
+  color: #ffffff;
+  outline: none;
+}
+
+.sidebar .sidebar-group-toggle.expanded,
+.sidebar .sidebar-group-toggle.active {
+  background: var(--trry-shell-raised, #111318);
+}
+
+.sidebar .sidebar-group-toggle.active {
+  color: var(--trry-lime, #adff05);
+}
+
+.sidebar .sidebar-group-toggle.active .nav-icon.lucide-icon {
+  color: var(--trry-lime, #adff05);
+}
+
+.sidebar .sidebar-group-toggle.active::before {
+  background: var(--trry-lime, #adff05);
+  border-radius: 999px;
+  content: "";
+  height: 22px;
+  left: 0;
+  position: absolute;
+  top: 11px;
+  width: 3px;
+}
+
+.sidebar .sidebar-group-children {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  width: 100%;
+}
+
+.sidebar .sidebar-group-children[hidden] {
+  display: none;
+}
+
+.sidebar .sidebar-group-child {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  color: #dfe4ef;
+  display: flex;
+  font-family: var(--trry-font-ui);
+  min-height: 32px;
+  padding: 0 12px 0 42px;
+  text-decoration: none;
+  width: 100%;
+}
+
+.sidebar .sidebar-group-child .nav-label {
+  color: inherit;
+  font-family: var(--trry-font-ui);
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 18px;
+  text-transform: none;
+  white-space: nowrap;
+}
+
+.sidebar .sidebar-group-child:hover,
+.sidebar .sidebar-group-child:focus-visible {
+  background: var(--trry-shell-raised, #111318);
+  color: #ffffff;
+  outline: none;
+  transform: none;
+}
+
+.sidebar .sidebar-group-child.active {
+  background: transparent;
+  color: var(--trry-lime, #adff05);
+  transform: none;
+}
+
+.sidebar .sidebar-group-child.active::before {
+  display: none;
+}
+
+.sidebar .sidebar-group-child.active .nav-label {
+  color: var(--trry-lime, #adff05);
+  font-weight: 600;
+}
+
+.sidebar.is-collapsed .sidebar-group-toggle {
+  justify-content: center;
+  padding-inline: 0;
+}
+
+.sidebar.is-collapsed .sidebar-group-toggle .nav-label,
+.sidebar.is-collapsed .sidebar-group-children {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .sidebar .sidebar-group-toggle {
+    min-height: 44px;
+  }
+
+  .sidebar .sidebar-group-child {
+    min-height: 36px;
+  }
+}

@@ -703,6 +703,7 @@ const routes = {
   "/catalog/inventory": "Catalog",
   "/catalog/purchasing": "Catalog",
   "/catalog/suppliers": "Catalog",
+  "/settings": "Settings",
 };
 
 const defaultRoutePath = "/";
@@ -710,6 +711,9 @@ const legacyOrderDashboardPath = "/order-dashboard";
 const activeOrdersPath = "/orders";
 const ADMIN_ACCESS_SESSION_KEY = "trry_admin_access_unlocked";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "trry_admin_sidebar_collapsed_v3";
+
+const MASTER_CATALOG_PATHS = ["/catalog", "/catalog/brands", "/catalog/categories"];
+const SUPPLY_INVENTORY_PATHS = ["/catalog/suppliers", "/catalog/purchasing", "/catalog/inventory"];
 
 let adminAccessCodeInput = "";
 let adminAccessError = "";
@@ -736,6 +740,8 @@ let passwordSetupMode = "invite";
 let passwordSetupSuccess = "";
 let isSidebarCollapsed = getStoredSidebarCollapsed();
 let isMobileSidebarOpen = false;
+let isMasterCatalogNavExpanded = false;
+let isSupplyInventoryNavExpanded = false;
 
 function render() {
   if (normalizeLegacyOrderDashboardRoute()) {
@@ -804,7 +810,9 @@ function render() {
                         ? renderWorkboardPage()
                         : currentRoute === "Catalog"
                           ? renderCatalogPage()
-                          : renderOverviewPage()
+                          : currentRoute === "Settings"
+                            ? renderSettingsPage()
+                            : renderOverviewPage()
         }
         ${renderFooter()}
       </section>
@@ -10633,6 +10641,11 @@ function renderProductImageManager(product) {
 
 function renderSidebar(currentRoute) {
   const routePath = getRoutePath();
+  const isMasterCatalogRoute = MASTER_CATALOG_PATHS.includes(routePath);
+  const isSupplyInventoryRoute = SUPPLY_INVENTORY_PATHS.includes(routePath);
+  const masterCatalogExpanded = isMasterCatalogRoute || isMasterCatalogNavExpanded;
+  const supplyInventoryExpanded = isSupplyInventoryRoute || isSupplyInventoryNavExpanded;
+
   const topNavItems = [
     { label: "Overview", path: "/overview" },
     ...(canViewInboxRoute() ? [{ label: "Inbox", path: "/inbox", icon: "message-square" }] : []),
@@ -10640,19 +10653,26 @@ function renderSidebar(currentRoute) {
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
   ];
-  const catalogSupplyItems = [
+
+  const masterCatalogItems = [
     { label: "Products", path: "/catalog", icon: "package", activePaths: ["/catalog"] },
     { label: "Brands", path: "/catalog/brands", icon: "tag", activePaths: ["/catalog/brands"] },
     { label: "Categories", path: "/catalog/categories", icon: "layers", activePaths: ["/catalog/categories"] },
+  ];
+
+  const supplyInventoryItems = [
     { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"] },
     { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", activePaths: ["/catalog/purchasing"] },
     { label: "Inventory", path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"] },
   ];
+
   const workflowNavItems = [
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    { label: "Settings", path: "/settings", icon: "settings" },
   ];
+
   const renderNavItem = (item) => {
     const isActive = item.activePaths ? item.activePaths.includes(routePath) : item.label === currentRoute;
     const itemLabel = item.label === "Staff" ? "Staff Access" : item.label;
@@ -10666,16 +10686,45 @@ function renderSidebar(currentRoute) {
     </div>`;
   };
 
+  const renderGroupChild = (item) => {
+    const isActive = routePath === item.path;
+    return `<a class="sidebar-group-child ${isActive ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}" aria-current="${isActive ? "page" : "false"}"><span class="nav-label">${item.label}</span></a>`;
+  };
+
+  const renderGroup = ({ key, label, icon, expanded, active, items }) => `
+    <div class="sidebar-group ${expanded ? "expanded" : ""}" data-sidebar-group="${key}">
+      <button class="sidebar-group-toggle ${expanded ? "expanded" : ""} ${active ? "active" : ""}" type="button"
+        data-sidebar-group-toggle="${key}" aria-expanded="${expanded ? "true" : "false"}"
+        title="${label}" aria-label="${expanded ? `Collapse ${label}` : `Expand ${label}`}">
+        ${renderIcon(icon, "nav-icon")}<span class="nav-label">${label}</span>
+      </button>
+      <div class="sidebar-group-children" ${expanded ? "" : "hidden"}>
+        ${items.map(renderGroupChild).join("")}
+      </div>
+    </div>`;
+
   return `
     <aside class="sidebar ${isSidebarCollapsed ? "is-collapsed" : ""}">
       <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
         ${topNavItems.map(renderNavItem).join("")}
-        <div class="sidebar-section-label">CATALOG &amp; SUPPLY</div>
-        <div class="catalog-supply-nav" role="group" aria-label="Catalog and supply">
-          ${catalogSupplyItems.map(renderNavItem).join("")}
-        </div>
+        ${renderGroup({
+          key: "master-catalog",
+          label: "Master Catalog",
+          icon: "factory",
+          expanded: masterCatalogExpanded,
+          active: isMasterCatalogRoute,
+          items: masterCatalogItems,
+        })}
+        ${renderGroup({
+          key: "supply-inventory",
+          label: "Supply & Inventory",
+          icon: "boxes",
+          expanded: supplyInventoryExpanded,
+          active: isSupplyInventoryRoute,
+          items: supplyInventoryItems,
+        })}
         ${workflowNavItems.map(renderNavItem).join("")}
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
@@ -11820,9 +11869,22 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-sidebar-group-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const group = button.dataset.sidebarGroupToggle;
+      if (group === "master-catalog") isMasterCatalogNavExpanded = !isMasterCatalogNavExpanded;
+      if (group === "supply-inventory") isSupplyInventoryNavExpanded = !isSupplyInventoryNavExpanded;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-route-link]").forEach((link) => {
     const openRoute = () => {
-      navigateTo(link.getAttribute("href"));
+      const href = link.getAttribute("href");
+      const targetPath = new URL(href, window.location.origin).pathname;
+      if (!MASTER_CATALOG_PATHS.includes(targetPath)) isMasterCatalogNavExpanded = false;
+      if (!SUPPLY_INVENTORY_PATHS.includes(targetPath)) isSupplyInventoryNavExpanded = false;
+      navigateTo(href);
       isMobileSidebarOpen = false;
       render();
     };
