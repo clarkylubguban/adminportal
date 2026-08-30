@@ -30685,7 +30685,21 @@ pre,
 .app-shell:has(.admin-saas-page) .sidebar a.sidebar-group-child.active,
 .app-shell.admin-saas-shell .sidebar a.sidebar-group-child.active {
   background: transparent;
+  border-color: transparent;
+  box-shadow: none;
   color: var(--trry-lime, #adff05);
+}
+
+.sidebar a.sidebar-group-child.active:hover,
+.sidebar a.sidebar-group-child.active:focus-visible,
+.app-shell:has(.mvp-page) .sidebar a.sidebar-group-child.active:hover,
+.app-shell:has(.mvp-page) .sidebar a.sidebar-group-child.active:focus-visible,
+.app-shell:has(.admin-saas-page) .sidebar a.sidebar-group-child.active:hover,
+.app-shell:has(.admin-saas-page) .sidebar a.sidebar-group-child.active:focus-visible,
+.app-shell.admin-saas-shell .sidebar a.sidebar-group-child.active:hover,
+.app-shell.admin-saas-shell .sidebar a.sidebar-group-child.active:focus-visible {
+  background: transparent;
+  box-shadow: none;
 }
 
 .sidebar a.sidebar-group-child.active::before,
