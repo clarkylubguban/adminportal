@@ -129,7 +129,7 @@ try {
   ], { capture: true });
   await waitForPostgres();
   await psqlStdin(bootstrap);
-  await psqlFile("/workspace/supabase/migrations/20260831003000_add_customer_identity_c1.sql");
+  await psqlFile("/workspace/supabase/migrations/20260831021438_add_customer_identity_c1.sql");
   await psqlFile("/workspace/supabase/tests/customer_identity_c1.sql");
   console.log("Customer Identity C1 validation passed.");
 } finally {
