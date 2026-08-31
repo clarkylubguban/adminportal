@@ -58,5 +58,19 @@ Recovered production-authority migrations:
 - `supabase/migrations/20260820000000_m2b_inventory_foundation.sql`
 - `supabase/migrations/20260820001000_m2c_inventory_rls_helper_execute.sql`
 - `supabase/migrations/20260830125100_os_baseline_1_production_db_hardening.sql`
+- `supabase/migrations/20260831152138_recover_pos_e5_authority.sql`
 
 The August 30 recovery migration documents staging version-number differences and excludes executable E7 module-access predicates. Optional hardening policy blocks are guarded by the table/function dependencies they reference so local migration validation can run against partial historical schemas while production keeps the exact canonical policy semantics.
+
+## POS/E5 Authority Recovery
+
+The 2026-08-31 forward-only recovery migration restores the missing clean-from-zero source representation for accepted production POS/E5 authority. It recovers only the minimal POS staff identity/read surface from POS M3B, E5 temporary access for Inventory and Purchasing/Suppliers reads, `public.get_pos_sales_effective_access()`, and POS cashier branch-scoped Inventory reads.
+
+Lineage:
+
+- POS base authority: `b67c090` / `20260820132016_m3b_atomic_checkout_foundation.sql`.
+- E5 temporary access authority: `8576908` and `0bec6c5` Employee production-release lineage.
+- Cashier branch-scoped Inventory read: `3bb471e` / `20260822090000_m9b4c_cashier_inventory_read.sql`.
+- Production catalog definitions remain final authority where source migration version numbers differ.
+
+The recovery explicitly excludes the full POS checkout engine, E7 role/module permission tables, `public.has_admin_module_access(...)`, and staging-only module/action permission predicates.
