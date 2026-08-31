@@ -2,7 +2,7 @@
 
 ## Status
 
-Implementation checkpoint only. No staging or production database migration has been applied by this worktree.
+STAGING PASS. Customer Identity C1 is applied to trry-admin-staging and validated. Production has not been touched.
 
 ## Authority
 
@@ -54,7 +54,7 @@ Those belong to C2+.
 
 ## Files
 
-- `supabase/migrations/20260831003000_add_customer_identity_c1.sql`
+- `supabase/migrations/20260831021438_add_customer_identity_c1.sql`
 - `supabase/tests/customer_identity_c1.sql`
 - `scripts/validate-customer-identity-c1.mjs`
 - `package.json` (`validate:customer-identity-c1`)
@@ -69,16 +69,18 @@ npm run validate:customer-identity-c1
 
 The validator boots disposable PostgreSQL 17 in Docker, creates the minimum accepted auth/admin prerequisites, applies only the C1 migration, runs the C1 contract test, then destroys the container.
 
-Remote/staging/production databases must remain untouched until a later explicit migration approval gate.
+Staging was applied only after disposable local validation passed. Production remains behind an explicit approval gate.
 
-## Validation Result — This Runtime
+## Validation Result — Current
 
-- `node --check scripts/validate-customer-identity-c1.mjs`: PASS
-- static C1 migration scope/required-marker audit: PASS
+- Windows disposable PostgreSQL 17 contract test: PASS
 - `git diff --check`: PASS
-- disposable PostgreSQL contract test: **BLOCKED IN THIS RUNTIME**
-  - Docker: not installed
-  - `psql`: not installed
-  - Supabase CLI: not installed
-
-The migration has therefore **not** been applied to staging or production as a substitute for local validation. Database execution remains an approval/validation gate before any remote migration.
+- staging preflight: PASS
+- staging migration: `20260831021438_add_customer_identity_c1`
+- staging C1 contract test with transaction rollback: PASS
+- staging post-check: `customers` row count `0`
+- RLS enabled
+- anon direct read blocked
+- authenticated delete blocked
+- expected three customer RLS policies present
+- production migration: NOT APPLIED
