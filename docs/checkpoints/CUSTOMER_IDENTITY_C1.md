@@ -54,7 +54,7 @@ Those belong to C2+.
 
 ## Files
 
-- `supabase/migrations/202608300001_add_customer_identity_c1.sql`
+- `supabase/migrations/20260831003000_add_customer_identity_c1.sql`
 - `supabase/tests/customer_identity_c1.sql`
 - `scripts/validate-customer-identity-c1.mjs`
 - `package.json` (`validate:customer-identity-c1`)
