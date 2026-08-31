@@ -578,6 +578,9 @@ let staffDraft = createEmptyStaffDraft();
 let staffSaveState = "idle";
 let staffSaveError = "";
 let staffActionId = "";
+let employeeQuery = "";
+let employeeRoleFilter = "all";
+let employeeStatusFilter = "active";
 let assignmentUsers = [];
 let assignmentLoadState = "idle";
 let assignmentLoadError = "";
@@ -650,6 +653,7 @@ const routes = {
   "/catalog/purchasing": "Catalog",
   "/catalog/suppliers": "Catalog",
   "/settings": "Settings",
+  "/settings/people-access": "Settings",
 };
 
 const defaultRoutePath = "/";
@@ -754,7 +758,7 @@ function render() {
                         : currentRoute === "Catalog"
                           ? renderCatalogPage()
                           : currentRoute === "Settings"
-                            ? renderSettingsPage()
+                            ? renderPeopleAccessEmployeesPage()
                             : renderOverviewPage()
         }
         ${renderFooter()}
@@ -8831,6 +8835,10 @@ function canManageStaffAccounts() {
   return ["owner", "admin"].includes(adminUser?.role);
 }
 
+function canViewSettingsRoute() {
+  return canManageStaffAccounts();
+}
+
 function createCatalogDraft(product = null) {
   if (product) {
     const images = normalizeCatalogDraftImages(product.images?.length ? product.images : (product.imageUrl ? [{ url: product.imageUrl, publicUrl: product.imageUrl, storagePath: "", isPrimary: true }] : []));
@@ -8916,6 +8924,207 @@ function createEmptyStaffDraft() {
   return { displayName: "", email: "", role: "staff" };
 }
 
+function getVisibleEmployeeUsers() {
+  const normalizedQuery = employeeQuery.trim().toLowerCase();
+
+  return staffUsers.filter((user) => {
+    const role = String(user.role || "").toLowerCase();
+    const active = user.isActive !== false;
+    const matchesQuery =
+      !normalizedQuery ||
+      [
+        user.displayName,
+        user.email,
+        role,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+    const matchesRole = employeeRoleFilter === "all" || role === employeeRoleFilter;
+    const matchesStatus =
+      employeeStatusFilter === "all" ||
+      (employeeStatusFilter === "active" && active) ||
+      (employeeStatusFilter === "deactivated" && !active);
+
+    return matchesQuery && matchesRole && matchesStatus;
+  });
+}
+
+function getEmployeeKpis() {
+  const activeUsers = staffUsers.filter((user) => user.isActive !== false);
+  return {
+    teamMembers: activeUsers.length,
+    roles: new Set(activeUsers.map((user) => user.role).filter(Boolean)).size,
+    suspended: staffUsers.filter((user) => user.isActive === false).length,
+  };
+}
+
+function renderPeopleAccessEmployeesPage() {
+  if (!canManageStaffAccounts()) {
+    return `<main class="people-access-page"><section class="people-access-denied"><span>SETTINGS</span><h1>Access restricted</h1><p>Your account cannot manage employees.</p></section></main>`;
+  }
+
+  if (staffLoadState === "idle") {
+    staffLoadState = "loading";
+    window.setTimeout(loadStaffUsers, 0);
+  }
+
+  const visibleEmployees = getVisibleEmployeeUsers();
+  const kpis = getEmployeeKpis();
+  const loading = staffLoadState === "loading";
+  const activeCount = staffUsers.filter((user) => user.isActive !== false).length;
+
+  return `<main class="people-access-page admin-saas-page">
+    <section class="people-access-hero">
+      <div class="people-access-title">
+        <span>Home › Settings › People &amp; Access</span>
+        <h1>People &amp; Access</h1>
+        <p>Manage employees and assign their access role.</p>
+      </div>
+      <button class="people-access-primary" type="button" data-staff-new ${loading ? "disabled" : ""}>+ INVITE EMPLOYEE</button>
+    </section>
+
+    ${staffFeedback ? `<p class="staff-feedback" role="status">${escapeHtml(staffFeedback)}</p>` : ""}
+    ${staffLoadError ? `<p class="staff-feedback error" role="alert">${escapeHtml(staffLoadError)}</p>` : ""}
+
+    <section class="people-access-tabs" aria-label="People and Access sections">
+      <button class="active" type="button" aria-current="page">Employees</button>
+      <button type="button" disabled aria-disabled="true">Roles &amp; Permissions</button>
+      <span>${activeCount} ACTIVE</span>
+    </section>
+
+    <section class="people-access-kpis" aria-label="Employee summary">
+      ${renderEmployeeKpiCard("TEAM MEMBERS", kpis.teamMembers, "Active accounts")}
+      ${renderEmployeeKpiCard("ROLES", kpis.roles, "Access presets")}
+      ${renderEmployeeKpiCard("SUSPENDED", kpis.suspended, kpis.suspended ? "Deactivated accounts" : "No suspended users")}
+    </section>
+
+    <section class="employee-controls" aria-label="Employee filters">
+      <input id="employee-search" type="search" value="${escapeHtml(employeeQuery)}" placeholder="Search employee, role, email..." />
+      <select id="employee-role-filter" aria-label="Filter employees by role">
+        ${renderEmployeeRoleOptions()}
+      </select>
+      <select id="employee-status-filter" aria-label="Filter employees by status">
+        <option value="all" ${employeeStatusFilter === "all" ? "selected" : ""}>All statuses</option>
+        <option value="active" ${employeeStatusFilter === "active" ? "selected" : ""}>Active</option>
+        <option value="deactivated" ${employeeStatusFilter === "deactivated" ? "selected" : ""}>Deactivated</option>
+      </select>
+      <button type="button" data-employee-reset>RESET</button>
+    </section>
+
+    <section class="employees-panel" aria-label="Employees">
+      <div class="employees-panel-title">
+        <strong>EMPLOYEES</strong>
+        <span>Profile photo, assigned role, account status, and access are managed here.</span>
+      </div>
+      <div class="employees-table" role="table" aria-label="Employees">
+        <div class="employees-table-header" role="row">
+          <span>EMPLOYEE</span><span>ROLE</span><span>STATUS</span><span>LAST LOGIN</span><span>ACCESS</span><span>ACTION</span>
+        </div>
+        <div class="employees-table-body" role="rowgroup">
+          ${renderEmployeeTableBody(visibleEmployees, loading)}
+        </div>
+      </div>
+      <footer class="employees-panel-footer">
+        <span>${escapeHtml(getEmployeeShowingLabel(visibleEmployees.length))}</span>
+        <button type="button" data-employee-view-deactivated>VIEW DEACTIVATED</button>
+      </footer>
+    </section>
+    ${staffDrawerMode ? renderStaffDrawer() : ""}
+  </main>`;
+}
+
+function renderEmployeeKpiCard(label, value, helper) {
+  return `<article class="employee-kpi-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(helper)}</small></article>`;
+}
+
+function renderEmployeeRoleOptions() {
+  const roles = Array.from(new Set(staffUsers.map((user) => String(user.role || "").toLowerCase()).filter(Boolean))).sort();
+  const options = [["all", "All roles"], ...roles.map((role) => [role, getEmployeeRoleLabel({ role })])];
+  return options.map(([value, label]) => `<option value="${escapeHtml(value)}" ${employeeRoleFilter === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+}
+
+function renderEmployeeTableBody(visibleEmployees, loading) {
+  if (loading) return `<p class="employee-empty-state">Loading employees...</p>`;
+  if (staffLoadState === "error") return `<p class="employee-empty-state error"><strong>Unable to load employees</strong><span>${escapeHtml(staffLoadError || "Unable to load employees.")}</span></p>`;
+  if (!visibleEmployees.length) return `<p class="employee-empty-state">${escapeHtml(getEmployeeEmptyLabel())}</p>`;
+  return visibleEmployees.map(renderEmployeeRow).join("");
+}
+
+function renderEmployeeRow(user) {
+  const active = user.isActive !== false;
+  return `<div class="employee-row" role="row">
+    <div class="employee-profile-cell">
+      <span class="employee-avatar ${escapeHtml(getEmployeeAvatarTone(user))}"><b>${escapeHtml(getEmployeeInitial(user))}</b></span>
+      <div><strong>${escapeHtml(user.displayName || "Unnamed employee")}</strong><small>${escapeHtml(user.email || "No email")}</small></div>
+    </div>
+    <span class="employee-role-cell">${escapeHtml(getEmployeeRoleLabel(user))}</span>
+    <span>${renderEmployeeStatusChip(active)}</span>
+    <span class="employee-last-login">${escapeHtml(formatEmployeeLastLogin(user.lastSignInAt))}</span>
+    <span>${renderEmployeeAccessChip(user)}</span>
+    <span class="employee-row-actions">${renderStaffActions(user)}</span>
+  </div>`;
+}
+
+function renderEmployeeStatusChip(active) {
+  return `<b class="employee-chip ${active ? "active" : "deactivated"}">${active ? "ACTIVE" : "DEACTIVATED"}</b>`;
+}
+
+function renderEmployeeAccessChip(user) {
+  const role = String(user.role || "").toLowerCase();
+  const label = role === "owner" ? "FULL ACCESS" : role === "admin" ? "MANAGEMENT" : "MY WORK";
+  const tone = role === "owner" ? "full" : "summary";
+  return `<b class="employee-chip ${tone}">${label}</b>`;
+}
+
+function getEmployeeRoleLabel(user) {
+  const role = String(user?.role || "").toLowerCase();
+  if (role === "owner") return "Owner / Admin";
+  if (role === "admin") return "Admin / Operations";
+  if (role === "staff") return "Production Staff";
+  return formatAdminRole(role || "staff");
+}
+
+function getEmployeeInitial(user) {
+  const label = user.displayName || user.email || "Employee";
+  return label.trim().charAt(0).toUpperCase() || "E";
+}
+
+function getEmployeeAvatarTone(user) {
+  const tones = ["tone-blue", "tone-lavender", "tone-coral", "tone-green", "tone-gold"];
+  const seed = String(user.id || user.email || user.displayName || "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return tones[seed % tones.length];
+}
+
+function getEmployeeShowingLabel(count) {
+  if (employeeStatusFilter === "deactivated") return `Showing ${count} deactivated employees`;
+  if (employeeStatusFilter === "all") return `Showing ${count} employees`;
+  return `Showing ${count} active employees`;
+}
+
+function getEmployeeEmptyLabel() {
+  if (employeeQuery.trim() || employeeRoleFilter !== "all") return "No employees match the current filters";
+  if (employeeStatusFilter === "deactivated") return "No deactivated employees found";
+  return "No active employees found";
+}
+
+function formatEmployeeLastLogin(value) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Never";
+  const manilaNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const manilaDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const diffMs = manilaNow.getTime() - manilaDate.getTime();
+  if (diffMs >= 0 && diffMs <= 5 * 60 * 1000) return "Now";
+  const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  if (dayKey === todayKey) {
+    return `Today ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" }).format(date)}`;
+  }
+  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" }).format(date);
+}
+
 function renderStaffAccessPage() {
   if (!canManageStaffAccounts()) {
     return `<main class="staff-access-page"><section class="staff-access-denied"><span>STAFF ACCESS</span><h1>Access restricted</h1><p>Your account cannot manage TRRY Admin Portal access.</p></section></main>`;
@@ -8986,7 +9195,7 @@ function renderStaffBadge(label, tone) {
 
 function renderStaffDrawer() {
   const isEdit = staffDrawerMode === "edit";
-  const title = isEdit ? "EDIT STAFF ACCESS" : "NEW STAFF";
+  const title = isEdit ? "EDIT EMPLOYEE" : "INVITE EMPLOYEE";
   const roleOptions = getPermittedStaffRoleOptions(isEdit);
   const roleLocked = roleOptions.length <= 1;
   const saving = staffSaveState === "saving";
@@ -8995,14 +9204,15 @@ function renderStaffDrawer() {
     : `<select id="staff-role" ${saving ? "disabled" : ""}>${roleOptions.map((role) => `<option value="${role}" ${staffDraft.role === role ? "selected" : ""}>${escapeHtml(formatAdminRole(role))}</option>`).join("")}</select>`;
 
   return `<div class="staff-drawer-backdrop" data-staff-close></div><aside class="staff-drawer" aria-label="${escapeHtml(title)}">
-    <header><div><span>STAFF ACCESS</span><h2>${title}</h2></div><button type="button" data-staff-close aria-label="Close staff drawer">X</button></header>
+    <header><div><span>EMPLOYEES</span><h2>${title}</h2></div><button type="button" data-staff-close aria-label="Close employee modal">X</button></header>
     <form id="staff-form" class="staff-form">
       <label><span>Display name</span><input id="staff-display-name" value="${escapeHtml(staffDraft.displayName)}" autocomplete="name" ${saving ? "disabled" : ""} required /></label>
       <label><span>Email</span><input id="staff-email" value="${escapeHtml(staffDraft.email)}" type="email" autocomplete="email" ${isEdit || saving ? "disabled" : ""} required /></label>
       <label><span>Role</span>${roleControl}</label>
+      ${isEdit ? `<p class="staff-note">Email is read-only for employee lifecycle updates.</p>` : ""}
       ${adminUser?.role === "admin" && !isEdit ? `<p class="staff-note">Role is locked to STAFF for admin users.</p>` : ""}
       ${staffSaveError ? `<p class="staff-form-error" role="alert">${escapeHtml(staffSaveError)}</p>` : ""}
-      <button class="staff-primary-action" type="submit" ${saving ? "disabled" : ""}>${saving ? (isEdit ? "SAVING..." : "CREATING...") : (isEdit ? "SAVE CHANGES" : "CREATE STAFF")}</button>
+      <button class="staff-primary-action" type="submit" ${saving ? "disabled" : ""}>${saving ? (isEdit ? "SAVING..." : "SENDING...") : (isEdit ? "SAVE CHANGES" : "SEND INVITE")}</button>
     </form>
   </aside>`;
 }
@@ -9037,11 +9247,7 @@ function openEditStaffDrawer(id) {
 }
 
 function closeStaffDrawer() {
-  staffDrawerMode = "";
-  staffEditingId = null;
-  staffDraft = createEmptyStaffDraft();
-  staffSaveState = "idle";
-  staffSaveError = "";
+  resetStaffDrawerState();
   render();
 }
 
@@ -9062,50 +9268,90 @@ async function loadStaffUsers() {
 }
 
 async function submitStaffForm() {
+  const validationError = validateStaffDraft();
+  if (validationError) {
+    staffSaveError = validationError;
+    render();
+    return;
+  }
+
   staffSaveState = "saving";
   staffSaveError = "";
   render();
   try {
     if (staffDrawerMode === "edit") {
+      const editing = staffUsers.find((user) => user.id === staffEditingId);
+      const nextDisplayName = staffDraft.displayName.trim();
+      const nextRole = String(staffDraft.role || "staff").trim().toLowerCase();
+      const body = { action: "update", displayName: nextDisplayName };
+      if (editing && nextRole !== String(editing.role || "").toLowerCase()) body.role = nextRole;
+
+      if (editing && nextDisplayName === String(editing.displayName || "").trim() && body.role === undefined) {
+        staffFeedback = "Employee account unchanged.";
+        closeStaffDrawer();
+        return;
+      }
+
       const payload = await staffApiRequest(`/api/admin-users/${encodeURIComponent(staffEditingId)}`, {
         method: "PATCH",
-        body: { action: "update", displayName: staffDraft.displayName, role: staffDraft.role },
+        body,
       });
-      staffUsers = staffUsers.map((user) => user.id === payload.user.id ? payload.user : user);
-      staffFeedback = "Staff account updated.";
+      staffFeedback = payload.user ? "Employee account updated." : "Employee account updated.";
     } else {
       const payload = await staffApiRequest("/api/admin-users", {
         method: "POST",
-        body: { displayName: staffDraft.displayName, email: staffDraft.email, role: staffDraft.role },
+        body: { displayName: staffDraft.displayName.trim(), email: staffDraft.email.trim(), role: staffDraft.role },
       });
-      staffUsers = [payload.user, ...staffUsers.filter((user) => user.id !== payload.user.id)];
-      staffFeedback = payload.inviteSent ? "Staff invite sent and access profile created." : "Staff account created.";
+      staffFeedback = payload.inviteSent ? "Employee invite sent." : "Employee account created.";
     }
-    closeStaffDrawer();
+    resetStaffDrawerState();
+    await loadStaffUsers();
   } catch (error) {
     staffSaveState = "idle";
-    staffSaveError = error.message || "Staff account save failed.";
+    staffSaveError = error.message || "Employee account save failed.";
     render();
   }
 }
 
 async function updateStaffStatus(id, action) {
+  const target = staffUsers.find((user) => user.id === id);
+  if (!target) return;
+  if (action === "disable") {
+    const label = target.displayName || target.email || "this employee";
+    if (!window.confirm(`Deactivate ${label}? This keeps their employee record but disables portal access.`)) return;
+  }
+
   staffActionId = id;
   staffFeedback = "";
   staffLoadError = "";
   render();
   try {
-    const payload = await staffApiRequest(`/api/admin-users/${encodeURIComponent(id)}`, {
+    await staffApiRequest(`/api/admin-users/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: { action },
     });
-    staffUsers = staffUsers.map((user) => user.id === payload.user.id ? payload.user : user);
-    staffFeedback = action === "disable" ? "Staff account disabled." : "Staff account activated.";
+    staffFeedback = action === "disable" ? "Employee account deactivated." : "Employee account activated.";
+    await loadStaffUsers();
   } catch (error) {
-    staffLoadError = error.message || "Staff account update failed.";
+    staffLoadError = error.message || "Employee account update failed.";
   }
   staffActionId = "";
   render();
+}
+
+function validateStaffDraft() {
+  if (!staffDraft.displayName.trim()) return "Display name is required.";
+  if (staffDrawerMode !== "edit" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(staffDraft.email.trim())) return "Enter a valid email address.";
+  if (!["owner", "admin", "staff"].includes(String(staffDraft.role || "").toLowerCase())) return "Choose Owner, Admin, or Staff.";
+  return "";
+}
+
+function resetStaffDrawerState() {
+  staffDrawerMode = "";
+  staffEditingId = null;
+  staffDraft = createEmptyStaffDraft();
+  staffSaveState = "idle";
+  staffSaveError = "";
 }
 
 async function staffApiRequest(path, { method = "GET", body } = {}) {
@@ -9126,12 +9372,12 @@ async function staffApiRequest(path, { method = "GET", body } = {}) {
 function getStaffApiErrorMessage(status, error) {
   const normalized = String(error || "").toLowerCase();
   if (status === 401) return "Admin session required. Sign in again.";
-  if (status === 403) return normalized.includes("role") ? "Role change is not permitted." : "You do not have permission for that staff account.";
+  if (status === 403) return normalized.includes("role") ? "Role change is not permitted." : (error || "You do not have permission for that employee account.");
   if (status === 409) return normalized.includes("auth") ? "That email already has a login account." : "That email already has admin access.";
-  if (status === 503) return normalized.includes("server key") ? "Staff invite service is not configured. Check the Supabase server key." : "Staff invite email could not be sent. Configure Supabase email delivery.";
+  if (status === 503) return normalized.includes("server key") ? "Employee invite service is not configured. Check the Supabase server key." : "Employee invite email could not be sent. Configure Supabase email delivery.";
   if (normalized.includes("display")) return "Display name is required.";
   if (normalized.includes("email")) return "Enter a valid email address.";
-  return "Staff account request failed. Try again.";
+  return error || "Employee account request failed. Try again.";
 }
 
 function formatStaffDate(value, fallback = "-") {
@@ -9701,7 +9947,7 @@ function renderSidebar(currentRoute) {
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
-    { label: "Settings", path: "/settings", icon: "settings" },
+    ...(canViewSettingsRoute() ? [{ label: "Settings", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
   ];
 
   const renderNavItem = (item) => {
@@ -10861,6 +11107,29 @@ function bindEvents() {
   document.querySelectorAll("[data-staff-disable]").forEach((button) => button.addEventListener("click", () => updateStaffStatus(button.dataset.staffDisable, "disable")));
   document.querySelectorAll("[data-staff-activate]").forEach((button) => button.addEventListener("click", () => updateStaffStatus(button.dataset.staffActivate, "activate")));
   document.querySelectorAll("[data-staff-close]").forEach((button) => button.addEventListener("click", closeStaffDrawer));
+  document.getElementById("employee-search")?.addEventListener("input", (event) => {
+    employeeQuery = event.target.value;
+    render();
+    focusFieldAtEnd("employee-search");
+  });
+  document.getElementById("employee-role-filter")?.addEventListener("change", (event) => {
+    employeeRoleFilter = event.target.value;
+    render();
+  });
+  document.getElementById("employee-status-filter")?.addEventListener("change", (event) => {
+    employeeStatusFilter = event.target.value;
+    render();
+  });
+  document.querySelector("[data-employee-reset]")?.addEventListener("click", () => {
+    employeeQuery = "";
+    employeeRoleFilter = "all";
+    employeeStatusFilter = "active";
+    render();
+  });
+  document.querySelector("[data-employee-view-deactivated]")?.addEventListener("click", () => {
+    employeeStatusFilter = "deactivated";
+    render();
+  });
 
   const staffForm = document.getElementById("staff-form");
   if (staffForm) {
@@ -12501,6 +12770,7 @@ function getRoutePath() {
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (path === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
+  if ((path === "/settings" || path === "/settings/people-access") && !canViewSettingsRoute()) return defaultRoutePath;
   return routes[path] ? path : defaultRoutePath;
 }
 
@@ -12519,6 +12789,7 @@ function normalizeRoutePath(path) {
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (routePath === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
+  if ((routePath === "/settings" || routePath === "/settings/people-access") && !canViewSettingsRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
 }
 

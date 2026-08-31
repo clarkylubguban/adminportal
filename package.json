@@ -6,6 +6,9 @@
   "scripts": {
     "dev": "node scripts/local-dev.mjs",
     "build": "node scripts/build.mjs",
+    "test:employee-e1": "node scripts/test-employee-e1.mjs",
+    "test:employee-e1-browser": "node scripts/test-employee-e1-browser.mjs",
+    "test:employee-e2": "node scripts/test-employee-e2.mjs",
     "test:native-orders": "node scripts/test-native-order-foundation.mjs",
     "test:native-orders-db": "node scripts/test-native-order-db-contract.mjs",
     "test:native-order-status-authority": "node scripts/test-native-order-status-authority.mjs",
