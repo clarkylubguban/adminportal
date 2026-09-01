@@ -51,7 +51,7 @@ const nativeRow = {
   customer_name: "Native Customer Snapshot",
   customer_contact: "0917-999-9999",
   product: "Embroidery Snapshot",
-  quantity: "14 pcs",
+  quantity: "14 pcs (XL: 14)",
   quoted_amount: 1400,
   amount_due: 1400,
   quote_breakdown: "14 pcs | PHP 100",
@@ -75,6 +75,7 @@ assert.equal(nativeOnly[0].orderReference, "TRRY-ORD-NATIVE01");
 assert.equal(nativeOnly[0].odooSO, "", "native display identity must not fall back to Odoo");
 assert.equal(nativeOnly[0].status, "", "native-only row must not synthesize Inquiry status=won");
 assert.equal(nativeOnly[0].quoteStatus, "approved");
+assert.equal(nativeOnly[0].sizeBreakdown, "XL: 14", "native order derives size breakdown from canonical quantity text");
 
 const mixed = buildDualReadOrders({ inquiries: [legacyInquiry, nativeSourceInquiry], nativeRows: [nativeRow] });
 assert.equal(mixed.length, 2, "mixed read should include native and unrelated legacy orders");
@@ -118,7 +119,9 @@ const main = await readFile("src/main.js", "utf8");
 assert.ok(main.includes("buildDualReadOrders"), "/orders uses the dual-read compatibility collection");
 assert.ok(main.includes("getNativeOrderRows"), "native orders are read through the compatibility service");
 assert.ok(main.includes("payment-confirmations"), "existing payment confirmation contract remains present");
-assert.ok(main.includes("Review the Messenger receipt"), "Messenger manual receipt behavior remains unchanged");
+assert.ok(main.includes('["proof_submitted", "under_review", "correction_required"]'), "required payment state remains neutral until a payment method is selected");
+assert.ok(main.includes("Reference number <small>(optional for Cash)</small>"), "cash payment reference is explicitly optional");
+assert.ok(main.includes("Review the Messenger receipt"), "verified online payment review guidance remains available");
 assert.ok(main.includes("if (routePath === legacyOrderDashboardPath) return `${activeOrdersPath}${url.search}`;"), "/order-dashboard preserves compatible query string");
 assert.ok(main.includes("normalizeLegacyOrderDashboardRoute()"), "legacy dashboard route is normalized before render");
 

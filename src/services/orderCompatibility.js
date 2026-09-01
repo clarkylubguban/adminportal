@@ -63,6 +63,12 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
   const nativeOrderId = getFirstValue(row, ["id"]);
   const sourceInquiryId = getFirstValue(row, ["source_inquiry_id", "sourceInquiryId"]);
   const orderReference = getFirstValue(row, ["order_reference", "orderReference"]);
+  const quantity = getFirstValue(row, ["quantity", "qty"]) || sourceInquiry?.qty || "-";
+  const sizeBreakdown =
+    getFirstValue(row, ["size_breakdown", "sizeBreakdown"]) ||
+    sourceInquiry?.sizeBreakdown ||
+    extractSizeBreakdown(quantity) ||
+    extractSizeBreakdown(sourceInquiry?.qty);
   const bridgeId = sourceInquiryId || nativeOrderId || orderReference;
 
   if (!bridgeId) return null;
@@ -89,8 +95,8 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
     company: getFirstValue(row, ["company", "business_name", "businessName"]) || sourceInquiry?.company || "",
     service: getFirstValue(row, ["product", "service", "service_type", "serviceType"]) || sourceInquiry?.service || "-",
     productDesc: getFirstValue(row, ["product_desc", "productDesc"]) || sourceInquiry?.productDesc || "",
-    qty: getFirstValue(row, ["quantity", "qty"]) || sourceInquiry?.qty || "-",
-    sizeBreakdown: getFirstValue(row, ["size_breakdown", "sizeBreakdown"]) || sourceInquiry?.sizeBreakdown || "",
+    qty: quantity,
+    sizeBreakdown,
     status: getFirstValue(sourceInquiry, ["status"]) || "",
     quoteStatus: getFirstValue(sourceInquiry, ["quoteStatus", "quote_status"]) || "approved",
     orderStatus: getFirstValue(row, ["status"]),
@@ -180,6 +186,13 @@ function isLegacyOrderInquiry(item) {
 
 function getAccessToken(authSession) {
   return authSession?.access_token || "";
+}
+
+function extractSizeBreakdown(value) {
+  const text = String(value || "").trim();
+  const parenthetical = text.match(/\(([^)]+)\)/)?.[1]?.trim() || "";
+  if (!parenthetical || !/[A-Za-z0-9]+\s*:\s*\d+/.test(parenthetical)) return "";
+  return parenthetical;
 }
 
 function getFirstValue(row, keys) {
