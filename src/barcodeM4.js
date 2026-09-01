@@ -266,7 +266,7 @@ function printRows(variantIds) {
       * { box-sizing: border-box; }
       body { margin: 0; color: #111; font-family: Arial, sans-serif; }
       .label { width: ${LABEL_SIZE.width}mm; height: ${LABEL_SIZE.height}mm; page-break-after: always; padding: 1mm; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
-      .label strong { font-size: 6px; line-height: 1; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+      .label strong { font-size: 8px; line-height: 1; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .label span { font-size: 5px; line-height: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
       .label .barcode { margin: 0.7mm 0 0.3mm; width: 100%; }
       .label svg { width: 100%; height: 9mm; display: block; }
