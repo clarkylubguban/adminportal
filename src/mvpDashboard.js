@@ -1140,7 +1140,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderDrawerOverview(item) {
     return `<section class="mvp-order-panel"><h3>ORDER SUMMARY</h3><div class="mvp-order-detail-list">
       ${detailLine("Product", itemDisplay(item))}
-      ${detailLine("Quantity", item.sizeBreakdown || item.qty || "Not set")}
+      ${detailLine("Quantity", item.qty || "Not set")}
       ${detailLine("Sizes", item.sizeBreakdown || "Not set")}
       ${detailLine("Color", item.color || item.garmentColor || messageValue(item.message, ["Color", "Garment Color"]) || "Not set")}
       ${detailLine("Due Date", dueShortLabel(due(item), item))}
@@ -1446,7 +1446,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function quantityDisplay(item) {
-    return item.sizeBreakdown || item.qty || "-";
+    return item.qty || "-";
   }
 
   function productionBlocker(item) {
