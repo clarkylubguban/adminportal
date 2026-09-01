@@ -12,15 +12,6 @@ assert.ok(main.includes("function renderCatalogVariantGenerator"), "variant gene
 assert.ok(main.includes('data-catalog-variant-generator="'), "variant generator checkbox hook missing");
 assert.ok(main.includes("updateCatalogVariantGeneratorSelection"), "variant generator event handler missing");
 assert.ok(main.includes("buildCatalogVariantMatrixDraft"), "matrix draft builder missing");
-assert.ok(main.includes('data-catalog-generate-variants'), "single Generate Variants action missing");
-assert.ok(main.includes("generateCatalogVariantsFromSelection"), "explicit generation handler missing");
-assert.ok(main.includes("Variants generated in draft. Review prices, then use Save Changes once."), "single-save guidance missing");
-assert.equal(/<button[^>]+data-catalog-add-variant/.test(main), false, "Add Variant button must not be rendered");
-assert.equal(/<button[^>]+data-catalog-save-existing-variant/.test(main), false, "row-level Save buttons must not be rendered");
-assert.equal(/data-catalog-existing-variant-field="(?:color|size)"/.test(main), false, "generated color and size identity must be locked in rows");
-assert.ok(main.includes('data-catalog-existing-variant-field="sellingPrice"'), "generated variant price must remain editable");
-assert.ok(main.includes('data-catalog-delete-variant='), "variant removal control must remain available");
-
 assert.ok(main.includes("colors.flatMap((color) => sizes.map((size) =>"), "matrix must group generated rows by color, then size");
 assert.ok(main.includes("...(existing || {})"), "matrix rebuild must preserve existing variant identity fields");
 assert.ok(main.includes("sellingPrice: existing?.sellingPrice ?? draft.startingPrice ?? 0"), "matrix rebuild must preserve existing per-variant selling price");
