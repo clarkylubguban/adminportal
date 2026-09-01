@@ -7966,73 +7966,66 @@ function renderCatalogEditorProduction(draft, disabled = false) {
 
 function renderCatalogEditorVariants(draft, disabled = false) {
   const variants = getCatalogDraftVariantRows(draft);
-  const sizes = uniqueList(variants.map((variant) => variant.size).filter(Boolean));
-  const colors = uniqueList(variants.map((variant) => variant.color).filter(Boolean));
   const canWrite = canWriteCatalogProducts();
-  const canAddVariant = canWrite && !disabled && Boolean(draft.id);
-  const addVariantMessage = !canWrite
-    ? "Catalog variants are read-only for this role."
-    : disabled
-      ? "Wait for the current Product save to finish before adding variants."
-      : !draft.id
-        ? "Save this Product before adding variants."
-        : "Use Add Variant to add the next size or color option, then save.";
+  const generatorDisabled = disabled || !canWrite || !draft.id;
 
   return `
     <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
       <header class="catalog-variants-header">
-        <div><h2>Variants</h2><p>Size and color combinations for this catalog product.</p></div>
-        <button class="note-button catalog-add-variant-button" type="button" data-catalog-add-variant ${canAddVariant ? "" : "disabled"} title="${escapeHtml(addVariantMessage)}">${variants.length ? "Add Variant" : "Add First Variant"}</button>
+        <div><h2>Variants</h2><p>Select sizes, type or choose a remembered color, review the count, then click GENERATE VARIANTS.</p></div>
+        <button class="note-button" type="button" data-catalog-variants-done>Done</button>
       </header>
-      ${canAddVariant ? "" : `<p class="catalog-editor-helper">${escapeHtml(addVariantMessage)}</p>`}
-      ${renderCatalogVariantGenerator(draft, variants, disabled || !canWrite)}
-      <div class="catalog-variant-attributes">
-        <div>
-          <span>Available Sizes</span>
-          <div class="catalog-chip-list">${sizes.length ? sizes.map((size) => `<span class="catalog-attribute-chip">${escapeHtml(size)}</span>`).join("") : `<span class="catalog-muted-chip">No sizes yet</span>`}</div>
-        </div>
-        <div>
-          <span>Available Colors</span>
-          <div class="catalog-chip-list">${colors.length ? colors.map((color) => `<span class="catalog-attribute-chip color-chip"><i></i>${escapeHtml(color)}</span>`).join("") : `<span class="catalog-muted-chip">No colors yet</span>`}</div>
-        </div>
-      </div>
-      ${(catalogVariantPanel.mode || variants.length)
+      ${!draft.id ? `<p class="catalog-editor-helper">Save this Product before generating variants.</p>` : ""}
+      ${renderCatalogVariantGenerator(draft, variants, generatorDisabled)}
+      ${variants.length
         ? `<div class="catalog-variant-row-stack">
             <div class="catalog-variant-row-labels" aria-hidden="true"><span>Color</span><span>Size</span><span>SKU</span><span>Price</span><span>Action</span></div>
             ${variants.map((variant, index) => renderCatalogVariantRow(draft, variant, index, disabled)).join("")}
-            ${catalogVariantPanel.mode ? renderCatalogVariantPanel(draft, variants, disabled) : ""}
           </div>`
-        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Add size and color combinations for this product.</span></div>`}
+        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Select at least one size and color, then generate variants.</span></div>`}
     </article>
   `;
 }
 
 function renderCatalogVariantGenerator(draft, variants, disabled = false) {
-  const selectedSizes = new Set(uniqueList([...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(draft.availableSizesText)]).map(normalizeVariantToken));
-  const selectedColors = new Set(uniqueList([...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(draft.availableColorsText)]).map(normalizeVariantToken));
-  const sizeOptions = uniqueList([...catalogVariantSizeOptions, ...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(draft.availableSizesText)]);
-  const colorOptions = uniqueList([...catalogVariantColorOptions, ...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(draft.availableColorsText)]);
-  const generatedCount = selectedSizes.size * selectedColors.size;
+  const sizes = splitCatalogList(draft.availableSizesText);
+  const colors = splitCatalogList(draft.availableColorsText);
+  const sizeOptions = uniqueList([...catalogVariantSizeOptions.filter((size) => size !== "XXL"), ...sizes]);
+  const rememberedColors = uniqueList(["White", "Navy", "Cream", ...colors]);
+  const generatedCount = sizes.length * colors.length;
 
   return `
-    <div class="catalog-variant-generator" aria-label="Variant generator">
-      <div class="catalog-variant-generator-copy">
-        <span>Size x Color Generator</span>
-        <strong>${generatedCount ? `${generatedCount} combinations selected` : "Select sizes and colors"}</strong>
+    <div class="catalog-variant-generator catalog-variant-generator-v4" aria-label="Variant generator">
+      <div class="catalog-variant-option-row">
+        <span class="catalog-variant-option-name">Option<br><strong>Size</strong></span>
+        <span class="catalog-variant-option-values">Values</span>
+        <div class="catalog-variant-option-list">
+          ${sizeOptions.map((size) => renderCatalogVariantOption("size", size, sizes.some((item) => normalizeVariantToken(item) === normalizeVariantToken(size)), disabled)).join("")}
+          <label class="catalog-variant-custom-option">
+            <input type="text" data-catalog-custom-size placeholder="Select sizes…" ${disabled ? "disabled" : ""} aria-label="Add custom size, for example XXS or 3XL">
+          </label>
+        </div>
       </div>
-      <div class="catalog-variant-generator-options">
-        <div>
-          <span>Sizes</span>
-          <div class="catalog-variant-option-list">
-            ${sizeOptions.map((size) => renderCatalogVariantOption("size", size, selectedSizes.has(normalizeVariantToken(size)), disabled)).join("")}
-          </div>
+      <div class="catalog-variant-option-row">
+        <span class="catalog-variant-option-name">Option<br><strong>Color</strong></span>
+        <span class="catalog-variant-option-values">Values</span>
+        <div class="catalog-variant-option-list">
+          ${colors.map((color) => renderCatalogVariantOption("color", color, true, disabled)).join("")}
+          <span class="catalog-variant-option-prompt">Type / saved…</span>
         </div>
-        <div>
-          <span>Colors</span>
-          <div class="catalog-variant-option-list">
-            ${colorOptions.map((color) => renderCatalogVariantOption("color", color, selectedColors.has(normalizeVariantToken(color)), disabled)).join("")}
-          </div>
-        </div>
+      </div>
+      <div class="catalog-variant-selection-summary">${sizes.length} sizes + ${colors.length} colors selected • ${generatedCount} combinations ready to generate.</div>
+      <div class="catalog-variant-color-adder">
+        <span>Color</span>
+        <input type="text" data-catalog-custom-color placeholder="Type or choose saved color…" list="catalog-remembered-colors" ${disabled ? "disabled" : ""}>
+        <datalist id="catalog-remembered-colors">${rememberedColors.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
+        <span>Saved</span>
+        <div class="catalog-chip-list">${rememberedColors.slice(0, 3).map((color) => `<button type="button" class="catalog-attribute-chip" data-catalog-remembered-color="${escapeHtml(color)}" ${disabled ? "disabled" : ""}>${escapeHtml(color)}</button>`).join("")}</div>
+        <button class="secondary-button" type="button" data-catalog-add-color ${disabled ? "disabled" : ""}>Add Color</button>
+      </div>
+      <div class="catalog-variant-generate-row">
+        <span><strong>${generatedCount} combinations ready</strong></span>
+        <button class="secondary-button" type="button" data-catalog-generate-variants ${disabled || !generatedCount ? "disabled" : ""}>Generate Variants</button>
       </div>
     </div>
   `;
@@ -8045,6 +8038,33 @@ function renderCatalogVariantOption(type, value, selected, disabled = false) {
       <span>${escapeHtml(value)}</span>
     </label>
   `;
+}
+
+function addCatalogCustomVariantValue(type, rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value || !catalogDraft || !canWriteCatalogProducts()) return;
+  updateCatalogVariantGeneratorSelection(type, value, true);
+}
+
+function generateCatalogVariantDrafts() {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const sizes = splitCatalogList(catalogDraft.availableSizesText);
+  const colors = splitCatalogList(catalogDraft.availableColorsText);
+  if (!sizes.length || !colors.length) {
+    catalogSaveError = "Select at least one size and one color before generating variants.";
+    render();
+    return;
+  }
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  catalogDraft = {
+    ...catalogDraft,
+    variants: buildCatalogVariantMatrixDraft(catalogDraft, variants, sizes, colors),
+  };
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+  catalogSaveError = "Variants generated in draft. Review them, then use Save Changes.";
+  catalogValidationError = "";
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
 }
 
 function addCatalogVariantDraft() {
@@ -8112,7 +8132,6 @@ function renderCatalogVariantRow(draft, variant, index, disabled = false) {
         </label>
       </div>
       <div class="catalog-variant-row-actions">
-        <button class="primary-button" type="button" data-catalog-save-existing-variant="${index}" ${disabled ? "disabled" : ""}>Save</button>
         <button class="icon-button danger" type="button" data-catalog-delete-variant="${index}" ${disabled ? "disabled" : ""} aria-label="Delete Variant">${renderIcon("trash-2")}</button>
       </div>
     </div>
@@ -8274,22 +8293,16 @@ function deleteCatalogVariantDraft(index) {
 
 function updateCatalogVariantGeneratorSelection(type, value, checked) {
   if (!catalogDraft || !canWriteCatalogProducts()) return;
-  const variants = getCatalogDraftVariantRows(catalogDraft);
-  const currentSizes = uniqueList([...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(catalogDraft.availableSizesText)]);
-  const currentColors = uniqueList([...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(catalogDraft.availableColorsText)]);
-  const nextSizes = updateCatalogVariantOptionList(currentSizes, value, checked);
-  const nextColors = updateCatalogVariantOptionList(currentColors, value, checked);
-  const selectedSizes = type === "size" ? nextSizes : currentSizes;
-  const selectedColors = type === "color" ? nextColors : currentColors;
-  const nextVariants = buildCatalogVariantMatrixDraft(catalogDraft, variants, selectedSizes, selectedColors);
+  const currentSizes = splitCatalogList(catalogDraft.availableSizesText);
+  const currentColors = splitCatalogList(catalogDraft.availableColorsText);
+  const selectedSizes = type === "size" ? updateCatalogVariantOptionList(currentSizes, value, checked) : currentSizes;
+  const selectedColors = type === "color" ? updateCatalogVariantOptionList(currentColors, value, checked) : currentColors;
 
   catalogDraft = {
     ...catalogDraft,
-    variants: nextVariants,
     availableSizesText: selectedSizes.join(", "),
     availableColorsText: selectedColors.join(", "),
   };
-  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
   catalogSaveError = "";
   catalogValidationError = "";
   render();
@@ -11842,6 +11855,37 @@ function bindEvents() {
     field.addEventListener("change", () => {
       updateCatalogVariantGeneratorSelection(field.dataset.catalogVariantGenerator, field.value, field.checked);
     });
+  });
+
+  document.querySelector("[data-catalog-custom-size]")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addCatalogCustomVariantValue("size", event.currentTarget.value);
+  });
+
+  document.querySelector("[data-catalog-add-color]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    addCatalogCustomVariantValue("color", document.querySelector("[data-catalog-custom-color]")?.value);
+  });
+
+  document.querySelector("[data-catalog-custom-color]")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addCatalogCustomVariantValue("color", event.currentTarget.value);
+  });
+
+  document.querySelectorAll("[data-catalog-remembered-color]").forEach((button) => {
+    button.addEventListener("click", () => addCatalogCustomVariantValue("color", button.dataset.catalogRememberedColor));
+  });
+
+  document.querySelector("[data-catalog-generate-variants]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    generateCatalogVariantDrafts();
+  });
+
+  document.querySelector("[data-catalog-variants-done]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    document.querySelector("[data-catalog-editor-save]")?.focus();
   });
 
   document.querySelectorAll("[data-catalog-variant-field]").forEach((field) => {
