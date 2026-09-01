@@ -129,8 +129,9 @@ const dashboardSource = await readFile("src/mvpDashboard.js", "utf8");
 assert.ok(dashboardSource.includes("data-mvp-open-messenger"), "Messenger button contract remains present");
 assert.ok(dashboardSource.includes("findOrderByIdentity(orders, state.orderId || orderQuery)"), "order URL resolution uses compatibility identity matching");
 assert.ok(dashboardSource.includes("findOrderByIdentity(productionJobs, selectedId)"), "production URL resolution uses compatibility identity matching");
-assert.ok(dashboardSource.includes('detailLine("Quantity", item.qty || "Not set")'), "Order summary keeps total quantity separate from size breakdown");
-assert.ok(dashboardSource.includes('return item.qty || "-";'), "Production summary keeps total quantity separate from size breakdown");
+assert.ok(dashboardSource.includes('detailLine("Quantity", quantityDisplay(item))'), "Order summary uses the total-only quantity formatter");
+assert.ok(dashboardSource.includes("normalize(trailingBreakdown[1]) !== normalize(sizes)"), "quantity formatter strips only an exact trailing copy of the Sizes value");
+assert.ok(dashboardSource.includes("quantity.slice(0, trailingBreakdown.index).trim() || quantity"), "Production summary removes the duplicated trailing size breakdown");
 assert.ok(dashboardSource.includes('detailLine("Sizes", item.sizeBreakdown || "Not set")'), "Order summary keeps size breakdown in the Sizes row");
 
 console.log("PASS Orders dual-read compatibility, native identity, legacy suppression, and Inquiry-ID bridges");
