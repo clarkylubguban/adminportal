@@ -7967,7 +7967,7 @@ function renderCatalogEditorProduction(draft, disabled = false) {
 function renderCatalogEditorVariants(draft, disabled = false) {
   const variants = getCatalogDraftVariantRows(draft);
   const canWrite = canWriteCatalogProducts();
-  const generatorDisabled = disabled || !canWrite || !draft.id;
+  const generatorDisabled = disabled || !canWrite;
 
   return `
     <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
@@ -7975,7 +7975,6 @@ function renderCatalogEditorVariants(draft, disabled = false) {
         <div><h2>Variants</h2><p>Select sizes, type or choose a remembered color, review the count, then click GENERATE VARIANTS.</p></div>
         <button class="note-button" type="button" data-catalog-variants-done>Done</button>
       </header>
-      ${!draft.id ? `<p class="catalog-editor-helper">Save this Product before generating variants.</p>` : ""}
       ${renderCatalogVariantGenerator(draft, variants, generatorDisabled)}
       ${variants.length
         ? `<div class="catalog-variant-row-stack">
@@ -8908,8 +8907,8 @@ function createCatalogDraft(product = null) {
     availableSizes: [],
     availableColors: [],
     printMethods: [],
-    availableSizesText: "",
-    availableColorsText: "",
+    availableSizesText: "S, M, L, XL",
+    availableColorsText: "Black, White",
     printMethodsText: "",
     sortOrder: 0,
     isFeatured: false,
