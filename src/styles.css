@@ -30874,3 +30874,26 @@ pre,
     display: none;
   }
 }
+
+
+/* Variants 04 collision fix: override the legacy two-column generator shell. */
+.catalog-variant-generator.catalog-variant-generator-v4 {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: stretch;
+  width: 100%;
+  min-width: 0;
+}
+.catalog-variant-generator-v4 > * {
+  grid-column: 1 / -1;
+  min-width: 0;
+}
+.catalog-variant-generator-v4 .catalog-variant-option-row {
+  width: 100%;
+  box-sizing: border-box;
+}
+.catalog-variant-generator-v4 .catalog-variant-option-list {
+  min-width: 0;
+}
+.catalog-variant-generator-v4 .catalog-variant-custom-option {
+  display: inline-flex;
+}
