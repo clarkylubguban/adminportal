@@ -30897,3 +30897,42 @@ pre,
 .catalog-variant-generator-v4 .catalog-variant-custom-option {
   display: inline-flex;
 }
+
+
+/* Variants 04 simplified actions */
+.catalog-variant-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 0 0 auto;
+}
+.catalog-variant-header-actions .primary-button {
+  min-height: 38px;
+  padding-inline: 18px;
+  background: var(--trry-lime, #b8ff00);
+  border-color: var(--trry-lime, #b8ff00);
+  color: #111;
+}
+.catalog-variant-generator-v4 .catalog-variant-custom-option input {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+  background: #fff;
+}
+.catalog-variant-generator-v4 .catalog-variant-custom-option input:focus,
+.catalog-variant-generator-v4 .catalog-variant-custom-option input:focus-visible {
+  border: 0;
+  outline: 0;
+  box-shadow: none;
+}
+@media (max-width: 640px) {
+  .catalog-variants-header {
+    align-items: flex-start;
+  }
+  .catalog-variant-header-actions {
+    width: 100%;
+  }
+  .catalog-variant-header-actions > button {
+    flex: 1 1 0;
+  }
+}
