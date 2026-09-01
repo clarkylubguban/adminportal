@@ -2526,6 +2526,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       const id = button.dataset.mvpFulfillmentAction;
       const trackingSubstatus = button.dataset.mvpFulfillmentStatus;
       if (!id || !trackingSubstatus) return;
+      if (trackingSubstatus === "completed" && !window.confirm("Confirm the customer has received the order. This will mark the order Completed.")) return;
       state.orderFulfillmentId = id;
       state.orderFulfillmentError = "";
       button.disabled = true;

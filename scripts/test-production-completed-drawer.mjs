@@ -113,6 +113,8 @@ assert.ok(source.includes("productionCompletedDrawer"), "completed drawer uses d
 assert.ok(source.includes("Production work and internal handoff are complete."), "production-owned completion copy is encoded");
 assert.ok(!source.includes("productionCompletedFulfillment"), "Completed Production drawer has no fulfillment-owned panel");
 assert.ok(source.includes("data-mvp-open-messenger"), "Messenger behavior remains elsewhere and untouched");
+assert.ok(source.includes('trackingSubstatus === "completed" && !window.confirm'), "pickup completion requires an explicit confirmation gate");
+assert.ok(source.includes("Confirm the customer has received the order."), "pickup completion confirmation explains the terminal action");
 
 await verifyResponsiveCompletedDrawer();
 
