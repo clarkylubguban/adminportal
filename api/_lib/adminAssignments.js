@@ -6,6 +6,7 @@ export async function listAssignmentUsers(supabase, caller = null) {
     .from("admin_users")
     .select("id,user_id,email,display_name,role,is_active,is_test")
     .eq("is_active", true)
+    .or("is_test.is.null,is_test.eq.false")
     .in("role", ASSIGNMENT_ROLES);
 
   if (error) throw error;
@@ -25,6 +26,7 @@ export async function validateAssignmentUser(supabase, userId, caller = null) {
     .select("id,user_id,email,display_name,role,is_active,is_test")
     .eq("user_id", normalized)
     .eq("is_active", true)
+    .or("is_test.is.null,is_test.eq.false")
     .in("role", ASSIGNMENT_ROLES)
     .maybeSingle();
 
@@ -53,6 +55,8 @@ function toAssignmentUser(row) {
     displayName: String(row.display_name || "").trim(),
     email: String(row.email || "").trim(),
     role,
+    isActive: row.is_active !== false,
+    assignmentEligible: row.is_active !== false && row.is_test !== true,
   };
 }
 
@@ -65,6 +69,7 @@ function compareAssignmentUsers(a, b) {
 function canAssignToUser(caller, target) {
   const callerRole = normalizeRole(caller?.role);
   const targetRole = normalizeRole(target?.role);
+  if (target.assignmentEligible === false) return false;
   if (!target?.userId || !ASSIGNMENT_ROLES.includes(targetRole)) return false;
   if (callerRole === "owner") return true;
   if (callerRole === "admin") return targetRole === "staff";

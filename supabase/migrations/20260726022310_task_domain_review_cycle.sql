@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260726022310
+-- Original filename: 20260726022310_task_domain_review_cycle.sql
+-- Original fetched SHA-256: 97E5AC33A2FBD3FB758FF1CD1DD52A7955BD093F1FD12728AFBF2C3797587EC0
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202607250002_create_task_domain_functions.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260726022310_task_domain_review_cycle.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

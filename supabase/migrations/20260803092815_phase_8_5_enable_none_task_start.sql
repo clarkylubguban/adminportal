@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260803092815
+-- Original filename: 20260803092815_phase_8_5_enable_none_task_start.sql
+-- Original fetched SHA-256: 3CCD528FFA3CAB52409B81A018BA6D5167E7C3A436B4005A1DC0DDA8870DDB72
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202608030002_enable_none_task_start.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260803092815_phase_8_5_enable_none_task_start.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

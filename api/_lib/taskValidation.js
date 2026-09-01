@@ -152,8 +152,15 @@ export function parseDraftUpdate(body, currentTask) {
   assertAllowedKeys(body, new Set([
     "expectedVersion", "title", "brief", "priority", "assignedUserId", "reviewerUserId",
     "draftApprovalRequired", "scheduledDate", "startDeadline", "submissionDeadline", "approvalDeadline",
-    "timeTrackingMode",
+    "timeTrackingMode", "sourceRecordType", "sourceRecordId",
   ]));
+  const sourceRecordType = body.sourceRecordType === undefined
+    ? currentTask.sourceRecordType
+    : optionalText(body.sourceRecordType, "sourceRecordType", 64);
+  const sourceRecordId = body.sourceRecordId === undefined
+    ? currentTask.sourceRecordId
+    : optionalText(body.sourceRecordId, "sourceRecordId", 200);
+  validateSourcePair(sourceRecordType, sourceRecordId);
   const merged = {
     title: body.title ?? currentTask.title,
     brief: body.brief ?? currentTask.brief,
@@ -173,6 +180,8 @@ export function parseDraftUpdate(body, currentTask) {
     brief: requireText(merged.brief, "brief", 10000),
     priority: enumValue(merged.priority, "priority", TASK_PRIORITIES),
     timeTrackingMode: enumValue(merged.timeTrackingMode, "timeTrackingMode", TASK_TIME_TRACKING_MODES),
+    sourceRecordType,
+    sourceRecordId,
     assignedUserId: optionalUuid(merged.assignedUserId, "assignedUserId"),
     reviewerUserId: optionalUuid(merged.reviewerUserId, "reviewerUserId"),
     draftApprovalRequired: booleanValue(merged.draftApprovalRequired, "draftApprovalRequired"),
@@ -231,6 +240,21 @@ export function parseTaskListQuery(request, { myTasks = false } = {}) {
   };
 }
 
+export function parseTaskCalendarQuery(request) {
+  const query = queryObject(request);
+  assertAllowedQuery(query, new Set(["from", "to", "assignedUserId", "sourceType", "status"]));
+  const from = optionalDate(singleQueryValue(query.from, "from"), "from");
+  const to = optionalDate(singleQueryValue(query.to, "to"), "to");
+  if (from && to && to < from) throw new TaskValidationError("to must not be earlier than from.");
+  return {
+    from,
+    to,
+    assignedUserId: query.assignedUserId === undefined ? null : requireUuid(singleQueryValue(query.assignedUserId, "assignedUserId"), "assignedUserId"),
+    sourceType: query.sourceType === undefined ? null : enumValue(singleQueryValue(query.sourceType, "sourceType"), "sourceType", TASK_SOURCES),
+    status: query.status === undefined ? null : enumValue(singleQueryValue(query.status, "status"), "status", TASK_STATUSES),
+  };
+}
+
 export function parseHistoryQuery(request) {
   const query = queryObject(request);
   const cleaned = { ...query };
@@ -242,6 +266,24 @@ export function parseHistoryQuery(request) {
 export function parseAssignBody(body) {
   const parsed = parseExpectedVersionBody(body, ["assignedUserId"]);
   return { ...parsed, assignedUserId: optionalUuid(body.assignedUserId, "assignedUserId") };
+}
+
+export function parseApproveAndAssignBody(body) {
+  const parsed = parseExpectedVersionBody(body, [
+    "assignedUserId",
+    "reviewerUserId",
+    "startDeadline",
+    "submissionDeadline",
+    "approvalDeadline",
+  ]);
+  return {
+    ...parsed,
+    assignedUserId: requireUuid(body.assignedUserId, "assignedUserId"),
+    reviewerUserId: requireUuid(body.reviewerUserId, "reviewerUserId"),
+    startDeadline: optionalTimestamp(body.startDeadline, "startDeadline"),
+    submissionDeadline: optionalTimestamp(body.submissionDeadline, "submissionDeadline"),
+    approvalDeadline: optionalTimestamp(body.approvalDeadline, "approvalDeadline"),
+  };
 }
 
 export function parseSubmitBody(body) {

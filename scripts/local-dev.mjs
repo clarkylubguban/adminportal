@@ -21,15 +21,21 @@ const appRoutes = new Set([
   "/order-dashboard",
   "/production",
   "/my-tasks",
+  "/calendar",
   "/workboard",
-  "/reorders",
-  "/overview",
-  "/clients",
-  "/products",
-  "/catalog",
   "/settings",
-  "/staff",
+  "/settings/people-access",
+  "/overview",
+  "/catalog",
+  "/catalog/brands",
+  "/catalog/categories",
+  "/catalog/suppliers",
+  "/catalog/purchasing",
+  "/catalog/inventory",
+  "/login",
   "/set-password",
+  "/reset-password",
+  "/forgot-password",
 ]);
 
 async function handleRequest(request, response) {
@@ -38,9 +44,15 @@ async function handleRequest(request, response) {
     const pathname = decodeURIComponent(url.pathname);
     const routePath = normalizeRoutePath(pathname);
 
-    if (/^\/api\/admin-users(\/[^/]+)?\/?$/.test(routePath)) {
-      const { default: handleAdminUsersRequest } = await import("../api/admin-users.js");
+    if (/^\/api\/admin-users\/?$/.test(routePath)) {
+      const { default: handleAdminUsersRequest } = await import("../api/admin-users/index.js");
       await handleAdminUsersRequest(request, response);
+      return;
+    }
+
+    if (/^\/api\/admin-users\/[^/]+\/?$/.test(routePath)) {
+      const { default: handleAdminUserRequest } = await import("../api/admin-users/[id].js");
+      await handleAdminUserRequest(request, response);
       return;
     }
 
@@ -50,25 +62,14 @@ async function handleRequest(request, response) {
       return;
     }
 
-    if (/^\/api\/inquiries\/[^/]+\/payments\/?$/.test(routePath)) {
-      const { default: handlePaymentsRequest } = await import("../api/inquiries/[id]/payments.js");
-      await handlePaymentsRequest(request, response);
-      return;
-    }
-    if (/^\/api\/inquiries\/[^/]+\/follow-ups\/?$/.test(routePath)) {
-      const { default: handleFollowUpsRequest } = await import("../api/inquiries/[id]/follow-ups.js");
-      await handleFollowUpsRequest(request, response);
-      return;
-    }
     if (/^\/api\/inquiries\/[^/]+\/workflow\/?$/.test(routePath)) {
       const { default: handleWorkflowRequest } = await import("../api/inquiries/[id]/workflow.js");
       await handleWorkflowRequest(request, response);
       return;
     }
-    if (/^\/api\/inquiries\/[^/]+\/payment-(review|proof)\/?$/.test(routePath)) {
+
+    if (/^\/api\/inquiries\/[^/]+\/orders\/?$/.test(routePath)) {
       const { default: handleWorkflowRequest } = await import("../api/inquiries/[id]/workflow.js");
-      const paymentAction = routePath.endsWith("/payment-proof") ? "payment-proof" : "payment-review";
-      request.query = { ...(request.query || {}), _opsAction: paymentAction };
       await handleWorkflowRequest(request, response);
       return;
     }
@@ -79,21 +80,9 @@ async function handleRequest(request, response) {
       return;
     }
 
-    if (/^\/api\/orders\/[^/]+\/?$/.test(routePath)) {
-      const { default: handleOrderDetailsRequest } = await import("../api/_lib/orderDetails.js");
-      await handleOrderDetailsRequest(request, response);
-      return;
-    }
 
-    if (/^\/api\/production\/[^/]+\/?$/.test(routePath)) {
-      const { default: handleProductionJobRequest } = await import("../api/_lib/productionJob.js");
-      await handleProductionJobRequest(request, response);
-      return;
-    }
-
-
-    if (await handleTaskApiRoute(routePath, request, response)) return;
-    if (await handleWorkChatApiRoute(routePath, request, response)) return;
+  if (await handleTaskApiRoute(routePath, request, response)) return;
+  if (await handleIntegrationApiRoute(routePath, request, response)) return;
 
     if (routePath === "/src/env.js") {
       response.writeHead(200, { "Content-Type": contentTypes[".js"] });
@@ -123,8 +112,20 @@ async function handleRequest(request, response) {
 
 async function handleTaskApiRoute(routePath, request, response) {
   if (routePath === "/api/my-tasks") {
-    const { default: handleMyTasksRequest } = await import("../api/my-tasks.js");
+    const { default: handleMyTasksRequest } = await import("../api/task-views.js");
     await handleMyTasksRequest(request, response);
+    return true;
+  }
+
+  if (routePath === "/api/task-calendar") {
+    const { default: handleTaskCalendarRequest } = await import("../api/task-views.js");
+    await handleTaskCalendarRequest(request, response);
+    return true;
+  }
+
+  if (routePath === "/api/planning/auto-plan-today") {
+    const { default: handleAutoPlanTodayRequest } = await import("../api/task-automation.js");
+    await handleAutoPlanTodayRequest(request, response);
     return true;
   }
 
@@ -143,11 +144,13 @@ async function handleTaskApiRoute(routePath, request, response) {
   return false;
 }
 
-async function handleWorkChatApiRoute(routePath, request, response) {
-  if (!routePath.startsWith("/api/work-chat")) return false;
-  const { default: handleWorkChatRequest } = await import("../api/work-chat.js");
-  await handleWorkChatRequest(request, response);
-  return true;
+async function handleIntegrationApiRoute(routePath, request, response) {
+  if (routePath === "/api/integrations/n8n/task-drafts") {
+    const { default: handleN8nTaskDraftsRequest } = await import("../api/task-automation.js");
+    await handleN8nTaskDraftsRequest(request, response);
+    return true;
+  }
+  return false;
 }
 function normalizeRoutePath(pathname) {
   if (pathname === "/") return "/";
@@ -197,8 +200,10 @@ async function createEnvScript() {
     VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY ?? "",
     VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA ?? env.VITE_USE_SUPABASE_DATA ?? "true",
     VITE_ENABLE_TASK_DOMAIN: process.env.VITE_ENABLE_TASK_DOMAIN ?? env.VITE_ENABLE_TASK_DOMAIN ?? "false",
-    VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW: process.env.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? env.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? "false",
-    VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW: process.env.VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW ?? env.VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW ?? "false",
+    VITE_ENABLE_WORKBOARD: process.env.VITE_ENABLE_WORKBOARD ?? env.VITE_ENABLE_WORKBOARD ?? "false",
+    VITE_ENABLE_MY_TASKS: process.env.VITE_ENABLE_MY_TASKS ?? env.VITE_ENABLE_MY_TASKS ?? "false",
+    VITE_ENABLE_CALENDAR: process.env.VITE_ENABLE_CALENDAR ?? env.VITE_ENABLE_CALENDAR ?? "false",
+    VITE_ENABLE_AUTO_PLAN_TODAY: process.env.VITE_ENABLE_AUTO_PLAN_TODAY ?? env.VITE_ENABLE_AUTO_PLAN_TODAY ?? "false",
     VITE_LOCAL_TASK_QA_MODE: process.env.VITE_LOCAL_TASK_QA_MODE ?? env.VITE_LOCAL_TASK_QA_MODE ?? "false",
     VITE_ADMIN_ACCESS_CODE: process.env.VITE_ADMIN_ACCESS_CODE ?? env.VITE_ADMIN_ACCESS_CODE ?? "",
   };

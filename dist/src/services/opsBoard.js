@@ -4,6 +4,10 @@ import {
   readSupabaseTableWithAuth,
   updateSupabaseRowsWithAuth,
 } from "../lib/supabaseClient.js";
+import {
+  reconcileNativeOrderStatusForInquiry,
+  shouldReconcileFulfillmentCompletion,
+} from "./nativeOrderStatus.js";
 
 export const OPS_INQUIRIES_TABLE = "ops_inquiries";
 
@@ -123,16 +127,7 @@ export async function saveOpsInquiryOdooSO(
   odooSO,
   authSession
 ) {
-  const rows = await updateSupabaseRowsWithAuth(
-    OPS_INQUIRIES_TABLE,
-    { id: `eq.${id}` },
-    mapInquiryUpdatesToOpsRow({ odooSO }),
-    getAccessToken(authSession)
-  );
-
-  return rows?.[0]
-    ? mapOpsRowToInquiry(rows[0])
-    : null;
+  throw new Error("Legacy Odoo SO writes are disabled. Native public.orders is the active Order authority.");
 }
 
 export async function confirmOpsInquiryOdooSO(
@@ -140,20 +135,7 @@ export async function confirmOpsInquiryOdooSO(
   odooSO,
   authSession
 ) {
-  const rows = await updateSupabaseRowsWithAuth(
-    OPS_INQUIRIES_TABLE,
-    { id: `eq.${id}` },
-    mapInquiryUpdatesToOpsRow({
-      status: "won",
-      odooSO,
-      next: "TRRY order confirmed - ready for production handoff",
-    }),
-    getAccessToken(authSession)
-  );
-
-  return rows?.[0]
-    ? mapOpsRowToInquiry(rows[0])
-    : null;
+  throw new Error("Legacy Odoo SO confirmation is disabled. Native public.orders is the active Order authority.");
 }
 
 export const updateOpsInquiryOdooSO =
@@ -171,73 +153,15 @@ export async function updateOpsInquiryFields(
     getAccessToken(authSession)
   );
 
-  return rows?.[0]
+  const savedInquiry = rows?.[0]
     ? mapOpsRowToInquiry(rows[0])
     : null;
-}
-
-async function attachFollowUpEvents(inquiries, accessToken) {
-  if (!inquiries.length) return inquiries;
-  try {
-    const ids = inquiries.map((item) => item.id).filter(Boolean);
-    if (!ids.length) return inquiries;
-    const events = await readSupabaseTableWithAuth(
-      "inquiry_follow_up_events",
-      {
-        select: "id,inquiry_id,outcome,note,next_follow_up_date,created_by_user_id,created_at",
-        inquiry_id: `in.(${ids.map((id) => String(id).replace(/[^A-Za-z0-9_-]/g, "")).filter(Boolean).join(",")})`,
-        order: "created_at.desc",
-      },
-      accessToken
-    );
-    const userIds = [...new Set((events || []).map((event) => event.created_by_user_id).filter(Boolean))];
-    const users = await readFollowUpUsers(userIds, accessToken);
-    const byInquiry = new Map();
-    for (const event of events || []) {
-      const row = mapFollowUpEvent(event, users.get(event.created_by_user_id));
-      const list = byInquiry.get(row.inquiryId) || [];
-      list.push(row);
-      byInquiry.set(row.inquiryId, list);
-    }
-    return inquiries.map((item) => ({ ...item, followUpEvents: byInquiry.get(item.id) || [] }));
-  } catch (error) {
-    const message = String(error?.message || error || "");
-    if (/inquiry_follow_up_events|could not find|does not exist|schema cache|42p01|PGRST205/i.test(message)) {
-      return inquiries.map((item) => ({ ...item, followUpEvents: [] }));
-    }
-    throw error;
+  if (savedInquiry && shouldReconcileFulfillmentCompletion(updates, savedInquiry)) {
+    await reconcileNativeOrderStatusForInquiry(savedInquiry, authSession);
   }
+  return savedInquiry;
 }
 
-async function readFollowUpUsers(userIds, accessToken) {
-  if (!userIds.length) return new Map();
-  try {
-    const rows = await readSupabaseTableWithAuth(
-      "admin_users",
-      {
-        select: "user_id,email,display_name,role",
-        user_id: `in.(${userIds.map((id) => String(id).replace(/[^A-Za-z0-9-]/g, "")).filter(Boolean).join(",")})`,
-      },
-      accessToken
-    );
-    return new Map((rows || []).map((row) => [row.user_id, row]));
-  } catch {
-    return new Map();
-  }
-}
-
-function mapFollowUpEvent(row, user) {
-  return {
-    id: getFirstValue(row, ["id"]),
-    inquiryId: getFirstValue(row, ["inquiry_id", "inquiryId"]),
-    outcome: getFirstValue(row, ["outcome"]),
-    note: getFirstValue(row, ["note"]),
-    nextFollowUpDate: normalizeDate(getFirstValue(row, ["next_follow_up_date", "nextFollowUpDate"])),
-    createdByUserId: getFirstValue(row, ["created_by_user_id", "createdByUserId"]),
-    createdByName: user?.display_name || user?.email || "Staff",
-    createdAt: getFirstValue(row, ["created_at", "createdAt"]),
-  };
-}
 export function mapOpsRowToInquiry(row) {
   return {
     id: getFirstValue(row, ["id"]),
@@ -297,7 +221,6 @@ export function mapOpsRowToInquiry(row) {
     deliveryLandmark: getFirstValue(row, ["delivery_landmark", "deliveryLandmark"]),
     trackingSubstatus: getFirstValue(row, ["tracking_substatus", "trackingSubstatus"]),
     trackingNote: getFirstValue(row, ["tracking_note", "trackingNote"]),
-    createdAt: getFirstValue(row, ["created_at", "createdAt"]),
     updatedAt: getFirstValue(row, ["updated_at", "updatedAt"]),
     trackingUpdatedAt: getFirstValue(row, ["tracking_updated_at", "trackingUpdatedAt"]),
     followUpDate: normalizeDate(
@@ -325,6 +248,24 @@ export function mapOpsRowToInquiry(row) {
       getFirstValue(row, ["production_note", "productionNote"]),
     productionUpdatedAt:
       getFirstValue(row, ["production_updated_at", "productionUpdatedAt"]),
+    productionStartedAt:
+      getFirstValue(row, ["production_started_at", "productionStartedAt"]),
+    productionStartedBy:
+      getFirstValue(row, ["production_started_by", "productionStartedBy"]),
+    productionCompletedAt:
+      getFirstValue(row, ["production_completed_at", "productionCompletedAt"]),
+    productionCompletedBy:
+      getFirstValue(row, ["production_completed_by", "productionCompletedBy"]),
+    qcStartedAt:
+      getFirstValue(row, ["qc_started_at", "qcStartedAt"]),
+    qcStartedBy:
+      getFirstValue(row, ["qc_started_by", "qcStartedBy"]),
+    qcNote:
+      getFirstValue(row, ["qc_note", "qcNote"]),
+    qcCompletedAt:
+      getFirstValue(row, ["qc_completed_at", "qcCompletedAt"]),
+    qcCompletedBy:
+      getFirstValue(row, ["qc_completed_by", "qcCompletedBy"]),
     quotedAmount: getNullableNumber(row, ["quoted_amount", "quotedAmount"]),
     amountDue: getNullableNumber(row, ["amount_due", "amountDue"]),
     quoteStatus: getFirstValue(row, ["quote_status", "quoteStatus"]),
@@ -350,6 +291,9 @@ export function mapOpsRowToInquiry(row) {
     paymentVerifiedAmount: getNullableNumber(row, ["payment_verified_amount", "paymentVerifiedAmount"]),
     paymentVerifiedAt: getFirstValue(row, ["payment_verified_at", "paymentVerifiedAt"]),
     paymentVerifiedBy: getFirstValue(row, ["payment_verified_by", "paymentVerifiedBy"]),
+    paymentConfirmedBy: getFirstValue(row, ["payment_confirmed_by", "paymentConfirmedBy"]),
+    paymentInternalNote: getFirstValue(row, ["payment_internal_note", "paymentInternalNote"]),
+    paymentHistory: Array.isArray(row?.payment_history) ? row.payment_history : [],
     depositAmount: getNullableNumber(row, ["deposit_amount", "depositAmount"]),
     paymentLabel: getFirstValue(row, ["payment_label", "paymentLabel"]),
     paymentInstructions: getFirstValue(row, ["payment_instructions", "paymentInstructions"]),
@@ -357,12 +301,10 @@ export function mapOpsRowToInquiry(row) {
     paymentProofSubmittedAt: getFirstValue(row, ["payment_proof_submitted_at", "paymentProofSubmittedAt"]),
     paymentConfirmedAt: getFirstValue(row, ["payment_confirmed_at", "paymentConfirmedAt"]),
     paymentConfirmedAmount: getNullableNumber(row, ["payment_confirmed_amount", "paymentConfirmedAmount"]),
-    paymentSelectedAt: getFirstValue(row, ["payment_selected_at", "paymentSelectedAt"]),
-    paymentInternalNote: getFirstValue(row, ["payment_internal_note", "paymentInternalNote"]),
     paymentReviewNote: getFirstValue(row, ["payment_review_note", "paymentReviewNote"]),
     paymentRejectedAt: getFirstValue(row, ["payment_rejected_at", "paymentRejectedAt"]),
     productionFieldsReady:
-      ["assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
+      ["assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at", "production_started_at", "production_started_by", "qc_started_at", "qc_started_by", "qc_note", "qc_completed_at", "qc_completed_by"].every((key) => Object.prototype.hasOwnProperty.call(row || {}, key)),
   };
 }
 
@@ -399,13 +341,21 @@ export function mapInquiryToOpsRow(inquiry) {
     follow_up_date: normalizeDate(
       inquiry.followUpDate
     ),
-    odoo_so: inquiry.odooSO,
     estimated_value: inquiry.estimatedValue,
     assigned_staff: inquiry.assignedStaff,
     assigned_user_id: inquiry.assignedUserId,
     production_stage: inquiry.productionStage,
     production_note: inquiry.productionNote,
     production_updated_at: inquiry.productionUpdatedAt,
+    production_started_at: inquiry.productionStartedAt,
+    production_started_by: inquiry.productionStartedBy,
+    production_completed_at: inquiry.productionCompletedAt,
+    production_completed_by: inquiry.productionCompletedBy,
+    qc_started_at: inquiry.qcStartedAt,
+    qc_started_by: inquiry.qcStartedBy,
+    qc_note: inquiry.qcNote,
+    qc_completed_at: inquiry.qcCompletedAt,
+    qc_completed_by: inquiry.qcCompletedBy,
   });
 }
 
@@ -448,13 +398,21 @@ function mapInquiryUpdatesToOpsRow(updates) {
       updates.followUpDate === undefined
         ? undefined
         : normalizeDate(updates.followUpDate),
-    odoo_so: updates.odooSO,
     estimated_value: updates.estimatedValue,
     assigned_staff: updates.assignedStaff,
     assigned_user_id: updates.assignedUserId,
     production_stage: updates.productionStage,
     production_note: updates.productionNote,
     production_updated_at: updates.productionUpdatedAt,
+    production_started_at: updates.productionStartedAt,
+    production_started_by: updates.productionStartedBy,
+    production_completed_at: updates.productionCompletedAt,
+    production_completed_by: updates.productionCompletedBy,
+    qc_started_at: updates.qcStartedAt,
+    qc_started_by: updates.qcStartedBy,
+    qc_note: updates.qcNote,
+    qc_completed_at: updates.qcCompletedAt,
+    qc_completed_by: updates.qcCompletedBy,
   });
 }
 

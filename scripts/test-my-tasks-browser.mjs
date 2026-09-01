@@ -14,13 +14,17 @@ const owner = "95000000-0000-4000-8000-000000000001";
 const inactive = "95000000-0000-4000-8000-000000000012";
 const received = [];
 let syntheticNow = Date.now();
+let activeQaRole = "staff";
+let activeQaUserId = staffA;
 
 const users = {
   [staffA]: { displayName: "Synthetic Staff A", initials: "SA", role: "staff", isActive: true },
   [staffB]: { displayName: "Synthetic Staff B", initials: "SB", role: "staff", isActive: true },
   [owner]: { displayName: "Synthetic Owner", initials: "SO", role: "owner", isActive: true },
+  ["95000000-0000-4000-8000-000000000002"]: { displayName: "Synthetic Admin", initials: "SA", role: "admin", isActive: true },
   [inactive]: { displayName: "Former Synthetic Staff", initials: "FS", role: "staff", isActive: false },
 };
+const admin = "95000000-0000-4000-8000-000000000002";
 
 const tasks = new Map([
   task("task-running", "WB-DR-001", "[DRY RUN] Running screen print timer", "IN_PROGRESS", { open: true, priority: "HIGH", titleSuffix: "", deadlineHours: 2 }),
@@ -36,10 +40,13 @@ const tasks = new Map([
   task("task-long", "WB-DR-011", "[DRY RUN] Long title containment validation for embroidered campaign photography, detailed proofing, post copy, and upload handoff", "TO_DO", { brief: "Synthetic long brief: keep all copy contained inside the drawer and cards without horizontal overflow. This does not contain customer, payment, artwork, or private staff data.", priority: "URGENT", deadlineHours: -26 }),
   task("task-other-staff", "WB-DR-012", "[DRY RUN] Staff B private task", "TO_DO", { assignedUserId: staffB }),
   task("task-draft", "WB-DR-013", "[DRY RUN] Draft hidden from staff", "DRAFT"),
+  task("task-owner-self", "WB-DR-014", "[DRY RUN] Owner self-assigned planning task", "TO_DO", { assignedUserId: owner, reviewerUserId: owner }),
+  task("task-admin-self", "WB-DR-015", "[DRY RUN] Admin self-assigned operations task", "TO_DO", { assignedUserId: admin, reviewerUserId: owner }),
 ]);
 
 const submissions = new Map([
   ["task-revision", [{ id: "sub-rev-1", taskId: "task-revision", cycleNumber: 1, submittedByUser: users[staffA], submissionNote: "Synthetic previous submission.", submittedAt: iso(-7), timeRecordingStatus: "RECORDED", recordedDurationSeconds: 1200, noTimeReason: null, reviewDecision: "REVISION_REQUESTED", reviewNote: "Synthetic revision note: make CTA clearer and resubmit.", reviewedAt: iso(-5), reviewerUser: users[inactive] }]],
+  ["task-none-revision", [{ id: "sub-none-rev-1", taskId: "task-none-revision", cycleNumber: 1, submittedByUser: users[staffA], submissionNote: "Synthetic previous no-time submission.", submittedAt: iso(-7), timeRecordingStatus: "NOT_REQUIRED", recordedDurationSeconds: null, noTimeReason: null, reviewDecision: "REVISION_REQUESTED", reviewNote: "Synthetic no-time revision note: update the checklist and resubmit.", reviewedAt: iso(-5), reviewerUser: users[owner] }]],
   ["task-review-recorded", [{ id: "sub-rec-1", taskId: "task-review-recorded", cycleNumber: 1, submittedByUser: users[staffA], submissionNote: "Synthetic recorded submission.", submittedAt: iso(-2), timeRecordingStatus: "RECORDED", recordedDurationSeconds: 1860, noTimeReason: null, reviewDecision: "PENDING", reviewerUser: users[owner] }]],
   ["task-review-no-time", [{ id: "sub-nt-1", taskId: "task-review-no-time", cycleNumber: 1, submittedByUser: users[staffA], submissionNote: "Synthetic no-time submission.", submittedAt: iso(-2), timeRecordingStatus: "NOT_RECORDED", recordedDurationSeconds: null, noTimeReason: "Forgot to start timer during synthetic validation.", reviewDecision: "PENDING", reviewerUser: users[owner] }]],
   ["task-review-none", [{ id: "sub-nr-1", taskId: "task-review-none", cycleNumber: 1, submittedByUser: users[staffA], submissionNote: "Synthetic no timer required.", submittedAt: iso(-1), timeRecordingStatus: "NOT_REQUIRED", recordedDurationSeconds: null, noTimeReason: null, reviewDecision: "PENDING", reviewerUser: users[owner] }]],
@@ -72,19 +79,37 @@ try {
   await assertNoCriticalConsole(cdp, desktop);
   await assertEval(cdp, desktop, `document.body.innerText.includes('Workboard') === false`, "Workboard hidden");
   await assertEval(cdp, desktop, `document.body.innerText.includes('Auto Plan Today') === false`, "Auto Plan hidden");
+  await assertEval(cdp, desktop, `document.body.innerText.includes('Calendar') === false || document.body.innerText.includes('Calendar Quick Direction') === false`, "Calendar execution hidden");
+  await assertEval(cdp, desktop, `document.body.innerText.includes('Staff B private task') === false`, "other staff task hidden from list");
   await assertEval(cdp, desktop, `document.scrollingElement.scrollWidth <= window.innerWidth`, "desktop no horizontal overflow");
   await assertTimerAdvances(cdp, desktop);
   await screenshot(cdp, desktop, "desktop-my-tasks.png");
+  assert.equal(await evalValue(cdp, desktop, `fetch('/api/tasks/task-other-staff', { headers: { Authorization: 'Bearer synthetic-staff-a-token' } }).then((response) => response.status)`), 404, "direct other-staff detail denied");
+  assert.equal(await evalValue(cdp, desktop, `fetch('/api/my-tasks?assignedUserId=${staffB}', { headers: { Authorization: 'Bearer synthetic-staff-a-token' } }).then((response) => response.status)`), 400, "assignedUserId spoof rejected");
+
+  await clickTask(cdp, desktop, "Start regular production content task");
+  await click(cdp, desktop, '[data-task-start="task-todo"]');
+  await waitForText(cdp, desktop, "Another task timer is already running");
+  await click(cdp, desktop, "[data-task-close]");
 
   await clickTask(cdp, desktop, "Running screen print timer");
   await waitForText(cdp, desktop, "RECORDED TIME");
-  await setValue(cdp, desktop, "#task-submission-note", "Synthetic timed submission note.");
-  await setValue(cdp, desktop, "#task-proof-url", "http://invalid.local/proof");
+  await typeText(cdp, desktop, "#task-submission-note", "Synthetic timed submission note.\nLine two survives timer refresh.");
+  await pressKey(cdp, desktop, "Escape");
+  await assertEval(cdp, desktop, `document.querySelector('.my-task-drawer') !== null`, "Escape in submission note keeps drawer open");
+  await typeText(cdp, desktop, "#task-proof-url", "http://invalid.local/proof");
+  await assertEval(cdp, desktop, `document.activeElement?.id === "task-proof-url"`, "proof URL keeps focus after typing");
+  await waitForIdle(10500);
+  await assertEval(cdp, desktop, `document.activeElement?.id === "task-proof-url"`, "proof URL keeps focus through timer refresh");
+  await assertEval(cdp, desktop, `document.querySelector("#task-submission-note")?.value === "Synthetic timed submission note.\\nLine two survives timer refresh."`, "submission note survives timer refresh");
+  await assertEval(cdp, desktop, `document.querySelector("#task-proof-url")?.value === "http://invalid.local/proof"`, "proof URL survives timer refresh");
   await click(cdp, desktop, '[data-task-submit="task-running"]');
   await waitForText(cdp, desktop, "Proof URL must start with https://");
-  await setValue(cdp, desktop, "#task-proof-url", "https://synthetic.invalid/proof");
-  await click(cdp, desktop, '[data-task-submit="task-running"]');
+  await replaceValue(cdp, desktop, "#task-proof-url", "https://synthetic.invalid/proof?copy=paste&selection=ok");
+  await rapidDoubleClick(cdp, desktop, '[data-task-submit="task-running"]');
   await waitForText(cdp, desktop, "RECORDED TIME");
+  assert.equal(submissions.get("task-running")?.length, 1, "rapid double submit created exactly one submission");
+  assert.equal(received.filter((item) => item.path === "/api/tasks/task-running/submit" && item.method === "POST").length, 1, "rapid double submit sent exactly one submit request");
   await screenshot(cdp, desktop, "desktop-task-drawer-recorded.png");
 
   await clickTask(cdp, desktop, "Upload finished embroidery photos");
@@ -99,7 +124,9 @@ try {
   await screenshot(cdp, desktop, "desktop-forgot-to-start.png");
 
   await clickTask(cdp, desktop, "Confirm shop checklist without timer");
-  await assertEval(cdp, desktop, `document.querySelector('.my-task-drawer').innerText.includes('START WORK') === false`, "NONE mode hides Start Work");
+  await click(cdp, desktop, '[data-task-start="task-none"]');
+  await waitForText(cdp, desktop, "IN PROGRESS");
+  assert.equal([...tasks.values()].find((item) => item.id === "task-none").openTimeEntry, null, "NONE start did not create timer");
   await setValue(cdp, desktop, "#task-submission-note", "Synthetic none-mode submission.");
   await click(cdp, desktop, '[data-task-submit="task-none"]');
   await waitForText(cdp, desktop, "TIME NOT REQUIRED");
@@ -109,6 +136,25 @@ try {
   await click(cdp, desktop, '[data-task-start-revision="task-revision"]');
   await waitForText(cdp, desktop, "RUNNING");
   await assertEval(cdp, desktop, `[...document.querySelectorAll('.my-task-drawer button')].every((button) => !['ASSIGN', 'APPROVE WORK', 'APPROVE', 'REASSIGN'].includes(button.innerText.trim().toUpperCase()))`, "no manager controls for staff");
+  await click(cdp, desktop, "[data-task-close]");
+
+  await clickTask(cdp, desktop, "Update non-timed revision note");
+  await waitForText(cdp, desktop, "REVISION NOTE");
+  await click(cdp, desktop, '[data-task-start-revision="task-none-revision"]');
+  await waitForText(cdp, desktop, "IN PROGRESS");
+  assert.equal([...tasks.values()].find((item) => item.id === "task-none-revision").openTimeEntry, null, "NONE revision start did not create timer");
+  await setValue(cdp, desktop, "#task-submission-note", "Synthetic none-mode revision submission.");
+  await click(cdp, desktop, '[data-task-submit="task-none-revision"]');
+  await waitForText(cdp, desktop, "TIME NOT REQUIRED");
+
+  await navigate(cdp, desktop, `http://127.0.0.1:${port}/my-tasks?qaRole=owner`);
+  await waitForText(cdp, desktop, "Owner self-assigned planning task");
+  await assertEval(cdp, desktop, `document.body.innerText.includes('Running screen print timer') === false`, "owner My Tasks is self-assignment scoped");
+  await navigate(cdp, desktop, `http://127.0.0.1:${port}/my-tasks?qaRole=admin`);
+  await waitForText(cdp, desktop, "Admin self-assigned operations task");
+  await assertEval(cdp, desktop, `document.body.innerText.includes('Owner self-assigned planning task') === false`, "admin My Tasks is self-assignment scoped");
+  await navigate(cdp, desktop, `http://127.0.0.1:${port}/my-tasks?qaRole=staff`);
+  await waitForText(cdp, desktop, "My Tasks");
 
   await navigate(cdp, desktop, `http://127.0.0.1:${port}/overview`);
   await waitForText(cdp, desktop, "Overview");
@@ -121,7 +167,7 @@ try {
   }
 
   const mobile = await createPage(cdp, { width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 });
-  await navigate(cdp, mobile, `http://127.0.0.1:${port}/my-tasks`);
+  await navigate(cdp, mobile, `http://127.0.0.1:${port}/my-tasks?qaRole=staff`);
   await waitForText(cdp, mobile, "My Tasks");
   await assertEval(cdp, mobile, `document.querySelector('.mobile-bottom-nav a[href="/my-tasks"]') !== null`, "mobile My Tasks nav visible");
   await assertEval(cdp, mobile, `document.scrollingElement.scrollWidth <= window.innerWidth + 2`, "mobile no horizontal overflow");
@@ -130,9 +176,27 @@ try {
   await clickTask(cdp, mobile, "Long title containment validation");
   await waitForText(cdp, mobile, "Synthetic long brief");
   await assertEval(cdp, mobile, `document.querySelector('.my-task-drawer').getBoundingClientRect().width <= window.innerWidth`, "mobile drawer fits viewport");
+  await click(cdp, mobile, '[data-task-close]');
+  await clickTask(cdp, mobile, "Revise CTA poster");
+  await waitForText(cdp, mobile, "SUBMISSION NOTE");
+  await typeText(cdp, mobile, "#task-submission-note", "Mobile note entry remains focused.");
+  await typeText(cdp, mobile, "#task-proof-url", "https://synthetic.invalid/mobile-proof");
+  await waitForIdle(10500);
+  await assertEval(cdp, mobile, `document.activeElement?.id === "task-proof-url"`, "mobile proof field keeps focus through timer refresh");
+  await assertEval(cdp, mobile, `document.querySelector("#task-submission-note")?.value === "Mobile note entry remains focused."`, "mobile note survives timer refresh");
+  await assertEval(cdp, mobile, `document.querySelector("#task-proof-url")?.value === "https://synthetic.invalid/mobile-proof"`, "mobile proof survives timer refresh");
   await screenshot(cdp, mobile, "mobile-my-tasks-drawer.png");
 
+  for (const [name, viewport] of [["mobile-360", { width: 360, height: 780, isMobile: true, deviceScaleFactor: 2 }], ["tablet-820", { width: 820, height: 1180, isMobile: false, deviceScaleFactor: 1 }]]) {
+    const page = await createPage(cdp, viewport);
+    await navigate(cdp, page, `http://127.0.0.1:${port}/my-tasks?qaRole=staff`);
+    await waitForText(cdp, page, "My Tasks");
+    await assertEval(cdp, page, `document.scrollingElement.scrollWidth <= window.innerWidth + 2`, `${name} no horizontal overflow`);
+    await screenshot(cdp, page, `${name}-my-tasks.png`);
+  }
+
   assert.ok(received.some((item) => item.path === "/api/my-tasks" && item.auth === "Bearer synthetic-staff-a-token"), "bearer list auth used");
+  assert.ok(received.some((item) => item.path.includes("/start") && item.body?.expectedVersion && item.idempotency), "idempotency used for start work");
   assert.ok(received.some((item) => item.path.includes("/start-revision") && item.idempotency), "idempotency used for start revision");
   assert.ok(received.some((item) => item.path.includes("/submit") && item.body?.expectedVersion), "expectedVersion used for submit");
   assert.equal([...tasks.values()].filter((item) => item.openTimeEntry).length, 1, "only one task running at end");
@@ -187,7 +251,12 @@ async function handleRequest(request, response) {
   const url = new URL(request.url || "/", `http://${request.headers.host}`);
   const path = url.pathname.replace(/\/+$/, "") || "/";
   if (path.startsWith("/api/")) return handleApi(request, response, path, url);
-  if (path === "/src/env.js") return send(response, 200, "text/javascript", `window.TRRY_ADMIN_ENV = ${JSON.stringify({ VITE_USE_SUPABASE_DATA: "false", VITE_SUPABASE_URL: "", VITE_SUPABASE_ANON_KEY: "", VITE_ENABLE_TASK_DOMAIN: "true", VITE_LOCAL_TASK_QA_MODE: "true", VITE_ADMIN_ACCESS_CODE: "" }, null, 2)};\n`);
+  if (path === "/src/env.js") {
+    const referer = new URL(request.headers.referer || `http://${request.headers.host}/my-tasks?qaRole=staff`);
+    activeQaRole = referer.searchParams.get("qaRole") || "staff";
+    activeQaUserId = activeQaRole === "owner" ? owner : activeQaRole === "admin" ? admin : staffA;
+    return send(response, 200, "text/javascript", `window.TRRY_ADMIN_ENV = ${JSON.stringify({ VITE_USE_SUPABASE_DATA: "false", VITE_SUPABASE_URL: "", VITE_SUPABASE_ANON_KEY: "", VITE_ENABLE_TASK_DOMAIN: "true", VITE_ENABLE_MY_TASKS: "true", VITE_ENABLE_WORKBOARD: "false", VITE_LOCAL_TASK_QA_MODE: "true", VITE_LOCAL_TASK_QA_ROLE: activeQaRole, VITE_LOCAL_TASK_QA_USER_ID: activeQaUserId, VITE_ADMIN_ACCESS_CODE: "" }, null, 2)};\n`);
+  }
   const filePath = normalize(join(root, path === "/" || !extname(path) ? "index.html" : path));
   if (!filePath.startsWith(root)) return send(response, 403, "text/plain", "Forbidden");
   try {
@@ -219,15 +288,16 @@ async function handleApi(request, response, path, url) {
     });
   }
   if (path === "/api/my-tasks") {
+    if (url.searchParams.has("assignedUserId")) return sendJson(response, 400, { ok: false, error: { code: "VALIDATION_ERROR", message: "Unknown query parameters." } });
     const status = url.searchParams.get("status") || "";
-    const visible = [...tasks.values()].filter((item) => item.assignedUserId === staffA && item.status !== "DRAFT" && (!status || item.status === status));
+    const visible = [...tasks.values()].filter((item) => item.assignedUserId === activeQaUserId && item.status !== "DRAFT" && (!status || item.status === status));
     return sendJson(response, 200, { ok: true, tasks: visible.map(project), page: 1, pageSize: 100, total: visible.length });
   }
   const match = path.match(/^\/api\/tasks\/([^/]+)(?:\/([^/]+(?:-[^/]+)?))?$/);
   if (!match) return sendJson(response, 404, { ok: false, error: { code: "NOT_FOUND", message: "Task resource not found." } });
   const [, taskId, action = ""] = match;
   const current = tasks.get(taskId);
-  if (!current || current.assignedUserId !== staffA || current.status === "DRAFT") return sendJson(response, 404, { ok: false, error: { code: "NOT_FOUND", message: "Task resource not found." } });
+  if (!current || current.assignedUserId !== activeQaUserId || current.status === "DRAFT") return sendJson(response, 404, { ok: false, error: { code: "NOT_FOUND", message: "Task resource not found." } });
   if (!action && request.method === "GET") return sendJson(response, 200, detail(current));
   if (Number(body.expectedVersion) !== current.version) return sendJson(response, 409, { ok: false, error: { code: "VERSION_CONFLICT", message: "Task version is stale.", details: { currentVersion: current.version } } });
   if (action === "start" || action === "start-revision") return startTask(response, current, action);
@@ -237,10 +307,12 @@ async function handleApi(request, response, path, url) {
 }
 
 function startTask(response, current) {
-  const otherOpen = [...tasks.values()].find((item) => item.openTimeEntry && item.id !== current.id);
-  if (otherOpen) return sendJson(response, 409, { ok: false, error: { code: "TIMER_ALREADY_OPEN", message: "A conflicting timer is already open." } });
+  if (current.timeTrackingMode === "EXPECTED") {
+    const otherOpen = [...tasks.values()].find((item) => item.openTimeEntry && item.id !== current.id && item.openTimeEntry.userId === activeQaUserId);
+    if (otherOpen) return sendJson(response, 409, { ok: false, error: { code: "TIMER_ALREADY_OPEN", message: "A conflicting timer is already open." } });
+  }
   current.status = "IN_PROGRESS";
-  current.openTimeEntry = { id: `${current.id}-time-${Date.now()}`, taskId: current.id, userId: staffA, cycleNumber: 1, startedAt: new Date().toISOString(), endedAt: null };
+  if (current.timeTrackingMode === "EXPECTED") current.openTimeEntry = { id: `${current.id}-time-${Date.now()}`, taskId: current.id, userId: activeQaUserId, cycleNumber: 1, startedAt: new Date().toISOString(), endedAt: null };
   current.version += 1;
   return sendJson(response, 200, mutation(current));
 }
@@ -273,7 +345,7 @@ function submitNoTime(response, current, body) {
 
 function addSubmission(current, note, timeRecordingStatus, noTimeReason, duration) {
   const rows = submissions.get(current.id) || [];
-  rows.push({ id: `${current.id}-sub-${rows.length + 1}`, taskId: current.id, cycleNumber: rows.length + 1, submittedByUser: users[staffA], submissionNote: note, submittedAt: new Date().toISOString(), timeRecordingStatus, noTimeReason, recordedDurationSeconds: timeRecordingStatus === "RECORDED" ? duration : null, reviewDecision: "PENDING", reviewerUser: users[current.reviewerUserId] });
+  rows.push({ id: `${current.id}-sub-${rows.length + 1}`, taskId: current.id, cycleNumber: rows.length + 1, submittedByUser: users[activeQaUserId], submissionNote: note, submittedAt: new Date().toISOString(), timeRecordingStatus, noTimeReason, recordedDurationSeconds: timeRecordingStatus === "RECORDED" ? duration : null, reviewDecision: "PENDING", reviewerUser: users[current.reviewerUserId] });
   submissions.set(current.id, rows);
 }
 
@@ -292,10 +364,11 @@ function project(current) {
 
 function allowed(current) {
   if (current.status === "TO_DO" && current.timeTrackingMode === "EXPECTED") return ["START_WORK", "SUBMIT_WITHOUT_RECORDED_TIME"];
-  if (current.status === "TO_DO" && current.timeTrackingMode === "NONE") return ["SUBMIT_FOR_REVIEW"];
+  if (current.status === "TO_DO" && current.timeTrackingMode === "NONE") return ["START_WORK", "SUBMIT_FOR_REVIEW"];
   if (current.status === "IN_PROGRESS" && current.timeTrackingMode === "EXPECTED") return ["SUBMIT_FOR_REVIEW"];
+  if (current.status === "IN_PROGRESS" && current.timeTrackingMode === "NONE") return ["SUBMIT_FOR_REVIEW"];
   if (current.status === "NEEDS_REVISION" && current.timeTrackingMode === "EXPECTED") return ["START_REVISION", "SUBMIT_WITHOUT_RECORDED_TIME"];
-  if (current.status === "NEEDS_REVISION" && current.timeTrackingMode === "NONE") return ["SUBMIT_FOR_REVIEW"];
+  if (current.status === "NEEDS_REVISION" && current.timeTrackingMode === "NONE") return ["START_REVISION", "SUBMIT_FOR_REVIEW"];
   return [];
 }
 
@@ -415,6 +488,44 @@ async function click(cdp, page, selector) {
 async function setValue(cdp, page, selector, value) {
   const expression = `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`;
   assert.equal(await evalValue(cdp, page, expression), true, `input missing: ${selector}`);
+}
+
+async function typeText(cdp, page, selector, value) {
+  await replaceValue(cdp, page, selector, "");
+  await cdp.send("Input.insertText", { text: value }, page.sessionId);
+  await waitForIdle(250);
+  assert.equal(await evalValue(cdp, page, `document.querySelector(${JSON.stringify(selector)})?.value`), value, `typed value mismatch: ${selector}`);
+}
+
+async function replaceValue(cdp, page, selector, value) {
+  const focused = await evalValue(cdp, page, `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return false;
+    el.focus();
+    el.select();
+    document.execCommand('insertText', false, ${JSON.stringify(value)});
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    return document.activeElement === el;
+  })()`);
+  assert.equal(focused, true, `input focus failed: ${selector}`);
+  await waitForIdle(250);
+}
+
+async function pressKey(cdp, page, key) {
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyDown", key }, page.sessionId);
+  await cdp.send("Input.dispatchKeyEvent", { type: "keyUp", key }, page.sessionId);
+  await waitForIdle(250);
+}
+
+async function rapidDoubleClick(cdp, page, selector) {
+  assert.equal(await evalValue(cdp, page, `(() => {
+    const el = document.querySelector(${JSON.stringify(selector)});
+    if (!el) return false;
+    el.click();
+    el.click();
+    return true;
+  })()`), true, `selector missing: ${selector}`);
+  await waitForIdle(500);
 }
 
 async function screenshot(cdp, page, filename) {

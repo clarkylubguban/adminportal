@@ -1,5 +1,7 @@
 -- Forgot-to-start and NONE-mode contract. Disposable local Supabase only.
 begin;
+create extension if not exists pgtap;
+select plan(1);
 
 do $$
 declare
@@ -18,7 +20,7 @@ declare
   v_version bigint;
 begin
   insert into auth.users (
-    instance_id, id, aud, role, email, encrypted_password, confirmed_at,
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
   )
   values
@@ -30,7 +32,7 @@ begin
   insert into public.admin_users (user_id, email, role, display_name, is_active, is_test)
   values
     (v_owner, 'no-time-owner@invalid.example', 'owner', 'Synthetic Owner', true, false),
-    (v_staff_a, 'no-time-staff-a@invalid.example', 'staff', 'Synthetic Staff A', true, true),
+    (v_staff_a, 'no-time-staff-a@invalid.example', 'staff', 'Synthetic Staff A', true, false),
     (v_staff_b, 'no-time-staff-b@invalid.example', 'staff', 'Synthetic Staff B', true, false),
     (v_disabled, 'no-time-disabled@invalid.example', 'staff', 'Synthetic Disabled Staff', false, false);
 
@@ -204,13 +206,15 @@ begin
     v_none_id, (v_none ->> 'version')::bigint, 'no-time-approve-none'
   );
   perform set_config('request.jwt.claim.sub', v_staff_a::text, true);
-  begin
-    perform public.task_start_work(
-      v_none_id, (v_result ->> 'version')::bigint, 'no-time-invalid-start-none'
-    );
-    raise exception 'NONE task allowed Start Work';
-  exception when sqlstate '55000' then null;
-  end;
+  v_result := public.task_start_work(
+    v_none_id, (v_result ->> 'version')::bigint, 'no-time-start-none'
+  );
+  if v_result ->> 'status' <> 'IN_PROGRESS' then
+    raise exception 'NONE Start Work did not reach IN_PROGRESS';
+  end if;
+  if exists (select 1 from public.task_time_entries where task_id = v_none_id) then
+    raise exception 'NONE Start Work created a timer';
+  end if;
   v_result := public.task_submit_for_review(
     v_none_id, (v_result ->> 'version')::bigint,
     'Synthetic no-tracking submission.', null, 'no-time-submit-none'
@@ -232,13 +236,15 @@ begin
     'Synthetic no-tracking revision.', 'no-time-revise-none'
   );
   perform set_config('request.jwt.claim.sub', v_staff_a::text, true);
-  begin
-    perform public.task_start_revision(
-      v_none_id, (v_result ->> 'version')::bigint, 'no-time-invalid-revision-start'
-    );
-    raise exception 'NONE task allowed Start Revision';
-  exception when sqlstate '55000' then null;
-  end;
+  v_result := public.task_start_revision(
+    v_none_id, (v_result ->> 'version')::bigint, 'no-time-start-none-revision'
+  );
+  if v_result ->> 'status' <> 'IN_PROGRESS' then
+    raise exception 'NONE Start Revision did not reach IN_PROGRESS';
+  end if;
+  if exists (select 1 from public.task_time_entries where task_id = v_none_id) then
+    raise exception 'NONE Start Revision created a timer';
+  end if;
   v_result := public.task_submit_for_review(
     v_none_id, (v_result ->> 'version')::bigint,
     'Synthetic no-tracking revision complete.', null, 'no-time-submit-none-revision'
@@ -312,4 +318,6 @@ begin
 end;
 $$;
 
+select pass('task domain no-time submission contract');
+select * from finish();
 rollback;

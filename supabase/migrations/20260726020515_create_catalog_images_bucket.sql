@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260726020515
+-- Original filename: 20260726020515_create_catalog_images_bucket.sql
+-- Original fetched SHA-256: EC6BC2AD9B3DDC7E3A7BFE64A4366CF766A49DC47D302951362E63FAE7638945
+-- Classification: DUPLICATE OF TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202607120001_create_catalog_images_bucket.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260726020515_create_catalog_images_bucket.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

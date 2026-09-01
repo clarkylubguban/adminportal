@@ -1,6 +1,7 @@
 import { createMvpDashboard } from "./mvpDashboard.js";
 import {
   approveTaskDraft,
+  approveAndAssignTask,
   approveTaskWork,
   archiveTask,
   assignTask,
@@ -8,9 +9,11 @@ import {
   createIdempotencyKey,
   createTaskDraft,
   getMyTasks,
+  getTaskCalendar,
   getTaskDetail,
   getWorkboardTasks,
   reopenTask,
+  requestAutoPlanToday,
   requestTaskRevision,
   startTaskRevision,
   startTaskWork,
@@ -18,16 +21,6 @@ import {
   submitTaskWithoutRecordedTime,
   updateTaskDraft,
 } from "./services/tasks.js";
-import {
-  createWorkChatOrderThread,
-  getWorkChatBootstrap,
-  getWorkChatMessages,
-  markWorkChatRead,
-  openWorkChatAttachment,
-  prepareWorkChatAttachment,
-  sendWorkChatMessage,
-  subscribeToWorkChatMessages,
-} from "./services/workChat.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
@@ -36,44 +29,83 @@ import {
   updateOpsInquiryFields,
   updateOpsInquiryStatus,
 } from "./services/opsBoard.js";
-import { getOrderDetails } from "./services/orderDetails.js";
 import {
-  createPaymentReviewIdempotencyKey,
-  getPaymentReview,
-  openPaymentProof,
-  updatePaymentReview,
-} from "./services/paymentReview.js";
+  buildDualReadOrders,
+  normalizeNativeOrderResponseToRow,
+  getNativeOrderRows,
+} from "./services/orderCompatibility.js";
 import {
-  getProductionJob,
-  updateProductionJob,
-} from "./services/productionJob.js";
-import { renderOnlinePaymentReview } from "./paymentReviewView.js";
+  findNativeOrderBySourceInquiryId,
+  hasNativeOrderAuthority,
+} from "./services/nativeOrderAuthority.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
 import {
   getAdminAssignmentUsers,
   updateInquiryAssignment,
 } from "./services/adminAssignments.js";
 import {
+  canonicalSalesChannelCodes,
+  canonicalSalesChannels,
   catalogOptions,
   catalogStatusOptions,
-  createAdminCatalogProduct,
+  createAdminBrand,
+  createAdminProductCategory,
+  createAdminProduct,
+  getAdminBrands,
+  getAdminProductCategories,
   getAdminCatalogProducts,
-  updateAdminCatalogProduct,
+  productTypeOptions,
+  duplicateAdminProduct,
+  updateAdminBrand,
+  updateAdminProductCategory,
+  updateAdminProduct,
 } from "./services/adminCatalog.js";
 import {
-  deleteCatalogImageByUrl,
+  INVENTORY_RECEIVE_RPC_LABEL,
+  canReceiveInventoryForRole,
+  createInventoryIdempotencyKey,
+  getAdminInventory,
+  receiveAdminInventoryStock,
+} from "./services/adminInventory.js";
+import {
+  canWriteSuppliersForRole,
+  createAdminSupplier,
+  getAdminSuppliers,
+  getSupplierReferencePreview,
+  updateAdminSupplier,
+  validateSupplierDraft,
+} from "./services/adminSuppliers.js";
+import {
+  PO_NUMBER_PREVIEW,
+  canWritePurchaseOrdersForRole,
+  createEmptyPurchaseOrderDraft,
+  createEmptyPurchaseOrderLine,
+  createPurchaseOrder,
+  getPurchaseOrderTotals,
+  getPurchaseOrders,
+  isEligiblePurchaseVariant,
+  markPurchaseOrderOrdered,
+  validatePurchaseOrderDraft,
+} from "./services/adminPurchasing.js";
+import {
   deleteCatalogImagePath,
   uploadCatalogImage,
   validateCatalogImageFileWithDimensions,
 } from "./services/adminCatalogImages.js";
 import {
   getCurrentAdminAuthSession,
+  refreshAdminAuthSession,
   getSupabaseConfig,
+  getAdminPasswordResetRedirectUrl,
+  cleanAdminAuthCallbackUrl,
   readInviteSessionFromUrl,
+  readRecoverySessionFromUrl,
   isSupabaseReady,
+  requestAdminPasswordReset,
   signInAdminWithPassword,
   signOutAdmin,
   updateAdminInvitePassword,
+  updateAdminRecoveryPassword,
 } from "./lib/supabaseClient.js";
 
 const mvpDashboard = createMvpDashboard({
@@ -83,6 +115,15 @@ const mvpDashboard = createMvpDashboard({
     error: assignmentLoadError,
   }),
 });
+
+const TASK_PRIORITIES = new Set(["LOW", "MEDIUM", "HIGH", "URGENT"]);
+const TASK_TIME_TRACKING_MODES = new Set(["EXPECTED", "NONE"]);
+const TASK_PRIORITY_LABELS = {
+  LOW: "Low",
+  MEDIUM: "Medium",
+  HIGH: "High",
+  URGENT: "Urgent",
+};
 
 const lucideIcons = {
   "layout-dashboard": '<rect width="7" height="9" x="3" y="3" rx="1"></rect><rect width="7" height="5" x="14" y="3" rx="1"></rect><rect width="7" height="9" x="14" y="12" rx="1"></rect><rect width="7" height="5" x="3" y="16" rx="1"></rect>',
@@ -110,14 +151,15 @@ const lucideIcons = {
   package: '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="m7.5 4.27 9 5.15"></path>',
   "calendar-check": '<path d="M8 2v4"></path><path d="M16 2v4"></path><rect width="18" height="18" x="3" y="4" rx="2"></rect><path d="M3 10h18"></path><path d="m9 16 2 2 4-4"></path>',
   "clipboard-plus": '<rect width="8" height="4" x="8" y="2" rx="1" ry="1"></rect><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"></path><path d="M9 14h6"></path><path d="M12 11v6"></path>',
+  boxes: '<path d="M2.97 12.92A2 2 0 0 0 2 14.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0L11 19.6a2 2 0 0 0 .97-1.71v-3.24a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0z"></path><path d="m7 17-4.74-2.85"></path><path d="m7 17 4.74-2.85"></path><path d="M7 17v5"></path><path d="M12.97 3.92A2 2 0 0 0 12 5.63v3.24a2 2 0 0 0 .97 1.71l3 1.8a2 2 0 0 0 2.06 0l3-1.8A2 2 0 0 0 22 8.87V5.63a2 2 0 0 0-.97-1.71l-3-1.8a2 2 0 0 0-2.06 0z"></path><path d="m17 8-4.74-2.85"></path><path d="m17 8 4.74-2.85"></path><path d="M17 8v5"></path>',
+  tag: '<path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 3.42 0l6.58-6.58a2.426 2.426 0 0 0 0-3.42z"></path><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"></circle>',
+  layers: '<path d="m12.83 2.18 8.33 4.69a1 1 0 0 1 0 1.74l-8.33 4.69a1.7 1.7 0 0 1-1.66 0L2.84 8.61a1 1 0 0 1 0-1.74l8.33-4.69a1.7 1.7 0 0 1 1.66 0"></path><path d="m22 12.5-9.17 5.16a1.7 1.7 0 0 1-1.66 0L2 12.5"></path><path d="m22 17.5-9.17 5.16a1.7 1.7 0 0 1-1.66 0L2 17.5"></path>',
+  "shopping-cart": '<circle cx="8" cy="21" r="1"></circle><circle cx="19" cy="21" r="1"></circle><path d="M2.05 2.05h2l2.66 12.42a2 2 0 0 0 2 1.58h9.78a2 2 0 0 0 1.95-1.57l1.65-7.43H5.12"></path>',
+  "trash-2": '<path d="M10 11v6"></path><path d="M14 11v6"></path><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path><path d="M3 6h18"></path><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>',
   "user-plus": '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M19 8v6"></path><path d="M22 11h-6"></path>',
   "package-plus": '<path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path><path d="M12 22V12"></path><path d="m3.3 7 8.7 5 8.7-5"></path><path d="M12 8v8"></path><path d="M8 12h8"></path>',
+  "alert-circle": '<circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line>',
   sparkles: '<path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .962 0L14.064 8.5A2 2 0 0 0 15.5 9.937l6.135 1.582a.5.5 0 0 1 0 .962L15.5 14.064a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.962 0z"></path><path d="M20 3v4"></path><path d="M22 5h-4"></path><path d="M4 17v2"></path><path d="M5 18H3"></path>',
-  "message-circle": '<path d="M21 15a4 4 0 0 1-4 4H7l-4 4V7a4 4 0 0 1 4-4h10a4 4 0 0 1 4 4z"></path>',
-  send: '<path d="m22 2-7 20-4-9-9-4Z"></path><path d="M22 2 11 13"></path>',
-  paperclip: '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.828 2.828L18.828 9A4 4 0 1 0 13.172 3.343L4.757 11.757a6 6 0 1 0 8.486 8.486L20 13.486"></path>',
-  at: '<circle cx="12" cy="12" r="4"></circle><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"></path>',
-  hash: '<line x1="4" x2="20" y1="9" y2="9"></line><line x1="4" x2="20" y1="15" y2="15"></line><line x1="10" x2="8" y1="3" y2="21"></line><line x1="16" x2="14" y1="3" y2="21"></line>',
 };
 
 function renderIcon(name, className = "") {
@@ -211,6 +253,8 @@ const products = [
 ];
 
 const imageAngleLabels = ["Front", "Back", "Detail", "Size Chart"];
+const catalogVariantSizeOptions = ["S", "M", "L", "XL", "XXL"];
+const catalogVariantColorOptions = ["Black", "White"];
 
 let productImages = products.flatMap((product) =>
   imageAngleLabels.map((angleLabel, index) => ({
@@ -227,18 +271,13 @@ let productImages = products.flatMap((product) =>
 const OPS_LIME = "#DDFF4F";
 const OPS_INK = "#111111";
 const OPS_RED = "#E23F32";
-const CUSTOMER_PAYMENT_WORKFLOW_ENABLED = false;
-const ONLINE_PAYMENT_CUSTOMER_ACTIONS = new Set(["require_payment", "mark_payment_under_review", "request_new_payment_proof", "confirm_payment"]);
-const SHOP_PAYMENT_ACTIONS = new Set(["confirm_shop_payment", "confirm_cash_payment"]);
-const SHOP_PAYMENT_METHODS = new Set(["cash", "gcash", "bank_transfer", "card", "other"]);
-const PAYMENT_INTERNAL_NOTE_MAX_LENGTH = 500;
 
 const opsStatus = {
   new: { label: "New / Inquiry Received", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
   quote: { label: "New Inquiry", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
   sent: { label: "Quote Sent", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
   followup: { label: "Follow Up", dot: OPS_INK, bg: "#FFFFFF", text: OPS_INK },
-  won: { label: "Won / TRRY Order", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
+  won: { label: "Won / Odoo Created", dot: OPS_LIME, bg: OPS_LIME, text: OPS_INK },
   lost: { label: "Lost", dot: OPS_RED, bg: "#FFF5F4", text: OPS_RED },
 };
 
@@ -262,7 +301,7 @@ const opsStatusNameToKey = {
   "Need Details": "followup",
   "Quote Sent": "sent",
   "Follow Up": "followup",
-  "Won / TRRY Order": "won",
+  "Won / Odoo Created": "won",
   Lost: "lost",
 };
 
@@ -294,6 +333,10 @@ let opsInquiries = shouldLoadSupabaseOps ? [] : [...localOpsInquiries];
 let opsLoadState = shouldLoadSupabaseOps ? "loading" : "local";
 let opsLoadError = "";
 let hasLoadedOpsInquiries = false;
+let nativeOrderRows = [];
+let nativeOrdersLoadState = shouldLoadSupabaseOps ? "loading" : "local";
+let nativeOrdersLoadError = "";
+let nativeOrderConversionRequests = {};
 
 const opsProduction = [
   { name: "DTF", jobs: 0, note: "Production tracking not connected yet." },
@@ -305,32 +348,16 @@ const opsProduction = [
 const opsPriorities = [
   { text: "Follow up pending quotation - St. Michael's College Org", tag: "Quote Sent", tone: "sent" },
   { text: "Ask missing details - Brgy. Hinaplanon needs sizes + logo file", tag: "Follow Up", tone: "followup" },
-  { text: "Create TRRY order - Iligan Riders Club confirmed 60 pcs", tag: "Confirmed", tone: "won" },
+  { text: "Create Odoo Sales Order - Iligan Riders Club confirmed 60 pcs", tag: "Confirmed", tone: "won" },
   { text: "Check production queue - embroidery due this week", tag: "Production", tone: "followup" },
 ];
 
 let opsRawMessage = "";
 let opsExtractFields = null;
 let opsSavedNotice = false;
-let opsSoDraft = null;
-let opsSoSavingId = null;
 let opsArtworkRequests = {};
 let opsCustomerActionRequests = {};
-let opsPaymentHistoryByInquiry = {};
-let opsShopPaymentDrafts = {};
-let opsShopPaymentConfirmation = null;
-let onlinePaymentReviewByInquiry = {};
-const scheduledOnlinePaymentReviews = new Set();
-let mvpOrderDetailState = { id: null, status: "idle", order: null, error: "" };
-let mvpOrderDetailRequestVersion = 0;
-let mvpOrderDetailController = null;
-let mvpOrderDetailScheduledId = null;
-let mvpProductionDetailState = { id: null, status: "idle", job: null, error: "" };
-let mvpProductionActionState = { id: null, status: "idle", error: "", success: "" };
-let mvpProductionDrafts = {};
-let mvpProductionRequestVersion = 0;
-let mvpProductionController = null;
-let mvpProductionScheduledId = null;
+let mvpPaymentConfirmationRequests = {};
 let expandedOpsInquiryId = null;
 let selectedOrderDashboardId = null;
 let orderDashboardSaveError = "";
@@ -441,8 +468,10 @@ let activeFilter = "All";
 let clientKpiFilter = "All";
 let productFilter = "All";
 let catalogStatusFilter = "active";
+let catalogBrandFilter = "all";
 let catalogCategoryFilter = "all";
 let catalogFeaturedFilter = "all";
+let catalogProductTypeFilter = "all";
 let query = "";
 let draftStatus = orders[0]?.status ?? "Pending Review";
 let clientQuery = "";
@@ -458,15 +487,86 @@ let hasLoadedCatalogProducts = false;
 let orderLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 let clientLoadState = shouldLoadSupabaseOrders ? "loading" : "local";
 let catalogProducts = [];
+let productCategories = [];
+let brands = [];
 let catalogLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
 let catalogLoadError = "";
+let categoryLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
+let categoryLoadError = "";
+let brandLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
+let brandLoadError = "";
 let activeCatalogKey = "trry_webapp";
 let selectedCatalogProductId = null;
-let catalogDrawerMode = "";
+let catalogExpandedProductId = null;
+let catalogQuickSaveState = "idle";
+let catalogQuickSaveError = "";
+let catalogEditorMode = "";
+let catalogEditorRouteKey = "";
 let catalogDraft = null;
 let catalogValidationError = "";
 let catalogSaveState = "idle";
 let catalogSaveError = "";
+let catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+let inventoryRows = [];
+let inventoryLocations = [];
+let inventoryMovements = [];
+let inventoryLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
+let inventoryLoadError = "";
+let hasLoadedInventory = false;
+let inventoryView = "stock";
+let inventoryQuery = "";
+let inventoryLocationFilter = "all";
+let inventoryStockStateFilter = "all";
+let inventoryMovementTypeFilter = "all";
+let inventoryMovementSourceFilter = "all";
+let inventoryReceiveDrawer = { open: false, rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
+let suppliers = [];
+let supplierLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
+let supplierLoadError = "";
+let hasLoadedSuppliers = false;
+let supplierQuery = "";
+let supplierStatusFilter = "active";
+let supplierSupplyTypeFilter = "all";
+let supplierDrawerMode = "";
+let selectedSupplierId = null;
+let supplierDraft = null;
+let supplierSaveState = "idle";
+let supplierSaveError = "";
+let purchaseOrders = [];
+let purchasingLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
+let purchasingLoadError = "";
+let hasLoadedPurchaseOrders = false;
+let purchasingQuery = "";
+let purchasingStatusFilter = "all";
+let purchasingSupplierFilter = "all";
+let purchasingExpectedFilter = "all";
+let purchasingDrawerOpen = false;
+let purchasingDraft = null;
+let purchasingSaveState = "idle";
+let purchasingSaveError = "";
+let selectedPurchaseOrderId = null;
+let purchaseOrderDetailTab = "items";
+let purchaseOrderPickerState = { activeIndex: -1, queries: {}, highlighted: {} };
+let purchaseOrderOutsideClickBound = false;
+const CATALOG_PRODUCT_IMAGE_LIMIT = 6;
+let categoryStatusFilter = "active";
+let categoryProductTypeFilter = "all";
+let categoryHierarchyFilter = "all";
+let selectedCategoryId = null;
+let categoryDrawerMode = "";
+let categoryDraft = null;
+let categoryValidationError = "";
+let categorySaveState = "idle";
+let categorySaveError = "";
+let hasLoadedProductCategories = false;
+let hasLoadedBrands = false;
+let brandStatusFilter = "active";
+let selectedBrandId = null;
+let brandDrawerMode = "";
+let brandDraft = null;
+let brandValidationError = "";
+let brandSaveState = "idle";
+let brandSaveError = "";
 let isAccountMenuOpen = false;
 let staffUsers = [];
 let staffLoadState = "idle";
@@ -478,6 +578,9 @@ let staffDraft = createEmptyStaffDraft();
 let staffSaveState = "idle";
 let staffSaveError = "";
 let staffActionId = "";
+let employeeQuery = "";
+let employeeRoleFilter = "all";
+let employeeStatusFilter = "active";
 let assignmentUsers = [];
 let assignmentLoadState = "idle";
 let assignmentLoadError = "";
@@ -499,14 +602,11 @@ let taskNoTimeReason = "";
 let taskFallbackOpen = false;
 let myTasksClock = Date.now();
 let myTasksTickHandle = null;
+let myTasksLastFullTickRender = 0;
 let workboardTasks = [];
-let overviewTasks = [];
-let overviewTaskLoadState = "idle";
-let overviewTaskLoadError = "";
 let workboardLoadState = "idle";
 let workboardLoadError = "";
 let workboardFilterStatus = "active";
-let workboardFilterDue = "";
 let workboardFilterPriority = "";
 let workboardFilterSource = "";
 let workboardFilterAssignee = "";
@@ -518,60 +618,52 @@ let workboardCommandError = "";
 let workboardReviewNote = "";
 let workboardReason = "";
 let workboardDraftForm = createEmptyWorkboardDraft();
-const WORK_CHAT_STANDARD_KEYS = ["general", "front-desk", "production"];
-const WORK_CHAT_MAX_ATTACHMENTS = 5;
-const WORK_CHAT_MAX_FILE_BYTES = 10 * 1024 * 1024;
-let workChatState = createWorkChatInitialState();
-let workChatSubscription = null;
-
-function createWorkChatInitialState() {
-  return {
-    initialized: false,
-    loadState: "idle",
-    messageLoadState: "idle",
-    realtimeStatus: "idle",
-    isOpen: false,
-    activeChannelId: "",
-    activeView: "channel",
-    channels: [],
-    orderThreads: [],
-    mentionMessages: [],
-    activeUsers: [],
-    messagesByChannel: {},
-    unreadByChannel: {},
-    globalUnreadCount: 0,
-    unreadMentionCount: 0,
-    composerBody: "",
-    mentionedUserIds: [],
-    pendingAttachments: [],
-    attachmentUploadState: "idle",
-    sending: false,
-    error: "",
-    orderSearch: "",
-  };
-}
+let autoPlanQuickDirection = "";
+let autoPlanState = "idle";
+let autoPlanError = "";
+let autoPlanResult = null;
+let autoPlanIdempotencyKey = "";
+let calendarEvents = [];
+let calendarLoadState = "idle";
+let calendarLoadError = "";
+let calendarSelectedDate = getManilaTodayKey();
+let calendarVisibleMonth = getMonthKey(calendarSelectedDate);
+let calendarAssigneeFilter = "";
+let calendarSourceFilter = "";
+let calendarStatusFilter = "";
+let calendarSelectedTask = null;
 
 const routes = {
   "/": "Overview",
   "/inquiries": "Inquiries",
-  "/order-dashboard": "Orders",
   "/orders": "Orders",
   "/production": "Production",
-  "/my-tasks": "My Tasks",
-  "/workboard": "Workboard",
-  "/reorders": "Reorders",
-  "/overview": "Overview",
-  "/clients": "Clients",
-  "/products": "Products",
   "/catalog": "Catalog",
-  "/staff": "Staff",
+  "/catalog/inventory": "Catalog",
+  "/catalog/purchasing": "Catalog",
+  "/catalog/suppliers": "Catalog",
+  "/my-tasks": "My Tasks",
+  "/calendar": "Calendar",
+  "/workboard": "Workboard",
+  "/overview": "Overview",
+  "/catalog": "Catalog",
+  "/catalog/brands": "Catalog",
+  "/catalog/categories": "Catalog",
+  "/catalog/inventory": "Catalog",
+  "/catalog/purchasing": "Catalog",
+  "/catalog/suppliers": "Catalog",
   "/settings": "Settings",
+  "/settings/people-access": "Settings",
 };
 
 const defaultRoutePath = "/";
-const parkedAdminRoutes = new Set(["/clients", "/products"]);
+const legacyOrderDashboardPath = "/order-dashboard";
+const activeOrdersPath = "/orders";
 const ADMIN_ACCESS_SESSION_KEY = "trry_admin_access_unlocked";
 const SIDEBAR_COLLAPSED_STORAGE_KEY = "trry_admin_sidebar_collapsed_v3";
+
+const MASTER_CATALOG_PATHS = ["/catalog", "/catalog/brands", "/catalog/categories"];
+const SUPPLY_INVENTORY_PATHS = ["/catalog/suppliers", "/catalog/purchasing", "/catalog/inventory"];
 
 let adminAccessCodeInput = "";
 let adminAccessError = "";
@@ -584,18 +676,45 @@ let adminLoginPassword = "";
 let adminLoginPasswordVisible = false;
 let adminLoginError = "";
 let adminLoginNotice = "";
+let passwordResetEmail = "";
+let passwordResetStatus = "idle";
+let passwordResetError = "";
+let passwordResetNotice = "";
 let adminAuthMessage = "";
 let adminShellMessage = "";
 let passwordSetupDraft = { password: "", confirm: "" };
 let passwordSetupStatus = "idle";
 let passwordSetupError = "";
 let passwordSetupSession = null;
+let passwordSetupMode = "invite";
+let passwordSetupSuccess = "";
 let isSidebarCollapsed = getStoredSidebarCollapsed();
 let isMobileSidebarOpen = false;
+let isMasterCatalogNavExpanded = false;
+let isSupplyInventoryNavExpanded = false;
 
 function render() {
+  if (normalizeLegacyOrderDashboardRoute()) {
+    return;
+  }
+
   if (isPasswordSetupRoute()) {
-    renderPasswordSetupScreen();
+    renderPasswordSetupScreen("invite");
+    return;
+  }
+
+  if (isPasswordResetRoute()) {
+    renderPasswordSetupScreen("recovery");
+    return;
+  }
+
+  if (isForgotPasswordRoute()) {
+    renderForgotPasswordScreen();
+    return;
+  }
+
+  if (isLoginRoute() && adminAuthStatus !== "approved") {
+    renderAdminAuthGate();
     return;
   }
 
@@ -608,9 +727,13 @@ function render() {
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = ["Clients", "Products", "Catalog", "Staff", "Settings"].includes(currentRoute);
+  const isAdminSaasRoute = currentRoute === "Catalog";
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
+  if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
+  if (getRoutePath() === "/catalog/inventory" && inventoryLoadState === "idle") window.setTimeout(loadInventory, 0);
+  if (getRoutePath() === "/catalog/purchasing" && purchasingLoadState === "idle") window.setTimeout(loadPurchaseOrders, 0);
+  if (getRoutePath() === "/catalog/suppliers" && supplierLoadState === "idle") window.setTimeout(loadSuppliers, 0);
 
   document.getElementById("root").innerHTML = `
     <div class="app-shell ${isSidebarCollapsed ? "sidebar-collapsed" : ""} ${isMobileSidebarOpen ? "mobile-sidebar-open" : ""} ${isAdminSaasRoute ? "admin-saas-shell" : ""}">
@@ -622,36 +745,26 @@ function render() {
         ${
           currentRoute === "Orders"
             ? renderMvpOrdersPage()
-            : currentRoute === "Reorders"
-              ? renderOrdersPage(selectedOrder, filteredOrders)
-              : currentRoute === "Inquiries"
+            : currentRoute === "Inquiries"
                 ? renderMvpInquiriesPage()
                 : currentRoute === "Production"
                   ? renderMvpProductionPage()
                   : currentRoute === "My Tasks"
                     ? renderMyTasksPage()
-                    : currentRoute === "Workboard"
-                      ? renderWorkboardPage()
-                  : currentRoute === "Overview"
-                ? renderOverviewPage()
-                : currentRoute === "Clients"
-                  ? renderClientsPage()
-                  : currentRoute === "Products"
-                    ? renderProductsPage(selectedProduct)
-                    : currentRoute === "Catalog"
-                      ? renderCatalogPage()
-                      : currentRoute === "Staff"
-                        ? renderStaffAccessPage()
-                        : currentRoute === "Settings"
-                        ? renderSettingsPage()
-                        : renderOverviewPage()
+                    : currentRoute === "Calendar"
+                      ? renderCalendarPage()
+                      : currentRoute === "Workboard"
+                        ? renderWorkboardPage()
+                        : currentRoute === "Catalog"
+                          ? renderCatalogPage()
+                          : currentRoute === "Settings"
+                            ? renderPeopleAccessEmployeesPage()
+                            : renderOverviewPage()
         }
         ${renderFooter()}
       </section>
       ${renderMobileBottomNav(currentRoute)}
-      ${renderWorkChatShell()}
     </div>
-    <div id="ops-payment-dialog-host">${renderActiveOpsShopPaymentDialog()}</div>
   `;
 
   bindEvents();
@@ -747,6 +860,7 @@ function renderAdminLoginScreen() {
           ${adminLoginError ? `<p class="admin-access-error" role="alert">${escapeHtml(adminLoginError)}</p>` : ""}
           <button type="submit" ${isSigningIn ? "disabled" : ""}>${isSigningIn ? "SIGNING IN..." : "SIGN IN"}</button>
         </form>
+        <button class="admin-auth-link" data-forgot-password type="button" ${isSigningIn ? "disabled" : ""}>Forgot Password?</button>
         <p class="admin-login-note">Authorized staff only.</p>
       </section>
     </main>
@@ -757,33 +871,121 @@ function renderAdminLoginScreen() {
 
 function getAdminLoginNotice() {
   if (adminLoginNotice) return adminLoginNotice;
+  if (new URLSearchParams(window.location.search).get("password_reset") === "1") {
+    return "PASSWORD UPDATED. YOU CAN NOW SIGN IN.";
+  }
   return new URLSearchParams(window.location.search).get("password_set") === "1"
     ? "PASSWORD SET. YOU CAN NOW SIGN IN."
     : "";
 }
 
-function renderPasswordSetupScreen() {
+function renderForgotPasswordScreen() {
+  const isSending = passwordResetStatus === "sending";
+  document.getElementById("root").innerHTML = `
+    <main class="admin-access-page">
+      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin password reset request">
+        <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
+        <div class="admin-access-heading">
+          <h1>Reset password</h1>
+          <span>Enter your Admin Staging email address.</span>
+        </div>
+        <form class="admin-access-form" id="admin-forgot-password-form">
+          <label for="admin-reset-email">EMAIL</label>
+          <input id="admin-reset-email" value="${escapeHtml(passwordResetEmail)}" type="email" autocomplete="email" inputmode="email" aria-invalid="${passwordResetError ? "true" : "false"}" ${isSending ? "disabled" : ""} />
+          ${passwordResetNotice ? `<p class="admin-access-success" role="status">${escapeHtml(passwordResetNotice)}</p>` : ""}
+          ${passwordResetError ? `<p class="admin-access-error" role="alert">${escapeHtml(passwordResetError)}</p>` : ""}
+          <button type="submit" ${isSending ? "disabled" : ""}>${isSending ? "SENDING..." : "SEND RESET LINK"}</button>
+        </form>
+        <button class="admin-auth-link" data-back-to-login type="button" ${isSending ? "disabled" : ""}>Back to Login</button>
+        <p class="admin-login-note">Authorized staff only.</p>
+      </section>
+    </main>
+  `;
+
+  bindForgotPasswordEvents();
+}
+
+function bindForgotPasswordEvents() {
+  const email = document.getElementById("admin-reset-email");
+  const form = document.getElementById("admin-forgot-password-form");
+
+  email?.addEventListener("input", (event) => {
+    passwordResetEmail = event.target.value;
+    passwordResetError = "";
+    passwordResetNotice = "";
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitPasswordResetRequest();
+  });
+
+  document.querySelector("[data-back-to-login]")?.addEventListener("click", () => {
+    passwordResetError = "";
+    passwordResetNotice = "";
+    navigateTo("/");
+    render();
+  });
+
+  email?.focus();
+}
+
+async function submitPasswordResetRequest() {
+  const email = passwordResetEmail.trim();
+  if (!email) {
+    passwordResetError = "Enter the email address for your admin account.";
+    render();
+    return;
+  }
+
+  passwordResetStatus = "sending";
+  passwordResetError = "";
+  passwordResetNotice = "";
+  render();
+
+  try {
+    await requestAdminPasswordReset(email, getAdminPasswordResetRedirectUrl());
+    passwordResetStatus = "sent";
+    passwordResetNotice = "RESET LINK REQUESTED. CHECK THE EMAIL INBOX FOR THIS ACCOUNT.";
+  } catch (error) {
+    console.error("Admin password reset request failed.", error);
+    passwordResetStatus = "idle";
+    passwordResetError = error.message || "Unable to send password reset email. Check the address and try again.";
+  }
+  render();
+}
+
+function renderPasswordSetupScreen(mode = "invite") {
+  passwordSetupMode = mode;
   const inviteError = passwordSetupSession?.error || "";
   const isSaving = passwordSetupStatus === "saving";
   const isInvalid = !passwordSetupSession?.access_token || Boolean(inviteError);
-  const message = inviteError || (isInvalid ? "Invitation link is expired or invalid." : "Create your password to activate your staff account.");
+  const isRecovery = mode === "recovery";
+  const isInvalidRecovery = isRecovery && isInvalid && !passwordSetupSuccess;
+  const invalidMessage = isRecovery ? "This password reset link is invalid or has expired." : "Invitation link is expired or invalid.";
+  const activeMessage = isRecovery ? "Choose a new password for your Admin Staging account." : "Create your password to activate your staff account.";
+  const message = passwordSetupSuccess || inviteError || (isInvalid ? invalidMessage : activeMessage);
+  const heading = isInvalidRecovery ? "PASSWORD RESET LINK EXPIRED" : isRecovery ? "Reset Password" : "Set password";
 
   document.getElementById("root").innerHTML = `
     <main class="admin-access-page">
-      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin password setup">
+      <section class="admin-access-card admin-login-card" aria-label="TRRY Admin ${isRecovery ? "password reset" : "password setup"}">
         <div class="admin-access-brand"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
         <div class="admin-access-heading">
-          <h1>Set password</h1>
+          <h1>${escapeHtml(heading)}</h1>
           <span>${escapeHtml(message)}</span>
         </div>
-        <form class="admin-access-form" id="admin-password-setup-form">
+        ${isInvalidRecovery ? "" : `<form class="admin-access-form" id="admin-password-setup-form">
           <label for="admin-new-password">NEW PASSWORD</label>
           <input id="admin-new-password" value="${escapeHtml(passwordSetupDraft.password)}" type="password" autocomplete="new-password" aria-invalid="${passwordSetupError ? "true" : "false"}" ${isInvalid || isSaving ? "disabled" : ""} />
           <label for="admin-confirm-password">CONFIRM PASSWORD</label>
           <input id="admin-confirm-password" value="${escapeHtml(passwordSetupDraft.confirm)}" type="password" autocomplete="new-password" aria-invalid="${passwordSetupError ? "true" : "false"}" ${isInvalid || isSaving ? "disabled" : ""} />
+          ${passwordSetupSuccess ? `<p class="admin-access-success" role="status">${escapeHtml(passwordSetupSuccess)}</p>` : ""}
           ${passwordSetupError ? `<p class="admin-access-error" role="alert">${escapeHtml(passwordSetupError)}</p>` : ""}
-          <button type="submit" ${isInvalid || isSaving ? "disabled" : ""}>${isSaving ? "SAVING..." : "SAVE PASSWORD"}</button>
-        </form>
+          <button type="submit" ${isInvalid || isSaving ? "disabled" : ""}>${isSaving ? "UPDATING..." : isRecovery ? "UPDATE PASSWORD" : "SAVE PASSWORD"}</button>
+        </form>`}
+        ${isInvalidRecovery ? `<button class="admin-auth-link" data-request-new-reset type="button">REQUEST NEW RESET LINK</button>` : ""}
+        ${isInvalid || passwordSetupSuccess ? `<button class="admin-auth-link" data-back-to-login type="button">BACK TO LOGIN</button>` : ""}
         <p class="admin-login-note">Authorized staff only.</p>
       </section>
     </main>
@@ -800,16 +1002,36 @@ function bindPasswordSetupEvents() {
   password?.addEventListener("input", (event) => {
     passwordSetupDraft.password = event.target.value;
     passwordSetupError = "";
+    passwordSetupSuccess = "";
   });
 
   confirm?.addEventListener("input", (event) => {
     passwordSetupDraft.confirm = event.target.value;
     passwordSetupError = "";
+    passwordSetupSuccess = "";
   });
 
   form?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await submitPasswordSetup();
+  });
+
+  document.querySelector("[data-back-to-login]")?.addEventListener("click", () => {
+    passwordSetupSession = null;
+    passwordSetupDraft = { password: "", confirm: "" };
+    passwordSetupError = "";
+    passwordSetupSuccess = "";
+    navigateTo("/login");
+    render();
+  });
+
+  document.querySelector("[data-request-new-reset]")?.addEventListener("click", () => {
+    passwordSetupSession = null;
+    passwordSetupDraft = { password: "", confirm: "" };
+    passwordSetupError = "";
+    passwordSetupSuccess = "";
+    navigateTo("/forgot-password");
+    render();
   });
 
   password?.focus();
@@ -826,21 +1048,30 @@ async function submitPasswordSetup() {
   render();
 
   try {
-    await updateAdminInvitePassword(passwordSetupSession, passwordSetupDraft.password);
+    if (passwordSetupMode === "recovery") {
+      await updateAdminRecoveryPassword(passwordSetupSession, passwordSetupDraft.password);
+    } else {
+      await updateAdminInvitePassword(passwordSetupSession, passwordSetupDraft.password);
+    }
     passwordSetupDraft = { password: "", confirm: "" };
     passwordSetupStatus = "idle";
     passwordSetupError = "";
     passwordSetupSession = null;
+    passwordSetupSuccess = "Password updated successfully.";
     adminAuthSession = null;
     adminUser = null;
     adminAuthStatus = "login";
-    adminLoginNotice = "PASSWORD SET. YOU CAN NOW SIGN IN.";
-    window.history.replaceState({}, "", "/?password_set=1");
+    adminLoginNotice = passwordSetupMode === "recovery"
+      ? "Password updated successfully."
+      : "PASSWORD SET. YOU CAN NOW SIGN IN.";
+    window.history.replaceState({}, "", passwordSetupMode === "recovery" ? "/login?password_reset=1" : "/login?password_set=1");
     render();
   } catch (error) {
-    console.error("Admin invite password setup failed.", error);
+    console.error("Admin password setup failed.", error);
     passwordSetupStatus = "idle";
-    passwordSetupError = error.message || "Unable to set password. Try a new invitation link.";
+    passwordSetupError = error.message || (passwordSetupMode === "recovery"
+      ? "Unable to set password. Try a new recovery link."
+      : "Unable to set password. Try a new invitation link.");
     render();
   }
 }
@@ -896,6 +1127,15 @@ function bindAdminLoginEvents() {
     adminLoginPasswordVisible = !adminLoginPasswordVisible;
     render();
     document.getElementById("admin-login-password")?.focus();
+  });
+
+  document.querySelector("[data-forgot-password]")?.addEventListener("click", () => {
+    passwordResetEmail = adminLoginEmail.trim();
+    passwordResetStatus = "idle";
+    passwordResetError = "";
+    passwordResetNotice = "";
+    navigateTo("/forgot-password");
+    render();
   });
 
   form?.addEventListener("submit", async (event) => {
@@ -957,7 +1197,32 @@ async function approveAdminSession(session) {
 async function initializeAdminAuth() {
   if (isPasswordSetupRoute()) {
     passwordSetupSession = readInviteSessionFromUrl();
+    passwordSetupMode = "invite";
+    passwordSetupSuccess = "";
     adminAuthStatus = "password-setup";
+    if (passwordSetupSession?.access_token) cleanAdminAuthCallbackUrl("/set-password");
+    render();
+    return;
+  }
+
+  if (isPasswordResetRoute()) {
+    passwordSetupSession = readRecoverySessionFromUrl();
+    passwordSetupMode = "recovery";
+    passwordSetupSuccess = "";
+    adminAuthStatus = "password-reset";
+    if (passwordSetupSession?.access_token) cleanAdminAuthCallbackUrl("/reset-password");
+    render();
+    return;
+  }
+
+  if (isForgotPasswordRoute()) {
+    adminAuthStatus = "forgot-password";
+    render();
+    return;
+  }
+
+  if (isLoginRoute()) {
+    adminAuthStatus = isSupabaseReady() ? "login" : "access-code";
     render();
     return;
   }
@@ -1134,8 +1399,12 @@ function startAdminDataLoading() {
   loadAdminOrders();
   loadAdminClients();
   loadCatalogProducts();
+  loadProductCategories();
+  loadBrands();
+  loadInventory();
+  loadSuppliers();
+  loadPurchaseOrders();
   if (isTaskFeatureUiEnabled()) loadMyTasks();
-  if (isTaskFeatureUiEnabled()) loadOverviewTasks();
 }
 
 async function loadAssignmentUsers() {
@@ -1195,7 +1464,7 @@ async function loadCatalogProducts() {
     catalogLoadError = result?.error?.message ?? "";
 
     if (!catalogProducts.some((item) => item.id === selectedCatalogProductId)) {
-      selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+      selectedCatalogProductId = catalogProducts[0]?.id ?? null;
     }
   } catch (error) {
     console.error("Unable to apply catalog products.", error);
@@ -1206,26 +1475,163 @@ async function loadCatalogProducts() {
     render();
   }
 }
+
+async function loadProductCategories() {
+  if (hasLoadedProductCategories && categoryLoadState !== "loading") return;
+  hasLoadedProductCategories = true;
+  categoryLoadState = "loading";
+  categoryLoadError = "";
+
+  try {
+    const result = await getAdminProductCategories(adminAuthSession);
+    const nextCategories = Array.isArray(result?.categories) ? result.categories : [];
+    productCategories = sortProductCategories(nextCategories);
+    categoryLoadState = result?.status === "error" ? "error" : nextCategories.length ? "success" : "empty";
+    categoryLoadError = result?.error?.message ?? "";
+
+    if (!productCategories.some((item) => item.id === selectedCategoryId)) {
+      selectedCategoryId = productCategories[0]?.id ?? null;
+    }
+  } catch (error) {
+    console.error("Unable to apply product categories.", error);
+    productCategories = [];
+    categoryLoadState = "error";
+    categoryLoadError = error.message || "Unable to load product categories.";
+  } finally {
+    render();
+  }
+}
+
+async function loadBrands() {
+  if (hasLoadedBrands && brandLoadState !== "loading") return;
+  hasLoadedBrands = true;
+  brandLoadState = "loading";
+  brandLoadError = "";
+
+  try {
+    const result = await getAdminBrands(adminAuthSession);
+    const nextBrands = Array.isArray(result?.brands) ? result.brands : [];
+    brands = sortBrands(nextBrands);
+    brandLoadState = result?.status === "error" ? "error" : nextBrands.length ? "success" : "empty";
+    brandLoadError = result?.error?.message ?? "";
+
+    if (!brands.some((item) => item.id === selectedBrandId)) {
+      selectedBrandId = brands[0]?.id ?? null;
+    }
+  } catch (error) {
+    console.error("Unable to apply brands.", error);
+    brands = [];
+    brandLoadState = "error";
+    brandLoadError = error.message || "Unable to load brands.";
+  } finally {
+    render();
+  }
+}
+
+async function loadInventory({ force = false } = {}) {
+  if (!force && hasLoadedInventory && inventoryLoadState !== "loading") return;
+  hasLoadedInventory = true;
+  inventoryLoadState = "loading";
+  inventoryLoadError = "";
+
+  try {
+    const result = await getAdminInventory(adminAuthSession);
+    inventoryRows = Array.isArray(result?.rows) ? result.rows : [];
+    inventoryLocations = Array.isArray(result?.locations) ? result.locations : [];
+    inventoryMovements = Array.isArray(result?.movements) ? result.movements : [];
+    inventoryLoadState = result?.status === "error" ? "error" : inventoryRows.length || inventoryLocations.length || inventoryMovements.length ? "success" : "empty";
+    inventoryLoadError = result?.error?.message ?? "";
+    if (inventoryLocations.length === 1) inventoryLocationFilter = inventoryLocations[0].id;
+    if (inventoryReceiveDrawer.open && !inventoryRows.some((row) => row.id === inventoryReceiveDrawer.rowId)) {
+      inventoryReceiveDrawer = createClosedInventoryReceiveDrawer();
+    }
+  } catch (error) {
+    console.error("Unable to apply inventory.", error);
+    inventoryRows = [];
+    inventoryLocations = [];
+    inventoryMovements = [];
+    inventoryLoadState = "error";
+    inventoryLoadError = error.message || "Unable to load inventory records.";
+  } finally {
+    render();
+  }
+}
+
+async function loadSuppliers({ force = false } = {}) {
+  if (!force && hasLoadedSuppliers && supplierLoadState !== "loading") return;
+  hasLoadedSuppliers = true;
+  supplierLoadState = "loading";
+  supplierLoadError = "";
+
+  try {
+    const result = await getAdminSuppliers(adminAuthSession);
+    const nextSuppliers = Array.isArray(result?.suppliers) ? result.suppliers : [];
+    suppliers = nextSuppliers;
+    supplierLoadState = result?.status === "error" ? "error" : nextSuppliers.length ? "success" : "empty";
+    supplierLoadError = result?.error?.message ?? "";
+
+    if (!suppliers.some((item) => item.id === selectedSupplierId)) {
+      selectedSupplierId = suppliers[0]?.id ?? null;
+    }
+  } catch (error) {
+    console.error("Unable to apply suppliers.", error);
+    suppliers = [];
+    supplierLoadState = "error";
+    supplierLoadError = error.message || "Unable to load supplier records.";
+  } finally {
+    render();
+  }
+}
+
+async function loadPurchaseOrders({ force = false } = {}) {
+  if (!force && hasLoadedPurchaseOrders && purchasingLoadState !== "loading") return;
+  hasLoadedPurchaseOrders = true;
+  purchasingLoadState = "loading";
+  purchasingLoadError = "";
+
+  try {
+    const result = await getPurchaseOrders(adminAuthSession);
+    const nextOrders = Array.isArray(result?.purchaseOrders) ? result.purchaseOrders : [];
+    purchaseOrders = nextOrders;
+    purchasingLoadState = result?.status === "error" ? "error" : nextOrders.length ? "success" : "empty";
+    purchasingLoadError = result?.error?.message ?? "";
+
+    if (selectedPurchaseOrderId && !purchaseOrders.some((order) => order.id === selectedPurchaseOrderId)) {
+      selectedPurchaseOrderId = null;
+    }
+  } catch (error) {
+    console.error("Unable to apply Purchase Orders.", error);
+    purchaseOrders = [];
+    purchasingLoadState = "error";
+    purchasingLoadError = error.message || "Unable to load purchase orders.";
+  } finally {
+    render();
+  }
+}
 async function loadOpsBoardInquiries() {
   if (hasLoadedOpsInquiries) return;
   hasLoadedOpsInquiries = true;
 
-  const result = await getOpsBoardInquiries(localOpsInquiries, adminAuthSession);
+  const [result, nativeResult] = await Promise.all([
+    getOpsBoardInquiries(localOpsInquiries, adminAuthSession),
+    getNativeOrderRows(adminAuthSession),
+  ]);
   opsInquiries = result.inquiries;
   opsLoadState = result.status;
   opsLoadError = result.error?.message ?? "";
+  nativeOrderRows = nativeResult.rows;
+  nativeOrdersLoadState = nativeResult.status;
+  nativeOrdersLoadError = nativeResult.error?.message ?? "";
 
   render();
-  void preloadOpsPaymentHistories(opsInquiries);
 }
 
-async function refreshOpsInquiryDataForPayment(inquiryId) {
-  const result = await getOpsBoardInquiries(localOpsInquiries, adminAuthSession);
-  opsInquiries = result.inquiries;
-  opsLoadState = result.status;
-  opsLoadError = result.error?.message ?? "";
-  hasLoadedOpsInquiries = true;
-  if (isAdminPayAtShopUiEnabled()) await loadOpsPaymentHistory(inquiryId, true, { silent: true });
+async function loadNativeOrderRows() {
+  const result = await getNativeOrderRows(adminAuthSession);
+  nativeOrderRows = result.rows;
+  nativeOrdersLoadState = result.status;
+  nativeOrdersLoadError = result.error?.message ?? "";
+  return result;
 }
 function isLocalTaskQaMode() {
   const value = String(window.TRRY_ADMIN_ENV?.VITE_LOCAL_TASK_QA_MODE ?? "false").trim().toLowerCase();
@@ -1261,32 +1667,14 @@ function isTaskFeatureUiEnabled() {
   return ["1", "true", "yes", "on"].includes(value) && (isSupabaseReady() || isLocalTaskQaMode());
 }
 
-function canViewMyTasksRoute() {
-  return isTaskFeatureUiEnabled() && ["owner", "admin", "staff"].includes(adminUser?.role);
+function isFeatureFlagEnabled(...names) {
+  return names.some((name) => ["1", "true", "yes", "on"].includes(String(window.TRRY_ADMIN_ENV?.[name] ?? "false").trim().toLowerCase()));
 }
 
-async function loadOverviewTasks({ silent = false } = {}) {
-  if (!isTaskFeatureUiEnabled() || !adminAuthSession?.access_token) return;
-  if (!silent) {
-    overviewTaskLoadState = "loading";
-    overviewTaskLoadError = "";
-    render();
-  }
-  try {
-    const response = canViewWorkboardRoute()
-      ? await getWorkboardTasks(adminAuthSession, { archived: "false", pageSize: 100 })
-      : await getMyTasks(adminAuthSession, { pageSize: 100 });
-    overviewTasks = canViewWorkboardRoute() ? sortWorkboardTasks(response.tasks || []) : sortMyTasks(response.tasks || []);
-    overviewTaskLoadState = "ready";
-    overviewTaskLoadError = "";
-    syncMyTasksTimerTick();
-  } catch (error) {
-    overviewTaskLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : "error";
-    overviewTaskLoadError = getTaskErrorMessage(error);
-    overviewTasks = [];
-  }
-  render();
+function canViewMyTasksRoute() {
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_MY_TASKS", "VITE_MY_TASKS_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
 }
+
 async function loadMyTasks({ silent = false } = {}) {
   if (!canViewMyTasksRoute() || !adminAuthSession?.access_token) return;
   if (!silent) {
@@ -1348,44 +1736,6 @@ function compareTaskDate(a, b) {
   return Date.parse(a.submissionDeadline || a.scheduledDate || a.updatedAt || 0) - Date.parse(b.submissionDeadline || b.scheduledDate || b.updatedAt || 0);
 }
 
-function sortWorkboardTasks(tasks) {
-  return [...tasks].sort((a, b) => compareWorkboardTasks(a, b));
-}
-
-function compareWorkboardTasks(a, b) {
-  const groupA = getWorkboardDisplayGroup(a);
-  const groupB = getWorkboardDisplayGroup(b);
-  if (groupA === "completed" && groupB === "completed") return compareTaskRecentDate(a, b, "completedAt");
-  if (groupA === "cancelled" && groupB === "cancelled") return compareTaskRecentDate(a, b, "cancelledAt");
-  const weight = getWorkboardSortWeight(a) - getWorkboardSortWeight(b);
-  if (weight) return weight;
-  return compareTaskDate(a, b) || compareTaskRecentDate(a, b, "updatedAt");
-}
-
-function compareTaskRecentDate(a, b, preferredKey = "updatedAt") {
-  return Date.parse(b[preferredKey] || b.updatedAt || b.createdAt || 0) - Date.parse(a[preferredKey] || a.updatedAt || a.createdAt || 0);
-}
-
-function getWorkboardSortWeight(task) {
-  const group = getWorkboardDisplayGroup(task);
-  if (group === "todo") {
-    if (isTaskOverdue(task)) return 0;
-    if (["URGENT", "HIGH"].includes(task.priority)) return 10;
-    return 20;
-  }
-  if (group === "in_progress") {
-    if (task.status === "FOR_REVIEW") return 0;
-    if (task.status === "NEEDS_REVISION") return 10;
-    if (isTaskOverdue(task) || isTaskDueToday(task)) return 20;
-    return 30;
-  }
-  if (group === "drafts") {
-    if (task.draftApprovalRequired) return 0;
-    return 10;
-  }
-  return 50;
-}
-
 function isTaskOverdue(task, now = Date.now()) {
   const due = Date.parse(task.submissionDeadline || "");
   return Number.isFinite(due) && due < startOfToday(now) && !["DONE", "CANCELLED"].includes(task.status);
@@ -1415,7 +1765,7 @@ function syncMyTasksTimerTick() {
     if (!myTasksTickHandle) {
       myTasksTickHandle = window.setInterval(() => {
         myTasksClock = Date.now();
-        render();
+        renderMyTasksTimerTick();
       }, 1000);
     }
     return;
@@ -1426,10 +1776,130 @@ function syncMyTasksTimerTick() {
 function stopMyTasksTimerTick() {
   if (myTasksTickHandle) window.clearInterval(myTasksTickHandle);
   myTasksTickHandle = null;
+  myTasksLastFullTickRender = 0;
+}
+
+function renderMyTasksTimerTick() {
+  updateMyTasksTimerLabels();
+  if (isTaskSubmitFieldFocused()) return;
+  if (Date.now() - myTasksLastFullTickRender < 5000) return;
+  myTasksLastFullTickRender = Date.now();
+  render();
+}
+
+function updateMyTasksTimerLabels() {
+  const taskMap = new Map(myTasks.map((task) => [task.id, task]));
+  if (selectedTaskDetail?.task?.id) taskMap.set(selectedTaskDetail.task.id, selectedTaskDetail.task);
+  document.querySelectorAll("[data-task-elapsed]").forEach((element) => {
+    const task = taskMap.get(element.dataset.taskElapsed);
+    if (task?.openTimeEntry?.startedAt) {
+      element.textContent = formatElapsed(getRunningElapsedSeconds(task));
+    }
+  });
+}
+
+function isTaskSubmitFieldFocused() {
+  const active = document.activeElement;
+  return isEditableElement(active) && Boolean(active.closest(".my-task-action-area"));
+}
+
+function isEditableElement(element) {
+  if (!element) return false;
+  const tag = String(element.tagName || "").toLowerCase();
+  return ["input", "textarea", "select"].includes(tag) || element.isContentEditable;
 }
 
 function canViewWorkboardRoute() {
-  return isTaskFeatureUiEnabled() && ["owner", "admin"].includes(adminUser?.role);
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_WORKBOARD", "VITE_WORKBOARD_ENABLED") && ["owner", "admin"].includes(adminUser?.role);
+}
+
+function canUseAutoPlanTodayUi() {
+  return canViewWorkboardRoute() && isFeatureFlagEnabled("VITE_ENABLE_AUTO_PLAN_TODAY", "VITE_AUTO_PLAN_TODAY_ENABLED") && adminUser?.role === "owner";
+}
+
+function canViewCalendarRoute() {
+  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_CALENDAR", "VITE_CALENDAR_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
+}
+
+async function loadTaskCalendar({ silent = false } = {}) {
+  if (!canViewCalendarRoute()) return;
+  if (!adminAuthSession?.access_token) {
+    calendarLoadState = "auth-required";
+    calendarLoadError = "Authentication required.";
+    calendarEvents = [];
+    render();
+    return;
+  }
+  if (!silent) {
+    calendarLoadState = "loading";
+    calendarLoadError = "";
+    render();
+  }
+  try {
+    const response = await getTaskCalendar(adminAuthSession, getCalendarApiFilters());
+    calendarEvents = Array.isArray(response.events) ? response.events : [];
+    calendarLoadState = "ready";
+    calendarLoadError = "";
+  } catch (error) {
+    calendarLoadState = error.code === "FEATURE_DISABLED" ? "feature-disabled" : error.code === "FORBIDDEN" ? "forbidden" : error.code === "AUTH_REQUIRED" ? "auth-required" : "error";
+    calendarLoadError = getTaskErrorMessage(error);
+    calendarEvents = [];
+  }
+  render();
+}
+
+function getCalendarApiFilters() {
+  const bounds = getCalendarMonthBounds(calendarVisibleMonth);
+  return {
+    from: bounds.from,
+    to: bounds.to,
+    assignedUserId: calendarAssigneeFilter,
+    sourceType: calendarSourceFilter,
+    status: calendarStatusFilter,
+  };
+}
+
+function getCalendarMonthBounds(monthKey) {
+  const [year, month] = String(monthKey || getMonthKey(getManilaTodayKey())).split("-").map(Number);
+  const first = `${year}-${String(month).padStart(2, "0")}-01`;
+  const lastDay = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return { from: first, to: `${year}-${String(month).padStart(2, "0")}-${String(lastDay).padStart(2, "0")}` };
+}
+
+function getManilaTodayKey(now = new Date()) {
+  return toManilaDateKey(now.toISOString());
+}
+
+function getMonthKey(dateKey) {
+  return String(dateKey || getManilaTodayKey()).slice(0, 7);
+}
+
+function toManilaDateKey(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    if (/^\d{4}-\d{2}-\d{2}$/.test(String(value))) return String(value);
+    return "";
+  }
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}`;
+}
+
+function formatManilaTime(value) {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return "All day";
+  const date = new Date(value || "");
+  if (Number.isNaN(date.getTime())) return "All day";
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Manila",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(date);
 }
 
 function createEmptyWorkboardDraft(task = null) {
@@ -1448,7 +1918,7 @@ function createEmptyWorkboardDraft(task = null) {
     draftApprovalRequired: task?.draftApprovalRequired === true,
     scheduledDate: task?.scheduledDate || "",
     startDeadline: toLocalDatetimeInput(task?.startDeadline || ""),
-    submissionDeadline: toLocalDatetimeInput(task?.submissionDeadline || defaultDeadline),
+    submissionDeadline: task ? toLocalDatetimeInput(task.submissionDeadline || "") : defaultDeadline,
     approvalDeadline: toLocalDatetimeInput(task?.approvalDeadline || ""),
   };
 }
@@ -1475,13 +1945,22 @@ async function loadWorkboardTasks({ silent = false } = {}) {
 }
 
 function getWorkboardApiFilters() {
+  const statusMap = {
+    draft: "DRAFT",
+    to_do: "TO_DO",
+    in_progress: "IN_PROGRESS",
+    for_review: "FOR_REVIEW",
+    needs_revision: "NEEDS_REVISION",
+    done: "DONE",
+    cancelled: "CANCELLED",
+  };
   return {
-    status: "",
+    status: statusMap[workboardFilterStatus] || "",
     priority: workboardFilterPriority,
     sourceType: workboardFilterSource,
     assignedUserId: workboardFilterAssignee,
     reviewerUserId: workboardFilterReviewer,
-    archived: "false",
+    archived: workboardFilterStatus === "archived" ? "true" : "false",
     search: workboardSearch.trim(),
     pageSize: 100,
   };
@@ -1491,11 +1970,7 @@ function getVisibleWorkboardTasks() {
   const normalized = workboardSearch.trim().toLowerCase();
   return workboardTasks.filter((task) => {
     if (workboardFilterStatus === "active" && ["DRAFT", "CANCELLED"].includes(task.status)) return false;
-    if (workboardFilterStatus === "draft" && task.status !== "DRAFT") return false;
-    if (workboardFilterStatus === "cancelled" && task.status !== "CANCELLED") return false;
-    if (workboardFilterDue === "overdue" && !isTaskOverdue(task)) return false;
-    if (workboardFilterDue === "today" && !isTaskDueToday(task)) return false;
-    if (workboardFilterDue === "unscheduled" && (task.submissionDeadline || task.scheduledDate)) return false;
+    if (workboardFilterStatus === "overdue" && !isTaskOverdue(task)) return false;
     if (normalized) return [task.taskCode, task.title, task.sourceType, task.priority, task.status, getUserLabel(task.assignedUser), getUserLabel(task.reviewerUser)].join(" ").toLowerCase().includes(normalized);
     return true;
   });
@@ -1503,17 +1978,17 @@ function getVisibleWorkboardTasks() {
 
 function renderWorkboardPage() {
   if (!canViewWorkboardRoute()) {
-    return `<section class="mvp-page workboard-page"><div class="mvp-page-title"><div><span>WORKBOARD</span><h1>WORKBOARD</h1><p>Task planning is not enabled for this account.</p></div></div></section>`;
+    return `<section class="mvp-page workboard-page"><div class="mvp-page-title"><div><span>HOME / WORKBOARD</span><h1>Workboard</h1><p>Task planning is not enabled for this account.</p></div></div></section>`;
   }
   const visibleTasks = getVisibleWorkboardTasks();
   return `<section class="mvp-page workboard-page">
     <div class="mvp-page-title">
-      <div><span>WORKBOARD</span><h1>WORKBOARD</h1><p>${escapeHtml(getWorkboardViewLabel())} / ${visibleTasks.length} shown / ${workboardTasks.length} total</p></div>
+      <div><span>HOME / WORKBOARD</span><h1>Workboard</h1><p>Plan, assign, review, and monitor canonical task records.</p></div>
       <button class="ops-gold-button" data-workboard-create type="button">CREATE TASK</button>
     </div>
     ${renderWorkboardStateNotice()}
+    ${renderAutoPlanTodayPanel()}
     ${renderWorkboardSummary()}
-    ${renderWorkboardViewControls()}
     ${renderWorkboardFilters()}
     ${workboardLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Workboard</strong><span>Checking task records.</span></div>` : ""}
     ${workboardLoadState === "ready" ? renderWorkboardTaskList(visibleTasks) : ""}
@@ -1530,47 +2005,29 @@ function renderWorkboardStateNotice() {
 }
 
 function renderWorkboardSummary() {
-  const counts = getWorkboardCounts(workboardTasks);
-  return `<div class="workboard-summary">
-    ${renderMyTaskMetric("Active Board", counts.active, "Three columns")}
-    ${renderMyTaskMetric("To Do", counts.todo, "Ready to start")}
-    ${renderMyTaskMetric("In Progress", counts.inProgress, "Active/review/revision")}
-    ${renderMyTaskMetric("Completed", counts.completed, "Approved work")}
-    ${renderMyTaskMetric("Drafts", counts.drafts, "Planning queue")}
-    ${renderMyTaskMetric("Cancelled", counts.cancelled, "Archive")}
-  </div>`;
-}
-
-function getWorkboardCounts(tasks) {
-  return {
-    active: tasks.filter((task) => !["DRAFT", "CANCELLED"].includes(task.status)).length,
-    todo: tasks.filter((task) => task.status === "TO_DO").length,
-    inProgress: tasks.filter((task) => ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"].includes(task.status)).length,
-    completed: tasks.filter((task) => task.status === "DONE").length,
-    drafts: tasks.filter((task) => task.status === "DRAFT").length,
-    cancelled: tasks.filter((task) => task.status === "CANCELLED").length,
+  const counts = {
+    drafts: workboardTasks.filter((task) => task.status === "DRAFT").length,
+    todo: workboardTasks.filter((task) => task.status === "TO_DO").length,
+    progress: workboardTasks.filter((task) => task.status === "IN_PROGRESS").length,
+    review: workboardTasks.filter((task) => task.status === "FOR_REVIEW").length,
+    revision: workboardTasks.filter((task) => task.status === "NEEDS_REVISION").length,
+    overdue: workboardTasks.filter((task) => isTaskOverdue(task)).length,
+    done: workboardTasks.filter((task) => task.status === "DONE").length,
   };
-}
-
-function renderWorkboardViewControls() {
-  const counts = getWorkboardCounts(workboardTasks);
-  const controls = [
-    ["active", "ACTIVE BOARD", counts.active],
-    ["draft", "DRAFTS", counts.drafts],
-    ["cancelled", "CANCELLED", counts.cancelled],
-  ];
-  return `<nav class="workboard-view-controls" aria-label="Workboard views">${controls.map(([value, label, count]) => `<button class="${workboardFilterStatus === value ? "active" : ""}" data-workboard-view="${escapeHtml(value)}" type="button"><span>${escapeHtml(label)}</span><b>${escapeHtml(count)}</b></button>`).join("")}</nav>`;
-}
-
-function getWorkboardViewLabel() {
-  if (workboardFilterStatus === "draft") return "Draft planning queue";
-  if (workboardFilterStatus === "cancelled") return "Cancelled archive";
-  return "Active board";
+  return `<div class="workboard-summary">
+    ${renderMyTaskMetric("Drafts", counts.drafts, "Planning")}
+    ${renderMyTaskMetric("To Do", counts.todo, "Queued")}
+    ${renderMyTaskMetric("In Progress", counts.progress, "Running")}
+    ${renderMyTaskMetric("For Review", counts.review, "Owner/Admin")}
+    ${renderMyTaskMetric("Needs Revision", counts.revision, "Returned")}
+    ${renderMyTaskMetric("Overdue", counts.overdue, "Needs attention")}
+    ${renderMyTaskMetric("Done", counts.done, "Completed")}
+  </div>`;
 }
 
 function renderWorkboardFilters() {
   return `<div class="workboard-filters">
-    ${renderWorkboardSelect("workboard-due-filter", workboardFilterDue, [["", "All due states"], ["overdue", "Overdue"], ["today", "Due today"], ["unscheduled", "No date"]])}
+    ${renderWorkboardSelect("workboard-status-filter", workboardFilterStatus, [["active", "Active"], ["draft", "Draft"], ["to_do", "To Do"], ["in_progress", "In Progress"], ["for_review", "For Review"], ["needs_revision", "Needs Revision"], ["overdue", "Overdue"], ["done", "Done"], ["cancelled", "Cancelled"], ["archived", "Archived"]])}
     ${renderWorkboardSelect("workboard-priority-filter", workboardFilterPriority, [["", "All priorities"], ["URGENT", "Urgent"], ["HIGH", "High"], ["MEDIUM", "Medium"], ["LOW", "Low"]])}
     ${renderWorkboardSelect("workboard-source-filter", workboardFilterSource, [["", "All sources"], ["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]])}
     ${renderWorkboardUserSelect("workboard-assignee-filter", workboardFilterAssignee, "All assignees")}
@@ -1579,8 +2036,9 @@ function renderWorkboardFilters() {
     <button data-workboard-clear type="button">CLEAR</button>
   </div>`;
 }
-function renderWorkboardSelect(id, value, options) {
-  return `<select id="${escapeHtml(id)}">${options.map(([optionValue, label]) => `<option value="${escapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`;
+
+function renderWorkboardSelect(id, value, options, config = {}) {
+  return `<select id="${escapeHtml(id)}" ${config.disabled ? "disabled" : ""}>${options.map(([optionValue, label]) => `<option value="${escapeHtml(optionValue)}" ${String(value) === String(optionValue) ? "selected" : ""}>${escapeHtml(label)}</option>`).join("")}</select>`;
 }
 
 function renderWorkboardUserSelect(id, value, label) {
@@ -1589,67 +2047,61 @@ function renderWorkboardUserSelect(id, value, label) {
 }
 
 function renderWorkboardTaskList(tasks) {
-  if (!tasks.length && workboardFilterStatus !== "active") {
-    const emptyText = workboardFilterStatus === "draft" ? "No drafts waiting in planning." : workboardFilterStatus === "cancelled" ? "No cancelled tasks." : workboardTasks.length ? "No tasks match your filters." : "No task records yet.";
-    const emptyHint = workboardTasks.length ? "Try another filter or search term." : "Create a manual task draft when planning is ready.";
-    return `<div class="my-tasks-empty"><strong>${escapeHtml(emptyText)}</strong><span>${escapeHtml(emptyHint)}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
-  }
-  const groups = getWorkboardStatusGroups(tasks);
-  return `<section class="workboard-board ${workboardFilterStatus !== "active" ? "supporting" : ""}" aria-label="Workboard task groups">${groups.map(renderWorkboardGroup).join("")}</section>`;
+  if (!tasks.length) return `<div class="my-tasks-empty"><strong>${workboardTasks.length ? "No tasks match your filters" : "No task records yet"}</strong><span>${workboardTasks.length ? "Try another status or search term." : "Create a manual task draft when planning is ready."}</span>${workboardTasks.length ? `<button data-workboard-clear type="button">CLEAR FILTERS</button>` : ""}</div>`;
+  if (workboardFilterStatus === "active") return renderWorkboardKanban(tasks);
+  return `<div class="workboard-table-wrap"><table class="workboard-table"><thead><tr><th>Task</th><th>Source</th><th>Priority</th><th>Status</th><th>Assigned</th><th>Reviewer</th><th>Deadline</th><th>Time</th><th>Action</th></tr></thead><tbody>${tasks.map(renderWorkboardRow).join("")}</tbody></table></div><div class="workboard-card-list">${tasks.map(renderWorkboardCard).join("")}</div>`;
 }
 
-function getWorkboardStatusGroups(tasks) {
-  const definitions = workboardFilterStatus === "draft"
-    ? [{ key: "drafts", label: "DRAFT PLANNING QUEUE", emptyText: "No drafts waiting in planning.", statuses: ["DRAFT"] }]
-    : workboardFilterStatus === "cancelled"
-      ? [{ key: "cancelled", label: "CANCELLED ARCHIVE", emptyText: "No cancelled tasks.", statuses: ["CANCELLED"] }]
-      : [
-          { key: "todo", label: "TO DO", emptyText: "No tasks ready to start.", statuses: ["TO_DO"] },
-          { key: "in_progress", label: "IN PROGRESS", emptyText: "No active work.", statuses: ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"] },
-          { key: "completed", label: "COMPLETED", emptyText: "No completed tasks yet.", statuses: ["DONE"] },
-        ];
-  return definitions.map((definition) => {
-    const groupTasks = tasks.filter((task) => definition.statuses.includes(task.status)).sort((a, b) => compareWorkboardTasks(a, b));
-    return { ...definition, tasks: groupTasks };
-  });
+function renderAutoPlanTodayPanel() {
+  if (!canUseAutoPlanTodayUi()) return "";
+  const busy = autoPlanState === "submitting";
+  const result = autoPlanResult;
+  const stateText = getAutoPlanStateText(result);
+  return `<section class="auto-plan-panel">
+    <div class="auto-plan-heading">
+      <div><span>${renderIcon("sparkles", "auto-plan-icon")}AUTO PLAN TODAY</span><p>Create unassigned AI marketing and daily content drafts for Owner review.</p></div>
+      <button class="ops-gold-button" data-auto-plan-submit type="button" ${busy ? "disabled" : ""}>${busy ? "GENERATING..." : "GENERATE"}</button>
+    </div>
+    <label class="auto-plan-direction"><span>Quick Direction</span><textarea id="auto-plan-quick-direction" rows="3" maxlength="500" ${busy ? "disabled" : ""} placeholder="Optional direction for today only.">${escapeHtml(autoPlanQuickDirection)}</textarea></label>
+    ${busy ? `<div class="auto-plan-state"><strong>Planning request submitting</strong><span>Waiting for canonical drafts from the configured workflow.</span></div>` : ""}
+    ${autoPlanError ? `<div class="auto-plan-state error"><strong>Planning needs attention</strong><span>${escapeHtml(autoPlanError)}</span></div>` : ""}
+    ${result ? `<div class="auto-plan-state success"><strong>${escapeHtml(stateText.title)}</strong><span>${escapeHtml(stateText.message)}</span><button data-auto-plan-drafts type="button">OPEN DRAFT VIEW</button></div>` : ""}
+  </section>`;
 }
 
-function getWorkboardDisplayGroup(task) {
-  if (task.status === "DRAFT") return "drafts";
-  if (task.status === "CANCELLED") return "cancelled";
-  if (task.status === "TO_DO") return "todo";
-  if (["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"].includes(task.status)) return "in_progress";
-  if (task.status === "DONE") return "completed";
-  return "todo";
+function getAutoPlanStateText(result) {
+  const count = Number(result?.draftsReceived || 0);
+  const trace = result?.traceCode ? ` Trace ${result.traceCode}.` : "";
+  if (count >= 2) return { title: `${count} drafts received`, message: `Review the unassigned drafts in Workboard before approval.${trace}` };
+  if (count === 1) return { title: "1 draft received", message: `Fewer drafts were returned than expected. Review it before approval.${trace}` };
+  if (result?.dispatchStatus === "REQUESTED") return { title: "Plan pending", message: `The planning request is traceable, but no drafts have been ingested yet.${trace}` };
+  return { title: "No valid drafts received", message: `No canonical draft was created. Try again after checking the staging workflow.${trace}` };
 }
 
-function getWorkboardDisplayStatus(task) {
-  if (task.status === "FOR_REVIEW") return { key: "waiting-review", label: "WAITING FOR REVIEW" };
-  if (task.status === "NEEDS_REVISION") return { key: "needs-revision", label: "NEEDS REVISION" };
-  if (task.status === "IN_PROGRESS") return { key: "in-progress", label: "IN PROGRESS" };
-  if (task.status === "DONE") return { key: "completed", label: "COMPLETED" };
-  if (task.status === "DRAFT") return { key: "draft", label: "DRAFT" };
-  if (task.status === "CANCELLED") return { key: "cancelled", label: "CANCELLED" };
-  return { key: "to-do", label: "TO DO" };
+function sortWorkboardTasks(tasks) {
+  const now = Date.now();
+  return [...tasks].sort((a, b) => getTaskSortWeight(a, now) - getTaskSortWeight(b, now) || compareTaskDate(a, b));
 }
 
-function renderWorkboardDisplayStatus(task) {
-  const state = getWorkboardDisplayStatus(task);
-  return `<span class="workboard-task-state workboard-task-state--${escapeHtml(state.key)}" data-workboard-task-state="${escapeHtml(state.key)}">${escapeHtml(state.label)}</span>`;
+function renderWorkboardKanban(tasks) {
+  const columns = [
+    ["TO_DO", "TO DO", (task) => task.status === "TO_DO"],
+    ["IN_PROGRESS", "IN PROGRESS", (task) => ["IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION"].includes(task.status)],
+    ["DONE", "COMPLETED", (task) => task.status === "DONE"],
+  ];
+  return `<div class="workboard-kanban" aria-label="Workboard Kanban">${columns.map(([key, label, predicate]) => {
+    const items = tasks.filter(predicate);
+    return `<section class="workboard-kanban-column" data-workboard-column="${key}"><header><span>${escapeHtml(label)}</span><strong>${items.length}</strong></header><div>${items.length ? items.map(renderWorkboardKanbanCard).join("") : `<article class="workboard-kanban-empty">No tasks</article>`}</div></section>`;
+  }).join("")}</div>`;
 }
 
-function renderWorkboardGroup(group) {
-  const visibleCards = group.key === "completed" ? group.tasks.slice(0, 8) : group.tasks;
-  const more = group.key === "completed" && group.tasks.length > visibleCards.length ? `<p class="workboard-more">${escapeHtml(group.tasks.length - visibleCards.length)} older completed tasks hidden. Count includes all completed work.</p>` : "";
-  return `<section class="workboard-group ${escapeHtml(group.key.replace(/_/g, "-"))}" data-workboard-column="${escapeHtml(group.key)}"><header><div><strong>${escapeHtml(group.label)}</strong><span>${group.tasks.length}</span></div></header><div class="workboard-group-list">${visibleCards.length ? visibleCards.map(renderWorkboardCard).join("") + more : `<p class="workboard-empty">${escapeHtml(group.emptyText)}</p>`}</div></section>`;
-}
 function renderWorkboardRow(task) {
   const latest = getWorkboardPrimaryAction(task);
   return `<tr class="${task.status === "FOR_REVIEW" ? "for-review" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
     <td><button class="workboard-task-link" data-workboard-open="${escapeHtml(task.id)}" type="button"><span>${escapeHtml(task.taskCode || "TASK")}</span><strong>${escapeHtml(task.title || "Untitled task")}</strong></button></td>
     <td>${escapeHtml(formatSourceType(task.sourceType))}</td>
     <td>${renderTaskPriority(task.priority)}</td>
-    <td>${renderWorkboardDisplayStatus(task)}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</td>
+    <td>${renderTaskStatus(task.status)}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</td>
     <td>${escapeHtml(getUserLabel(task.assignedUser))}</td>
     <td>${escapeHtml(getUserLabel(task.reviewerUser))}</td>
     <td>${escapeHtml(formatTaskDue(task))}</td>
@@ -1659,35 +2111,29 @@ function renderWorkboardRow(task) {
 }
 
 function renderWorkboardCard(task) {
-  const displayStatus = getWorkboardDisplayStatus(task);
-  const source = formatWorkboardCardSource(task);
-  const attention = getWorkboardAttentionMessage(task);
-  return `<button class="workboard-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""} ${escapeHtml(displayStatus.key)}" data-workboard-open="${escapeHtml(task.id)}" type="button">
-    ${renderWorkboardDisplayStatus(task)}
-    <strong>${escapeHtml(task.title || "Untitled task")}</strong>
-    <span class="workboard-card-reference"><code>${escapeHtml(task.taskCode || "TASK")}</code>${source ? `<em>${escapeHtml(source)}</em>` : ""}</span>
-    <span class="workboard-card-meta"><b>${escapeHtml(getUserLabel(task.assignedUser))}</b>${renderTaskPriority(task.priority)}</span>
-    <span class="workboard-card-date">${escapeHtml(formatTaskDue(task))}${task.openTimeEntry ? ` / ${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}` : ""}</span>
-    ${attention ? `<span class="workboard-card-attention">${escapeHtml(attention)}</span>` : ""}
-  </button>`;
+  return `<article class="my-task-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
+    <button class="my-task-card-main" data-workboard-open="${escapeHtml(task.id)}" type="button"><span class="my-task-code">${escapeHtml(task.taskCode || "TASK")}</span><strong>${escapeHtml(task.title || "Untitled task")}</strong><small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(getUserLabel(task.assignedUser))}</small></button>
+    <div class="my-task-card-meta">${renderTaskPriority(task.priority)}${renderTaskStatus(task.status)}<span>${escapeHtml(formatTaskDue(task))}</span><span>${escapeHtml(formatTaskTimeSummary(task))}</span></div>
+  </article>`;
 }
 
-function formatWorkboardCardSource(task) {
-  if (task.sourceRecordType && task.sourceRecordId) return `${formatSourceType(task.sourceType)} / ${task.sourceRecordType}:${task.sourceRecordId}`;
-  if (task.sourceType && task.sourceType !== "MANUAL") return formatSourceType(task.sourceType);
-  return "";
+function renderWorkboardKanbanCard(task) {
+  return `<article class="workboard-kanban-card ${task.openTimeEntry ? "running" : ""} ${isTaskOverdue(task) ? "overdue" : ""}">
+    <button data-workboard-open="${escapeHtml(task.id)}" type="button">
+      <span>${escapeHtml(task.taskCode || "TASK")}</span>
+      <strong>${escapeHtml(task.title || "Untitled task")}</strong>
+      <small>${escapeHtml(formatSourceType(task.sourceType))} / ${escapeHtml(formatTaskDue(task))}</small>
+    </button>
+    <div>${renderTaskPriority(task.priority)}${renderTaskStatus(task.status)}${task.status === "FOR_REVIEW" ? `<span class="my-task-mode">FOR REVIEW</span>` : ""}${task.status === "NEEDS_REVISION" ? `<span class="my-task-mode">NEEDS REVISION</span>` : ""}</div>
+    <footer><span>${escapeHtml(getUserLabel(task.assignedUser))}</span><button data-workboard-open="${escapeHtml(task.id)}" type="button">${escapeHtml(getWorkboardPrimaryAction(task))}</button></footer>
+  </article>`;
 }
 
-function getWorkboardAttentionMessage(task) {
-  if (task.status === "FOR_REVIEW") return `Reviewer attention: ${getUserLabel(task.reviewerUser)}`;
-  if (task.status === "NEEDS_REVISION") return "Revision requested. Open drawer for latest review note.";
-  if (isTaskOverdue(task)) return "Deadline needs attention.";
-  return "";
-}
 function getWorkboardPrimaryAction(task) {
   const actions = task.allowedActions || [];
   if (actions.includes("APPROVE_WORK")) return "REVIEW";
   if (actions.includes("REQUEST_REVISION")) return "REVIEW";
+  if (actions.includes("APPROVE_AND_ASSIGN")) return "APPROVE AND ASSIGN";
   if (actions.includes("APPROVE_DRAFT")) return "APPROVE DRAFT";
   if (actions.includes("EDIT_DRAFT")) return "EDIT";
   return "OPEN";
@@ -1698,9 +2144,8 @@ function renderWorkboardDrawer() {
   const isForm = workboardDrawerMode === "create" || workboardDrawerMode === "edit";
   const detail = selectedTaskDetail;
   const task = detail?.task || workboardTasks.find((item) => item.id === selectedTaskId) || null;
-  const drawerBadges = task && !isForm ? `<div class="workboard-drawer-badges">${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}</div>` : "";
   return `<div class="my-task-drawer-backdrop" data-workboard-close></div><aside class="my-task-drawer workboard-drawer" aria-label="Workboard task details">
-    <header><div><span>${escapeHtml(workboardDrawerMode === "create" ? "NEW TASK" : task?.taskCode || "TASK")}</span><h2>${escapeHtml(workboardDrawerMode === "create" ? "Create manual task draft" : task?.title || "Loading task")}</h2>${drawerBadges}</div><button data-workboard-close type="button" aria-label="Close Workboard drawer">X</button></header>
+    <header><div><span>${escapeHtml(workboardDrawerMode === "create" ? "NEW TASK" : task?.taskCode || "TASK")}</span><h2>${escapeHtml(workboardDrawerMode === "create" ? "Create manual task draft" : task?.title || "Loading task")}</h2></div><button data-workboard-close type="button" aria-label="Close Workboard drawer">X</button></header>
     ${workboardCommandError ? `<div class="ops-persistence-card error"><strong>Action needs attention</strong><span>${escapeHtml(workboardCommandError)}</span></div>` : ""}
     ${isForm ? renderWorkboardDraftForm(task) : renderWorkboardTaskDetail(detail, task)}
   </aside>`;
@@ -1708,14 +2153,16 @@ function renderWorkboardDrawer() {
 
 function renderWorkboardDraftForm(task) {
   const busy = workboardCommandState === "saving";
+  const isEdit = Boolean(task);
+  const isAutomationDraft = isAutomatedTaskSource(workboardDraftForm.sourceType);
   return `<form class="workboard-form" data-workboard-draft-form>
     <label><span>Title</span><input id="workboard-title" value="${escapeHtml(workboardDraftForm.title)}" maxlength="200" ${busy ? "disabled" : ""} /></label>
-    <label><span>Brief</span><textarea id="workboard-brief" rows="5" ${busy ? "disabled" : ""}>${escapeHtml(workboardDraftForm.brief)}</textarea></label>
+    <label><span>Brief / instructions</span><textarea id="workboard-brief" rows="5" ${busy ? "disabled" : ""}>${escapeHtml(workboardDraftForm.brief)}</textarea></label>
     <div class="workboard-form-grid">
-      <label><span>Source</span>${renderWorkboardSelect("workboard-source-type", workboardDraftForm.sourceType, [["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]])}</label>
+      <label><span>Source</span>${renderWorkboardSelect("workboard-source-type", workboardDraftForm.sourceType, [["MANUAL", "Manual"], ["PRODUCTION", "Production"], ["SHOP_TASK", "Shop task"], ["AI_MARKETING", "AI marketing"], ["DAILY_CONTENT", "Daily content"]], { disabled: busy || isEdit })}${isEdit ? `<small class="workboard-field-help">Source type is immutable after draft creation.</small>` : ""}</label>
       <label><span>Priority</span>${renderWorkboardSelect("workboard-priority", workboardDraftForm.priority, [["LOW", "Low"], ["MEDIUM", "Medium"], ["HIGH", "High"], ["URGENT", "Urgent"]])}</label>
-      <label><span>Assigned</span>${renderWorkboardDraftUserSelect("workboard-assigned", workboardDraftForm.assignedUserId, "Unassigned")}</label>
-      <label><span>Reviewer</span>${renderWorkboardDraftUserSelect("workboard-reviewer", workboardDraftForm.reviewerUserId, "No reviewer")}</label>
+      <label><span>${isAutomationDraft ? "Assignee selected during approval" : "Assigned"}</span>${renderWorkboardDraftUserSelect("workboard-assigned", isAutomationDraft ? "" : workboardDraftForm.assignedUserId, isAutomationDraft ? "Unassigned until approval" : "Unassigned", { disabled: busy || isAutomationDraft })}</label>
+      <label><span>Reviewer</span>${renderWorkboardDraftReviewerSelect("workboard-reviewer", workboardDraftForm.reviewerUserId, "No reviewer")}</label>
       <label><span>Time mode</span>${renderWorkboardSelect("workboard-time-mode", workboardDraftForm.timeTrackingMode, [["EXPECTED", "Expected"], ["NONE", "Time not required"]])}</label>
       <label><span>Scheduled date</span><input id="workboard-scheduled" value="${escapeHtml(workboardDraftForm.scheduledDate)}" type="date" ${busy ? "disabled" : ""} /></label>
       <label><span>Start deadline</span><input id="workboard-start-deadline" value="${escapeHtml(workboardDraftForm.startDeadline)}" type="datetime-local" ${busy ? "disabled" : ""} /></label>
@@ -1723,15 +2170,15 @@ function renderWorkboardDraftForm(task) {
       <label><span>Approval deadline</span><input id="workboard-approval-deadline" value="${escapeHtml(workboardDraftForm.approvalDeadline)}" type="datetime-local" ${busy ? "disabled" : ""} /></label>
       <label><span>Source record type</span><input id="workboard-source-record-type" value="${escapeHtml(workboardDraftForm.sourceRecordType)}" maxlength="64" ${busy ? "disabled" : ""} /></label>
       <label><span>Source record id</span><input id="workboard-source-record-id" value="${escapeHtml(workboardDraftForm.sourceRecordId)}" maxlength="200" ${busy ? "disabled" : ""} /></label>
-      <label class="workboard-checkbox"><input id="workboard-draft-approval" type="checkbox" ${workboardDraftForm.draftApprovalRequired ? "checked" : ""} ${busy ? "disabled" : ""} /><span>Owner approval required</span></label>
+      <label class="workboard-checkbox"><input id="workboard-draft-approval" type="checkbox" ${workboardDraftForm.draftApprovalRequired || isAutomationDraft ? "checked" : ""} ${busy || isAutomationDraft ? "disabled" : ""} /><span>Owner approval required</span></label>
     </div>
-    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button>${task?.allowedActions?.includes("APPROVE_DRAFT") ? `<button data-workboard-approve-draft="${escapeHtml(task.id)}" type="button" ${busy ? "disabled" : ""}>APPROVE DRAFT</button>` : ""}</div>
+    <div class="my-task-action-buttons sticky-actions"><button class="primary" type="submit" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : workboardDrawerMode === "create" ? "CREATE DRAFT" : "SAVE DRAFT"}</button></div>
   </form>`;
 }
 
-function renderWorkboardDraftUserSelect(id, value, label) {
+function renderWorkboardDraftUserSelect(id, value, label, config = {}) {
   const users = getEligibleAssignmentUsers(true);
-  return `<select id="${escapeHtml(id)}"><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
+  return `<select id="${escapeHtml(id)}" ${config.disabled ? "disabled" : ""}><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
 }
 
 function renderWorkboardTaskDetail(detail, task) {
@@ -1739,11 +2186,11 @@ function renderWorkboardTaskDetail(detail, task) {
   if (taskDetailLoadError) return `<div class="ops-persistence-card error"><strong>Unable to open task</strong><span>${escapeHtml(taskDetailLoadError)}</span></div>`;
   if (!detail || !task) return `<div class="my-tasks-empty"><strong>No task selected</strong><span>Select a task to inspect.</span></div>`;
   const latestSubmission = (detail.submissions || []).at(-1) || null;
-  return `<div class="my-task-drawer-content workboard-detail-content">
-    <section class="workboard-detail-section"><h3>Task Summary</h3><div class="workboard-summary-line"><strong>${escapeHtml(formatSourceReference(task))}</strong><span>${escapeHtml(task.timeTrackingMode === "NONE" ? "Time not required" : "Time expected")}</span></div>${task.openTimeEntry ? `<p class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</p>` : ""}</section>
-    <section class="workboard-detail-section workboard-instructions"><h3>Instructions</h3><p>${escapeHtml(task.brief || "No instructions recorded.")}</p></section>
-    <section class="workboard-detail-section"><h3>Required Assets or Shots</h3><ul class="workboard-checklist"><li>No required assets or shot list recorded.</li></ul></section>
-    <section class="workboard-detail-section"><h3>Assignment and Deadline</h3><div class="my-task-detail-grid workboard-detail-grid">
+  return `<div class="my-task-drawer-content">
+    <section class="my-task-detail-hero"><div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}${task.openTimeEntry ? `<span class="my-task-mode">RUNNING</span>` : ""}</div><p>${escapeHtml(task.brief || "No brief provided.")}</p>${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}</section>
+    ${renderWorkboardAutomationNotice(task)}
+    <section class="my-task-detail-grid">
+      ${renderTaskFact("Source", formatSourceReference(task))}
       ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
       ${renderTaskFact("Reviewer", getUserLabel(task.reviewerUser))}
       ${renderTaskFact("Scheduled", formatTaskDate(task.scheduledDate))}
@@ -1751,39 +2198,89 @@ function renderWorkboardTaskDetail(detail, task) {
       ${renderTaskFact("Submission", formatTaskDateTime(task.submissionDeadline))}
       ${renderTaskFact("Approval", formatTaskDateTime(task.approvalDeadline))}
       ${renderTaskFact("Recorded", formatTaskTimeSummary(task))}
-    </div></section>
-    ${renderWorkboardSubmissionProof(latestSubmission)}
-    ${renderWorkboardActionArea(task)}
+    </section>
+    ${task.status === "DRAFT" ? renderWorkboardPlanningCheck(task) : ""}
+    ${latestSubmission ? renderWorkboardLatestSubmission(latestSubmission) : ""}
+    ${renderTaskSubmissions(detail.submissions || [])}
     ${renderWorkboardHistory(detail.history || [])}
+    ${renderWorkboardActionArea(task)}
   </div>`;
 }
 
-function renderWorkboardSubmissionProof(submission) {
-  if (!submission) return `<section class="workboard-detail-section workboard-proof-section"><h3>Submission / Proof</h3><p class="workboard-empty inline">No submissions yet.</p></section>`;
-  const proof = submission.proofUrl ? `<a class="workboard-proof-action" href="${escapeHtml(submission.proofUrl)}" target="_blank" rel="noreferrer">VIEW PROOF</a>` : `<span class="workboard-proof-missing">No proof link submitted.</span>`;
-  return `<section class="workboard-detail-section workboard-proof-section"><h3>Submission / Proof</h3><div class="workboard-proof-row"><div><strong>${escapeHtml(formatSubmissionTimeStatus(submission))}</strong><p>${escapeHtml(submission.submissionNote || "No note saved.")}</p><small>${escapeHtml(formatTaskDateTime(submission.submittedAt))} / ${escapeHtml(getUserLabel(submission.submittedByUser))}${submission.recordedDurationSeconds !== null ? ` / ${escapeHtml(formatDuration(submission.recordedDurationSeconds))}` : ""}</small>${submission.noTimeReason ? `<p><b>Time note:</b> ${escapeHtml(submission.noTimeReason)}</p>` : ""}${submission.reviewNote ? `<p><b>Review:</b> ${escapeHtml(submission.reviewNote)}</p>` : ""}</div>${proof}</div></section>`;
+function renderWorkboardAutomationNotice(task) {
+  if (!isAutomatedTaskSource(task.sourceType)) return "";
+  const trace = task.automationTrace || {};
+  const suggested = trace.suggestedAssignee?.label || trace.suggestedAssignee?.reason
+    ? ` / Suggestion only: ${trace.suggestedAssignee.label || "Unspecified"}${trace.suggestedAssignee.reason ? ` (${trace.suggestedAssignee.reason})` : ""}`
+    : "";
+  return `<section class="my-task-warning"><strong>AI-GENERATED DRAFT</strong><p>Human approval is required. This task must stay unassigned until Owner approval activates it.</p><small>${escapeHtml(trace.planningRequestId ? `Planning ${trace.planningRequestId}` : "Planning trace pending")} / ${escapeHtml(trace.externalTaskId ? `External task ${trace.externalTaskId}` : "External task pending")}${escapeHtml(suggested)}</small></section>`;
+}
+
+function renderWorkboardPlanningCheck(task) {
+  const missing = getDraftActivationMissingFields(task);
+  const trace = task.automationTrace || {};
+  const suggested = trace.suggestedAssignee?.label || trace.suggestedAssignee?.reason
+    ? `${trace.suggestedAssignee.label || "Unspecified"}${trace.suggestedAssignee.reason ? ` (${trace.suggestedAssignee.reason})` : ""}`
+    : "None";
+  return `<section class="workboard-planning-check">
+    <div class="workboard-planning-check-header"><strong>PLANNING CHECK</strong>${missing.length ? `<span class="missing">Missing required: ${escapeHtml(missing.join(", "))}</span>` : `<span class="ready">Required planning fields complete</span>`}</div>
+    ${missing.length ? `<p class="workboard-planning-guidance">Use EDIT DRAFT to complete required planning fields before activation.</p>` : ""}
+    <div class="workboard-planning-groups">
+      <div>
+        <h4>Required planning fields</h4>
+        <div class="my-task-detail-grid compact">
+          ${renderPlanningCheckFact("Title", task.title || "Not set", missing.includes("title"))}
+          ${renderPlanningCheckFact("Brief / instructions", task.brief || "Not set", missing.includes("brief/instructions"))}
+          ${renderPlanningCheckFact("Priority", formatTaskPriorityLabel(task.priority), missing.includes("priority"))}
+          ${renderPlanningCheckFact("Time tracking mode", formatTaskTimeMode(task.timeTrackingMode), missing.includes("time tracking mode"))}
+          ${renderPlanningCheckFact("Submission deadline", formatTaskDateTime(task.submissionDeadline), missing.includes("submission deadline"))}
+          ${renderPlanningCheckFact("Assignee", getUserLabel(task.assignedUser), missing.includes("assignee"))}
+          ${renderPlanningCheckFact("Reviewer", getUserLabel(task.reviewerUser), missing.includes("reviewer"))}
+        </div>
+      </div>
+      <div>
+        <h4>Optional planning fields</h4>
+        <div class="my-task-detail-grid compact">
+          ${renderPlanningCheckFact("Scheduled date optional", formatTaskDate(task.scheduledDate))}
+          ${renderPlanningCheckFact("Start deadline optional", formatTaskDateTime(task.startDeadline))}
+          ${renderPlanningCheckFact("Approval deadline optional", formatTaskDateTime(task.approvalDeadline))}
+          ${renderPlanningCheckFact("Suggested assignee", `${suggested} / SUGGESTION ONLY`)}
+        </div>
+      </div>
+    </div>
+  </section>`;
+}
+
+function renderPlanningCheckFact(label, value, isMissing = false) {
+  return `<div class="${isMissing ? "planning-missing" : ""}"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "Not set")}</strong></div>`;
 }
 
 function renderWorkboardLatestSubmission(submission) {
-  return renderWorkboardSubmissionProof(submission);
+  return `<section class="my-task-warning ${submission.timeRecordingStatus === "NOT_RECORDED" ? "no-time" : ""}"><strong>LATEST SUBMISSION - ${escapeHtml(formatSubmissionTimeStatus(submission))}</strong><p>${escapeHtml(submission.submissionNote || "No note saved.")}</p>${submission.proofUrl ? `<p><b>Proof:</b> ${escapeHtml(submission.proofUrl)}</p>` : ""}${submission.noTimeReason ? `<p><b>Time not recorded reason:</b> ${escapeHtml(submission.noTimeReason)}</p>` : ""}<small>${escapeHtml(formatTaskDateTime(submission.submittedAt))} / ${escapeHtml(getUserLabel(submission.submittedByUser))}${submission.recordedDurationSeconds !== null ? ` / ${escapeHtml(formatDuration(submission.recordedDurationSeconds))}` : ""}</small></section>`;
 }
+
 function renderWorkboardHistory(history) {
   if (!history.length) return "";
-  return `<section class="my-task-history workboard-activity"><h3>Notes or Activity</h3>${history.slice(-6).reverse().map((event) => `<article><div><strong>${escapeHtml(String(event.eventType || "EVENT").replace(/_/g, " "))}</strong><span>${escapeHtml(formatTaskDateTime(event.occurredAt))}</span></div>${event.reason ? `<p>${escapeHtml(event.reason)}</p>` : ""}</article>`).join("")}</section>`;
+  return `<section class="my-task-history"><h3>Audit History</h3>${history.slice(-6).reverse().map((event) => `<article><div><strong>${escapeHtml(String(event.eventType || "EVENT").replace(/_/g, " "))}</strong><span>${escapeHtml(formatTaskDateTime(event.occurredAt))}</span></div>${event.reason ? `<p>${escapeHtml(event.reason)}</p>` : ""}</article>`).join("")}</section>`;
 }
 
 function renderWorkboardActionArea(task) {
   const actions = task.allowedActions || [];
   const busy = workboardCommandState === "saving";
+  const showAssignAction = actions.includes("ASSIGN") && !(task.status === "DRAFT" && actions.includes("APPROVE_AND_ASSIGN"));
+  const approveMissing = actions.includes("APPROVE_AND_ASSIGN") ? getDraftPlanningBlockingFields(task) : [];
+  const approveBlocked = approveMissing.length > 0;
   if (!actions.length) return `<section class="my-task-action-area"><strong>No available manager action</strong><span>This task is waiting on another step.</span></section>`;
-  return `<section class="my-task-action-area workboard-actions"><strong>Owner Review</strong>
+  return `<section class="my-task-action-area workboard-actions"><strong>Allowed manager actions</strong>
+    ${approveBlocked ? `<p class="my-task-form-error" role="status">Complete required planning fields before activation: ${escapeHtml(approveMissing.join(", "))}.</p>` : ""}
     ${actions.includes("REQUEST_REVISION") || actions.includes("APPROVE_WORK") ? `<label><span>Review note</span><textarea id="workboard-review-note" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReviewNote)}</textarea></label>` : ""}
-    ${actions.includes("ASSIGN") ? `<label><span>Assign user</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
+    ${actions.includes("ASSIGN") || actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Assignee</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
+    ${actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Reviewer</span>${renderWorkboardDraftReviewerSelect("workboard-assign-reviewer", task.reviewerUserId || "", "Reviewer required")}</label>` : ""}
     ${actions.includes("CANCEL") || actions.includes("REOPEN") ? `<label><span>Reason</span><textarea id="workboard-reason" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReason)}</textarea></label>` : ""}
     <div class="my-task-action-buttons sticky-actions">
-      ${actions.includes("EDIT_DRAFT") ? `<button data-workboard-edit-draft="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">EDIT DRAFT</button>` : ""}
-      ${actions.includes("ASSIGN") ? `<button data-workboard-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ASSIGN</button>` : ""}
-      ${actions.includes("APPROVE_DRAFT") ? `<button class="primary" data-workboard-approve-draft="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE DRAFT</button>` : ""}
+      ${actions.includes("EDIT_DRAFT") ? `<button data-workboard-edit-draft="${escapeHtml(task.id)}" type="button">EDIT DRAFT</button>` : ""}
+      ${showAssignAction ? `<button data-workboard-assign="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">ASSIGN</button>` : ""}
+      ${actions.includes("APPROVE_AND_ASSIGN") ? `<button class="primary" data-workboard-approve-assign="${escapeHtml(task.id)}" ${busy || approveBlocked ? "disabled" : ""} type="button">APPROVE AND ASSIGN</button>` : ""}
       ${actions.includes("REQUEST_REVISION") ? `<button data-workboard-request-revision="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">REQUEST REVISION</button>` : ""}
       ${actions.includes("APPROVE_WORK") ? `<button class="primary" data-workboard-approve-work="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">APPROVE WORK</button>` : ""}
       ${actions.includes("CANCEL") ? `<button data-workboard-cancel="${escapeHtml(task.id)}" ${busy ? "disabled" : ""} type="button">CANCEL</button>` : ""}
@@ -1800,6 +2297,10 @@ function getEligibleAssignmentUsers(activeOnly = true) {
     if (user.assignmentEligible === false) return false;
     return ["owner", "admin", "staff"].includes(String(user.role || "").toLowerCase());
   });
+}
+
+function getEligibleReviewerUsers() {
+  return getEligibleAssignmentUsers(true).filter((user) => ["owner", "admin"].includes(String(user.role || "").toLowerCase()));
 }
 
 function getAssignmentUserLabel(user) {
@@ -1851,22 +2352,28 @@ function readWorkboardDraftForm() {
   };
 }
 
+function renderWorkboardDraftReviewerSelect(id, value, label) {
+  const users = getEligibleReviewerUsers();
+  return `<select id="${escapeHtml(id)}"><option value="">${escapeHtml(label)}</option>${users.map((user) => `<option value="${escapeHtml(user.userId)}" ${value === user.userId ? "selected" : ""}>${escapeHtml(getAssignmentUserLabel(user))}</option>`).join("")}</select>`;
+}
+
 function buildWorkboardDraftPayload(task = null) {
   readWorkboardDraftForm();
   const sourceRecordType = workboardDraftForm.sourceRecordType.trim();
   const sourceRecordId = workboardDraftForm.sourceRecordId.trim();
+  const isAutomationDraft = isAutomatedTaskSource(task?.sourceType || workboardDraftForm.sourceType);
   return {
     ...(task ? { expectedVersion: task.version } : {}),
     title: workboardDraftForm.title.trim(),
     brief: workboardDraftForm.brief.trim(),
-    sourceType: workboardDraftForm.sourceType,
+    ...(task ? {} : { sourceType: workboardDraftForm.sourceType }),
     sourceRecordType: sourceRecordType || null,
     sourceRecordId: sourceRecordId || null,
     priority: workboardDraftForm.priority,
-    assignedUserId: workboardDraftForm.assignedUserId || null,
+    assignedUserId: isAutomationDraft ? null : workboardDraftForm.assignedUserId || null,
     reviewerUserId: workboardDraftForm.reviewerUserId || null,
     timeTrackingMode: workboardDraftForm.timeTrackingMode,
-    draftApprovalRequired: workboardDraftForm.draftApprovalRequired,
+    draftApprovalRequired: isAutomationDraft || workboardDraftForm.draftApprovalRequired,
     scheduledDate: workboardDraftForm.scheduledDate || null,
     startDeadline: fromLocalDatetimeInput(workboardDraftForm.startDeadline),
     submissionDeadline: fromLocalDatetimeInput(workboardDraftForm.submissionDeadline),
@@ -1950,19 +2457,64 @@ async function saveWorkboardDraft() {
   }
 }
 
+async function submitAutoPlanToday() {
+  if (autoPlanState === "submitting") return;
+  autoPlanQuickDirection = document.getElementById("auto-plan-quick-direction")?.value || autoPlanQuickDirection;
+  autoPlanState = "submitting";
+  autoPlanError = "";
+  autoPlanResult = null;
+  autoPlanIdempotencyKey = autoPlanIdempotencyKey || createIdempotencyKey("auto-plan");
+  render();
+  try {
+    const response = await requestAutoPlanToday({ quickDirection: autoPlanQuickDirection }, adminAuthSession, autoPlanIdempotencyKey);
+    autoPlanResult = response;
+    autoPlanState = "received";
+    workboardFilterStatus = "draft";
+    workboardFilterSource = "";
+    await loadWorkboardTasks({ silent: true });
+  } catch (error) {
+    autoPlanState = "failed";
+    autoPlanError = getTaskErrorMessage(error);
+  } finally {
+    autoPlanIdempotencyKey = "";
+    render();
+  }
+}
+
+function openAutoPlanDraftView() {
+  workboardFilterStatus = "draft";
+  workboardFilterSource = "";
+  loadWorkboardTasks();
+}
+
 async function runWorkboardCommand(taskId, action) {
   if (workboardCommandState === "saving") return;
   const task = selectedTaskDetail?.task?.id === taskId ? selectedTaskDetail.task : workboardTasks.find((item) => item.id === taskId);
   if (!task) return;
   workboardReviewNote = document.getElementById("workboard-review-note")?.value || workboardReviewNote;
   workboardReason = document.getElementById("workboard-reason")?.value || workboardReason;
+  const commandSelection = readWorkboardCommandSelection();
+  const validationMessage = validateWorkboardCommand(action, task, commandSelection);
+  if (validationMessage) {
+    workboardCommandError = validationMessage;
+    render();
+    return;
+  }
   workboardCommandState = "saving";
   workboardCommandError = "";
   render();
   try {
     const version = task.version;
     let response;
-    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: document.getElementById("workboard-assign-user")?.value || null }, adminAuthSession, createIdempotencyKey("assign"));
+    if (action === "assign") response = await assignTask(taskId, { expectedVersion: version, assignedUserId: commandSelection.assignedUserId }, adminAuthSession, createIdempotencyKey("assign"));
+    if (action === "approve-and-assign") response = await approveAndAssignTask(taskId, {
+      expectedVersion: version,
+      assignedUserId: commandSelection.assignedUserId,
+      reviewerUserId: commandSelection.reviewerUserId,
+      startDeadline: task.startDeadline || null,
+      submissionDeadline: task.submissionDeadline || null,
+      approvalDeadline: task.approvalDeadline || null,
+    }, adminAuthSession, createIdempotencyKey("approve-and-assign"));
     if (action === "approve-draft") response = await approveTaskDraft(taskId, version, adminAuthSession, createIdempotencyKey("approve-draft"));
     if (action === "request-revision") response = await requestTaskRevision(taskId, { expectedVersion: version, reviewNote: workboardReviewNote.trim() }, adminAuthSession, createIdempotencyKey("revision-request"));
     if (action === "approve-work") response = await approveTaskWork(taskId, { expectedVersion: version, reviewNote: workboardReviewNote.trim() || null }, adminAuthSession, createIdempotencyKey("approve-work"));
@@ -1978,6 +2530,69 @@ async function runWorkboardCommand(taskId, action) {
     workboardCommandState = "idle";
     render();
   }
+}
+
+function readWorkboardCommandSelection() {
+  return {
+    assignedUserId: document.getElementById("workboard-assign-user")?.value
+      || document.getElementById("workboard-assigned")?.value
+      || null,
+    reviewerUserId: document.getElementById("workboard-assign-reviewer")?.value
+      || document.getElementById("workboard-reviewer")?.value
+      || null,
+  };
+}
+
+function validateWorkboardCommand(action, task, selection) {
+  if (action === "approve-and-assign") {
+    const missing = getDraftActivationMissingFields({
+      ...task,
+      assignedUserId: selection.assignedUserId,
+      reviewerUserId: selection.reviewerUserId,
+    });
+    if (missing.length) return `Complete required planning fields before activation: ${missing.join(", ")}.`;
+    if (!getEligibleAssignmentUsers(true).some((user) => user.userId === selection.assignedUserId)) {
+      return "Selected assignee is not eligible for task assignment.";
+    }
+    if (!getEligibleReviewerUsers().some((user) => user.userId === selection.reviewerUserId)) {
+      return "Selected reviewer is not eligible to review tasks.";
+    }
+  }
+  if (action === "assign" && task.status !== "DRAFT" && selection.assignedUserId
+      && !getEligibleAssignmentUsers(true).some((user) => user.userId === selection.assignedUserId)) {
+    return "Selected assignee is not eligible for task assignment.";
+  }
+  return "";
+}
+
+function getDraftActivationMissingFields(task) {
+  const missing = [];
+  if (!String(task?.title || "").trim()) missing.push("title");
+  if (!String(task?.brief || "").trim()) missing.push("brief/instructions");
+  if (!TASK_PRIORITIES.has(String(task?.priority || "").toUpperCase())) missing.push("priority");
+  if (!TASK_TIME_TRACKING_MODES.has(String(task?.timeTrackingMode || "").toUpperCase())) missing.push("time tracking mode");
+  if (!task?.assignedUserId) missing.push("assignee");
+  if (!task?.reviewerUserId) missing.push("reviewer");
+  if (!task?.submissionDeadline) missing.push("submission deadline");
+  return missing;
+}
+
+function getDraftPlanningBlockingFields(task) {
+  return getDraftActivationMissingFields(task).filter((field) => !["assignee", "reviewer"].includes(field));
+}
+
+function isAutomatedTaskSource(sourceType) {
+  return ["AI_MARKETING", "DAILY_CONTENT"].includes(String(sourceType || "").toUpperCase());
+}
+
+function formatTaskPriorityLabel(priority) {
+  return TASK_PRIORITY_LABELS[priority] || priority || "Not set";
+}
+
+function formatTaskTimeMode(mode) {
+  if (mode === "NONE") return "Time not required";
+  if (mode === "EXPECTED") return "Expected";
+  return "Not set";
 }
 function renderMyTasksPage() {
   if (!canViewMyTasksRoute()) {
@@ -2046,7 +2661,7 @@ function renderMyTaskMetric(label, value, note) {
 }
 
 function renderRunningTaskPin(task) {
-  return `<section class="my-tasks-running-pin"><div><span>RUNNING</span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.taskCode)} / ${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</small></div><button class="ops-gold-button mini" data-task-open="${escapeHtml(task.id)}" type="button">OPEN TASK</button></section>`;
+  return `<section class="my-tasks-running-pin"><div><span>RUNNING</span><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(task.taskCode)} / <span data-task-elapsed="${escapeHtml(task.id)}">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</span></small></div><button class="ops-gold-button mini" data-task-open="${escapeHtml(task.id)}" type="button">OPEN TASK</button></section>`;
 }
 
 function renderMyTasksFilters() {
@@ -2088,7 +2703,7 @@ function renderMyTaskCard(task) {
       ${renderTaskPriority(task.priority)}
       ${renderTaskStatus(task.status)}
       <span>${escapeHtml(formatTaskDue(task))}</span>
-      <span>${escapeHtml(task.openTimeEntry ? formatElapsed(getRunningElapsedSeconds(task)) : formatDuration(task.totalClosedDurationSeconds))}</span>
+      <span>${task.openTimeEntry ? `<span data-task-elapsed="${escapeHtml(task.id)}">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</span>` : escapeHtml(formatDuration(task.totalClosedDurationSeconds))}</span>
     </div>
     <div class="my-task-card-actions">${action ? renderTaskQuickAction(task, action) : `<button data-task-open="${escapeHtml(task.id)}" type="button">OPEN</button>`}</div>
   </article>`;
@@ -2130,7 +2745,7 @@ function renderTaskDetailBody(detail) {
     <section class="my-task-detail-hero">
       <div>${renderTaskStatus(task.status)}${renderTaskPriority(task.priority)}${task.timeTrackingMode === "NONE" ? `<span class="my-task-mode">TIME NOT REQUIRED</span>` : ""}</div>
       <p>${escapeHtml(task.brief || "No brief provided.")}</p>
-      ${task.openTimeEntry ? `<strong class="my-task-running-time">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}
+      ${task.openTimeEntry ? `<strong class="my-task-running-time" data-task-elapsed="${escapeHtml(task.id)}">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</strong>` : ""}
     </section>
     ${latestRevision ? `<section class="my-task-warning"><strong>REVISION NOTE</strong><p>${escapeHtml(latestRevision.reviewNote)}</p></section>` : ""}
     <section class="my-task-detail-grid">
@@ -2139,15 +2754,15 @@ function renderTaskDetailBody(detail) {
       ${renderTaskFact("Deadline", formatTaskDateTime(task.submissionDeadline))}
       ${renderTaskFact("Assigned", getUserLabel(task.assignedUser))}
       ${renderTaskFact("Reviewer", getUserLabel(task.reviewerUser))}
-      ${renderTaskFact("Recorded Time", task.openTimeEntry ? formatElapsed(getRunningElapsedSeconds(task)) : formatDuration(task.totalClosedDurationSeconds))}
+      ${renderTaskFact("Recorded Time", task.openTimeEntry ? `<span data-task-elapsed="${escapeHtml(task.id)}">${escapeHtml(formatElapsed(getRunningElapsedSeconds(task)))}</span>` : formatDuration(task.totalClosedDurationSeconds), { html: Boolean(task.openTimeEntry) })}
     </section>
     ${renderTaskSubmissions(detail.submissions || [])}
     ${renderTaskActionArea(task, latestSubmission)}
   </div>`;
 }
 
-function renderTaskFact(label, value) {
-  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value || "-")}</strong></div>`;
+function renderTaskFact(label, value, options = {}) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${options.html ? value : escapeHtml(value || "-")}</strong></div>`;
 }
 
 function renderTaskSubmissions(submissions) {
@@ -2324,7 +2939,6 @@ function applyTaskCommandResponse(response) {
   };
   myTasks = sortMyTasks(upsertTaskRecord(myTasks, response.task));
   workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, response.task));
-  overviewTasks = canViewWorkboardRoute() ? sortWorkboardTasks(upsertTaskRecord(overviewTasks, response.task)) : sortMyTasks(upsertTaskRecord(overviewTasks, response.task));
   taskFallbackOpen = false;
   taskSubmissionNote = "";
   taskProofUrl = "";
@@ -2343,7 +2957,6 @@ async function refreshTaskAfterConflict(taskId) {
     selectedTaskDetail = detail;
     myTasks = sortMyTasks(upsertTaskRecord(myTasks, detail.task));
     workboardTasks = sortWorkboardTasks(upsertTaskRecord(workboardTasks, detail.task));
-    overviewTasks = canViewWorkboardRoute() ? sortWorkboardTasks(upsertTaskRecord(overviewTasks, detail.task)) : sortMyTasks(upsertTaskRecord(overviewTasks, detail.task));
   } catch {
     await loadMyTasks({ silent: true });
   }
@@ -2379,14 +2992,224 @@ function validateTaskSubmit(action) {
   }
   return true;
 }
+
+function renderCalendarPage() {
+  if (!canViewCalendarRoute()) {
+    return `<section class="mvp-page calendar-page"><div class="mvp-page-title"><div><span>HOME / CALENDAR</span><h1>Calendar</h1><p>Task calendar is not enabled in this environment.</p></div></div></section>`;
+  }
+  const monthLabel = formatCalendarMonth(calendarVisibleMonth);
+  const selectedEvents = getCalendarEventsForDate(calendarSelectedDate);
+  const blockedState = ["auth-required", "error", "forbidden", "feature-disabled"].includes(calendarLoadState);
+  return `<section class="mvp-page calendar-page">
+    <div class="mvp-page-title">
+      <div><span>HOME / CALENDAR</span><h1>Calendar</h1><p>Read-only task schedule projected from canonical task dates.</p></div>
+      <strong>Asia/Manila</strong>
+    </div>
+    ${renderCalendarStateNotice()}
+    ${blockedState ? "" : `<div class="calendar-toolbar">
+      <div class="calendar-toolbar-main">
+        <div class="calendar-month-nav" aria-label="Calendar month navigation">
+          <button class="calendar-icon-button" data-calendar-prev type="button" aria-label="Previous month">${renderIcon("chevron-right", "calendar-prev-icon")}</button>
+          <strong>${escapeHtml(monthLabel)}</strong>
+          <button class="calendar-icon-button" data-calendar-next type="button" aria-label="Next month">${renderIcon("chevron-right", "calendar-next-icon")}</button>
+        </div>
+        <button class="calendar-today-button" data-calendar-today type="button">TODAY</button>
+      </div>
+      ${renderCalendarFilters()}
+    </div>
+    ${renderCalendarLegend()}`}
+    ${calendarLoadState === "loading" ? `<div class="my-tasks-empty"><strong>Loading Calendar</strong><span>Projecting permitted task dates.</span></div>` : ""}
+    ${calendarLoadState === "ready" ? `${calendarEvents.length ? "" : renderCalendarEmptyState()}<div class="calendar-layout">${renderCalendarMonthGrid()}${renderCalendarAgenda(selectedEvents)}</div>` : ""}
+    ${renderCalendarTaskSummary()}
+  </section>`;
+}
+
+function renderCalendarStateNotice() {
+  if (calendarLoadState === "auth-required") return `<div class="calendar-auth-required ops-persistence-card error"><strong>Authentication required</strong><span>${escapeHtml(calendarLoadError || "Log in again to view the read-only task Calendar.")}</span><button data-calendar-login-again type="button">LOGIN AGAIN</button></div>`;
+  if (calendarLoadState === "error") return `<div class="ops-persistence-card error"><strong>Unable to load Calendar</strong><span>${escapeHtml(calendarLoadError)}</span></div>`;
+  if (calendarLoadState === "forbidden") return `<div class="ops-persistence-card error"><strong>Calendar access is restricted</strong><span>${escapeHtml(calendarLoadError || "Your account cannot view task calendar records.")}</span></div>`;
+  if (calendarLoadState === "feature-disabled") return `<div class="ops-persistence-card"><strong>Calendar unavailable</strong><span>The task domain is disabled for this environment.</span></div>`;
+  return "";
+}
+
+function renderCalendarLegend() {
+  const items = [
+    ["scheduledStart", "Scheduled start"],
+    ["taskDeadline", "Submission deadline"],
+    ["reviewDeadline", "Review deadline"],
+    ["completed", "Completion date"],
+    ["overdue", "Overdue"],
+  ];
+  return `<div class="calendar-legend" aria-label="Calendar projection legend">${items.map(([key, label]) => `<span><i class="${escapeHtml(key)}"></i>${escapeHtml(label)}</span>`).join("")}</div>`;
+}
+
+function renderCalendarEmptyState() {
+  const hasFilters = Boolean(calendarAssigneeFilter || calendarSourceFilter || calendarStatusFilter);
+  return `<div class="my-tasks-empty compact"><strong>${hasFilters ? "No matching dated tasks" : "No dated tasks this month"}</strong><span>${hasFilters ? "Clear filters to return to the full read-only task schedule." : "Tasks without canonical dates are intentionally not projected as Calendar events."}</span></div>`;
+}
+
+function renderCalendarFilters() {
+  const assignees = [...new Map(calendarEvents.map((event) => [event.assignedUserId, { ...event.assignee, userId: event.assignedUserId }]).filter(([id]) => id)).values()];
+  const sources = [...new Set(calendarEvents.map((event) => event.sourceType).filter(Boolean))].sort();
+  const statuses = ["DRAFT", "TO_DO", "IN_PROGRESS", "FOR_REVIEW", "NEEDS_REVISION", "DONE", "CANCELLED"];
+  return `<div class="calendar-filters" aria-label="Calendar filters">
+    <select id="calendar-assignee-filter"><option value="">All assignees</option>${assignees.map((user) => `<option value="${escapeHtml(user.userId)}" ${calendarAssigneeFilter === user.userId ? "selected" : ""}>${escapeHtml(getUserLabel(user))}</option>`).join("")}</select>
+    <select id="calendar-source-filter"><option value="">All sources</option>${sources.map((source) => `<option value="${escapeHtml(source)}" ${calendarSourceFilter === source ? "selected" : ""}>${escapeHtml(formatSourceType(source))}</option>`).join("")}</select>
+    <select id="calendar-status-filter"><option value="">All statuses</option>${statuses.map((status) => `<option value="${escapeHtml(status)}" ${calendarStatusFilter === status ? "selected" : ""}>${escapeHtml(formatTaskStatus(status))}</option>`).join("")}</select>
+    <button data-calendar-clear type="button">CLEAR</button>
+  </div>`;
+}
+
+function renderCalendarMonthGrid() {
+  const days = buildCalendarDays(calendarVisibleMonth);
+  const byDate = groupCalendarEventsByDate(calendarEvents);
+  const weekdayLabels = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  return `<section class="calendar-month-view" aria-label="Month view">
+    <div class="calendar-weekdays">${weekdayLabels.map((day) => `<span>${day}</span>`).join("")}</div>
+    <div class="calendar-grid">${days.map((day) => renderCalendarDay(day, byDate.get(day.key) || [])).join("")}</div>
+  </section>`;
+}
+
+function renderCalendarDay(day, events) {
+  const visibleEvents = events.slice(0, 3);
+  const more = events.length - visibleEvents.length;
+  return `<button class="calendar-day ${day.inMonth ? "" : "muted"} ${day.key === calendarSelectedDate ? "selected" : ""} ${day.key === getManilaTodayKey() ? "today" : ""}" data-calendar-date="${escapeHtml(day.key)}" type="button">
+    <span class="calendar-day-number"><b>${escapeHtml(String(day.day))}</b>${day.key === getManilaTodayKey() ? `<em>Today</em>` : ""}</span>
+    <div>${visibleEvents.map(renderCalendarDayItem).join("")}${more > 0 ? `<small class="calendar-more">+${more} more</small>` : ""}</div>
+  </button>`;
+}
+
+function renderCalendarDayItem(event) {
+  return `<i class="calendar-dot ${escapeHtml(event.projectionTypeKey)} ${event.overdue ? "overdue" : ""}"><span>${escapeHtml(shortProjectionType(event.projectionType))}</span><strong>${escapeHtml(event.taskCode || "TASK")}</strong><small>${escapeHtml(shortTaskTitle(event.title || "Untitled task"))}</small></i>`;
+}
+
+function renderCalendarAgenda(events) {
+  const title = formatCalendarDateHeading(calendarSelectedDate);
+  return `<section class="calendar-agenda" aria-label="Agenda view">
+    <header><span>AGENDA</span><h2>${escapeHtml(title)}</h2></header>
+    ${events.length ? events.map(renderCalendarAgendaItem).join("") : `<div class="my-tasks-empty compact"><strong>No dated tasks</strong><span>No permitted task projections for this date.</span></div>`}
+  </section>`;
+}
+
+function renderCalendarAgendaItem(event) {
+  return `<article class="calendar-agenda-item ${event.overdue ? "overdue" : ""}">
+    <button data-calendar-event="${escapeHtml(event.key)}" type="button" aria-label="Open ${escapeHtml(event.taskCode || "task")} Calendar summary">
+      <span class="calendar-agenda-type ${escapeHtml(event.projectionTypeKey)}">${escapeHtml(event.projectionType)}</span>
+      <span class="calendar-agenda-time">${escapeHtml(formatManilaTime(event.dateTime))}</span>
+      <strong><span>${escapeHtml(event.taskCode || "TASK")}</span>${escapeHtml(event.title || "Untitled task")}</strong>
+      <div class="calendar-agenda-meta" aria-label="Calendar task metadata">
+        <small><b>Status</b>${escapeHtml(formatTaskStatus(event.status))}</small>
+        <small><b>Source</b>${escapeHtml(formatSourceType(event.sourceType))}</small>
+        <small><b>Assignee</b>${escapeHtml(getUserLabel(event.assignee))}</small>
+      </div>
+    </button>
+    <div class="calendar-agenda-badges">${renderTaskPriority(event.priority)}${event.overdue ? `<span class="my-task-status overdue">OVERDUE</span>` : ""}</div>
+  </article>`;
+}
+
+function renderCalendarTaskSummary() {
+  if (!calendarSelectedTask) return "";
+  return `<div class="my-task-drawer-backdrop" data-calendar-close></div><aside class="my-task-drawer calendar-drawer" aria-label="Calendar task summary">
+    <header><div><span>${escapeHtml(calendarSelectedTask.taskCode || "TASK")}</span><h2>${escapeHtml(calendarSelectedTask.title || "Untitled task")}</h2></div><button data-calendar-close type="button" aria-label="Close Calendar summary">X</button></header>
+    <div class="my-task-drawer-content">
+      <section class="my-task-detail-hero"><div>${renderTaskStatus(calendarSelectedTask.status)}${renderTaskPriority(calendarSelectedTask.priority)}</div><p>Read-only Calendar projection. Use Workboard or My Tasks for permitted task detail and actions.</p></section>
+      <section class="my-task-detail-grid">
+        ${renderTaskFact("Projection", calendarSelectedTask.projectionType)}
+        ${renderTaskFact("When", `${calendarSelectedTask.dateKey} ${formatManilaTime(calendarSelectedTask.dateTime)}`)}
+        ${renderTaskFact("Source", formatSourceType(calendarSelectedTask.sourceType))}
+        ${renderTaskFact("Assigned", getUserLabel(calendarSelectedTask.assignee))}
+      </section>
+      <section class="my-task-action-area"><strong>Read only</strong><span>Calendar cannot create, reschedule, assign, transition, or delete tasks.</span></section>
+    </div>
+  </aside>`;
+}
+
+function buildCalendarDays(monthKey) {
+  const [year, month] = String(monthKey).split("-").map(Number);
+  const first = new Date(Date.UTC(year, month - 1, 1));
+  const startOffset = first.getUTCDay();
+  const start = new Date(Date.UTC(year, month - 1, 1 - startOffset));
+  return Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start.getTime() + index * 86400000);
+    const key = date.toISOString().slice(0, 10);
+    return { key, day: date.getUTCDate(), inMonth: date.getUTCMonth() === month - 1 };
+  });
+}
+
+function groupCalendarEventsByDate(events) {
+  const grouped = new Map();
+  for (const event of events) {
+    if (!grouped.has(event.dateKey)) grouped.set(event.dateKey, []);
+    grouped.get(event.dateKey).push(event);
+  }
+  return grouped;
+}
+
+function getCalendarEventsForDate(dateKey) {
+  return calendarEvents.filter((event) => event.dateKey === dateKey);
+}
+
+function shiftCalendarMonth(delta) {
+  const [year, month] = calendarVisibleMonth.split("-").map(Number);
+  const next = new Date(Date.UTC(year, month - 1 + delta, 1));
+  calendarVisibleMonth = `${next.getUTCFullYear()}-${String(next.getUTCMonth() + 1).padStart(2, "0")}`;
+  calendarSelectedDate = getCalendarMonthBounds(calendarVisibleMonth).from;
+  calendarSelectedTask = null;
+  loadTaskCalendar();
+}
+
+function formatCalendarMonth(monthKey) {
+  const [year, month] = String(monthKey).split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, 1)));
+}
+
+function formatCalendarDateHeading(dateKey) {
+  const [year, month, day] = String(dateKey).split("-").map(Number);
+  return new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(new Date(Date.UTC(year, month - 1, day)));
+}
+
+function shortProjectionType(type) {
+  if (type === "SCHEDULED START") return "Start";
+  if (type === "TASK DEADLINE") return "Due";
+  if (type === "REVIEW DEADLINE") return "Review";
+  return "Done";
+}
+
+function shortTaskTitle(title) {
+  const value = String(title || "").trim();
+  return value.length > 28 ? `${value.slice(0, 25)}...` : value;
+}
+
 function getMvpDashboardItems() {
   return opsInquiries.map((item) => ({
     ...item,
-    paymentEvents: opsPaymentHistoryByInquiry[item.id]?.status === "success"
-      ? opsPaymentHistoryByInquiry[item.id].events
-      : [],
+    ...getNativeOrderIdentityForInquiry(item.id),
+    orderCreationState: nativeOrderConversionRequests[item.id]?.status || "",
+    orderCreationError: nativeOrderConversionRequests[item.id]?.message || "",
     requiresProductionMigration: shouldLoadSupabaseOps && !item.productionFieldsReady,
   }));
+}
+
+function getMvpOrderItems() {
+  const inquiries = getMvpDashboardItems();
+  return buildDualReadOrders({
+    inquiries,
+    nativeRows: nativeOrderRows,
+  });
+}
+
+function getNativeOrderIdentityForInquiry(inquiryId) {
+  const row = findNativeOrderRowBySourceInquiryId(inquiryId);
+  if (!row) return {};
+  return {
+    nativeOrderId: row.id || "",
+    nativeOrderReference: row.order_reference || row.orderReference || "",
+    nativeOrderStatus: row.status || "",
+  };
+}
+
+function findNativeOrderRowBySourceInquiryId(inquiryId) {
+  return findNativeOrderBySourceInquiryId(nativeOrderRows, inquiryId);
 }
 
 function renderOverviewPage() {
@@ -2401,259 +3224,26 @@ function renderMvpInquiriesPage() {
     items: getMvpDashboardItems(),
     notices: renderOpsPersistenceNotice(),
     renderQuote: renderOpsQuoteStage,
-    renderOrder: renderOpsOrderAction,
     renderArtwork: renderMvpArtworkAction,
-    renderPayment: renderOpsPaymentStage,
   });
 }
 
 function renderMvpOrdersPage() {
-  const requestedOrderId = mvpDashboard.state.orderId
-    || new URLSearchParams(window.location.search).get("order")
-    || "";
-  if (
-    requestedOrderId
-    && mvpOrderDetailState.id !== requestedOrderId
-    && mvpOrderDetailScheduledId !== requestedOrderId
-  ) {
-    mvpOrderDetailScheduledId = requestedOrderId;
-    queueMicrotask(() => {
-      mvpOrderDetailScheduledId = null;
-      void loadMvpOrderDetails(requestedOrderId);
-    });
-  }
-
   return mvpDashboard.renderOrders({
-    items: getMvpDashboardItems(),
-    notices: renderOpsPersistenceNotice(),
+    items: getMvpOrderItems(),
+    notices: `${renderOpsPersistenceNotice()}${renderNativeOrdersPersistenceNotice()}`,
     schemaNotice: renderOrderDashboardSchemaNotice(),
-    orderDetailState: mvpOrderDetailState,
-    renderPayment: renderOpsPaymentStage,
-    renderArtwork: renderMvpArtworkAction,
+    renderPayment: renderMvpPaymentConfirmation,
+    renderTracking: renderOpsCustomerTracking,
   });
-}
-
-async function loadMvpOrderDetails(orderId, { force = false } = {}) {
-  const id = String(orderId || "").trim();
-  if (!id || !adminAuthSession?.access_token) return;
-  if (!force && mvpOrderDetailState.id === id && mvpOrderDetailState.status === "ready") return;
-
-  const requestVersion = ++mvpOrderDetailRequestVersion;
-  mvpOrderDetailController?.abort();
-  const controller = new AbortController();
-  mvpOrderDetailController = controller;
-  mvpOrderDetailState = {
-    id,
-    status: "loading",
-    order: mvpOrderDetailState.id === id ? mvpOrderDetailState.order : null,
-    error: "",
-  };
-  render();
-
-  try {
-    const order = await getOrderDetails(id, adminAuthSession, { signal: controller.signal });
-    if (requestVersion !== mvpOrderDetailRequestVersion || controller.signal.aborted) return;
-    mvpOrderDetailState = { id, status: "ready", order, error: "" };
-    opsPaymentHistoryByInquiry = {
-      ...opsPaymentHistoryByInquiry,
-      [id]: {
-        status: "success",
-        events: Array.isArray(order.paymentEvents) ? order.paymentEvents : [],
-      },
-    };
-  } catch (error) {
-    if (controller.signal.aborted || requestVersion !== mvpOrderDetailRequestVersion) return;
-    mvpOrderDetailState = {
-      id,
-      status: "error",
-      order: null,
-      error: error.message || "Unable to load order details.",
-    };
-  } finally {
-    if (requestVersion === mvpOrderDetailRequestVersion) {
-      mvpOrderDetailController = null;
-      render();
-      requestAnimationFrame(() => document.querySelector(".mvp-order-detail-close")?.focus());
-    }
-  }
-}
-
-function closeMvpOrderDetails() {
-  mvpOrderDetailRequestVersion += 1;
-  mvpOrderDetailController?.abort();
-  mvpOrderDetailController = null;
-  mvpOrderDetailScheduledId = null;
-  mvpOrderDetailState = { id: null, status: "idle", order: null, error: "" };
 }
 
 function renderMvpProductionPage() {
-  const requestedJobId = mvpDashboard.state.productionId
-    || new URLSearchParams(window.location.search).get("order")
-    || "";
-  if (
-    requestedJobId
-    && mvpProductionDetailState.id !== requestedJobId
-    && mvpProductionScheduledId !== requestedJobId
-  ) {
-    mvpProductionScheduledId = requestedJobId;
-    queueMicrotask(() => {
-      mvpProductionScheduledId = null;
-      void loadMvpProductionJob(requestedJobId);
-    });
-  }
-
   return mvpDashboard.renderProduction({
-    items: getMvpDashboardItems(),
-    notices: renderOpsPersistenceNotice(),
+    items: getMvpOrderItems(),
+    notices: `${renderOpsPersistenceNotice()}${renderNativeOrdersPersistenceNotice()}`,
     schemaNotice: renderOrderDashboardSchemaNotice(),
-    productionDetailState: mvpProductionDetailState,
-    productionActionState: mvpProductionActionState,
-    productionDrafts: mvpProductionDrafts,
-    renderArtwork: renderMvpArtworkAction,
   });
-}
-
-async function loadMvpProductionJob(jobId, { force = false } = {}) {
-  const id = String(jobId || "").trim();
-  if (!id || !adminAuthSession?.access_token) return;
-  if (!force && mvpProductionDetailState.id === id && mvpProductionDetailState.status === "ready") return;
-
-  const requestVersion = ++mvpProductionRequestVersion;
-  mvpProductionController?.abort();
-  const controller = new AbortController();
-  mvpProductionController = controller;
-  mvpProductionDetailState = {
-    id,
-    status: "loading",
-    job: mvpProductionDetailState.id === id ? mvpProductionDetailState.job : null,
-    error: "",
-  };
-  mvpProductionActionState = { id, status: "idle", error: "", success: "" };
-  render();
-
-  try {
-    const job = await getProductionJob(id, adminAuthSession, { signal: controller.signal });
-    if (requestVersion !== mvpProductionRequestVersion || controller.signal.aborted) return;
-    mvpProductionDetailState = { id, status: "ready", job, error: "" };
-  } catch (error) {
-    if (controller.signal.aborted || requestVersion !== mvpProductionRequestVersion) return;
-    mvpProductionDetailState = {
-      id,
-      status: "error",
-      job: null,
-      error: error.message || "Unable to load production details.",
-    };
-  } finally {
-    if (requestVersion === mvpProductionRequestVersion) {
-      mvpProductionController = null;
-      render();
-      requestAnimationFrame(() => document.querySelector(".mvp-production-detail-close")?.focus());
-    }
-  }
-}
-
-function closeMvpProductionJob() {
-  const id = mvpProductionDetailState.id;
-  mvpProductionRequestVersion += 1;
-  mvpProductionController?.abort();
-  mvpProductionController = null;
-  mvpProductionScheduledId = null;
-  mvpProductionDetailState = { id: null, status: "idle", job: null, error: "" };
-  mvpProductionActionState = { id: null, status: "idle", error: "", success: "" };
-  if (id) {
-    const nextDrafts = { ...mvpProductionDrafts };
-    delete nextDrafts[id];
-    mvpProductionDrafts = nextDrafts;
-  }
-}
-
-async function runMvpProductionAction(id, action, draft = {}) {
-  const job = mvpProductionDetailState.id === id
-    ? mvpProductionDetailState.job
-    : null;
-  if (!job || mvpProductionActionState.status === "saving") return;
-
-  mvpProductionDrafts = {
-    ...mvpProductionDrafts,
-    [id]: {
-      ...(mvpProductionDrafts[id] || {}),
-      ...draft,
-    },
-  };
-  mvpProductionActionState = { id, status: "saving", error: "", success: "" };
-  render();
-
-  try {
-    const updated = await updateProductionJob(id, {
-      ...action,
-      expectedCurrentStage: job.stage,
-      expectedUpdatedAt: job.productionUpdatedAt,
-      ...(action.action === "advance_production_stage"
-        ? { nextStage: job.validNextStage }
-        : {}),
-    }, adminAuthSession);
-    mvpProductionDetailState = { id, status: "ready", job: updated, error: "" };
-    mvpProductionActionState = {
-      id,
-      status: "success",
-      error: "",
-      success: productionActionSuccessMessage(action.action),
-    };
-    const assignedUserId = action.action === "assign_production_staff"
-      ? action.assignedUserId || null
-      : undefined;
-    opsInquiries = opsInquiries.map((item) => item.id === id ? {
-      ...item,
-      ...(assignedUserId !== undefined ? { assignedUserId } : {}),
-      assignedStaff: updated.assignedStaff === "Not set" ? null : updated.assignedStaff,
-      productionStage: updated.storedStage,
-      productionNote: updated.productionNote || null,
-      productionUpdatedAt: updated.productionUpdatedAt,
-      blockedReason: updated.blockerReason || null,
-    } : item);
-    if (mvpOrderDetailState.id === id && mvpOrderDetailState.order) {
-      mvpOrderDetailState = {
-        ...mvpOrderDetailState,
-        order: {
-          ...mvpOrderDetailState.order,
-          assignedStaff: updated.assignedStaff,
-          productionStage: updated.storedStage,
-          productionNote: updated.productionNote,
-          productionUpdatedAt: updated.productionUpdatedAt,
-          blockerReason: updated.blockerReason,
-          readiness: updated.readiness,
-        },
-      };
-    }
-    mvpProductionDrafts = {
-      ...mvpProductionDrafts,
-      [id]: {
-        assignedUserId: assignedUserId !== undefined
-          ? assignedUserId
-          : mvpProductionDrafts[id]?.assignedUserId,
-        productionNote: updated.productionNote || "",
-        blockerReason: "",
-      },
-    };
-  } catch (error) {
-    mvpProductionActionState = {
-      id,
-      status: "error",
-      error: error.message || "Unable to update production details.",
-      success: "",
-    };
-  } finally {
-    render();
-  }
-}
-
-function productionActionSuccessMessage(action) {
-  if (action === "assign_production_staff") return "Assignment updated.";
-  if (action === "set_production_blocker") return "Production blocker set.";
-  if (action === "clear_production_blocker") return "Production blocker cleared.";
-  if (action === "update_production_note") return "Production note saved.";
-  if (action === "advance_production_stage") return "Production stage updated.";
-  return "Production job updated.";
 }
 
 function renderOpsPersistenceNotice() {
@@ -2678,13 +3268,28 @@ function renderOpsPersistenceNotice() {
 
   return "";
 }
+
+function renderNativeOrdersPersistenceNotice() {
+  if (!shouldLoadSupabaseOps) return "";
+  if (nativeOrdersLoadState === "success" || nativeOrdersLoadState === "empty") return "";
+  if (nativeOrdersLoadState === "loading") {
+    return `<section class="ops-persistence-card"><strong>Loading native Orders</strong><span>Reading TRRY Orders alongside legacy inquiry orders...</span></section>`;
+  }
+  if (nativeOrdersLoadState === "missing-table") {
+    return `<section class="ops-persistence-card"><strong>Native Orders table is not exposed yet</strong><span>Showing legacy inquiry-derived orders only.</span></section>`;
+  }
+  if (nativeOrdersLoadState === "error") {
+    return `<section class="ops-persistence-card error"><strong>Unable to load native Orders</strong><span>${escapeHtml(nativeOrdersLoadError || "Showing legacy inquiry-derived orders only.")}</span></section>`;
+  }
+  return "";
+}
 function getOpsCounts() {
   return {
     newToday: opsInquiries.filter((item) => item.status === "new").length,
     quotesDue: opsInquiries.filter((item) => item.status === "quote").length,
     followUps: opsInquiries.filter((item) => item.status === "sent" || item.status === "followup").length,
     prodToday: opsProduction.filter((item) => item.name !== "Ready for Pickup").reduce((total, item) => total + item.jobs, 0),
-    converted: opsInquiries.filter((item) => item.status === "won").length,
+    converted: opsInquiries.filter((item) => item.status === "won" && item.odooSO).length,
   };
 }
 
@@ -2720,8 +3325,8 @@ function getOpsPriorityItems() {
     .forEach((item) => addInquiry(item, "New Inquiry", "new", `${item.customer} - prepare quotation`));
 
   opsInquiries
-    .filter((item) => /confirm/i.test(item.next || "") && item.status !== "won")
-    .forEach((item) => addInquiry(item, "Ready", "sent", `${item.customer} - confirm TRRY order`));
+    .filter((item) => /confirm/i.test(item.next || "") && !item.odooSO)
+    .forEach((item) => addInquiry(item, "Need SO", "sent", `${item.customer} - add Odoo SO number`));
 
   const limited = selected.slice(0, 6).map((item, index) => ({ ...item, number: index + 1 }));
 
@@ -2805,50 +3410,8 @@ function canOpsPrepareProof(item) {
 }
 
 function canOpsRequestPayment(item) {
-  if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) return false;
   const state = getOpsNormalizedCustomerState(item);
   return state.quote === "approved" && state.artwork === "approved" && !isOpsPaymentConfirmed(state.payment);
-}
-
-function isAdminPayAtShopUiEnabled() {
-  const value = String(window.TRRY_ADMIN_ENV?.VITE_ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW ?? "false").trim().toLowerCase();
-  return value === "true";
-}
-
-function isAdminOnlinePaymentReviewUiEnabled() {
-  const value = String(window.TRRY_ADMIN_ENV?.VITE_ENABLE_ADMIN_ONLINE_PAYMENT_REVIEW ?? "false").trim().toLowerCase();
-  return value === "true";
-}
-
-function isOnlinePaymentReviewItem(item) {
-  const status = String(item?.paymentStatus || "").trim().toLowerCase();
-  const type = String(item?.paymentType || "").trim().toLowerCase();
-  const method = String(item?.paymentMethod || "").trim().toLowerCase();
-  return type !== "shop"
-    && ["gcash", "bank_transfer", "online"].includes(method)
-    && ["proof_submitted", "under_review", "correction_required", "down_payment_confirmed", "partially_paid", "full_payment_confirmed", "confirmed", "paid"].includes(status);
-}
-
-function isOpsShopPaymentPending(item) {
-  return ["pay_at_shop", "payment_pending_at_shop"].includes(String(item?.paymentStatus || "").trim().toLowerCase());
-}
-
-function isOpsShopPaymentConfirmed(item) {
-  const method = String(item?.paymentMethod || "").trim().toLowerCase();
-  const type = String(item?.paymentType || "").trim().toLowerCase();
-  const hasShopEvent = (opsPaymentHistoryByInquiry[item?.id]?.events || []).some((event) => ["PAY_AT_SHOP_SELECTED", "SHOP_PAYMENT_CONFIRMED"].includes(event.eventType));
-  return isOpsPaymentConfirmed(item?.paymentStatus)
-    && (type === "shop" || method === "cash" || hasShopEvent)
-    && !isOnlinePaymentReviewItem(item);
-}
-
-function canOpsConfirmShopPayment(item) {
-  const state = getOpsNormalizedCustomerState(item);
-  return isAdminPayAtShopUiEnabled()
-    && ["owner", "admin"].includes(adminUser?.role)
-    && state.quote === "approved"
-    && state.artwork === "approved"
-    && isOpsShopPaymentPending(item);
 }
 
 
@@ -2885,16 +3448,9 @@ function getOpsInquiryCurrentTask(item) {
   if (canOpsPrepareProof(item) && hasOpsFinalProof(item)) return { stage: "artwork", text: "Send approved design" };
   if (state.artwork === "approval_required") return { stage: "artwork", text: "Waiting for customer artwork approval" };
   if (canOpsRequestPayment(item) && ["proof_submitted", "under_review"].includes(state.payment)) return { stage: "payment", text: "Review payment receipt" };
-  if (isAdminPayAtShopUiEnabled() && isOpsShopPaymentPending(item)) {
-    return {
-      stage: "payment",
-      text: ["owner", "admin"].includes(adminUser?.role)
-        ? "Confirm shop payment"
-        : "Owner/Admin confirmation required",
-    };
-  }
+  if (canOpsRequestPayment(item) && ["pay_at_shop", "payment_pending_at_shop"].includes(state.payment)) return { stage: "payment", text: "Confirm shop payment" };
   if (canOpsRequestPayment(item)) return { stage: "payment", text: "Request payment" };
-  if (state.quote === "approved" && state.status !== "won") return { stage: "production", text: "Create TRRY order" };
+  if (isOpsPaymentConfirmed(state.payment) && !item.odooSO) return { stage: "production", text: "Create Odoo Sales Order" };
   if (canEditOpsCustomerTracking(item)) return { stage: "fulfillment", text: "Update customer tracking" };
   return { stage: "inquiry", text: item.next || "Review inquiry" };
 }
@@ -3049,7 +3605,7 @@ function renderOpsInquiryDetails(item) {
   ].filter(([, value]) => value !== undefined && value !== null && String(value).trim() !== "" && String(value).trim() !== "-");
 
   const summaryRows = rows.map(([label, value]) => `<div><span>${escapeHtml(label)}</span><strong>${label === "Estimated value" ? value : escapeHtml(value)}</strong></div>`).join("");
-  const notesPair = `<div class="ops-summary-odoo-notes-row ${notesAreLong ? "wide" : ""}"><div><span>Historical SO:</span><strong>${escapeHtml(item.odooSO || "Not recorded")}</strong></div><div class="ops-summary-customer-notes"><span>CUSTOMER NOTES</span><strong>${escapeHtml(customerNotes)}</strong></div></div>`;
+  const notesPair = `<div class="ops-summary-odoo-notes-row ${notesAreLong ? "wide" : ""}"><div><span>Odoo SO:</span><strong>${escapeHtml(item.odooSO || "Not created")}</strong></div><div class="ops-summary-customer-notes"><span>CUSTOMER NOTES</span><strong>${escapeHtml(customerNotes)}</strong></div></div>`;
   return `<section class="ops-inquiry-summary"><div class="ops-summary-grid">${summaryRows}${notesPair}</div><details class="ops-submission-details"><summary>CUSTOMER SUBMISSION</summary><p>${escapeHtml(item.message || "No message saved.")}</p></details></section>`;
 }
 function renderOpsArtworkAction(item) {
@@ -3071,10 +3627,10 @@ function renderMvpArtworkAction(item) {
     : "";
 
   if (!hasArtwork) {
-    return `<span class="mvp-artwork-empty">Artwork unavailable.</span>`;
+    return `<section class="mvp-drawer-section mvp-artwork-access"><h3>Artwork</h3><strong>NO ARTWORK</strong><span>No customer artwork file or supported URL is saved for this inquiry.</span></section>`;
   }
 
-  return `<button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>${renderIcon("external-link", "ops-button-icon")}${isLoading ? "OPENING..." : "VIEW ARTWORK"}</button>${message}`;
+  return `<section class="mvp-drawer-section mvp-artwork-access"><h3>Artwork</h3><strong>${escapeHtml(getOpsCustomerActionLabel("artwork", status || "missing"))}</strong><button class="ops-dark-button mini" data-ops-customer-asset="customer-artwork" data-ops-customer-id="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>${renderIcon("external-link", "ops-button-icon")}${isLoading ? "OPENING..." : "VIEW ARTWORK"}</button>${message}</section>`;
 }
 
 async function openOpsArtwork(inquiryId) {
@@ -3120,7 +3676,7 @@ async function openOpsArtwork(inquiryId) {
 }
 
 function getOpsArtworkErrorMessage(status, error) {
-  if (status === 404 && error === "no artwork uploaded") return "Artwork unavailable.";
+  if (status === 404 && error === "no artwork uploaded") return "NO ARTWORK FILE AVAILABLE";
   if (status === 400) return "INVALID INQUIRY REFERENCE";
   if (status === 401) return "ADMIN SESSION REQUIRED";
   if (status === 404) return "INQUIRY NOT FOUND";
@@ -3243,457 +3799,7 @@ function renderOpsQuoteStage(item) {
   return renderOpsStageShell({ key: "quote", title: "Quotation", status: getOpsCustomerActionLabel("quote", status), current, body });
 }
 
-function getOpsShopPaymentDraft(item) {
-  const existing = opsShopPaymentDrafts[item.id] || {};
-  const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : Number(item.amountDue) || 0;
-  const defaultChoice = quoteTotal >= 1000 ? "down_payment" : "full";
-  const paymentChoice = existing.paymentChoice || defaultChoice;
-  const selectedMethod = SHOP_PAYMENT_METHODS.has(String(existing?.paymentMethod || item.paymentMethod || "").toLowerCase())
-    ? String(existing?.paymentMethod || item.paymentMethod).toLowerCase()
-    : "cash";
-  return {
-    paymentChoice,
-    receivedAmount: existing?.receivedAmount ?? getOpsShopPaymentChoiceAmount(item, paymentChoice) ?? "",
-    paymentMethod: selectedMethod,
-    referenceNumber: existing?.referenceNumber ?? "",
-    internalNote: existing?.internalNote ?? "",
-  };
-}
-
-function getOpsShopPaymentChoiceAmount(item, choice) {
-  const total = Number(item?.quotedAmount);
-  if (!Number.isFinite(total) || total <= 0) return "";
-  return choice === "down_payment" && total >= 1000 ? Math.round(total * 50) / 100 : total;
-}
-
-function getOpsShopPaymentConfirmationEvent(item) {
-  const history = opsPaymentHistoryByInquiry[item.id]?.events || [];
-  return [...history].reverse().find((event) => event.eventType === "SHOP_PAYMENT_CONFIRMED") || null;
-}
-
-function renderOpsPaymentHistory(item) {
-  const history = opsPaymentHistoryByInquiry[item.id];
-  if (!history && expandedOpsInquiryId !== item.id) return "";
-
-  let content = `<p class="ops-stage-muted">Loading payment history...</p>`;
-  if (history?.status === "error") {
-    content = `<p class="ops-customer-action-message error">${escapeHtml(history.message || "PAYMENT HISTORY UNAVAILABLE")}</p>`;
-  } else if (history?.status === "success") {
-    const events = Array.isArray(history.events) ? history.events : [];
-    content = events.length
-      ? `<ol>${events.map((event) => {
-        const isConfirmation = event.eventType === "SHOP_PAYMENT_CONFIRMED";
-        const title = isConfirmation ? "SHOP PAYMENT CONFIRMED" : "PAY AT SHOP SELECTED";
-        const actor = event.source === "CUSTOMER"
-          ? "Customer"
-          : event.actorDisplayName || (event.actorRole ? formatAdminRole(event.actorRole) : "TRRY Admin");
-        const detail = isConfirmation
-          ? [formatOpsValue(event.amount), getOpsPaymentMethodLabel(event.paymentMethod)].filter(Boolean).join(" / ")
-          : "";
-        return `<li><span></span><div><strong>${escapeHtml(title)}</strong>${detail ? `<b>${escapeHtml(detail)}</b>` : ""}<small>${escapeHtml(actor)}</small><time>${escapeHtml(formatOpsTrackingDate(event.createdAt))}</time>${event.internalNote ? `<p>${escapeHtml(event.internalNote)}</p>` : ""}</div></li>`;
-      }).join("")}</ol>`
-      : `<p class="ops-stage-muted">No payment history yet.</p>`;
-  }
-
-  return `<section class="ops-payment-history"><header><strong>PAYMENT HISTORY</strong></header>${content}</section>`;
-}
-
-function renderOpsShopPaymentDialog(item) {
-  const confirmation = opsShopPaymentConfirmation;
-  if (!confirmation || confirmation.inquiryId !== item.id) return "";
-
-  const saving = confirmation.status === "loading";
-  const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
-  if (confirmation.viewOnly) {
-    const paid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) || 0;
-    const remaining = Math.max(quoteTotal - paid, 0);
-    const confirmationEvent = getOpsShopPaymentConfirmationEvent(item);
-    const confirmedBy = confirmationEvent?.actorDisplayName || (confirmationEvent?.actorRole ? formatAdminRole(confirmationEvent.actorRole) : "TRRY Admin");
-    const title = remaining > 0 ? "DOWN PAYMENT CONFIRMED" : "FULLY PAID";
-    const paymentType = remaining > 0 ? "Down Payment" : "Full Payment";
-    return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog shop-receiver" role="dialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><header><div><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">${title}</h3></div><button type="button" data-ops-cancel-shop-payment aria-label="Close payment dialog">X</button></header><div class="ops-payment-confirmed-hero"><div><span>PAID</span><strong>${escapeHtml(formatOpsValue(paid))}</strong></div><div><span>REMAINING</span><strong>${escapeHtml(formatOpsValue(remaining))}</strong></div><div><span>METHOD</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>RECEIVED BY</span><strong>${escapeHtml(confirmedBy)}</strong></div><div><span>RECEIVED</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</strong></div></div><h4>PAYMENT DETAILS</h4><dl><div><dt>Quote total</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div><div><dt>Payment type</dt><dd>${escapeHtml(paymentType)}</dd></div>${item.paymentInternalNote ? `<div><dt>Internal note</dt><dd>${escapeHtml(item.paymentInternalNote)}</dd></div>` : ""}</dl><div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button">CLOSE</button></div></section>`;
-  }
-  const allowsDp = quoteTotal >= 1000;
-  const amount = getOpsShopPaymentChoiceAmount(item, confirmation.paymentChoice);
-  const digital = ["gcash", "bank_transfer", "other"].includes(String(confirmation.paymentMethod || "").toLowerCase());
-  return `<div class="ops-payment-dialog-backdrop" data-ops-cancel-shop-payment></div><section class="ops-payment-dialog shop-receiver" role="alertdialog" aria-modal="true" aria-labelledby="ops-payment-dialog-title"><span>PAY AT SHOP</span><h3 id="ops-payment-dialog-title">Receive payment</h3><dl><div><dt>Quote total</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div>${allowsDp ? `<div><dt>Required DP</dt><dd>${escapeHtml(formatOpsValue(getOpsShopPaymentChoiceAmount(item, "down_payment")))}</dd></div>` : ""}<div><dt>Full-payment amount</dt><dd>${escapeHtml(formatOpsValue(quoteTotal))}</dd></div></dl><p>Opening this receiver does not record a transaction. Only final confirmation writes payment.</p><div class="ops-customer-action-form compact ops-shop-payment-form"><label><span>Payment amount choice</span><select data-ops-shop-field="paymentChoice" ${saving ? "disabled" : ""}>${allowsDp ? `<option value="down_payment" ${confirmation.paymentChoice === "down_payment" ? "selected" : ""}>Required DP</option>` : ""}<option value="full" ${confirmation.paymentChoice === "full" ? "selected" : ""}>Pay in full</option></select></label><label><span>Calculated amount</span><input data-ops-shop-field="receivedAmount" inputmode="decimal" readonly type="number" value="${escapeHtml(amount)}" /></label><label><span>Payment method</span><select data-ops-shop-field="paymentMethod" ${saving ? "disabled" : ""}><option value="cash" ${confirmation.paymentMethod === "cash" ? "selected" : ""}>Cash</option><option value="gcash" ${confirmation.paymentMethod === "gcash" ? "selected" : ""}>GCash</option><option value="bank_transfer" ${confirmation.paymentMethod === "bank_transfer" ? "selected" : ""}>Bank transfer</option><option value="other" ${confirmation.paymentMethod === "other" ? "selected" : ""}>Other</option></select></label><label><span>Reference number ${digital ? "" : "<small>Optional</small>"}</span><input data-ops-shop-field="referenceNumber" value="${escapeHtml(confirmation.referenceNumber || "")}" ${saving ? "disabled" : ""}></label><label class="wide"><span>Received by</span><input readonly value="${escapeHtml(adminUser?.displayName || adminUser?.email || "Authenticated admin")}" /></label><label class="wide"><span>Date/time</span><input readonly value="${escapeHtml(formatOpsTrackingDate(new Date().toISOString()))}" /></label><label class="wide"><span>Internal note <small>Optional</small></span><textarea data-ops-shop-field="internalNote" maxlength="${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}" rows="2" ${saving ? "disabled" : ""}>${escapeHtml(confirmation.internalNote || "")}</textarea><small>${String(confirmation.internalNote || "").length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}</small></label></div>${confirmation.error ? `<p class="ops-customer-action-message error">${escapeHtml(confirmation.error)}</p>` : ""}<div><button class="ops-light-button mini" data-ops-cancel-shop-payment type="button" ${saving ? "disabled" : ""}>CANCEL</button><button class="ops-gold-button mini" data-ops-confirm-shop-payment="${escapeHtml(item.id)}" data-ops-action-label="CONFIRM SHOP PAYMENT" type="button" ${saving ? "disabled" : ""}>${saving ? "CONFIRMING..." : "CONFIRM PAYMENT RECEIVED"}</button></div></section>`;
-}
-
-function renderActiveOpsShopPaymentDialog() {
-  const inquiryId = opsShopPaymentConfirmation?.inquiryId;
-  const item = inquiryId ? opsInquiries.find((inquiry) => inquiry.id === inquiryId) : null;
-  return item ? renderOpsShopPaymentDialog(item) : "";
-}
-
-function getActiveInquiryPaymentSection(inquiryId) {
-  if (mvpDashboard.state.inquiryId !== inquiryId) return null;
-  return document.querySelector(`.mvp-drawer.inquiry.locked .ops-stage-section[data-stage="payment"]`);
-}
-
-function getActiveInquiryHistoryPanel(inquiryId) {
-  if (mvpDashboard.state.inquiryId !== inquiryId) return null;
-  return document.querySelector(`.mvp-drawer.inquiry.locked [data-mvp-inquiry-panel="history"]`);
-}
-
-function replaceActiveInquiryPaymentSection(inquiryId, { includeHistory = false } = {}) {
-  const section = getActiveInquiryPaymentSection(inquiryId);
-  const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
-  if (!section || !item) return false;
-  const drawerBody = section.closest(".mvp-drawer-body");
-  const scrollTop = drawerBody?.scrollTop ?? 0;
-  section.outerHTML = renderOpsPaymentStage(item);
-  if (includeHistory) {
-    const historyPanel = getActiveInquiryHistoryPanel(inquiryId);
-    if (historyPanel) historyPanel.innerHTML = mvpDashboard.renderInquiryHistoryPanel?.(item) || historyPanel.innerHTML;
-  }
-  bindOnlinePaymentReviewEvents(getActiveInquiryPaymentSection(inquiryId) || document);
-  bindOpsPaymentScopedEvents(getActiveInquiryPaymentSection(inquiryId) || document);
-  if (drawerBody) drawerBody.scrollTop = scrollTop;
-  return true;
-}
-
-function syncOpsShopPaymentDialog() {
-  let host = document.getElementById("ops-payment-dialog-host");
-  if (!host) {
-    host = document.createElement("div");
-    host.id = "ops-payment-dialog-host";
-    document.body.appendChild(host);
-  }
-  host.innerHTML = renderActiveOpsShopPaymentDialog();
-  bindOpsPaymentScopedEvents(host);
-}
-
-function scheduleOnlinePaymentReview(inquiryId) {
-  if (
-    !inquiryId
-    || !isAdminOnlinePaymentReviewUiEnabled()
-    || scheduledOnlinePaymentReviews.has(inquiryId)
-    || ["loading", "loaded"].includes(onlinePaymentReviewByInquiry[inquiryId]?.status)
-  ) {
-    return;
-  }
-  scheduledOnlinePaymentReviews.add(inquiryId);
-  queueMicrotask(async () => {
-    scheduledOnlinePaymentReviews.delete(inquiryId);
-    await loadOnlinePaymentReview(inquiryId);
-  });
-}
-
-async function loadOnlinePaymentReview(inquiryId, { force = false, preserveDialog = false } = {}) {
-  if (!inquiryId || !isAdminOnlinePaymentReviewUiEnabled() || !adminAuthSession?.access_token) return;
-  const current = onlinePaymentReviewByInquiry[inquiryId] || {};
-  if (!force && ["loading", "loaded"].includes(current.status)) return;
-  const requestInquiryId = inquiryId;
-
-  onlinePaymentReviewByInquiry = {
-    ...onlinePaymentReviewByInquiry,
-    [inquiryId]: {
-      ...current,
-      status: "loading",
-      error: "",
-      message: "",
-    },
-  };
-  replaceActiveInquiryPaymentSection(inquiryId);
-
-  try {
-    const payment = await getPaymentReview(inquiryId, adminAuthSession);
-    if (mvpDashboard.state.inquiryId && mvpDashboard.state.inquiryId !== requestInquiryId) return;
-    onlinePaymentReviewByInquiry = {
-      ...onlinePaymentReviewByInquiry,
-      [inquiryId]: {
-        ...(preserveDialog ? current : {}),
-        status: "loaded",
-        payment,
-        error: "",
-        saving: false,
-        proofStatus: current.proofStatus === "loading" ? "idle" : current.proofStatus,
-      },
-    };
-  } catch (error) {
-    if (mvpDashboard.state.inquiryId && mvpDashboard.state.inquiryId !== requestInquiryId) return;
-    onlinePaymentReviewByInquiry = {
-      ...onlinePaymentReviewByInquiry,
-      [inquiryId]: {
-        ...current,
-        status: "error",
-        error: error.message || "Unable to load payment review details.",
-        saving: false,
-      },
-    };
-  }
-  replaceActiveInquiryPaymentSection(inquiryId);
-}
-
-async function openOnlinePaymentProof(inquiryId) {
-  const current = onlinePaymentReviewByInquiry[inquiryId];
-  if (!current || current.proofStatus === "loading") return;
-  const requestInquiryId = inquiryId;
-  onlinePaymentReviewByInquiry = {
-    ...onlinePaymentReviewByInquiry,
-    [inquiryId]: { ...current, proofStatus: "loading", message: "", messageTone: "" },
-  };
-  replaceActiveInquiryPaymentSection(inquiryId);
-
-  try {
-    const proof = await openPaymentProof(inquiryId, adminAuthSession);
-    if (mvpDashboard.state.inquiryId && mvpDashboard.state.inquiryId !== requestInquiryId) return;
-    onlinePaymentReviewByInquiry = {
-      ...onlinePaymentReviewByInquiry,
-      [inquiryId]: {
-        ...onlinePaymentReviewByInquiry[inquiryId],
-        proof,
-        proofStatus: "opened",
-        message: "",
-        messageTone: "",
-      },
-    };
-  } catch (error) {
-    if (mvpDashboard.state.inquiryId && mvpDashboard.state.inquiryId !== requestInquiryId) return;
-    onlinePaymentReviewByInquiry = {
-      ...onlinePaymentReviewByInquiry,
-      [inquiryId]: {
-        ...onlinePaymentReviewByInquiry[inquiryId],
-        proofStatus: "error",
-        message: error.message || "Unable to open the payment receipt.",
-        messageTone: "error",
-      },
-    };
-  }
-  replaceActiveInquiryPaymentSection(inquiryId);
-}
-
-function openOnlinePaymentDialog(inquiryId, dialog) {
-  const current = onlinePaymentReviewByInquiry[inquiryId];
-  if (!current?.payment || current.saving) return;
-  const payment = current.payment;
-  onlinePaymentReviewByInquiry = {
-    ...onlinePaymentReviewByInquiry,
-    [inquiryId]: {
-      ...current,
-      dialog,
-      dialogError: "",
-      draft: dialog === "review"
-        ? {
-          verifiedAmount: payment.submittedAmount ?? payment.amountDue ?? "",
-          internalNote: payment.internalNote || "",
-        }
-        : dialog === "confirm"
-        ? {
-          verifiedAmount: payment.submittedAmount ?? payment.amountDue ?? "",
-          internalNote: payment.internalNote || "",
-        }
-        : {
-          reviewNote: payment.reviewNote || "",
-          internalNote: payment.internalNote || "",
-        },
-      pendingAction: "",
-      pendingKey: "",
-    },
-  };
-  replaceActiveInquiryPaymentSection(inquiryId);
-  requestAnimationFrame(() => document.querySelector("[data-payment-review-field]")?.focus());
-}
-
-function closeOnlinePaymentDialog() {
-  const entry = Object.entries(onlinePaymentReviewByInquiry)
-    .find(([, state]) => state?.dialog);
-  if (!entry || entry[1].saving) return;
-  const [inquiryId, current] = entry;
-  onlinePaymentReviewByInquiry = {
-    ...onlinePaymentReviewByInquiry,
-    [inquiryId]: {
-      ...current,
-      dialog: "",
-      dialogError: "",
-      draft: {},
-      pendingAction: "",
-      pendingKey: "",
-    },
-  };
-  replaceActiveInquiryPaymentSection(inquiryId);
-}
-
-function updateOnlinePaymentDraft(field, value) {
-  const entry = Object.entries(onlinePaymentReviewByInquiry)
-    .find(([, state]) => state?.dialog);
-  if (!entry) return;
-  const [inquiryId, current] = entry;
-  onlinePaymentReviewByInquiry = {
-    ...onlinePaymentReviewByInquiry,
-    [inquiryId]: {
-      ...current,
-      draft: { ...(current.draft || {}), [field]: value },
-    },
-  };
-}
-
-async function saveOnlinePaymentReview(inquiryId, action) {
-  const current = onlinePaymentReviewByInquiry[inquiryId];
-  if (!current?.payment || current.saving) return;
-  const draft = current.draft || {};
-  if (
-    action === "request_online_payment_correction"
-    && String(draft.reviewNote || "").trim().length < 5
-  ) {
-    onlinePaymentReviewByInquiry = {
-      ...onlinePaymentReviewByInquiry,
-      [inquiryId]: { ...current, dialogError: "Enter a clear correction reason." },
-    };
-    replaceActiveInquiryPaymentSection(inquiryId);
-    return;
-  }
-
-  const idempotencyKey = current.pendingAction === action && current.pendingKey
-    ? current.pendingKey
-    : createPaymentReviewIdempotencyKey(inquiryId, action);
-  onlinePaymentReviewByInquiry = {
-    ...onlinePaymentReviewByInquiry,
-    [inquiryId]: {
-      ...current,
-      saving: true,
-      dialogError: "",
-      message: "",
-      pendingAction: action,
-      pendingKey: idempotencyKey,
-    },
-  };
-  replaceActiveInquiryPaymentSection(inquiryId);
-
-  try {
-    const payment = await updatePaymentReview(inquiryId, {
-      action,
-      expectedVersion: current.payment.version,
-      idempotencyKey,
-      verifiedAmount: action === "confirm_online_payment" ? draft.verifiedAmount : null,
-      reviewNote: action === "request_online_payment_correction" ? draft.reviewNote : "",
-      internalNote: draft.internalNote || "",
-    }, adminAuthSession);
-    onlinePaymentReviewByInquiry = {
-      ...onlinePaymentReviewByInquiry,
-      [inquiryId]: {
-        status: "loaded",
-        payment,
-        saving: false,
-        dialog: "",
-        draft: {},
-        dialogError: "",
-        message: paymentReviewSuccessMessage(action),
-        messageTone: "success",
-        proofStatus: current.proofStatus || "idle",
-        pendingAction: "",
-        pendingKey: "",
-      },
-    };
-
-    await refreshOpsInquiryDataForPayment(inquiryId);
-    replaceActiveInquiryPaymentSection(inquiryId, { includeHistory: true });
-    if (mvpDashboard.state.orderId === inquiryId) {
-      await loadMvpOrderDetails(inquiryId, { force: true });
-    }
-  } catch (error) {
-    const stale = error.code === "PAYMENT_STALE";
-    let payment = current.payment;
-    if (stale) {
-      try {
-        payment = await getPaymentReview(inquiryId, adminAuthSession);
-      } catch {
-        // Keep the last safe snapshot when the conflict refresh also fails.
-      }
-    }
-    onlinePaymentReviewByInquiry = {
-      ...onlinePaymentReviewByInquiry,
-      [inquiryId]: {
-        ...current,
-        payment,
-        status: "loaded",
-        saving: false,
-        dialogError: current.dialog ? error.message : "",
-        message: current.dialog ? "" : error.message,
-        messageTone: "error",
-        pendingAction: action,
-        pendingKey: idempotencyKey,
-      },
-    };
-  }
-  replaceActiveInquiryPaymentSection(inquiryId);
-}
-
-function paymentReviewSuccessMessage(action) {
-  if (action === "start_online_payment_review") return "Payment review started.";
-  if (action === "confirm_online_payment") return "Online payment confirmed.";
-  return "Receipt correction requested.";
-}
-
-function bindOnlinePaymentReviewEvents(root = document) {
-  root.querySelectorAll("[data-payment-review-retry]").forEach((button) => {
-    button.addEventListener("click", () => {
-      void loadOnlinePaymentReview(button.dataset.paymentReviewRetry, { force: true });
-    });
-  });
-  root.querySelectorAll("[data-payment-review-proof]").forEach((button) => {
-    button.addEventListener("click", () => {
-      void openOnlinePaymentProof(button.dataset.paymentReviewProof);
-    });
-  });
-  root.querySelectorAll("[data-payment-review-view]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openOnlinePaymentDialog(button.dataset.paymentReviewView, "review");
-      void openOnlinePaymentProof(button.dataset.paymentReviewView);
-    });
-  });
-  root.querySelectorAll("[data-payment-review-open-receipt]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const inquiryId = button.dataset.paymentReviewOpenReceipt;
-      await openOnlinePaymentProof(inquiryId);
-      const proof = onlinePaymentReviewByInquiry[inquiryId]?.proof;
-      if (proof?.signedUrl) window.open(proof.signedUrl, "_blank", "noopener,noreferrer");
-    });
-  });
-  root.querySelectorAll("[data-payment-review-retry-proof]").forEach((button) => {
-    button.addEventListener("click", () => {
-      void openOnlinePaymentProof(button.dataset.paymentReviewRetryProof);
-    });
-  });
-  root.querySelectorAll("[data-payment-review-action]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const inquiryId = button.dataset.paymentReviewId;
-      const action = button.dataset.paymentReviewAction;
-      if (action === "open_review") {
-        openOnlinePaymentDialog(inquiryId, "review");
-        void openOnlinePaymentProof(inquiryId);
-      } else if (action === "open_confirm") {
-        openOnlinePaymentDialog(inquiryId, "confirm");
-      } else if (action === "open_correction") {
-        openOnlinePaymentDialog(inquiryId, "correction");
-      } else {
-        void saveOnlinePaymentReview(inquiryId, action);
-      }
-    });
-  });
-  root.querySelectorAll("[data-payment-review-field]").forEach((field) => {
-    field.addEventListener("input", () => {
-      updateOnlinePaymentDraft(field.dataset.paymentReviewField, field.value);
-    });
-  });
-  root.querySelectorAll("[data-payment-review-cancel]").forEach((button) => {
-    button.addEventListener("click", closeOnlinePaymentDialog);
-  });
-  root.querySelectorAll("[data-payment-review-submit]").forEach((button) => {
-    button.addEventListener("click", () => {
-      void saveOnlinePaymentReview(
-        button.dataset.paymentReviewId,
-        button.dataset.paymentReviewSubmit,
-      );
-    });
-  });
-}
-
 function renderOpsPaymentStage(item) {
-  if (isAdminOnlinePaymentReviewUiEnabled() && isOnlinePaymentReviewItem(item)) {
-    scheduleOnlinePaymentReview(item.id);
-    return renderOnlinePaymentReview(item, onlinePaymentReviewByInquiry[item.id]);
-  }
   const request = opsCustomerActionRequests[item.id] || {};
   const isLoading = request.status === "loading";
   const isReceiptLoading = isLoading && request.asset === "payment-proof";
@@ -3703,39 +3809,16 @@ function renderOpsPaymentStage(item) {
   const status = item.paymentStatus || "not_required";
   let body = renderOpsQuoteHiddenFields(item);
   const paymentTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
-  const paymentPaid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) > 0 ? Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) : 0;
+  const paymentPaid = Number(item.paymentConfirmedAmount) > 0 ? Number(item.paymentConfirmedAmount) : 0;
   const paymentBalance = Math.max(paymentTotal - paymentPaid, 0);
-  const isShopPaymentPending = isOpsShopPaymentPending(item);
-  const isShopPaymentConfirmed = isOpsShopPaymentConfirmed(item);
-  const isBelowFullPaymentOnly = paymentTotal > 0 && paymentTotal < 1000 && !isOpsPaymentConfirmed(status);
-  if (!isBelowFullPaymentOnly && !isShopPaymentPending && !isShopPaymentConfirmed) {
-    body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
-  }
+  body += `<div class="ops-stage-mini-grid"><div><span>Total amount</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Amount paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div></div>`;
 
-  if (isShopPaymentPending && isAdminPayAtShopUiEnabled()) {
-    const quoteTotal = Number(item.quotedAmount) > 0 ? Number(item.quotedAmount) : 0;
-    const requiredDp = quoteTotal >= 1000 ? getOpsShopPaymentChoiceAmount(item, "down_payment") : null;
-    body += `<div class="ops-shop-payment-state"><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div>${requiredDp ? `<div><span>Required DP</span><strong>${formatOpsValue(requiredDp)}</strong></div>` : ""}<div><span>Full-payment amount</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div><div><span>Customer-selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Selected</span><strong>${escapeHtml(item.paymentSelectedAt ? formatOpsTrackingDate(item.paymentSelectedAt) : "Selection time unavailable")}</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until an exact allowed shop payment is received and confirmed.</p></div>`;
-    if (canOpsConfirmShopPayment(item)) {
-      body += `<div class="ops-stage-actions"><button class="ops-gold-button mini" data-ops-open-shop-payment="${escapeHtml(item.id)}" type="button" ${isLoading ? "disabled" : ""}>RECEIVE PAYMENT</button></div>`;
-    } else {
-      body += `<p class="ops-stage-muted"><strong>Owner/Admin confirmation required.</strong></p>`;
-    }
-    body += renderOpsPaymentHistory(item);
-  } else if (isShopPaymentConfirmed) {
-    const confirmationEvent = getOpsShopPaymentConfirmationEvent(item);
-    const confirmedBy = confirmationEvent?.actorDisplayName || (confirmationEvent?.actorRole ? formatAdminRole(confirmationEvent.actorRole) : "TRRY Admin");
-    const paid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount) || 0;
-    const remaining = Math.max(paymentTotal - paid, 0);
-    body += `<div class="ops-shop-payment-state confirmed"><div class="ops-stage-mini-grid"><div><span>Paid</span><strong>${formatOpsValue(paid)}</strong></div><div><span>Remaining</span><strong>${formatOpsValue(remaining)}</strong></div><div><span>Method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Received by</span><strong>${escapeHtml(confirmedBy)}</strong></div><div><span>Received</span><strong>${escapeHtml(formatOpsTrackingDate(item.paymentVerifiedAt || item.paymentConfirmedAt))}</strong></div>${item.paymentInternalNote ? `<div class="wide"><span>Internal note</span><strong>${escapeHtml(item.paymentInternalNote)}</strong></div>` : ""}</div><div class="ops-stage-actions"><button class="ops-dark-button mini" data-ops-view-shop-payment="${escapeHtml(item.id)}" type="button">VIEW PAYMENT</button></div></div>${renderOpsPaymentHistory(item)}`;
-  } else if (isBelowFullPaymentOnly) {
-    body += `<div class="ops-shop-payment-state"><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Full payment is required for quotations below ${formatOpsValue(1000)}. Production remains blocked until payment is confirmed.</p></div>`;
-  } else if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED) {
-    body += `<div class="ops-shop-payment-state"><strong class="ops-payment-state-badge pending">AWAITING PAYMENT</strong><div class="ops-stage-mini-grid"><div><span>Quote total</span><strong>${formatOpsValue(paymentTotal)}</strong></div><div><span>Paid</span><strong>${formatOpsValue(paymentPaid)}</strong></div><div><span>Balance</span><strong>${formatOpsValue(paymentBalance)}</strong></div><div><span>Status</span><strong>Awaiting customer payment</strong></div></div><p class="ops-shop-payment-warning">Production remains blocked until payment is confirmed.</p></div>`;
-  } else if (isOpsPaymentConfirmed(status)) {
+  if (isOpsPaymentConfirmed(status)) {
     body += `<p class="ops-stage-complete">PAYMENT CONFIRMED &#10003; / ${formatOpsValue(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount)}${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}</p>`;
   } else if (!canOpsRequestPayment(item)) {
     body += `<p class="ops-stage-muted">Available after quote and artwork approval.</p>`;
+  } else if (["pay_at_shop", "payment_pending_at_shop"].includes(status)) {
+    body += `<div class="ops-stage-mini-grid"><div><span>Selected method</span><strong>${escapeHtml(getOpsPaymentMethodLabel(item.paymentMethod))}</strong></div><div><span>Customer status</span><strong>PAY AT SHOP</strong></div><div><span>Amount to collect</span><strong>${formatOpsValue(item.quotedAmount)}</strong></div></div><p class="ops-stage-muted"><strong>SHOP PAYMENT PENDING</strong>Confirm only after staff receives payment at the shop.</p><div class="ops-customer-action-form compact"><label><span>Cash amount received</span><input data-ops-customer-field="confirmedAmount" min="0" step="0.01" type="number" value="${escapeHtml(item.quotedAmount ?? item.amountDue ?? "")}" /></label></div><div class="ops-stage-actions">${renderOpsActionButton({ label: "CONFIRM CASH PAYMENT", action: "confirm_cash_payment", id: item.id, primary: true, disabled: isLoading })}</div>`;
   } else if (["required", "correction_required"].includes(status)) {
     body += `<div class="ops-stage-mini-grid"><div><span>Amount due</span><strong>${formatOpsValue(item.amountDue)}</strong></div><div><span>Current status</span><strong>PAYMENT REQUESTED</strong></div></div><p class="ops-stage-muted"><strong>${item.paymentRejectedAt ? "NEW RECEIPT NEEDED" : "PAYMENT REQUESTED"}</strong>Awaiting receipt.</p>`;
   } else if (["proof_submitted", "under_review"].includes(status)) {
@@ -3749,41 +3832,66 @@ function renderOpsPaymentStage(item) {
 
   if (item.paymentRejectedAt) body += `<p class="ops-customer-action-alert"><strong>NEW RECEIPT NEEDED</strong>${escapeHtml(item.paymentReviewNote || "Replacement receipt requested.")}<small>${escapeHtml(formatOpsTrackingDate(item.paymentRejectedAt))}</small></p>`;
 
-  const stageStatus = isShopPaymentPending
-    ? "AWAITING SHOP PAYMENT"
-    : isShopPaymentConfirmed
-      ? (paymentBalance > 0 ? "DOWN PAYMENT CONFIRMED" : "FULLY PAID")
-      : isBelowFullPaymentOnly
-        ? "FULL PAYMENT REQUIRED"
-      : getOpsCustomerActionLabel("payment", status);
-  const locked = !isOpsShopPaymentPending(item)
-    && !canOpsRequestPayment(item)
-    && !isOpsPaymentConfirmed(status);
-  return renderOpsStageShell({ key: "payment", title: "Payment", status: stageStatus, current, locked, body });
+  return renderOpsStageShell({ key: "payment", title: "Payment", status: getOpsCustomerActionLabel("payment", status), current, locked: !canOpsRequestPayment(item) && !isOpsPaymentConfirmed(status), body });
 }
+
+function renderMvpPaymentConfirmation(item) {
+  const request = mvpPaymentConfirmationRequests[item.id] || {};
+  const status = String(item.paymentStatus || "").trim().toLowerCase();
+  const paid = Number(item.paymentVerifiedAmount ?? item.paymentConfirmedAmount ?? 0) || 0;
+  const total = Number(item.quotedAmount || item.amountDue || 0) || 0;
+  const balance = Math.max(Math.round((total - paid) * 100) / 100, 0);
+  const isLoading = request.status === "loading";
+  const isPaid = ["paid", "confirmed", "full_payment_confirmed"].includes(status) && balance <= 0;
+  const isShop = ["pay_at_shop", "payment_pending_at_shop"].includes(status) || String(item.paymentType || "").toLowerCase() === "shop";
+  const isOnline = ["proof_submitted", "under_review", "required", "correction_required"].includes(status) || String(item.paymentMethod || "").toLowerCase() === "online";
+
+  if (isPaid) {
+    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">PAYMENT CONFIRMED. ${escapeHtml(formatOpsValue(paid))} recorded${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}.</p></section>`;
+  }
+
+  if (balance <= 0) {
+    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">No outstanding balance is available for payment confirmation.</p></section>`;
+  }
+
+  const title = isOnline && !isShop ? "REVIEW & CONFIRM ONLINE PAYMENT" : "RECORD PAYMENT RECEIVED";
+  const warning = isShop
+    ? "Confirm only after staff receives payment at the shop."
+    : isOnline
+      ? "Review the Messenger receipt before confirming. This does not use in-app receipt upload."
+      : "Record only money actually received by TRRY.";
+  const message = request.status === "error"
+    ? `<p class="mvp-payment-message error" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation failed.")}</p>`
+    : request.status === "success"
+      ? `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation saved.")}</p>`
+      : `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(warning)}</p>`;
+
+  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number</span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label></div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
+}
+
 function renderOpsProductionStage(item) {
   const current = getOpsInquiryCurrentTask(item).stage === "production";
   if (item.status === "sent") {
     return renderOpsStageShell({
       key: "production",
-      title: "Production / Order",
-      status: item.status === "won" ? "TRRY order created" : "Order needed",
+      title: "Production / Odoo",
+      status: item.odooSO ? "Odoo created" : "Sales order needed",
       current,
-      body: renderOpsOrderAction(item),
+      body: renderOpsOdooAction(item),
     });
   }
-  if (item.status === "won") {
+  if (item.odooSO) {
     return renderOpsStageShell({
       key: "production",
-      title: "Production / Order",
-      status: "TRRY order created",
+      title: "Production / Odoo",
+      status: "Odoo created",
       current,
-      body: `<p class="ops-stage-complete">TRRY order ${escapeHtml(createConfirmedOrderReference(item))} is recorded.</p>`,
+      body: `<p class="ops-stage-complete">Sales Order ${escapeHtml(item.odooSO)} is recorded.</p>`,
     });
   }
   return renderOpsStageShell({
     key: "production",
-    title: "Production / Order",
+    title: "Production / Odoo",
     status: "Locked",
     locked: true,
     current,
@@ -3813,6 +3921,7 @@ function getOpsCustomerActionFormPayload(action, sourceElement) {
     quoteBreakdown: fieldValue("quoteBreakdown"),
     quoteNotes: fieldValue("quoteNotes"),
     quoteValidUntil: fieldValue("quoteValidUntil"),
+    dueDate: fieldValue("dueDate"),
     paymentLabel: quoteAction ? "" : fieldValue("paymentLabel"),
     paymentInstructions: quoteAction ? "" : fieldValue("paymentInstructions"),
     confirmedAmount: fieldValue("confirmedAmount"),
@@ -3827,13 +3936,18 @@ function parseOpsQuoteMoney(value) {
 }
 
 function getOpsQuoteValidationMessage(action, body) {
-  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "require_payment", "request_new_payment_proof"].includes(action)) return "";
+  if (!["publish_quote", "save_quote_draft", "revise_quote", "mark_quote_pending", "set_due_date", "approve_artwork", "require_payment", "request_new_payment_proof"].includes(action)) return "";
 
   const quotedAmountText = String(body.quotedAmount ?? "").trim();
   const amountDueText = String(body.amountDue ?? "").trim();
   const quotedAmount = parseOpsQuoteMoney(quotedAmountText);
   const amountDue = amountDueText ? parseOpsQuoteMoney(amountDueText) : quotedAmount;
   const validUntil = String(body.quoteValidUntil || "").trim();
+  const dueDate = String(body.dueDate || "").trim();
+
+  if (action === "set_due_date" && !/^\d{4}-\d{2}-\d{2}$/.test(dueDate)) {
+    return "ENTER AN AGREED DUE DATE\nChoose the due date agreed with the customer before creating an Order.";
+  }
 
   if (action === "publish_quote" && (!Number.isFinite(quotedAmount) || quotedAmount <= 0)) {
     return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than 0 before sending the quote.";
@@ -3904,16 +4018,18 @@ function setOpsCustomerActionInlineMessage(sourceElement, message, status = "err
 
 function getOpsActionLoadingLabel(action) {
   if (action === "publish_quote") return "SENDING...";
+  if (action === "set_due_date") return "SAVING...";
   if (action === "require_payment") return "REQUESTING...";
-  if (action === "confirm_payment" || SHOP_PAYMENT_ACTIONS.has(action)) return "CONFIRMING...";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING...";
   if (action === "request_new_payment_proof") return "REQUESTING...";
   return "SAVING...";
 }
 
 function getOpsActionSavingMessage(action) {
   if (action === "publish_quote") return "SENDING QUOTE...";
+  if (action === "set_due_date") return "SAVING AGREED DUE DATE...";
   if (action === "require_payment") return "REQUESTING PAYMENT...";
-  if (action === "confirm_payment" || SHOP_PAYMENT_ACTIONS.has(action)) return "CONFIRMING PAYMENT...";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "CONFIRMING PAYMENT...";
   if (action === "request_new_payment_proof") return "REQUESTING NEW RECEIPT...";
   return "SAVING CUSTOMER ACTION...";
 }
@@ -3921,8 +4037,9 @@ function getOpsActionSavingMessage(action) {
 function getOpsActionSuccessMessage(action) {
   if (action === "save_quote_draft") return "QUOTE DRAFT SAVED.";
   if (action === "publish_quote") return "QUOTE PUBLISHED FOR CUSTOMER.";
+  if (action === "set_due_date") return "AGREED DUE DATE SAVED.";
   if (action === "require_payment") return "PAYMENT REQUESTED.";
-  if (action === "confirm_payment" || SHOP_PAYMENT_ACTIONS.has(action)) return "PAYMENT CONFIRMED.";
+  if (action === "confirm_payment" || action === "confirm_cash_payment") return "PAYMENT CONFIRMED.";
   if (action === "request_new_payment_proof") return "NEW RECEIPT NEEDED.";
   return "CUSTOMER ACTION SAVED.";
 }
@@ -3939,209 +4056,6 @@ function setOpsActionButtonLoading(button, isLoading) {
     delete button.dataset.opsOriginalText;
   }
 }
-
-function getOpsShopPaymentFormPayload(inquiryId, sourceElement) {
-  const stageSection = sourceElement?.closest?.(".ops-stage-section");
-  const dialog = sourceElement?.closest?.(".ops-payment-dialog");
-  const existing = opsShopPaymentConfirmation?.inquiryId === inquiryId
-    ? opsShopPaymentConfirmation
-    : opsShopPaymentDrafts[inquiryId] || {};
-  const fieldValue = (name) => dialog?.querySelector(`[data-ops-shop-field="${name}"]`)?.value
-    ?? stageSection?.querySelector(`[data-ops-shop-field="${name}"]`)?.value
-    ?? existing[name]
-    ?? "";
-  return {
-    inquiryId,
-    paymentChoice: fieldValue("paymentChoice"),
-    receivedAmount: fieldValue("receivedAmount"),
-    paymentMethod: fieldValue("paymentMethod"),
-    referenceNumber: fieldValue("referenceNumber"),
-    internalNote: fieldValue("internalNote"),
-  };
-}
-
-function getOpsShopPaymentValidationMessage(item, draft) {
-  const expectedAmount = getOpsShopPaymentChoiceAmount(item, draft.paymentChoice);
-  const amount = parseOpsQuoteMoney(draft.receivedAmount || expectedAmount);
-  const quoteTotal = Number(item?.quotedAmount);
-  const method = String(draft.paymentMethod || "").trim().toLowerCase();
-  if (!Number.isFinite(amount) || amount <= 0) return "ENTER A VALID RECEIVED AMOUNT.";
-  if (!Number.isFinite(quoteTotal) || quoteTotal <= 0) return "A POSITIVE APPROVED QUOTE IS REQUIRED.";
-  if (!["full", "down_payment"].includes(String(draft.paymentChoice || ""))) return "SELECT A VALID PAYMENT AMOUNT.";
-  if (draft.paymentChoice === "down_payment" && quoteTotal < 1000) return `FULL PAYMENT ONLY BELOW ${formatOpsValue(1000)}.`;
-  if (Math.round(amount * 100) !== Math.round(Number(expectedAmount) * 100)) return "RECEIVED AMOUNT MUST MATCH THE SELECTED PAYMENT AMOUNT.";
-  if (!SHOP_PAYMENT_METHODS.has(method) || method === "card") return "SELECT A VALID PAYMENT METHOD.";
-  if (["gcash", "bank_transfer", "other"].includes(method) && !String(draft.referenceNumber || "").trim()) return "REFERENCE NUMBER IS REQUIRED FOR DIGITAL METHODS.";
-  if (String(draft.internalNote || "").trim().length > PAYMENT_INTERNAL_NOTE_MAX_LENGTH) return `INTERNAL NOTE MUST BE ${PAYMENT_INTERNAL_NOTE_MAX_LENGTH} CHARACTERS OR FEWER.`;
-  return "";
-}
-
-function openOpsShopPaymentConfirmation(inquiryId, sourceElement) {
-  const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
-  if (!item || !canOpsConfirmShopPayment(item)) {
-    setOpsCustomerActionInlineMessage(sourceElement, "OWNER OR ADMIN CONFIRMATION REQUIRED.", "error");
-    return;
-  }
-
-  const draft = getOpsShopPaymentDraft(item);
-  opsShopPaymentDrafts = { ...opsShopPaymentDrafts, [inquiryId]: draft };
-
-  opsShopPaymentConfirmation = {
-    ...draft,
-    receivedAmount: getOpsShopPaymentChoiceAmount(item, draft.paymentChoice),
-    paymentMethod: String(draft.paymentMethod).trim().toLowerCase(),
-    referenceNumber: String(draft.referenceNumber || "").trim(),
-    internalNote: String(draft.internalNote || "").trim(),
-    idempotencyKey: `shop:${inquiryId}:${crypto.randomUUID()}`,
-    status: "ready",
-    error: "",
-  };
-  syncOpsShopPaymentDialog();
-  requestAnimationFrame(() => document.querySelector("[data-ops-confirm-shop-payment]")?.focus());
-}
-
-async function confirmOpsShopPayment(inquiryId) {
-  const confirmation = opsShopPaymentConfirmation;
-  if (!confirmation || confirmation.inquiryId !== inquiryId || confirmation.status === "loading") return;
-  const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
-  const draft = getOpsShopPaymentFormPayload(inquiryId, document.querySelector(`[data-ops-confirm-shop-payment="${CSS.escape(inquiryId)}"]`));
-  const validationMessage = getOpsShopPaymentValidationMessage(item, draft);
-  if (validationMessage) {
-    opsShopPaymentConfirmation = { ...confirmation, ...draft, status: "ready", error: validationMessage };
-    syncOpsShopPaymentDialog();
-    return;
-  }
-  const receivedAmount = getOpsShopPaymentChoiceAmount(item, draft.paymentChoice);
-  const referenceNumber = String(draft.referenceNumber || "").trim();
-  const internalNote = [String(draft.internalNote || "").trim(), referenceNumber ? `Reference: ${referenceNumber}` : ""].filter(Boolean).join("\n");
-
-  opsShopPaymentConfirmation = { ...confirmation, ...draft, receivedAmount, status: "loading", error: "" };
-  opsCustomerActionRequests = {
-    ...opsCustomerActionRequests,
-    [inquiryId]: { status: "loading", message: "CONFIRMING SHOP PAYMENT..." },
-  };
-  syncOpsShopPaymentDialog();
-  replaceActiveInquiryPaymentSection(inquiryId);
-
-  try {
-    const payload = await requestOpsCustomerAction(inquiryId, {
-      action: "confirm_shop_payment",
-      receivedAmount,
-      paymentMethod: String(draft.paymentMethod).trim().toLowerCase(),
-      internalNote,
-      idempotencyKey: confirmation.idempotencyKey,
-    });
-
-    if (payload?.inquiry) {
-      opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...payload.inquiry } : item);
-    }
-    if (Array.isArray(payload?.paymentEvents)) {
-      opsPaymentHistoryByInquiry = {
-        ...opsPaymentHistoryByInquiry,
-        [inquiryId]: { status: "success", events: payload.paymentEvents },
-      };
-    }
-    opsCustomerActionRequests = {
-      ...opsCustomerActionRequests,
-      [inquiryId]: { status: "success", message: "SHOP PAYMENT CONFIRMED." },
-    };
-    const nextDrafts = { ...opsShopPaymentDrafts };
-    delete nextDrafts[inquiryId];
-    opsShopPaymentDrafts = nextDrafts;
-    opsShopPaymentConfirmation = null;
-    await refreshOpsInquiryDataForPayment(inquiryId);
-    syncOpsShopPaymentDialog();
-    replaceActiveInquiryPaymentSection(inquiryId, { includeHistory: true });
-    const refreshOpenOrder = mvpDashboard.state.orderId === inquiryId;
-    if (refreshOpenOrder) {
-      await loadMvpOrderDetails(inquiryId, { force: true });
-    }
-  } catch (error) {
-    const message = error.message || "SHOP PAYMENT CONFIRMATION FAILED.";
-    opsShopPaymentConfirmation = {
-      ...confirmation,
-      status: "error",
-      error: message,
-    };
-    opsCustomerActionRequests = {
-      ...opsCustomerActionRequests,
-      [inquiryId]: { status: "error", message },
-    };
-    syncOpsShopPaymentDialog();
-    replaceActiveInquiryPaymentSection(inquiryId);
-  }
-}
-
-async function loadOpsPaymentHistory(inquiryId, force = false, { silent = false } = {}) {
-  if (!inquiryId || !isAdminPayAtShopUiEnabled() || !adminAuthSession?.access_token) return;
-  const current = opsPaymentHistoryByInquiry[inquiryId];
-  if (!force && ["loading", "success"].includes(current?.status)) return;
-
-  opsPaymentHistoryByInquiry = {
-    ...opsPaymentHistoryByInquiry,
-    [inquiryId]: { status: "loading", events: current?.events || [] },
-  };
-  if (!silent) replaceActiveInquiryPaymentSection(inquiryId, { includeHistory: true }) || render();
-
-  try {
-    const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions?view=payment-history`, {
-      headers: { Authorization: `Bearer ${adminAuthSession.access_token}` },
-    });
-    const payload = await response.json().catch(() => ({}));
-    if (!response.ok || !payload?.ok) {
-      throw new Error(getOpsCustomerActionError(response.status, payload?.error));
-    }
-
-    opsPaymentHistoryByInquiry = {
-      ...opsPaymentHistoryByInquiry,
-      [inquiryId]: { status: "success", events: Array.isArray(payload.paymentEvents) ? payload.paymentEvents : [] },
-    };
-  } catch (error) {
-    opsPaymentHistoryByInquiry = {
-      ...opsPaymentHistoryByInquiry,
-      [inquiryId]: { status: "error", events: current?.events || [], message: error.message || "PAYMENT HISTORY UNAVAILABLE." },
-    };
-  }
-
-  if (!silent) replaceActiveInquiryPaymentSection(inquiryId, { includeHistory: true }) || render();
-}
-
-async function preloadOpsPaymentHistories(items) {
-  if (!isAdminPayAtShopUiEnabled() || !adminAuthSession?.access_token) return;
-  const inquiryIds = (items || [])
-    .filter((item) => isOpsShopPaymentPending(item) || isOpsShopPaymentConfirmed(item))
-    .map((item) => item.id)
-    .filter((id) => id && !["loading", "success"].includes(opsPaymentHistoryByInquiry[id]?.status));
-  if (!inquiryIds.length) return;
-
-  opsPaymentHistoryByInquiry = inquiryIds.reduce(
-    (history, id) => ({ ...history, [id]: { status: "loading", events: [] } }),
-    opsPaymentHistoryByInquiry
-  );
-  render();
-
-  await Promise.all(inquiryIds.map(async (inquiryId) => {
-    try {
-      const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions?view=payment-history`, {
-        headers: { Authorization: `Bearer ${adminAuthSession.access_token}` },
-      });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok || !payload?.ok) throw new Error(getOpsCustomerActionError(response.status, payload?.error));
-      opsPaymentHistoryByInquiry = {
-        ...opsPaymentHistoryByInquiry,
-        [inquiryId]: { status: "success", events: Array.isArray(payload.paymentEvents) ? payload.paymentEvents : [] },
-      };
-    } catch (error) {
-      opsPaymentHistoryByInquiry = {
-        ...opsPaymentHistoryByInquiry,
-        [inquiryId]: { status: "error", events: [], message: error.message || "PAYMENT HISTORY UNAVAILABLE." },
-      };
-    }
-  }));
-
-  render();
-}
-
 async function requestOpsCustomerAction(inquiryId, body) {
   const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/customer-actions`, {
     method: "PATCH",
@@ -4162,14 +4076,6 @@ async function requestOpsCustomerAction(inquiryId, body) {
 
 async function saveOpsCustomerAction(inquiryId, action, sourceElement) {
   if (!inquiryId || !action || sourceElement?.disabled) return;
-  if (!CUSTOMER_PAYMENT_WORKFLOW_ENABLED && ONLINE_PAYMENT_CUSTOMER_ACTIONS.has(action)) {
-    setOpsCustomerActionInlineMessage(sourceElement, "PAYMENT WORKFLOW IS PARKED FOR THIS RELEASE.", "error");
-    return;
-  }
-  if (!isAdminPayAtShopUiEnabled() && SHOP_PAYMENT_ACTIONS.has(action)) {
-    setOpsCustomerActionInlineMessage(sourceElement, "PAY AT SHOP CONFIRMATION IS NOT AVAILABLE.", "error");
-    return;
-  }
 
   const body = getOpsCustomerActionFormPayload(action, sourceElement);
   const validationMessage = getOpsQuoteValidationMessage(action, body);
@@ -4318,10 +4224,8 @@ async function openOpsCustomerAsset(inquiryId, asset) {
 function getOpsCustomerActionError(status, error) {
   const normalized = String(error || "").trim().toLowerCase();
   if (status === 401) return "ADMIN SESSION REQUIRED.";
-  if (status === 403) return error ? String(error).toUpperCase() : "OWNER OR ADMIN CONFIRMATION REQUIRED.";
-  if (status === 404 && normalized.includes("not available")) return String(error).toUpperCase();
+  if (status === 403) return "ADMIN WRITE ACCESS REQUIRED.";
   if (status === 404) return "INQUIRY OR FILE NOT FOUND.";
-  if (status === 409) return error ? String(error).toUpperCase() : "SHOP PAYMENT IS ALREADY CONFIRMED.";
   if (status === 503) return "CUSTOMER ACTION DATABASE FIELDS ARE NOT READY.";
   if (status === 400 && normalized === "enter a valid quoted amount") return "ENTER A VALID QUOTED AMOUNT\nEnter an amount greater than 0 before sending the quote.";
   if (status === 400 && normalized === "enter a valid amount due") return "ENTER A VALID AMOUNT DUE\nAmount due must be zero or greater.";
@@ -4335,7 +4239,7 @@ function renderOpsStaffActions(item, statusKey) {
   const actions = getOpsStatusActions(statusKey);
 
   if (actions.length === 0) {
-    const finalText = statusKey === "won" ? "Closed - TRRY order created" : "Closed - lost inquiry";
+    const finalText = statusKey === "won" ? "Closed - Odoo SO created" : "Closed - lost inquiry";
     return `<div class="ops-card-final">${finalText}</div>`;
   }
 
@@ -4351,7 +4255,7 @@ function getOpsStatusActions(statusKey) {
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
     ],
     quote: [
-      { to: "sent", label: "Quote Sent", next: "Quote sent - wait for customer approval" },
+      { to: "sent", label: "Quote Sent", next: "Quote sent - wait for confirmation or add Odoo SO when confirmed" },
       { to: "followup", label: "Follow Up", next: "Follow up before sending quote" },
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
     ],
@@ -4360,7 +4264,7 @@ function getOpsStatusActions(statusKey) {
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
     ],
     followup: [
-      { to: "won", label: "Won", next: "Customer confirmed - create TRRY order" },
+      { to: "won", label: "Won", next: "Customer confirmed - move to Odoo sales order" },
       { to: "lost", label: "Lost", next: "Pipeline closed - lost inquiry", tone: "danger" },
       { to: "new", label: "Back to New Inquiry", next: "Prepare quote after follow-up" },
     ],
@@ -4430,7 +4334,6 @@ async function moveOpsInquiry(id, targetStatus) {
       console.error("Unable to update Ops Board inquiry status.", error);
       opsLoadState = "error";
       opsLoadError = error.message;
-      opsSoSavingId = null;
       return;
     }
   }
@@ -4444,23 +4347,17 @@ async function moveOpsInquiry(id, targetStatus) {
       : item
   );
 
-  if (opsSoDraft?.id === id && targetStatus !== "sent") {
-    opsSoDraft = null;
-  }
 }
 function todayIsoDate() {
   return new Date().toISOString().slice(0, 10);
 }
-function renderOpsOrderAction(item) {
-  if (opsSoDraft?.id === item.id) {
-    const isSaving = opsSoSavingId === item.id;
-    return `<div class="ops-so-editor ops-order-confirm-card"><strong>CREATE CONFIRMED ORDER?</strong><p>This approved inquiry will be added to Orders.</p><div><button class="ops-gold-button mini" data-ops-confirm-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>${isSaving ? "CREATING..." : "CONFIRM &amp; CREATE ORDER"}</button><button class="ops-light-button mini" data-ops-cancel-so="${item.id}" type="button" ${isSaving ? "disabled" : ""}>CANCEL</button></div></div>`;
-  }
-  return `<button class="ops-add-so-button" data-ops-add-so="${item.id}" type="button">CREATE ORDER</button>`;
+function renderOpsOdooAction(item) {
+  const orderText = item.orderReference || item.orderCode || item.reference || "";
+  return `<div class="ops-so-editor ops-order-confirm-card"><strong>NATIVE ORDER REQUIRED</strong><p>${orderText ? `Linked native order: ${escapeHtml(orderText)}` : "Create native TRRY Orders from the Inquiry drawer."}</p></div>`;
 }
 
 function createConfirmedOrderReference(item) {
-  return String(item.orderCode || item.orderReference || item.reference || item.id || item.odooSO || "").trim();
+  return String(item.odooSO || item.orderCode || item.orderReference || item.reference || item.id || "").trim();
 }
 
 function renderOpsProductionCard(item) {
@@ -4483,7 +4380,7 @@ function formatOpsValue(value) {
   if (value === null || value === undefined || value === "") return "-";
   const numberValue = Number(value);
   if (Number.isFinite(numberValue)) {
-    return `${String.fromCharCode(8369)}${numberValue.toLocaleString("en-US")}`;
+    return `PHP ${numberValue.toLocaleString("en-US")}`;
   }
   return escapeHtml(value);
 }
@@ -4528,7 +4425,6 @@ async function saveOpsInquiry() {
       console.error("Unable to save Ops Board inquiry.", error);
       opsLoadState = "error";
       opsLoadError = error.message;
-      opsSoSavingId = null;
       return;
     }
   } else {
@@ -4578,36 +4474,6 @@ function normalizeOpsDate(value) {
   return Number.isNaN(parsed) ? null : new Date(parsed).toISOString().slice(0, 10);
 }
 
-async function confirmOpsSO(id) {
-  if (opsSoSavingId) return;
-  const current = opsInquiries.find((item) => item.id === id);
-  if (!current || String(current.quoteStatus || "").toLowerCase() !== "approved" || !(Number(current.quotedAmount) > 0)) return;
-  opsSoSavingId = id;
-
-  if (shouldLoadSupabaseOps) {
-    try {
-      const payload = await requestOpsWorkflowAction(id, { action: "confirm_order" });
-      const savedInquiry = payload.inquiry;
-      if (!savedInquiry) throw new Error("Order conversion returned no saved inquiry.");
-      opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...savedInquiry } : item);
-      opsLoadState = opsLoadState === "empty" ? "success" : opsLoadState;
-      opsLoadError = "";
-    } catch (error) {
-      console.error("Unable to create TRRY order.", error);
-      opsLoadState = "error";
-      opsLoadError = error.message;
-      opsSoSavingId = null;
-      return;
-    }
-  }
-
-  if (!shouldLoadSupabaseOps) {
-    opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, status: "won", next: "TRRY order confirmed - ready for production handoff" } : item);
-  }
-  opsSoDraft = null;
-  opsSoSavingId = null;
-  navigateTo(`/orders?order=${encodeURIComponent(id)}`);
-}
 
 async function requestOpsWorkflowAction(inquiryId, body) {
   const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/workflow`, {
@@ -4620,10 +4486,77 @@ async function requestOpsWorkflowAction(inquiryId, body) {
   });
   const payload = await response.json().catch(() => ({}));
   if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Workflow update failed.");
+  mergeNativeOrderPayload(payload.order);
   return payload;
 }
-async function requestInquiryFollowUpEvent(inquiryId, body) {
-  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/follow-ups`, {
+
+async function requestNativeOrderConversion(inquiryId) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/orders`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify({}),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok || !payload?.order) {
+    const message = payload?.error || "Native Order creation failed.";
+    const code = payload?.code ? ` (${payload.code})` : "";
+    throw new Error(`${message}${code}`);
+  }
+  return payload;
+}
+
+async function createNativeOrderFromInquiry(inquiryId) {
+  const id = String(inquiryId || "").trim();
+  if (!id || nativeOrderConversionRequests[id]?.status === "loading") return;
+  const existing = findNativeOrderRowBySourceInquiryId(id);
+  if (existing) {
+    navigateTo(`/orders?order=${encodeURIComponent(existing.order_reference || existing.orderReference || existing.id)}`);
+    render();
+    return;
+  }
+
+  nativeOrderConversionRequests = {
+    ...nativeOrderConversionRequests,
+    [id]: { status: "loading", message: "" },
+  };
+  render();
+
+  try {
+    const payload = await requestNativeOrderConversion(id);
+    const row = normalizeNativeOrderResponseToRow(payload.order);
+    let optimisticNativeRows = nativeOrderRows;
+    if (row) {
+      optimisticNativeRows = [
+        row,
+        ...nativeOrderRows.filter((item) => String(item?.source_inquiry_id || item?.sourceInquiryId || "").trim().toLowerCase() !== id.toLowerCase()),
+      ];
+      nativeOrderRows = optimisticNativeRows;
+    }
+    const refresh = await loadNativeOrderRows().catch(() => null);
+    if (!refresh || ["error", "missing-table"].includes(refresh.status)) nativeOrderRows = optimisticNativeRows;
+    nativeOrderConversionRequests = {
+      ...nativeOrderConversionRequests,
+      [id]: { status: "success", message: payload.created ? "Native Order created." : "Native Order already exists." },
+    };
+    const order = payload.order;
+    const routeIdentity = order.orderReference || order.id || id;
+    navigateTo(`/orders?order=${encodeURIComponent(routeIdentity)}`);
+  } catch (error) {
+    console.error("Unable to create native TRRY Order.", error);
+    nativeOrderConversionRequests = {
+      ...nativeOrderConversionRequests,
+      [id]: { status: "error", message: error.message || "Native Order creation failed." },
+    };
+  } finally {
+    render();
+  }
+}
+
+async function requestMvpPaymentConfirmation(inquiryId, body) {
+  const response = await fetch(`/api/inquiries/${encodeURIComponent(inquiryId)}/payment-confirmations`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -4632,9 +4565,52 @@ async function requestInquiryFollowUpEvent(inquiryId, body) {
     body: JSON.stringify(body),
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Follow-up update failed.");
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Payment confirmation failed.");
+  mergeNativeOrderPayload(payload.order);
   return payload;
-}function getAssignmentUserById(userId) {
+}
+
+function mergeNativeOrderPayload(order) {
+  const row = normalizeNativeOrderResponseToRow(order);
+  if (!row) return;
+  const sourceId = String(row.source_inquiry_id || row.sourceInquiryId || "").trim().toLowerCase();
+  const orderId = String(row.id || "").trim().toLowerCase();
+  nativeOrderRows = [
+    row,
+    ...nativeOrderRows.filter((item) => {
+      const itemSourceId = String(item?.source_inquiry_id || item?.sourceInquiryId || "").trim().toLowerCase();
+      const itemOrderId = String(item?.id || "").trim().toLowerCase();
+      return itemSourceId !== sourceId && itemOrderId !== orderId;
+    }),
+  ];
+}
+
+async function confirmMvpOrderPayment(inquiryId, form) {
+  if (!inquiryId || mvpPaymentConfirmationRequests[inquiryId]?.status === "loading") return;
+  const amountReceived = Number(String(form.amountReceived || "").replace(/,/g, ""));
+  if (!Number.isFinite(amountReceived) || amountReceived <= 0) {
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "error", message: "Enter a positive amount received." } };
+    return;
+  }
+
+  mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "loading", message: "Saving payment confirmation..." } };
+  render();
+
+  try {
+    const payload = await requestMvpPaymentConfirmation(inquiryId, {
+      ...form,
+      amountReceived,
+      idempotencyKey: `admin-payment-${inquiryId}-${amountReceived}-${Date.now()}`,
+    });
+    if (!payload?.inquiry) throw new Error("Payment confirmation returned no saved order.");
+    opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...payload.inquiry } : item);
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "success", message: "Payment confirmation saved." } };
+  } catch (error) {
+    mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "error", message: error.message || "Payment confirmation failed." } };
+  }
+}
+
+function getAssignmentUserById(userId) {
   return assignmentUsers.find((user) => user.userId === userId) || null;
 }
 
@@ -4787,11 +4763,11 @@ function renderOrderDashboardPage() {
           <div>
             <p class="ops-date-line">ORDER DASHBOARD</p>
             <h1>Confirmed Orders</h1>
-            <p class="subtitle">Internal production view for confirmed TRRY orders.</p>
+            <p class="subtitle">Internal production view for Won inquiries and Odoo sales orders only.</p>
           </div>
           <div class="ops-rule-card">
-            <strong>TRRY order workflow</strong>
-            <span>Production handoff is managed here while accounting and invoicing remain outside this dashboard.</span>
+            <strong>Odoo stays source of truth</strong>
+            <span>Accounting, payment, inventory, costing, and invoicing remain outside this dashboard.</span>
           </div>
         </header>
         ${renderOpsPersistenceNotice()}
@@ -4852,7 +4828,7 @@ function renderOrderDashboardFilters() {
   ];
 
   return `<section class="order-dashboard-filters" aria-label="Order dashboard filters">
-    <label class="order-dashboard-search">${renderIcon("search", "search-icon")}<input id="order-dashboard-search" value="${escapeHtml(orderDashboardFilters.search)}" placeholder="Search order or customer..." type="search" /></label>
+    <label class="order-dashboard-search">${renderIcon("search", "search-icon")}<input id="order-dashboard-search" value="${escapeHtml(orderDashboardFilters.search)}" placeholder="Search order, customer, Odoo SO..." type="search" /></label>
     <select data-order-dashboard-filter="stage">${stageOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.stage === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
     <select data-order-dashboard-filter="staff"><option value="all">All Staff</option>${staffOptions.map((staff) => `<option value="${escapeHtml(staff.value)}" ${orderDashboardFilters.staff === staff.value ? "selected" : ""}>${escapeHtml(staff.label)}</option>`).join("")}</select>
     <select data-order-dashboard-filter="fulfillment">${fulfillmentOptions.map((option) => `<option value="${option.value}" ${orderDashboardFilters.fulfillment === option.value ? "selected" : ""}>${option.label}</option>`).join("")}</select>
@@ -4954,7 +4930,7 @@ function renderOrderDashboardCard(item) {
     <strong>${escapeHtml(item.customer || "Unnamed customer")}</strong>
     <small>${escapeHtml(item.service || "-")} / ${escapeHtml(item.qty || "-")}</small>
     <div class="order-dashboard-meta"><span>${escapeHtml(getOrderProductionStageLabel(stage))}</span><span>${escapeHtml(getOpsFulfillmentLabel(item))}</span><span>${escapeHtml(getOrderDueLabel(item))}</span></div>
-    <div class="order-dashboard-meta"><span>Staff: ${escapeHtml(getOrderAssignedStaff(item))}</span><span>Order: ${escapeHtml(createConfirmedOrderReference(item) || "-")}</span></div>
+    <div class="order-dashboard-meta"><span>Staff: ${escapeHtml(getOrderAssignedStaff(item))}</span><span>Odoo: ${escapeHtml(item.odooSO || "-")}</span></div>
   </button>`;
 }
 
@@ -4973,7 +4949,7 @@ function renderOrderDashboardDrawer(item) {
     <header><div><span>${escapeHtml(item.id)}</span><h2>${escapeHtml(item.customer || "Order")}</h2></div><button class="ops-drawer-close" data-order-dashboard-close type="button" aria-label="Close order details">X</button></header>
     <div class="ops-ticket-details">
       <div><span>Status</span><strong>${escapeHtml(opsStatus[item.status]?.label || item.status || "Won")}</strong></div>
-      <div><span>Historical SO</span><strong>${escapeHtml(item.odooSO || "-")}</strong></div>
+      <div><span>Odoo SO</span><strong>${escapeHtml(item.odooSO || "-")}</strong></div>
       <div><span>Product</span><strong>${escapeHtml(item.service || "-")}</strong></div>
       <div><span>Quantity</span><strong>${escapeHtml(item.qty || "-")}</strong></div>
       <div><span>Needed Date</span><strong>${escapeHtml(getOrderDueLabel(item))}</strong></div>
@@ -4982,7 +4958,6 @@ function renderOrderDashboardDrawer(item) {
       <div><span>Production</span><strong>${escapeHtml(getOrderProductionStageLabel(stage))}</strong></div>
       <div class="wide"><span>Customer Message</span><p>${escapeHtml(item.message || "No message saved.")}</p></div>
     </div>
-    <div class="order-dashboard-chat-action"><button class="ops-light-button mini" data-work-chat-open-order-thread="${escapeHtml(item.id)}" type="button">Open Order Thread</button></div>
     ${renderOrderProductionEditor(item)}
     ${renderOpsCustomerTracking(item)}
   </aside>`;
@@ -5258,46 +5233,71 @@ function renderProductsPage(selectedProduct) {
 }
 
 function renderCatalogPage() {
+  const editorRoute = getCatalogProductEditorRoute();
+  if (editorRoute) {
+    return renderCatalogProductEditorPage(editorRoute);
+  }
+  if (getRoutePath() === "/catalog/brands") {
+    return renderCatalogBrandsPage();
+  }
+  if (getRoutePath() === "/catalog/categories") {
+    return renderCatalogCategoriesPage();
+  }
+  if (getRoutePath() === "/catalog/suppliers") {
+    return renderSuppliersPage();
+  }
+  if (getRoutePath() === "/catalog/purchasing") {
+    return renderPurchasingPage();
+  }
+  if (getRoutePath() === "/catalog/inventory") {
+    return renderInventoryPage();
+  }
+
   const visibleProducts = getVisibleCatalogProducts();
-  const selectedProduct = catalogProducts.find((item) => item.id === selectedCatalogProductId);
-  const canWrite = canWriteCatalogProducts();
-  const destinationCounts = getCatalogDestinationCounts();
+  const canWriteCatalog = canWriteCatalogProducts();
+  const brandOptions = getCatalogBrandOptions();
   const categoryOptions = getCatalogCategoryOptions();
+  const summaryCards = getCatalogProductSummaryCards(visibleProducts);
 
   return `
     <main class="orders-page catalog-page admin-saas-page">
       <div class="page-heading catalog-heading">
         <div>
-          <h1>Catalog</h1>
-          <p class="subtitle">Manage how approved products appear across customer-facing catalogs.</p>
+          <h1>Master Catalog</h1>
+          <p class="subtitle">Manage products, variants, cost, and selling price from one source of truth.</p>
         </div>
-        ${canWrite ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ Add Catalog Item</button>` : ""}
+        ${canWriteCatalog ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ New Product</button>` : ""}
       </div>
 
+      <section class="catalog-summary-grid" aria-label="Product catalog summary">
+        ${summaryCards.map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
       <section class="catalog-controls" aria-label="Catalog controls">
-        <div class="catalog-tabs" role="tablist" aria-label="Catalog destinations">
-          ${catalogOptions.map((catalog) => `
-            <button class="${catalog.key === activeCatalogKey ? "active" : ""}" data-catalog-tab="${catalog.key}" type="button" role="tab" aria-selected="${catalog.key === activeCatalogKey ? "true" : "false"}">
-              <span>${catalog.label}</span>
-              <strong>${destinationCounts[catalog.key] ?? 0}</strong>
-            </button>`).join("")}
-        </div>
         <div class="catalog-filter-row">
           <label class="search-field catalog-search">
             ${renderIcon("search", "search-icon")}
             <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search catalog" type="search" />
           </label>
-          <select class="catalog-status-filter" id="catalog-status-filter" aria-label="Publish status filter">
-            ${getCatalogFilterOptions().map((option) => `<option value="${option.value}" ${option.value === catalogStatusFilter ? "selected" : ""}>${option.label}</option>`).join("")}
+          <select class="catalog-status-filter" id="catalog-brand-filter" aria-label="Brand filter">
+            ${brandOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogBrandFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
           </select>
           <select class="catalog-status-filter" id="catalog-category-filter" aria-label="Category filter">
             ${categoryOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogCategoryFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
           </select>
+          <select class="catalog-status-filter" id="catalog-product-type-filter" aria-label="Product type filter">
+            <option value="all" ${catalogProductTypeFilter === "all" ? "selected" : ""}>All Types</option>
+            ${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === catalogProductTypeFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+          </select>
+          <select class="catalog-status-filter" id="catalog-status-filter" aria-label="Publish status filter">
+            ${getCatalogFilterOptions().map((option) => `<option value="${option.value}" ${option.value === catalogStatusFilter ? "selected" : ""}>${option.label}</option>`).join("")}
+          </select>
           <select class="catalog-status-filter" id="catalog-featured-filter" aria-label="Featured filter">
-            <option value="all" ${catalogFeaturedFilter === "all" ? "selected" : ""}>All featured states</option>
+            <option value="all" ${catalogFeaturedFilter === "all" ? "selected" : ""}>All featured</option>
             <option value="featured" ${catalogFeaturedFilter === "featured" ? "selected" : ""}>Featured only</option>
             <option value="standard" ${catalogFeaturedFilter === "standard" ? "selected" : ""}>Not featured</option>
           </select>
+          <button class="note-button catalog-reset-button" data-catalog-reset-filters type="button">Reset Filters</button>
         </div>
       </section>
 
@@ -5305,17 +5305,27 @@ function renderCatalogPage() {
 
       <article class="content-card table-card catalog-table-card">
         <p class="table-helper-text catalog-count-label">${visibleProducts.length} ${visibleProducts.length === 1 ? "CATALOG ITEM" : "CATALOG ITEMS"}</p>
-        <table class="products-table catalog-table">
+        <table class="products-table catalog-table catalog-products-table">
+          <colgroup>
+            <col class="catalog-product-col">
+            <col class="catalog-brand-col">
+            <col class="catalog-category-col">
+            <col class="catalog-sku-col">
+            <col class="catalog-selling-price-col">
+            <col class="catalog-margin-col">
+            <col class="catalog-status-col">
+            <col class="catalog-expand-col">
+          </colgroup>
           <thead>
             <tr>
               <th>Product</th>
-              <th>Destination</th>
+              <th>Brand</th>
               <th>Category</th>
-              <th>Price Display</th>
-              <th>Min Qty</th>
-              <th>Featured</th>
-              <th>Publish Status</th>
-              <th>Updated</th>
+              <th>SKU</th>
+              <th>Selling Price</th>
+              <th>Margin</th>
+              <th>Status</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -5324,23 +5334,1646 @@ function renderCatalogPage() {
         </table>
         ${renderCatalogEmptyState(visibleProducts)}
       </article>
-      ${catalogDrawerMode ? renderCatalogDrawer(selectedProduct) : ""}
     </main>
   `;
+}
+
+function renderPurchasingPage() {
+  if (selectedPurchaseOrderId) {
+    return renderPurchaseOrderDetailPage();
+  }
+  return renderPurchaseOrderListPage();
+}
+
+function renderPurchaseOrderListPage() {
+  const visibleOrders = getVisiblePurchaseOrders();
+  const canWrite = canWritePurchaseOrdersForRole(adminUser?.role);
+  const supplierOptions = getPurchasingSupplierOptions();
+
+  return `
+    <main class="orders-page catalog-page purchasing-page admin-saas-page">
+      <div class="page-heading catalog-heading purchasing-heading">
+        <div>
+          <span class="breadcrumb">Home  &rsaquo;  Purchasing  &rsaquo;  Purchase Orders</span>
+          <h1>Purchasing</h1>
+          <p class="subtitle">Create supplier purchase orders from catalog product variants. Receiving remains parked for M2.</p>
+        </div>
+        ${canWrite ? `<button class="catalog-add-button" data-purchase-order-create type="button">+ Create PO</button>` : ""}
+      </div>
+
+      <section class="catalog-summary-grid purchasing-summary-grid" aria-label="Purchase order summary">
+        ${getPurchaseOrderSummaryCards().map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="supplier-tabs purchasing-tabs" aria-label="Purchasing tabs">
+        <button class="active" type="button">Purchase Orders</button>
+        <button type="button" data-route-target="/catalog/suppliers">Suppliers</button>
+        <button type="button" data-receiving-history-parked disabled>Receiving History</button>
+      </section>
+
+      <section class="catalog-controls purchasing-controls" aria-label="Purchase order controls">
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="purchase-order-search" value="${escapeHtml(purchasingQuery)}" placeholder="Search PO, supplier, SKU..." type="search" />
+          </label>
+          <select id="purchase-order-status-filter" aria-label="PO status filter">
+            <option value="all" ${purchasingStatusFilter === "all" ? "selected" : ""}>All Statuses</option>
+            <option value="DRAFT" ${purchasingStatusFilter === "DRAFT" ? "selected" : ""}>Draft</option>
+            <option value="ORDERED" ${purchasingStatusFilter === "ORDERED" ? "selected" : ""}>Ordered</option>
+          </select>
+          <select id="purchase-order-supplier-filter" aria-label="PO supplier filter">
+            <option value="all" ${purchasingSupplierFilter === "all" ? "selected" : ""}>All Suppliers</option>
+            ${supplierOptions.map((supplier) => `<option value="${escapeHtml(supplier.id)}" ${purchasingSupplierFilter === supplier.id ? "selected" : ""}>${escapeHtml(supplier.name)}</option>`).join("")}
+          </select>
+          <select id="purchase-order-expected-filter" aria-label="Expected date filter">
+            <option value="all" ${purchasingExpectedFilter === "all" ? "selected" : ""}>All Expected Dates</option>
+            <option value="with-date" ${purchasingExpectedFilter === "with-date" ? "selected" : ""}>With Expected Date</option>
+            <option value="missing" ${purchasingExpectedFilter === "missing" ? "selected" : ""}>Missing Expected Date</option>
+            <option value="overdue" ${purchasingExpectedFilter === "overdue" ? "selected" : ""}>Overdue</option>
+          </select>
+          <button class="note-button catalog-reset-button" data-purchase-order-reset-filters type="button">Reset</button>
+        </div>
+      </section>
+
+      ${renderPurchaseOrderNotice(canWrite)}
+
+      <article class="content-card table-card catalog-table-card purchasing-table-card">
+        <p class="table-helper-text catalog-count-label">${visibleOrders.length} ${visibleOrders.length === 1 ? "PURCHASE ORDER" : "PURCHASE ORDERS"}</p>
+        <table class="products-table catalog-table purchase-order-table">
+          <thead>
+            <tr>
+              <th>PO Number</th>
+              <th>Supplier</th>
+              <th>Ordered</th>
+              <th>Expected</th>
+              <th>Items</th>
+              <th>Total Cost</th>
+              <th>Receiving</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>${visibleOrders.map(renderPurchaseOrderRow).join("")}</tbody>
+        </table>
+        ${renderPurchaseOrderEmptyState(visibleOrders)}
+      </article>
+      <div class="supplier-rule-note purchasing-boundary-note"><strong>BOUNDARY</strong><span>PO does not change On Hand. Inventory increases only when an authorized user confirms Receive Stock.</span></div>
+      ${purchasingDrawerOpen ? renderPurchaseOrderDrawer(canWrite) : ""}
+    </main>
+  `;
+}
+
+function renderPurchaseOrderRow(order) {
+  const lineCount = Number(order.lineCount || 0);
+  const orderedUnits = Number(order.orderedUnits || 0);
+  return `
+    <tr data-purchase-order-row="${escapeHtml(order.id)}" tabindex="0">
+      <td data-mobile-label="PO Number"><span class="mono-value">${escapeHtml(order.poNumber || "-")}</span></td>
+      <td data-mobile-label="Supplier"><div class="catalog-name-stack"><strong>${escapeHtml(order.supplierName || "-")}</strong><span>${escapeHtml(order.supplierReference || "-")}</span></div></td>
+      <td data-mobile-label="Ordered">${escapeHtml(formatPurchaseDate(order.orderedAt || order.orderDate))}</td>
+      <td data-mobile-label="Expected">${escapeHtml(formatPurchaseDate(order.expectedDate))}</td>
+      <td data-mobile-label="Items">${escapeHtml(`${lineCount} ${lineCount === 1 ? "SKU" : "SKUs"}`)}</td>
+      <td data-mobile-label="Total Cost">${formatPurchaseMoney(order.totalCost)}</td>
+      <td data-mobile-label="Receiving">${order.status === "ORDERED" ? `0 / ${escapeHtml(String(orderedUnits))} pcs` : "—"}</td>
+      <td data-mobile-label="Status">${renderPurchaseOrderStatusPill(order.status)}</td>
+      <td data-mobile-label="Action"><button class="note-button compact-action" data-purchase-order-view="${escapeHtml(order.id)}" type="button">View</button></td>
+    </tr>
+  `;
+}
+
+function renderPurchaseOrderDetailPage() {
+  const order = purchaseOrders.find((item) => item.id === selectedPurchaseOrderId);
+  if (!order) {
+    selectedPurchaseOrderId = null;
+    return renderPurchaseOrderListPage();
+  }
+  const canMarkOrdered = canWritePurchaseOrdersForRole(adminUser?.role) && order.status === "DRAFT";
+
+  return `
+    <main class="orders-page catalog-page purchasing-page po-detail-page admin-saas-page">
+      <div class="page-heading catalog-heading purchasing-heading">
+        <div>
+          <span class="breadcrumb">Home  &rsaquo;  Purchasing  &rsaquo;  ${escapeHtml(order.poNumber || "Purchase Order")}</span>
+          <h1>Purchase Order</h1>
+          <p class="subtitle">${escapeHtml(order.poNumber || "-")} · ${escapeHtml(order.supplierName || "-")}</p>
+        </div>
+        <div class="purchasing-heading-actions">
+          <button class="note-button" data-purchase-order-back type="button">Back to POs</button>
+          ${canMarkOrdered ? `<button class="primary-button catalog-save-button" data-purchase-order-mark-ordered="${escapeHtml(order.id)}" type="button">MARK ORDERED</button>` : ""}
+          <button class="primary-button catalog-save-button" data-receive-stock-parked type="button" disabled>Receive Stock</button>
+        </div>
+      </div>
+
+      <section class="catalog-summary-grid purchasing-summary-grid" aria-label="Purchase order detail summary">
+        ${[
+          { label: "Status", value: formatPurchaseStatus(order.status), helper: "M2 order lifecycle" },
+          { label: "Ordered", value: formatPurchaseDate(order.orderedAt || order.orderDate), helper: "No stock movement" },
+          { label: "Expected", value: formatPurchaseDate(order.expectedDate), helper: "Supplier delivery target" },
+          { label: "PO Total", value: formatPurchaseMoney(order.totalCost), helper: "Items plus freight" },
+        ].map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="supplier-tabs purchasing-tabs" aria-label="Purchase order detail tabs">
+        <button class="${purchaseOrderDetailTab === "items" ? "active" : ""}" data-po-detail-tab="items" type="button">Order Items</button>
+        <button data-receiving-history-parked disabled type="button">Receiving History</button>
+        <button class="${purchaseOrderDetailTab === "supplier" ? "active" : ""}" data-po-detail-tab="supplier" type="button">Supplier</button>
+      </section>
+
+      ${purchaseOrderDetailTab === "supplier" ? renderPurchaseOrderSupplierPanel(order) : renderPurchaseOrderLineTable(order)}
+      <div class="supplier-rule-note purchasing-boundary-note"><strong>BOUNDARY</strong><span>PO does not change On Hand. Inventory increases only when an authorized user confirms Receive Stock.</span></div>
+    </main>
+  `;
+}
+
+function renderPurchaseOrderLineTable(order) {
+  return `
+    <article class="content-card table-card catalog-table-card purchasing-table-card">
+      <table class="products-table catalog-table po-detail-table">
+        <thead>
+          <tr>
+            <th>Product / SKU</th>
+            <th>Ordered</th>
+            <th>Received</th>
+            <th>Remaining</th>
+            <th>Unit Cost</th>
+            <th>Line Total</th>
+            <th>Last Receipt</th>
+            <th>Status</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${order.lines.map((line) => `
+            <tr>
+              <td data-mobile-label="Product / SKU"><div class="catalog-name-stack"><strong>${escapeHtml(line.productName || "-")}</strong><span>${escapeHtml([line.sku, line.variantLabel].filter(Boolean).join(" · ") || "-")}</span></div></td>
+              <td data-mobile-label="Ordered">${escapeHtml(String(line.orderedQuantity))}</td>
+              <td data-mobile-label="Received">0</td>
+              <td data-mobile-label="Remaining">${escapeHtml(String(line.remainingQuantity))}</td>
+              <td data-mobile-label="Unit Cost">${formatPurchaseMoney(line.unitCost)}</td>
+              <td data-mobile-label="Line Total">${formatPurchaseMoney(line.lineTotal)}</td>
+              <td data-mobile-label="Last Receipt">—</td>
+              <td data-mobile-label="Status">${renderPurchaseLineStatusPill(line.status)}</td>
+              <td data-mobile-label="Action"><button class="note-button compact-action" data-receive-stock-parked type="button" disabled>Receive</button></td>
+            </tr>
+          `).join("")}
+        </tbody>
+      </table>
+    </article>
+  `;
+}
+
+function renderPurchaseOrderSupplierPanel(order) {
+  const supplier = suppliers.find((item) => item.id === order.supplierId);
+  return `
+    <article class="content-card supplier-po-panel">
+      <header><h2>${escapeHtml(order.supplierName || "Supplier")}</h2><button class="note-button" data-purchase-order-supplier="${escapeHtml(order.supplierId)}" type="button">Open Supplier</button></header>
+      <div class="supplier-field-row three">
+        ${renderSupplierReadonlyFact("Supplier Ref", order.supplierReference)}
+        ${renderSupplierReadonlyFact("Currency", supplier?.currency || "PHP")}
+        ${renderSupplierReadonlyFact("Lead Time", supplier?.leadTimeDays ? `${supplier.leadTimeDays} days` : "")}
+      </div>
+      ${renderSupplierReadonlyFact("Supplier PO Ref", order.supplierReferenceNote)}
+      ${renderSupplierReadonlyFact("Internal Note", order.internalNote)}
+    </article>
+  `;
+}
+
+function renderPurchaseOrderDrawer(canWrite) {
+  const draft = purchasingDraft ?? createEmptyPurchaseOrderDraft();
+  const totals = getPurchaseOrderTotals(getPurchaseOrderDraftWithLineSnapshot(draft));
+  const disabled = purchasingSaveState === "saving" || !canWrite;
+  const supplierOptions = suppliers.filter((supplier) => supplier.active !== false && !supplier.archivedAt);
+  const variantOptions = getPurchaseVariantOptions();
+
+  return `
+    <div class="catalog-drawer-backdrop" data-purchase-order-close></div>
+    <aside class="catalog-drawer purchase-order-drawer" aria-label="Create purchase order drawer">
+      <header>
+        <div>
+          <span class="info-chip">PURCHASING · PURCHASE ORDER</span>
+          <h2>Create PO</h2>
+          <p>Supplier to catalog variant ordering, with receiving parked for the next milestone.</p>
+        </div>
+        <button class="catalog-drawer-close" data-purchase-order-close type="button" aria-label="Close purchase order drawer">X</button>
+      </header>
+      <form class="catalog-form purchase-order-form" id="purchase-order-form">
+        ${purchasingSaveError ? `<p class="catalog-form-error">${escapeHtml(purchasingSaveError)}</p>` : ""}
+        <section class="catalog-drawer-section">
+          <h3>Supplier</h3>
+          <label class="catalog-field"><span>Supplier</span><select data-po-field="supplierId" ${disabled ? "disabled" : ""} required><option value="">Choose active supplier</option>${supplierOptions.map((supplier) => `<option value="${escapeHtml(supplier.id)}" ${draft.supplierId === supplier.id ? "selected" : ""}>${escapeHtml(supplier.name)}</option>`).join("")}</select></label>
+          <div class="supplier-field-row">
+            <label class="catalog-field"><span>Expected Date</span><input data-po-field="expectedDate" value="${escapeHtml(draft.expectedDate)}" type="date" ${disabled ? "disabled" : ""}></label>
+            <label class="catalog-field"><span>PO Number</span><input class="locked-field" value="${escapeHtml(PO_NUMBER_PREVIEW)}" readonly></label>
+          </div>
+          <label class="catalog-field"><span>Supplier Ref</span><input data-po-field="supplierReference" value="${escapeHtml(draft.supplierReference)}" placeholder="Supplier quote or invoice ref" ${disabled ? "disabled" : ""}></label>
+        </section>
+        <section class="catalog-drawer-section po-lines-section">
+          <div class="section-heading-row"><h3>Order Items</h3><button class="note-button" data-po-add-line type="button" ${disabled ? "disabled" : ""}>+ Add Line</button></div>
+          ${draft.lines.map((line, index) => renderPurchaseOrderLineEditor(line, index, variantOptions, disabled)).join("")}
+        </section>
+        <section class="catalog-drawer-section">
+          <h3>Cost Summary</h3>
+          <div class="po-cost-summary">
+            <div><span>Items Subtotal</span><strong data-po-items-subtotal>${formatPurchaseMoney(totals.itemsSubtotal)}</strong></div>
+            <label class="catalog-field"><span>Shipping / Freight</span><input data-po-field="freightCost" value="${escapeHtml(draft.freightCost)}" min="0" step="0.01" type="number" ${disabled ? "disabled" : ""}></label>
+            <div><span>PO Total</span><strong data-po-total>${formatPurchaseMoney(totals.totalCost)}</strong></div>
+          </div>
+          <label class="catalog-field"><span>Internal Note</span><textarea data-po-field="internalNote" rows="3" placeholder="Optional buying notes" ${disabled ? "disabled" : ""}>${escapeHtml(draft.internalNote)}</textarea></label>
+        </section>
+        <div class="supplier-rule-note drawer po-rule-note"><strong>PO RULE</strong><span>Saving Draft creates no Inventory movement. Sending the PO also creates no On Hand quantity.</span></div>
+        <footer class="catalog-drawer-footer">
+          <span>${canWrite ? "Save as Draft or mark Ordered. Receive Stock remains disabled in M2." : "Purchase Order writes are restricted to Owner and Admin roles."}</span>
+          <div>
+            <button class="note-button" data-purchase-order-close type="button" ${purchasingSaveState === "saving" ? "disabled" : ""}>Cancel</button>
+            <button class="note-button catalog-save-button" data-po-save-status="DRAFT" type="button" ${disabled ? "disabled" : ""}>${purchasingSaveState === "saving" ? "Saving..." : "Save Draft"}</button>
+            <button class="primary-button catalog-save-button" data-po-save-status="ORDERED" type="button" ${disabled ? "disabled" : ""}>Create & Mark Ordered</button>
+          </div>
+        </footer>
+      </form>
+    </aside>
+  `;
+}
+
+function renderPurchaseOrderLineEditor(line, index, variantOptions, disabled) {
+  const selected = variantOptions.find((option) => option.variantId === line.variantId);
+  const lineTotal = Number(line.orderedQuantity || 0) * Number(line.unitCost || 0);
+  const active = purchaseOrderPickerState.activeIndex === index;
+  const query = purchaseOrderPickerState.queries[index] ?? "";
+  const results = active ? getPurchaseVariantSearchResults(query, variantOptions) : [];
+  const listboxId = `po-variant-results-${index}`;
+
+  return `
+    <article class="po-line-card" data-po-line-card="${index}">
+      <div class="po-line-grid">
+        <div class="catalog-field po-variant-picker" data-po-variant-picker="${index}">
+          <span>Product / Variant</span>
+          <div class="po-selected-variant" data-po-selected-variant="${index}">
+            ${renderPurchaseSelectedVariant(line, selected)}
+          </div>
+          <input data-po-line-search="${index}" role="combobox" aria-expanded="${active ? "true" : "false"}" aria-controls="${listboxId}" aria-autocomplete="list" value="${escapeHtml(query)}" placeholder="Search product, SKU, color, size..." ${disabled ? "disabled" : ""}>
+          <div class="po-variant-results ${active ? "open" : ""}" id="${listboxId}" role="listbox" data-po-variant-results="${index}">
+            ${active ? renderPurchaseVariantSearchResults(results, index, purchaseOrderPickerState.highlighted[index] ?? 0) : ""}
+          </div>
+        </div>
+        <label class="catalog-field"><span>SKU</span><input class="locked-field" data-po-line-sku="${index}" value="${escapeHtml(line.sku || selected?.sku || "")}" readonly></label>
+        <label class="catalog-field"><span>Qty</span><input data-po-line-field="orderedQuantity" data-po-line-index="${index}" value="${escapeHtml(line.orderedQuantity)}" min="1" step="1" type="number" ${disabled ? "disabled" : ""}></label>
+        <label class="catalog-field"><span>Unit Cost</span><input data-po-line-field="unitCost" data-po-line-index="${index}" value="${escapeHtml(line.unitCost)}" min="0" step="0.01" type="number" ${disabled ? "disabled" : ""}></label>
+        <div class="po-line-total"><span>Line Total</span><strong data-po-line-total="${index}">${formatPurchaseMoney(lineTotal)}</strong></div>
+        <button class="note-button compact-action" data-po-remove-line="${index}" type="button" ${disabled || purchasingDraft?.lines?.length <= 1 ? "disabled" : ""}>Remove</button>
+      </div>
+    </article>
+  `;
+}
+
+function renderPurchaseSelectedVariant(line, selected) {
+  const productName = line.productName || selected?.productName || "";
+  const variantLabel = line.variantLabel || selected?.variantLabel || "";
+  const sku = line.sku || selected?.sku || "";
+  if (!productName && !sku) return `<span class="po-selected-empty">No product selected</span>`;
+  return `<strong>${escapeHtml(productName || "Selected product")}</strong><span>${escapeHtml([variantLabel, sku].filter(Boolean).join(" · "))}</span><button class="note-button compact-action" data-po-change-variant type="button">Change</button>`;
+}
+
+function renderPurchaseVariantSearchResults(results, index, highlightedIndex = 0) {
+  if (!results.length) return `<div class="po-variant-empty" role="option" aria-disabled="true">No matching product / variant</div>`;
+  return results.map((option, resultIndex) => `
+    <button class="${resultIndex === highlightedIndex ? "active" : ""}" type="button" role="option" aria-selected="${resultIndex === highlightedIndex ? "true" : "false"}" data-po-select-variant="${escapeHtml(option.variantId)}" data-po-select-index="${index}">
+      <strong>${escapeHtml(option.productName)}</strong>
+      <span>${escapeHtml([option.variantLabel, option.sku].filter(Boolean).join(" · "))}</span>
+    </button>
+  `).join("");
+}
+
+function renderPurchaseOrderNotice(canWrite) {
+  if (purchasingLoadState === "loading") return `<div class="catalog-notice">Loading purchase orders...</div>`;
+  if (purchasingLoadState === "error") return `<div class="catalog-notice error">Unable to load purchase orders. ${escapeHtml(purchasingLoadError || "Check Supabase access and purchase order RLS policies.")}</div>`;
+  if (purchasingSaveState === "success") return `<div class="catalog-notice success">Purchase order saved. Receiving stayed parked.</div>`;
+  if (!canWrite) return `<div class="catalog-notice">Purchase Order writes are restricted to Owner and Admin roles. Current role is read-only.</div>`;
+  return "";
+}
+
+function renderPurchaseOrderEmptyState(rows) {
+  if (rows.length) return "";
+  if (purchasingLoadState === "loading") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading purchase orders...</strong><span>Checking supplier PO records.</span></div>`;
+  if (purchasingLoadState === "error") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Purchase orders unavailable</strong><span>${escapeHtml(purchasingLoadError || "PO data could not be loaded.")}</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No purchase orders found</strong><span>Create a supplier PO or adjust the current filters.</span></div>`;
+}
+
+function renderCatalogCategoriesPage() {
+  const visibleCategories = getVisibleProductCategories();
+  const selectedCategory = productCategories.find((item) => item.id === selectedCategoryId);
+  const canWriteCategories = canManageProductCategories();
+  const summaryCards = getCategorySummaryCards();
+
+  return `
+    <main class="orders-page catalog-page catalog-categories-page admin-saas-page">
+      <div class="page-heading catalog-heading">
+        <div>
+          <h1>Categories</h1>
+          <p class="subtitle">Manage product taxonomy, hierarchy, product-type binding, assignments, and archive status.</p>
+        </div>
+        ${canWriteCategories ? `<button class="catalog-add-button" data-category-add type="button">+ New Category</button>` : ""}
+      </div>
+
+      <section class="catalog-summary-grid" aria-label="Category governance summary">
+        ${summaryCards.map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="catalog-controls category-controls" aria-label="Category controls">
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search category name or code" type="search" />
+          </label>
+          <select class="catalog-status-filter" id="category-product-type-filter" aria-label="Product type filter">
+            <option value="all" ${categoryProductTypeFilter === "all" ? "selected" : ""}>All Product Types</option>
+            ${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === categoryProductTypeFilter ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}
+          </select>
+          <select class="catalog-status-filter" id="category-hierarchy-filter" aria-label="Hierarchy filter">
+            <option value="all" ${categoryHierarchyFilter === "all" ? "selected" : ""}>All Hierarchy</option>
+            <option value="root" ${categoryHierarchyFilter === "root" ? "selected" : ""}>Root Categories</option>
+            <option value="child" ${categoryHierarchyFilter === "child" ? "selected" : ""}>Subcategories</option>
+          </select>
+          <select class="catalog-status-filter" id="category-status-filter" aria-label="Category status filter">
+            <option value="active" ${categoryStatusFilter === "active" ? "selected" : ""}>Active categories</option>
+            <option value="archived" ${categoryStatusFilter === "archived" ? "selected" : ""}>Archived categories</option>
+            <option value="all" ${categoryStatusFilter === "all" ? "selected" : ""}>All categories</option>
+          </select>
+          <button class="note-button catalog-reset-button" data-category-reset-filters type="button">Reset Filters</button>
+        </div>
+      </section>
+
+      ${renderCategoryNotice()}
+
+      <article class="content-card table-card catalog-table-card">
+        <p class="table-helper-text catalog-count-label">${visibleCategories.length} ${visibleCategories.length === 1 ? "CATEGORY" : "CATEGORIES"}</p>
+        <table class="products-table catalog-table category-table">
+          <colgroup>
+            <col class="category-main-col">
+            <col class="category-code-col">
+            <col class="category-product-type-col">
+            <col class="category-parent-col">
+            <col class="category-children-col">
+            <col class="category-products-col">
+            <col class="category-status-col">
+            <col class="category-updated-col">
+            <col class="category-action-col">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>Category</th>
+              <th>Code</th>
+              <th>Product Type</th>
+              <th>Parent</th>
+              <th>Children</th>
+              <th>Products</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visibleCategories.map(renderProductCategoryRow).join("")}
+          </tbody>
+        </table>
+        ${renderCategoryEmptyState(visibleCategories)}
+      </article>
+      ${categoryDrawerMode ? renderCategoryDrawer(selectedCategory) : ""}
+    </main>
+  `;
+}
+
+function renderCatalogBrandsPage() {
+  const visibleBrands = getVisibleBrands();
+  const selectedBrand = brands.find((item) => item.id === selectedBrandId);
+  const canWriteBrands = canManageBrands();
+  const summaryCards = getBrandSummaryCards();
+
+  return `
+    <main class="orders-page catalog-page catalog-brands-page admin-saas-page">
+      <div class="page-heading catalog-heading">
+        <div>
+          <h1>Brands</h1>
+          <p class="subtitle">Manage brand identity, ownership, storefront slug, and product assignment.</p>
+        </div>
+        ${canWriteBrands ? `<button class="catalog-add-button" data-brand-add type="button">+ New Brand</button>` : ""}
+      </div>
+
+      <section class="catalog-summary-grid" aria-label="Brand summary">
+        ${summaryCards.map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="catalog-controls brand-controls" aria-label="Brand controls">
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="product-search" value="${escapeHtml(productQuery)}" placeholder="Search brand, owner, or storefront" type="search" />
+          </label>
+          <select class="catalog-status-filter" id="brand-status-filter" aria-label="Brand status filter">
+            <option value="active" ${brandStatusFilter === "active" ? "selected" : ""}>Active brands</option>
+            <option value="archived" ${brandStatusFilter === "archived" ? "selected" : ""}>Archived brands</option>
+            <option value="all" ${brandStatusFilter === "all" ? "selected" : ""}>All brands</option>
+          </select>
+          <button class="note-button catalog-reset-button" data-brand-reset-filters type="button">Reset Filters</button>
+        </div>
+      </section>
+
+      ${renderBrandNotice()}
+
+      <article class="content-card table-card catalog-table-card">
+        <p class="table-helper-text catalog-count-label">${visibleBrands.length} ${visibleBrands.length === 1 ? "BRAND" : "BRANDS"}</p>
+        <table class="products-table catalog-table brand-table">
+          <thead>
+            <tr>
+              <th>Brand</th>
+              <th>Owner</th>
+              <th>Products</th>
+              <th>Website Slug</th>
+              <th>Status</th>
+              <th>Updated</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${visibleBrands.map(renderBrandRow).join("")}
+          </tbody>
+        </table>
+        ${renderBrandEmptyState(visibleBrands)}
+      </article>
+      ${brandDrawerMode ? renderBrandDrawer(selectedBrand) : ""}
+    </main>
+  `;
+}
+
+function getPurchaseOrderSummaryCards() {
+  const ordered = purchaseOrders.filter((order) => order.status === "ORDERED");
+  const openValue = ordered.reduce((sum, order) => sum + Number(order.totalCost || 0), 0);
+  return [
+    { label: "Open POs", value: String(ordered.length), helper: formatPurchaseMoney(openValue) },
+    { label: "Awaiting Delivery", value: String(ordered.length), helper: "Receiving parked", tone: "warning" },
+    { label: "Partially Received", value: "0", helper: "M2 disabled", tone: "info" },
+    { label: "Stock Received Value", value: "₱0", helper: "No PO receive movement", tone: "success" },
+  ];
+}
+
+function getVisiblePurchaseOrders() {
+  const normalizedQuery = purchasingQuery.trim().toLowerCase();
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return purchaseOrders.filter((order) => {
+    const matchesQuery = !normalizedQuery || [
+      order.poNumber,
+      order.supplierName,
+      order.supplierReference,
+      order.supplierReferenceNote,
+      ...(order.lines ?? []).flatMap((line) => [line.productName, line.sku, line.variantLabel]),
+    ].join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesStatus = purchasingStatusFilter === "all" || order.status === purchasingStatusFilter;
+    const matchesSupplier = purchasingSupplierFilter === "all" || order.supplierId === purchasingSupplierFilter;
+    const expectedDate = order.expectedDate ? new Date(`${order.expectedDate}T00:00:00`) : null;
+    const matchesExpected = purchasingExpectedFilter === "all"
+      || (purchasingExpectedFilter === "with-date" && Boolean(order.expectedDate))
+      || (purchasingExpectedFilter === "missing" && !order.expectedDate)
+      || (purchasingExpectedFilter === "overdue" && expectedDate && expectedDate < today && order.status === "ORDERED");
+    return matchesQuery && matchesStatus && matchesSupplier && matchesExpected;
+  });
+}
+
+function getPurchasingSupplierOptions() {
+  const supplierIds = new Set(purchaseOrders.map((order) => order.supplierId).filter(Boolean));
+  return suppliers
+    .filter((supplier) => supplierIds.has(supplier.id) || supplier.active !== false)
+    .sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function getPurchaseVariantOptions() {
+  return catalogProducts.flatMap((product) => {
+    const variants = Array.isArray(product.variants) ? product.variants : [];
+    return variants
+      .filter((variant) => isEligiblePurchaseVariant(product, variant))
+      .map((variant) => ({
+        productId: product.id,
+        variantId: variant.id,
+        productName: product.name,
+        sku: variant.sku || variant.globalSku || "",
+        color: variant.color || "",
+        size: variant.size || "",
+        variantLabel: [variant.color, variant.size].filter(Boolean).join(" / ") || "Standard",
+        unitCost: variant.unitCost || product.unitCost || "0",
+      }));
+  });
+}
+
+function getPurchaseVariantSearchResults(query = "", variantOptions = getPurchaseVariantOptions(), limit = 10) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const matches = normalizedQuery
+    ? variantOptions.filter((option) => [option.productName, option.sku, option.variantLabel, option.color, option.size].join(" ").toLowerCase().includes(normalizedQuery))
+    : variantOptions;
+  return matches.slice(0, limit);
+}
+
+function getPurchaseOrderDraftWithLineSnapshot(draft = {}) {
+  const variantOptions = getPurchaseVariantOptions();
+  return {
+    ...draft,
+    lines: (draft.lines ?? []).map((line) => {
+      const selected = variantOptions.find((option) => option.variantId === line.variantId);
+      return {
+        ...line,
+        productId: selected?.productId || line.productId || "",
+        productName: selected?.productName || line.productName || "",
+        sku: selected?.sku || line.sku || "",
+        variantLabel: selected?.variantLabel || line.variantLabel || "",
+        unitCost: line.unitCost === "" && selected ? selected.unitCost : line.unitCost,
+      };
+    }),
+  };
+}
+
+function openPurchaseOrderDrawer(supplierId = "") {
+  if (!canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  purchasingDraft = createEmptyPurchaseOrderDraft(supplierId);
+  purchasingDrawerOpen = true;
+  purchasingSaveState = "idle";
+  purchasingSaveError = "";
+  selectedPurchaseOrderId = null;
+  purchaseOrderDetailTab = "items";
+  purchaseOrderPickerState = { activeIndex: -1, queries: {}, highlighted: {} };
+  render();
+}
+
+function closePurchaseOrderDrawer() {
+  purchasingDrawerOpen = false;
+  purchasingDraft = null;
+  purchasingSaveError = "";
+  purchaseOrderPickerState = { activeIndex: -1, queries: {}, highlighted: {} };
+  render();
+}
+
+function updatePurchaseDraftField(field, value) {
+  setPurchaseDraftField(field, value);
+  if (field === "freightCost") refreshPurchaseOrderTotalsInPlace();
+}
+
+function setPurchaseDraftField(field, value) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  purchasingDraft = { ...purchasingDraft, [field]: value };
+  purchasingSaveError = "";
+}
+
+function updatePurchaseLineField(index, field, value) {
+  setPurchaseLineField(index, field, value);
+  refreshPurchaseOrderTotalsInPlace();
+}
+
+function setPurchaseLineField(index, field, value) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  const lines = purchasingDraft.lines.map((line, lineIndex) => {
+    if (lineIndex !== index) return line;
+    if (field !== "variantId") return { ...line, [field]: value };
+    const selected = getPurchaseVariantOptions().find((option) => option.variantId === value);
+    return {
+      ...line,
+      variantId: value,
+      productId: selected?.productId || "",
+      productName: selected?.productName || "",
+      sku: selected?.sku || "",
+      variantLabel: selected?.variantLabel || "",
+      unitCost: line.unitCost && line.unitCost !== "0" ? line.unitCost : selected?.unitCost || "0",
+    };
+  });
+  purchasingDraft = { ...purchasingDraft, lines };
+  purchasingSaveError = "";
+}
+
+function openPurchaseVariantPicker(index) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  purchaseOrderPickerState = {
+    ...purchaseOrderPickerState,
+    activeIndex: index,
+    queries: { ...purchaseOrderPickerState.queries, [index]: purchaseOrderPickerState.queries[index] ?? "" },
+    highlighted: { ...purchaseOrderPickerState.highlighted, [index]: purchaseOrderPickerState.highlighted[index] ?? 0 },
+  };
+  updatePurchaseVariantResultsInPlace(index);
+}
+
+function closePurchaseVariantPicker(index = purchaseOrderPickerState.activeIndex) {
+  if (index < 0) return;
+  purchaseOrderPickerState = { ...purchaseOrderPickerState, activeIndex: -1 };
+  updatePurchaseVariantResultsInPlace(index);
+}
+
+function updatePurchaseVariantQuery(index, value) {
+  purchaseOrderPickerState = {
+    ...purchaseOrderPickerState,
+    activeIndex: index,
+    queries: { ...purchaseOrderPickerState.queries, [index]: value },
+    highlighted: { ...purchaseOrderPickerState.highlighted, [index]: 0 },
+  };
+  updatePurchaseVariantResultsInPlace(index);
+}
+
+function movePurchaseVariantHighlight(index, direction) {
+  const results = getPurchaseVariantSearchResults(purchaseOrderPickerState.queries[index] ?? "");
+  if (!results.length) return;
+  const current = purchaseOrderPickerState.highlighted[index] ?? 0;
+  const next = (current + direction + results.length) % results.length;
+  purchaseOrderPickerState = { ...purchaseOrderPickerState, highlighted: { ...purchaseOrderPickerState.highlighted, [index]: next } };
+  updatePurchaseVariantResultsInPlace(index);
+}
+
+function selectHighlightedPurchaseVariant(index) {
+  const results = getPurchaseVariantSearchResults(purchaseOrderPickerState.queries[index] ?? "");
+  const selected = results[purchaseOrderPickerState.highlighted[index] ?? 0];
+  if (selected) selectPurchaseVariantInPlace(index, selected.variantId);
+}
+
+function updatePurchaseVariantResultsInPlace(index) {
+  const input = document.querySelector(`[data-po-line-search="${index}"]`);
+  const container = document.querySelector(`[data-po-variant-results="${index}"]`);
+  if (!input || !container) return;
+  const active = purchaseOrderPickerState.activeIndex === index;
+  const results = active ? getPurchaseVariantSearchResults(purchaseOrderPickerState.queries[index] ?? "") : [];
+  input.setAttribute("aria-expanded", active ? "true" : "false");
+  input.value = purchaseOrderPickerState.queries[index] ?? "";
+  container.classList.toggle("open", active);
+  container.innerHTML = active ? renderPurchaseVariantSearchResults(results, index, purchaseOrderPickerState.highlighted[index] ?? 0) : "";
+}
+
+function selectPurchaseVariantInPlace(index, variantId) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  const selected = getPurchaseVariantOptions().find((option) => option.variantId === variantId);
+  if (!selected) return;
+  const currentLine = purchasingDraft.lines[index] || createEmptyPurchaseOrderLine();
+  const shouldUseSelectedCost = !currentLine.unitCost || currentLine.unitCost === "0";
+  setPurchaseLineField(index, "variantId", variantId);
+  const line = purchasingDraft.lines[index];
+  if (shouldUseSelectedCost) {
+    const costInput = document.querySelector(`[data-po-line-field="unitCost"][data-po-line-index="${index}"]`);
+    if (costInput) costInput.value = line.unitCost;
+  }
+  const selectedContainer = document.querySelector(`[data-po-selected-variant="${index}"]`);
+  if (selectedContainer) selectedContainer.innerHTML = renderPurchaseSelectedVariant(line, selected);
+  const skuInput = document.querySelector(`[data-po-line-sku="${index}"]`);
+  if (skuInput) skuInput.value = line.sku || selected.sku || "";
+  purchaseOrderPickerState = {
+    ...purchaseOrderPickerState,
+    activeIndex: -1,
+    queries: { ...purchaseOrderPickerState.queries, [index]: "" },
+    highlighted: { ...purchaseOrderPickerState.highlighted, [index]: 0 },
+  };
+  updatePurchaseVariantResultsInPlace(index);
+  refreshPurchaseOrderTotalsInPlace();
+}
+
+function refreshPurchaseOrderTotalsInPlace() {
+  if (!purchasingDraft) return;
+  const totals = getPurchaseOrderTotals(getPurchaseOrderDraftWithLineSnapshot(purchasingDraft));
+  document.querySelector("[data-po-items-subtotal]")?.replaceChildren(document.createTextNode(formatPurchaseMoney(totals.itemsSubtotal)));
+  document.querySelector("[data-po-total]")?.replaceChildren(document.createTextNode(formatPurchaseMoney(totals.totalCost)));
+  (purchasingDraft.lines || []).forEach((line, index) => {
+    const lineTotal = Number(line.orderedQuantity || 0) * Number(line.unitCost || 0);
+    document.querySelector(`[data-po-line-total="${index}"]`)?.replaceChildren(document.createTextNode(formatPurchaseMoney(lineTotal)));
+  });
+}
+
+function addPurchaseOrderLine() {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role)) return;
+  purchasingDraft = { ...purchasingDraft, lines: [...purchasingDraft.lines, createEmptyPurchaseOrderLine()] };
+  purchaseOrderPickerState = { ...purchaseOrderPickerState, activeIndex: purchasingDraft.lines.length - 1 };
+  render();
+  window.requestAnimationFrame?.(() => document.querySelector(`[data-po-line-search="${purchasingDraft.lines.length - 1}"]`)?.focus());
+}
+
+function removePurchaseOrderLine(index) {
+  if (!purchasingDraft || !canWritePurchaseOrdersForRole(adminUser?.role) || purchasingDraft.lines.length <= 1) return;
+  purchasingDraft = { ...purchasingDraft, lines: purchasingDraft.lines.filter((_, lineIndex) => lineIndex !== index) };
+  purchaseOrderPickerState = { activeIndex: -1, queries: {}, highlighted: {} };
+  render();
+}
+
+async function savePurchaseOrder(status) {
+  if (!purchasingDraft || purchasingSaveState === "saving") return;
+  if (!canWritePurchaseOrdersForRole(adminUser?.role)) {
+    purchasingSaveError = "Only Owner and Admin can create purchase orders.";
+    render();
+    return;
+  }
+
+  const draft = getPurchaseOrderDraftWithLineSnapshot(purchasingDraft);
+  const validationError = validatePurchaseOrderDraft(draft);
+  if (validationError) {
+    purchasingSaveError = validationError;
+    render();
+    return;
+  }
+
+  purchasingSaveState = "saving";
+  purchasingSaveError = "";
+  render();
+
+  try {
+    const savedOrder = await createPurchaseOrder(draft, status === "ORDERED" ? "ORDERED" : "DRAFT", adminAuthSession);
+    if (savedOrder) {
+      purchaseOrders = [savedOrder, ...purchaseOrders.filter((order) => order.id !== savedOrder.id)];
+      selectedPurchaseOrderId = savedOrder.id;
+    }
+    purchasingDrawerOpen = false;
+    purchasingDraft = null;
+    purchasingSaveState = "success";
+  } catch (error) {
+    console.error("Unable to save purchase order.", error);
+    purchasingSaveState = "idle";
+    purchasingSaveError = error.message || "Purchase order save failed.";
+  }
+  render();
+}
+
+async function markSelectedPurchaseOrderOrdered(purchaseOrderId) {
+  if (!purchaseOrderId || purchasingSaveState === "saving") return;
+  if (!canWritePurchaseOrdersForRole(adminUser?.role)) {
+    purchasingSaveError = "Only Owner and Admin can mark purchase orders Ordered.";
+    render();
+    return;
+  }
+
+  purchasingSaveState = "saving";
+  purchasingSaveError = "";
+  render();
+
+  try {
+    const savedOrder = await markPurchaseOrderOrdered(purchaseOrderId, adminAuthSession);
+    if (savedOrder) {
+      purchaseOrders = purchaseOrders.map((order) => order.id === savedOrder.id ? savedOrder : order);
+      selectedPurchaseOrderId = savedOrder.id;
+    }
+    purchasingSaveState = "success";
+  } catch (error) {
+    console.error("Unable to mark purchase order Ordered.", error);
+    purchasingSaveState = "idle";
+    purchasingSaveError = error.message || "Purchase order transition failed.";
+  }
+  render();
+}
+
+function openPurchaseOrderDetail(id) {
+  selectedPurchaseOrderId = id;
+  purchasingDrawerOpen = false;
+  purchasingSaveError = "";
+  purchaseOrderDetailTab = "items";
+  render();
+}
+
+function formatPurchaseMoney(value) {
+  const numericValue = Number(value || 0);
+  return `₱${numericValue.toLocaleString("en-PH", { maximumFractionDigits: 2, minimumFractionDigits: numericValue % 1 ? 2 : 0 })}`;
+}
+
+function formatPurchaseDate(value) {
+  if (!value) return "—";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleDateString("en-PH", { month: "short", day: "2-digit", year: "numeric" });
+}
+
+function formatPurchaseStatus(status) {
+  return String(status || "DRAFT").replace(/_/g, " ");
+}
+
+function renderPurchaseOrderStatusPill(status) {
+  return `<span class="status-pill po-status ${statusToClass(formatPurchaseStatus(status))}">${escapeHtml(formatPurchaseStatus(status))}</span>`;
+}
+
+function renderPurchaseLineStatusPill(status) {
+  return `<span class="status-pill po-line-status">${escapeHtml(formatPurchaseStatus(status))}</span>`;
+}
+
+function renderSuppliersPage() {
+  const visibleSuppliers = getVisibleSuppliers();
+  const selectedSupplier = suppliers.find((item) => item.id === selectedSupplierId) ?? null;
+  const canWriteSuppliers = canWriteSuppliersForRole(adminUser?.role);
+  const summaryCards = getSupplierSummaryCards();
+
+  return `
+    <main class="orders-page catalog-page suppliers-page admin-saas-page">
+      <div class="page-heading catalog-heading suppliers-heading">
+        <div>
+          <span class="breadcrumb">Home  &rsaquo;  Purchasing  &rsaquo;  Suppliers</span>
+          <h1>Suppliers</h1>
+          <p class="subtitle">Manage supplier records used by purchase orders and receiving.</p>
+        </div>
+        ${canWriteSuppliers ? `<button class="catalog-add-button" data-supplier-add type="button">+ Add Supplier</button>` : ""}
+      </div>
+
+      <section class="catalog-summary-grid supplier-summary-grid" aria-label="Supplier summary">
+        ${summaryCards.map((card) => renderCatalogSummaryCard(card)).join("")}
+      </section>
+
+      <section class="supplier-tabs" aria-label="Purchasing setup tabs">
+        <button type="button" data-route-target="/catalog/purchasing">Purchase Orders</button>
+        <button class="active" type="button">Suppliers</button>
+        <button type="button" disabled>Receiving History</button>
+      </section>
+
+      <section class="catalog-controls supplier-controls" aria-label="Supplier controls">
+        <div class="catalog-filter-row">
+          <label class="search-field catalog-search">
+            ${renderIcon("search", "search-icon")}
+            <input id="supplier-search" value="${escapeHtml(supplierQuery)}" placeholder="Search supplier, supply type..." type="search" />
+          </label>
+          <select id="supplier-status-filter" aria-label="Supplier status filter">
+            <option value="active" ${supplierStatusFilter === "active" ? "selected" : ""}>Active suppliers</option>
+            <option value="inactive" ${supplierStatusFilter === "inactive" ? "selected" : ""}>Inactive suppliers</option>
+            <option value="all" ${supplierStatusFilter === "all" ? "selected" : ""}>All statuses</option>
+          </select>
+          <select id="supplier-supply-type-filter" aria-label="Supply type filter">
+            <option value="all" ${supplierSupplyTypeFilter === "all" ? "selected" : ""}>All Supply Types</option>
+            ${getSupplierSupplyTypeOptions().map((type) => `<option value="${escapeHtml(type)}" ${supplierSupplyTypeFilter === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
+          </select>
+          <button class="note-button supplier-disabled-filter" type="button" disabled>Last Purchase</button>
+          <button class="note-button catalog-reset-button" data-supplier-reset-filters type="button">Reset</button>
+        </div>
+      </section>
+
+      ${renderSupplierNotice(canWriteSuppliers)}
+
+      <article class="content-card table-card catalog-table-card supplier-table-card">
+        <p class="table-helper-text catalog-count-label">${visibleSuppliers.length} ${visibleSuppliers.length === 1 ? "SUPPLIER" : "SUPPLIERS"}</p>
+        <table class="products-table catalog-table supplier-table">
+          <thead>
+            <tr>
+              <th>Supplier Ref</th>
+              <th>Supplier</th>
+              <th>Open POs</th>
+              <th>Open PO Value</th>
+              <th>Last Purchase</th>
+              <th>Last Receipt</th>
+              <th>Notes</th>
+              <th>Status</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody>${visibleSuppliers.map(renderSupplierRow).join("")}</tbody>
+        </table>
+        ${renderSupplierEmptyState(visibleSuppliers)}
+      </article>
+      <div class="supplier-rule-note"><strong>SUPPLIER RULE</strong><span>Supplier records create no stock movement. Inventory changes only through confirmed receiving.</span></div>
+      ${supplierDrawerMode ? renderSupplierDrawer(selectedSupplier, canWriteSuppliers) : ""}
+    </main>
+  `;
+}
+
+function renderSupplierRow(supplier) {
+  const selected = supplier.id === selectedSupplierId;
+  return `
+    <tr class="${selected ? "selected" : ""}" data-supplier-row="${escapeHtml(supplier.id)}" tabindex="0">
+      <td data-mobile-label="Supplier Ref"><span class="mono-value">${escapeHtml(supplier.supplierReference || "-")}</span></td>
+      <td data-mobile-label="Supplier"><div class="catalog-name-stack"><strong>${escapeHtml(supplier.name)}</strong><span>${escapeHtml([supplier.countryRegion || "-", supplier.supplyType || "-"].join(" · "))}</span></div></td>
+      <td data-mobile-label="Open POs">0</td>
+      <td data-mobile-label="Open PO Value">₱0</td>
+      <td data-mobile-label="Last Purchase">—</td>
+      <td data-mobile-label="Last Receipt">—</td>
+      <td data-mobile-label="Notes">${escapeHtml(supplier.internalNotes || "-")}</td>
+      <td data-mobile-label="Status">${renderSupplierStatusPill(supplier.active)}</td>
+      <td data-mobile-label="Action"><button class="note-button compact-action" data-supplier-view="${escapeHtml(supplier.id)}" type="button">View</button></td>
+    </tr>
+  `;
+}
+
+function renderSupplierDrawer(supplier, canWriteSuppliers) {
+  const isEditing = supplierDrawerMode === "add" || supplierDrawerMode === "edit";
+  const draft = supplierDraft ?? createSupplierDraft(supplier);
+  const title = supplierDrawerMode === "add" ? "Add Supplier" : isEditing ? "Edit Supplier" : supplier?.name || "Supplier";
+  const subtitle = supplierDrawerMode === "add"
+    ? "Create one reusable supplier record for purchase orders and receiving."
+    : `${supplier?.supplierReference || "-"} · ${supplier?.countryRegion || "-"} · ${supplier?.supplyType || "-"}`;
+  const disabled = supplierSaveState === "saving" || !canWriteSuppliers;
+
+  return `
+    <div class="catalog-drawer-backdrop" data-supplier-close></div>
+    <aside class="catalog-drawer supplier-drawer" aria-label="${escapeHtml(title)} drawer">
+      <header>
+        <div>
+          ${supplierDrawerMode === "add" || isEditing ? `<span class="info-chip">PURCHASING · SUPPLIER</span>` : renderSupplierStatusPill(supplier?.active)}
+          <h2>${escapeHtml(title)}</h2>
+          <p>${escapeHtml(subtitle)}</p>
+        </div>
+        <button class="catalog-drawer-close" data-supplier-close type="button" aria-label="Close supplier drawer">X</button>
+      </header>
+      ${
+        isEditing
+          ? renderSupplierForm(draft, disabled)
+          : renderSupplierDetail(supplier)
+      }
+    </aside>
+  `;
+}
+
+function renderSupplierForm(draft, disabled) {
+  return `
+    <form class="catalog-form supplier-form" id="supplier-form">
+      ${supplierSaveError ? `<p class="catalog-form-error">${escapeHtml(supplierSaveError)}</p>` : ""}
+      <section class="catalog-drawer-section">
+        <h3>Supplier Identity</h3>
+        <label class="catalog-field"><span>Supplier Reference</span><input class="locked-field" value="${escapeHtml(draft.supplierReference || getSupplierReferencePreview())}" readonly></label>
+        <label class="catalog-field"><span>Supplier Name</span><input data-supplier-field="name" value="${escapeHtml(draft.name)}" placeholder="e.g. Metro Textile Supply" ${disabled ? "disabled" : ""} required></label>
+        <div class="supplier-field-row">
+          <label class="catalog-field"><span>Supply Type</span><input data-supplier-field="supplyType" value="${escapeHtml(draft.supplyType)}" placeholder="Garments / Fabrics / Packaging" ${disabled ? "disabled" : ""}></label>
+          <label class="catalog-field"><span>Country / Region</span><input data-supplier-field="countryRegion" value="${escapeHtml(draft.countryRegion)}" placeholder="Philippines" ${disabled ? "disabled" : ""}></label>
+        </div>
+      </section>
+      <section class="catalog-drawer-section">
+        <h3>Contact Details</h3>
+        <div class="supplier-field-row">
+          <label class="catalog-field"><span>Contact Person</span><input data-supplier-field="contactPerson" value="${escapeHtml(draft.contactPerson)}" placeholder="Name" ${disabled ? "disabled" : ""}></label>
+          <label class="catalog-field"><span>Phone</span><input data-supplier-field="phone" value="${escapeHtml(draft.phone)}" placeholder="+63" ${disabled ? "disabled" : ""}></label>
+        </div>
+        <div class="supplier-field-row">
+          <label class="catalog-field"><span>Email</span><input data-supplier-field="email" value="${escapeHtml(draft.email)}" placeholder="email@example.com" type="email" ${disabled ? "disabled" : ""}></label>
+          <label class="catalog-field"><span>Address / Location</span><input data-supplier-field="addressLocation" value="${escapeHtml(draft.addressLocation)}" placeholder="City / warehouse" ${disabled ? "disabled" : ""}></label>
+        </div>
+      </section>
+      <section class="catalog-drawer-section">
+        <h3>Purchasing Terms</h3>
+        <div class="supplier-field-row three">
+          <label class="catalog-field"><span>Currency</span><input data-supplier-field="currency" value="${escapeHtml(draft.currency || "PHP")}" placeholder="PHP" ${disabled ? "disabled" : ""} required></label>
+          <label class="catalog-field"><span>Payment Terms</span><input data-supplier-field="paymentTerms" value="${escapeHtml(draft.paymentTerms)}" placeholder="Cash / Prepaid" ${disabled ? "disabled" : ""}></label>
+          <label class="catalog-field"><span>Lead Time</span><input data-supplier-field="leadTimeDays" min="0" step="1" inputmode="numeric" type="number" value="${escapeHtml(draft.leadTimeDays)}" placeholder="7" ${disabled ? "disabled" : ""}></label>
+        </div>
+        <label class="catalog-field"><span>Internal Notes</span><textarea data-supplier-field="internalNotes" rows="3" placeholder="What this supplier normally provides" ${disabled ? "disabled" : ""}>${escapeHtml(draft.internalNotes)}</textarea></label>
+        ${supplierDrawerMode === "edit" ? `<label class="catalog-field supplier-active-toggle"><span>Status</span><select data-supplier-field="active" ${disabled ? "disabled" : ""}><option value="true" ${draft.active !== false ? "selected" : ""}>Active</option><option value="false" ${draft.active === false ? "selected" : ""}>Inactive</option></select></label>` : ""}
+      </section>
+      <div class="supplier-rule-note drawer"><strong>SUPPLIER RULE</strong><span>Supplier setup creates no stock movement. Inventory changes only through confirmed receiving.</span></div>
+      <footer class="catalog-drawer-footer">
+        <span>${supplierDrawerMode === "add" ? "Supplier Reference is generated when saved." : "Supplier Master edits do not affect inventory."}</span>
+        <div>
+          <button class="note-button" data-supplier-close type="button" ${supplierSaveState === "saving" ? "disabled" : ""}>Cancel</button>
+          <button class="primary-button catalog-save-button" type="submit" ${disabled ? "disabled" : ""}>${supplierSaveState === "saving" ? "Saving..." : "Save Supplier"}</button>
+        </div>
+      </footer>
+    </form>
+  `;
+}
+
+function renderSupplierDetail(supplier) {
+  if (!supplier) return `<div class="catalog-form"><section class="catalog-drawer-section"><p>No supplier selected.</p></section></div>`;
+  return `
+    <div class="catalog-form supplier-detail">
+      <section class="supplier-kpi-strip" aria-label="Supplier KPIs">
+        ${renderSupplierKpi("Open POs", "0", "₱0")}
+        ${renderSupplierKpi("Last Purchase", "—", "Purchasing M2")}
+        ${renderSupplierKpi("Last Receipt", "—", "Receiving M2")}
+      </section>
+      <section class="catalog-drawer-section">
+        <h3>Supplier Profile</h3>
+        <div class="supplier-field-row">
+          ${renderSupplierReadonlyFact("Contact Person", supplier.contactPerson)}
+          ${renderSupplierReadonlyFact("Phone", supplier.phone)}
+        </div>
+        <div class="supplier-field-row">
+          ${renderSupplierReadonlyFact("Email", supplier.email)}
+          ${renderSupplierReadonlyFact("Location", supplier.addressLocation)}
+        </div>
+      </section>
+      <section class="catalog-drawer-section">
+        <h3>Procurement Settings</h3>
+        <div class="supplier-field-row three">
+          ${renderSupplierReadonlyFact("Currency", supplier.currency)}
+          ${renderSupplierReadonlyFact("Payment Terms", supplier.paymentTerms)}
+          ${renderSupplierReadonlyFact("Lead Time", supplier.leadTimeDays ? `${supplier.leadTimeDays} days` : "")}
+        </div>
+        ${renderSupplierReadonlyFact("Notes", supplier.internalNotes)}
+      </section>
+      <div class="supplier-rule-note drawer"><strong>BOUNDARY</strong><span>Supplier stores vendor identity and purchasing terms. Purchase Orders and confirmed receiving own transactions and stock effects.</span></div>
+      <footer class="catalog-drawer-footer">
+        <span>${canWritePurchaseOrdersForRole(adminUser?.role) ? "Create PO opens Purchasing M2 with this supplier preselected." : "Purchase Order writes are restricted to Owner and Admin roles."}</span>
+        <div>
+          <button class="note-button" data-supplier-edit="${escapeHtml(supplier.id)}" type="button" ${canWriteSuppliersForRole(adminUser?.role) ? "" : "disabled"}>Edit Supplier</button>
+          <button class="primary-button catalog-save-button" data-supplier-create-po-hook="${escapeHtml(supplier.id)}" type="button" ${canWritePurchaseOrdersForRole(adminUser?.role) ? "" : "disabled"}>Create PO</button>
+        </div>
+      </footer>
+    </div>
+  `;
+}
+
+function renderSupplierKpi(label, value, helper) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(helper)}</small></div>`;
+}
+
+function renderSupplierReadonlyFact(label, value) {
+  return `<label class="catalog-field readonly-field"><span>${escapeHtml(label)}</span><input value="${escapeHtml(value || "-")}" readonly></label>`;
+}
+
+function renderSupplierStatusPill(active) {
+  return `<span class="status-pill supplier-status ${active === false ? "inactive" : "active"}">${active === false ? "INACTIVE" : "ACTIVE"}</span>`;
+}
+
+function renderSupplierNotice(canWriteSuppliers) {
+  if (supplierLoadState === "loading") return `<div class="catalog-notice">Loading supplier records...</div>`;
+  if (supplierLoadState === "error") return `<div class="catalog-notice error">Unable to load suppliers. ${escapeHtml(supplierLoadError || "Check Supabase access and supplier RLS policies.")}</div>`;
+  if (supplierSaveState === "success") return `<div class="catalog-notice success">Supplier record saved.</div>`;
+  if (!canWriteSuppliers) return `<div class="catalog-notice">Supplier writes are restricted to Owner and Admin roles. Current role is read-only.</div>`;
+  return "";
+}
+
+function renderSupplierEmptyState(rows) {
+  if (rows.length) return "";
+  if (supplierLoadState === "loading") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading suppliers...</strong><span>Checking canonical Supplier Master records.</span></div>`;
+  if (supplierLoadState === "error") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Suppliers unavailable</strong><span>${escapeHtml(supplierLoadError || "Canonical supplier data could not be loaded.")}</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No suppliers found</strong><span>Add a supplier record or adjust the current filters.</span></div>`;
+}
+
+function getSupplierSummaryCards() {
+  const activeSuppliers = suppliers.filter((supplier) => supplier.active !== false && !supplier.archivedAt).length;
+  return [
+    { label: "Active Suppliers", value: String(activeSuppliers), helper: "Used in open POs" },
+    { label: "Open PO Value", value: "₱0", helper: "Across suppliers", tone: "warning" },
+    { label: "Due This Week", value: "0", helper: "Expected deliveries", tone: "info" },
+    { label: "Received This Month", value: "₱0", helper: "Supplier receipts", tone: "success" },
+  ];
+}
+
+function getVisibleSuppliers() {
+  const normalizedQuery = supplierQuery.trim().toLowerCase();
+  return suppliers.filter((supplier) => {
+    const matchesQuery = !normalizedQuery || [
+      supplier.supplierReference,
+      supplier.name,
+      supplier.supplyType,
+      supplier.countryRegion,
+      supplier.contactPerson,
+      supplier.email,
+      supplier.phone,
+      supplier.internalNotes,
+    ].join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesStatus = supplierStatusFilter === "all"
+      || (supplierStatusFilter === "active" && supplier.active !== false)
+      || (supplierStatusFilter === "inactive" && supplier.active === false);
+    const matchesSupplyType = supplierSupplyTypeFilter === "all" || supplier.supplyType === supplierSupplyTypeFilter;
+    return matchesQuery && matchesStatus && matchesSupplyType;
+  });
+}
+
+function getSupplierSupplyTypeOptions() {
+  return uniqueList(suppliers.map((supplier) => supplier.supplyType).filter(Boolean));
+}
+
+function createSupplierDraft(supplier = null) {
+  return {
+    supplierReference: supplier?.supplierReference || "",
+    name: supplier?.name || "",
+    supplyType: supplier?.supplyType || "",
+    countryRegion: supplier?.countryRegion || "",
+    contactPerson: supplier?.contactPerson || "",
+    phone: supplier?.phone || "",
+    email: supplier?.email || "",
+    addressLocation: supplier?.addressLocation || "",
+    currency: supplier?.currency || "PHP",
+    paymentTerms: supplier?.paymentTerms || "",
+    leadTimeDays: supplier?.leadTimeDays || "",
+    internalNotes: supplier?.internalNotes || "",
+    active: supplier?.active !== false,
+  };
+}
+
+function openSupplierDrawer(mode, supplierId = "") {
+  if ((mode === "add" || mode === "edit") && !canWriteSuppliersForRole(adminUser?.role)) return;
+  const supplier = suppliers.find((item) => item.id === supplierId) ?? null;
+  supplierDrawerMode = mode;
+  selectedSupplierId = supplier?.id || selectedSupplierId;
+  supplierDraft = mode === "view" ? null : createSupplierDraft(supplier);
+  supplierSaveState = "idle";
+  supplierSaveError = "";
+  render();
+}
+
+function closeSupplierDrawer() {
+  supplierDrawerMode = "";
+  supplierDraft = null;
+  supplierSaveError = "";
+  render();
+}
+
+function updateSupplierDraftField(field, value) {
+  if (!supplierDraft || !canWriteSuppliersForRole(adminUser?.role)) return;
+  supplierDraft = {
+    ...supplierDraft,
+    [field]: field === "active" ? value === "true" : value,
+  };
+  supplierSaveError = "";
+}
+
+async function saveSupplierDraft() {
+  if (!supplierDraft || supplierSaveState === "saving") return;
+  if (!canWriteSuppliersForRole(adminUser?.role)) {
+    supplierSaveError = "Only Owner and Admin can save suppliers.";
+    render();
+    return;
+  }
+
+  const validationError = validateSupplierDraft(supplierDraft);
+  if (validationError) {
+    supplierSaveError = validationError;
+    render();
+    return;
+  }
+
+  supplierSaveState = "saving";
+  supplierSaveError = "";
+  render();
+
+  try {
+    const savedSupplier = supplierDrawerMode === "edit" && selectedSupplierId
+      ? await updateAdminSupplier(selectedSupplierId, supplierDraft, adminAuthSession)
+      : await createAdminSupplier(supplierDraft, adminAuthSession);
+    if (savedSupplier?.id) {
+      suppliers = [
+        savedSupplier,
+        ...suppliers.filter((supplier) => supplier.id !== savedSupplier.id),
+      ].sort(sortSuppliers);
+      selectedSupplierId = savedSupplier.id;
+    }
+    supplierDrawerMode = "";
+    supplierDraft = null;
+    supplierSaveState = "success";
+  } catch (error) {
+    console.error("Unable to save supplier.", error);
+    supplierSaveState = "idle";
+    supplierSaveError = error.message || "Supplier save failed.";
+  }
+  render();
+}
+
+function sortSuppliers(a, b) {
+  return String(a.supplierReference || "").localeCompare(String(b.supplierReference || "")) || String(a.name || "").localeCompare(String(b.name || ""));
+}
+
+function renderInventoryPage() {
+  const canReceive = canReceiveInventoryForRole(adminUser?.role);
+  const visibleRows = getVisibleInventoryRows();
+  const visibleMovements = getVisibleInventoryMovements();
+  const summary = getInventorySummary();
+  const selectedReceiveRow = inventoryRows.find((row) => row.id === inventoryReceiveDrawer.rowId) ?? null;
+
+  return `
+    <main class="orders-page catalog-page inventory-page admin-saas-page">
+      <div class="page-heading catalog-heading inventory-heading">
+        <div>
+          <span class="breadcrumb">Home  &rsaquo;  Inventory${inventoryView === "movements" ? "  &rsaquo;  Stock Movements" : ""}</span>
+          <h1>${inventoryView === "movements" ? "Stock Movements" : "Inventory"}</h1>
+          <p class="subtitle">${inventoryView === "movements" ? "Complete audit trail of every quantity change across catalog-linked variants." : "Control physical stock without editing quantities directly. Every change creates a stock movement."}</p>
+        </div>
+        <div class="inventory-heading-actions">
+          <button class="note-button" data-inventory-parked="stock-count" type="button" disabled>Stock Count</button>
+          ${inventoryView === "stock" ? `<button class="primary-button" data-inventory-open-receive type="button" ${canReceive && visibleRows.length ? "" : "disabled"}>+ Receive Stock</button>` : `<button class="note-button" data-inventory-export type="button" disabled>Export CSV</button>`}
+        </div>
+      </div>
+
+      ${inventoryView === "movements" ? renderInventoryMovementSummary(visibleMovements) : renderInventoryStockSummary(summary)}
+      ${renderInventoryTabs(summary)}
+      ${inventoryView === "movements" ? renderInventoryMovementFilters() : renderInventoryStockFilters()}
+      ${renderInventoryNotice(canReceive)}
+      ${inventoryView === "movements" ? renderInventoryMovementTable(visibleMovements) : renderInventoryStockTable(visibleRows, canReceive)}
+      <div class="inventory-rule-note"><strong>${inventoryView === "movements" ? "AUDIT TRAIL" : "STOCK RULE"}</strong><span>${inventoryView === "movements" ? "Movements are append-only operational records. Corrections create a new reversing movement; history is never overwritten." : "On Hand is never edited directly. Receive, Sale, Return, Stock Count, and Adjustment create ledger movements."}</span></div>
+      ${inventoryReceiveDrawer.open ? renderInventoryReceiveDrawer(selectedReceiveRow, canReceive) : ""}
+    </main>
+  `;
+}
+
+function renderInventoryStockSummary(summary) {
+  const cards = [
+    { label: "Total On Hand", value: `${summary.onHand} pcs`, helper: "Across active SKUs" },
+    { label: "Low Stock", value: `${summary.lowStock} SKUs`, helper: "Below reorder point", tone: "warning" },
+    { label: "Out of Stock", value: `${summary.outOfStock} SKUs`, helper: "Needs action", tone: "urgent" },
+    { label: "Incoming", value: `${summary.incoming} pcs`, helper: "Open purchase orders", tone: "success" },
+  ];
+  return `<section class="catalog-summary-grid inventory-summary-grid" aria-label="Inventory summary">${cards.map((card) => renderCatalogSummaryCard(card)).join("")}</section>`;
+}
+
+function renderInventoryMovementSummary(movements) {
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todaysMovements = movements.filter((item) => String(item.createdAt || "").slice(0, 10) === todayKey);
+  const received = todaysMovements.filter((item) => isPositiveMovement(item)).reduce((sum, item) => sum + item.quantityDelta, 0);
+  const issued = todaysMovements.filter((item) => item.quantityDelta < 0).reduce((sum, item) => sum + Math.abs(item.quantityDelta), 0);
+  const adjusted = todaysMovements.filter((item) => String(item.movementType || "").toUpperCase().includes("ADJUST")).reduce((sum, item) => sum + item.quantityDelta, 0);
+  const net = todaysMovements.reduce((sum, item) => sum + item.quantityDelta, 0);
+  const cards = [
+    { label: "Received Today", value: formatSignedQuantity(received), helper: "Positive stock movements", tone: "success" },
+    { label: "Issued Today", value: formatSignedQuantity(-issued), helper: "Sales and outbound movements", tone: "urgent" },
+    { label: "Adjusted", value: formatSignedQuantity(adjusted), helper: "Count variance", tone: adjusted < 0 ? "urgent" : "success" },
+    { label: "Net Movement", value: formatSignedQuantity(net), helper: "Today", tone: net < 0 ? "urgent" : "success" },
+  ];
+  return `<section class="catalog-summary-grid inventory-summary-grid" aria-label="Movement summary">${cards.map((card) => renderCatalogSummaryCard(card)).join("")}</section>`;
+}
+
+function renderInventoryTabs(summary) {
+  const tabs = [
+    { key: "stock", label: "Stock Overview", count: summary.totalRows },
+    { key: "low", label: "Low Stock", count: summary.lowStock },
+    { key: "out", label: "Out of Stock", count: summary.outOfStock },
+    { key: "movements", label: "Movements", count: inventoryMovements.length },
+    { key: "count", label: "Stock Count", parked: true },
+  ];
+  return `<section class="inventory-tabs" aria-label="Inventory views">${tabs.map((tab) => {
+    const active = inventoryView === tab.key || (inventoryView === "stock" && inventoryStockStateFilter === tab.key);
+    return `<button class="${active ? "active" : ""}" data-inventory-tab="${escapeHtml(tab.key)}" type="button" ${tab.parked ? "disabled" : ""}>${escapeHtml(tab.label)}${tab.count !== undefined ? `<span>${tab.count}</span>` : ""}</button>`;
+  }).join("")}</section>`;
+}
+
+function renderInventoryStockFilters() {
+  return `
+    <section class="catalog-controls inventory-controls" aria-label="Inventory controls">
+      <div class="catalog-filter-row">
+        <label class="search-field catalog-search">
+          ${renderIcon("search", "search-icon")}
+          <input id="inventory-search" value="${escapeHtml(inventoryQuery)}" placeholder="Search product, variant, SKU..." type="search" />
+        </label>
+        <select id="inventory-location-filter" aria-label="Inventory location filter">
+          <option value="all" ${inventoryLocationFilter === "all" ? "selected" : ""}>All Locations</option>
+          ${inventoryLocations.map((location) => `<option value="${escapeHtml(location.id)}" ${inventoryLocationFilter === location.id ? "selected" : ""}>${escapeHtml(formatInventoryLocation(location))}</option>`).join("")}
+        </select>
+        <select id="inventory-stock-state-filter" aria-label="Stock state filter">
+          <option value="all" ${inventoryStockStateFilter === "all" ? "selected" : ""}>All Stock States</option>
+          <option value="low" ${inventoryStockStateFilter === "low" ? "selected" : ""}>Low Stock</option>
+          <option value="out" ${inventoryStockStateFilter === "out" ? "selected" : ""}>Out of Stock</option>
+          <option value="healthy" ${inventoryStockStateFilter === "healthy" ? "selected" : ""}>Healthy</option>
+        </select>
+        <button class="note-button catalog-reset-button" data-inventory-reset-filters type="button">Reset</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderInventoryMovementFilters() {
+  const movementTypes = uniqueList(inventoryMovements.map((item) => item.movementType).filter(Boolean));
+  const sources = uniqueList(inventoryMovements.map((item) => item.source).filter(Boolean));
+  return `
+    <section class="catalog-controls inventory-controls" aria-label="Movement controls">
+      <div class="catalog-filter-row">
+        <label class="search-field catalog-search">
+          ${renderIcon("search", "search-icon")}
+          <input id="inventory-search" value="${escapeHtml(inventoryQuery)}" placeholder="Search SKU, product, reference..." type="search" />
+        </label>
+        <select id="inventory-movement-type-filter" aria-label="Movement type filter">
+          <option value="all" ${inventoryMovementTypeFilter === "all" ? "selected" : ""}>All Movement Types</option>
+          ${movementTypes.map((type) => `<option value="${escapeHtml(type)}" ${inventoryMovementTypeFilter === type ? "selected" : ""}>${escapeHtml(type)}</option>`).join("")}
+        </select>
+        <select id="inventory-movement-source-filter" aria-label="Movement source filter">
+          <option value="all" ${inventoryMovementSourceFilter === "all" ? "selected" : ""}>All Sources</option>
+          ${sources.map((source) => `<option value="${escapeHtml(source)}" ${inventoryMovementSourceFilter === source ? "selected" : ""}>${escapeHtml(source)}</option>`).join("")}
+        </select>
+        <button class="note-button catalog-reset-button" data-inventory-reset-filters type="button">Reset</button>
+      </div>
+    </section>
+  `;
+}
+
+function renderInventoryNotice(canReceive) {
+  if (inventoryReceiveDrawer.status === "success") return `<div class="catalog-notice success">Receive Stock submitted through ${INVENTORY_RECEIVE_RPC_LABEL}.</div>`;
+  if (inventoryLoadState === "loading") return `<div class="catalog-notice">Loading canonical inventory...</div>`;
+  if (inventoryLoadState === "error") return `<div class="catalog-notice error">Unable to load canonical inventory. ${escapeHtml(inventoryLoadError || "Check Supabase access and inventory RLS policies.")}</div>`;
+  if (!canReceive) return `<div class="catalog-notice">Inventory receive is restricted to Owner and Admin roles. Current role is read-only.</div>`;
+  return "";
+}
+
+function renderInventoryStockTable(rows, canReceive) {
+  return `
+    <article class="content-card table-card catalog-table-card inventory-table-card">
+      <p class="table-helper-text catalog-count-label">${rows.length} ${rows.length === 1 ? "SKU" : "SKUS"}</p>
+      <table class="products-table catalog-table inventory-table">
+        <colgroup>
+          <col class="inventory-product-col">
+          <col class="inventory-sku-col">
+          <col class="inventory-on-hand-col">
+          <col class="inventory-reorder-col">
+          <col class="inventory-incoming-col">
+          <col class="inventory-stock-col">
+          <col class="inventory-last-cost-col">
+          <col class="inventory-stock-value-col">
+          <col class="inventory-action-col">
+        </colgroup>
+        <thead>
+          <tr>
+            <th>Product / Variant</th>
+            <th>SKU</th>
+            <th>On Hand</th>
+            <th>Reorder</th>
+            <th>Incoming</th>
+            <th>Stock</th>
+            <th>Last Cost</th>
+            <th>Stock Value</th>
+            <th>Action</th>
+          </tr>
+        </thead>
+        <tbody>${rows.map((row) => renderInventoryStockRow(row, canReceive)).join("")}</tbody>
+      </table>
+      ${renderInventoryStockEmptyState(rows)}
+    </article>
+  `;
+}
+
+function renderInventoryStockRow(row, canReceive) {
+  const action = row.onHand <= 0 ? "Receive" : "View";
+  return `
+    <tr>
+      <td data-mobile-label="Product / Variant"><div class="catalog-name-stack inventory-product-stack"><strong>${escapeHtml(row.productName)} · ${escapeHtml(row.variantLabel)}</strong><span>Catalog-linked variant</span></div></td>
+      <td data-mobile-label="SKU"><span class="mono-value">${escapeHtml(row.sku)}</span></td>
+      <td data-mobile-label="On Hand"><div class="inventory-on-hand-cell"><strong class="${row.onHand <= 0 ? "inventory-negative" : ""}">${row.onHand}</strong><span>Sellable: ${row.sellable} · Reserved: ${row.reserved}</span></div></td>
+      <td data-mobile-label="Reorder">${formatInventoryOptionalNumber(row.reorderPoint)}</td>
+      <td data-mobile-label="Incoming">${formatInventoryOptionalNumber(row.incoming)}</td>
+      <td data-mobile-label="Stock">${renderInventoryStockPill(row.stockState)}</td>
+      <td data-mobile-label="Last Cost">${formatInventoryMoney(row.unitCost)}</td>
+      <td data-mobile-label="Stock Value">${formatInventoryMoney(row.stockValue)}</td>
+      <td data-mobile-label="Action"><button class="${action === "Receive" ? "primary-button" : "note-button"} compact-action" data-inventory-receive="${escapeHtml(row.id)}" type="button" ${canReceive ? "" : "disabled"}>${action}</button></td>
+    </tr>
+  `;
+}
+
+function renderInventoryMovementTable(rows) {
+  return `
+    <article class="content-card table-card catalog-table-card inventory-table-card">
+      <p class="table-helper-text catalog-count-label">${rows.length} ${rows.length === 1 ? "MOVEMENT" : "MOVEMENTS"}</p>
+      <table class="products-table catalog-table inventory-movement-table">
+        <thead>
+          <tr>
+            <th class="movement-date-col">Date / Time</th>
+            <th class="movement-product-col">Product / SKU</th>
+            <th class="movement-type-col">Type</th>
+            <th class="movement-qty-col">Qty Change</th>
+            <th class="movement-balance-col">Balance After</th>
+            <th class="movement-source-col">Source</th>
+            <th class="movement-reference-col">Reference</th>
+            <th class="movement-reason-col">Reason / Note</th>
+            <th class="movement-operator-col">Done By</th>
+          </tr>
+        </thead>
+        <tbody>${rows.map(renderInventoryMovementRow).join("")}</tbody>
+      </table>
+      ${renderInventoryMovementEmptyState(rows)}
+    </article>
+  `;
+}
+
+function renderInventoryMovementRow(row) {
+  return `
+    <tr>
+      <td class="movement-date-col" data-mobile-label="Date / Time">${escapeHtml(formatInventoryDateTime(row.createdAt))}</td>
+      <td class="movement-product-col" data-mobile-label="Product / SKU"><div class="catalog-name-stack movement-product-stack"><strong>${escapeHtml([row.productName, row.variantLabel].filter(Boolean).join(" · ") || "-")}</strong><span>${escapeHtml(row.sku || "-")}</span></div></td>
+      <td class="movement-type-col" data-mobile-label="Type">${renderInventoryMovementPill(row.movementType)}</td>
+      <td class="movement-qty-col" data-mobile-label="Qty Change"><strong class="${row.quantityDelta < 0 ? "inventory-negative" : "inventory-positive"}">${escapeHtml(formatMovementQuantityDelta(row.quantityDelta))}</strong></td>
+      <td class="movement-balance-col" data-mobile-label="Balance After"><strong>${row.balanceAfter ?? "-"}</strong></td>
+      <td class="movement-source-col" data-mobile-label="Source">${escapeHtml(row.source || "-")}</td>
+      <td class="movement-reference-col" data-mobile-label="Reference">${escapeHtml(row.reference || "-")}</td>
+      <td class="movement-reason-col" data-mobile-label="Reason / Note">${escapeHtml(row.reason || "-")}</td>
+      <td class="movement-operator-col" data-mobile-label="Done By">${escapeHtml(row.operator || "-")}</td>
+    </tr>
+  `;
+}
+
+function renderInventoryReceiveDrawer(row, canReceive) {
+  const disabled = inventoryReceiveDrawer.status === "saving" || !canReceive || !row;
+  const quantity = escapeHtml(inventoryReceiveDrawer.quantity);
+  return `
+    <div class="catalog-drawer-backdrop" data-inventory-close-receive></div>
+    <aside class="catalog-drawer inventory-receive-drawer" aria-label="Receive stock drawer">
+      <header>
+        <div>
+          <span>OWNER / ADMIN ACTION</span>
+          <h2>Receive Stock</h2>
+          <p>Receiving creates a ledger movement. Unit Cost remains managed by Master Catalog.</p>
+          ${row ? renderInventoryStockPill(row.stockState) : ""}
+        </div>
+        <button class="catalog-drawer-close" data-inventory-close-receive type="button" aria-label="Close receive stock drawer">X</button>
+      </header>
+      <form class="catalog-form" id="inventory-receive-form">
+        ${inventoryReceiveDrawer.error ? `<p class="catalog-form-error">${escapeHtml(inventoryReceiveDrawer.error)}</p>` : ""}
+        ${!canReceive ? `<p class="catalog-form-error">Only Owner and Admin can receive stock.</p>` : ""}
+        ${row ? `
+          <section class="catalog-drawer-section">
+            <h3>Product / Variant / SKU</h3>
+            <div class="inventory-readonly-grid">
+              ${renderInventoryReadonlyFact("Product", row.productName)}
+              ${renderInventoryReadonlyFact("Variant", row.variantLabel)}
+              ${renderInventoryReadonlyFact("SKU", row.sku)}
+              ${renderInventoryReadonlyFact("Location", row.locationName)}
+              ${renderInventoryReadonlyFact("On Hand", row.onHand)}
+              ${renderInventoryReadonlyFact("Sellable", row.sellable)}
+              ${renderInventoryReadonlyFact("Existing Unit Cost", formatInventoryMoney(row.unitCost))}
+              ${renderInventoryReadonlyFact("Selling Price", formatInventoryMoney(row.sellingPrice))}
+            </div>
+          </section>
+          <section class="catalog-drawer-section">
+            <h3>Receive Details</h3>
+            <label class="catalog-field"><span>Inventory Location</span><select data-inventory-receive-field="locationId" ${disabled ? "disabled" : ""}>${inventoryLocations.map((location) => `<option value="${escapeHtml(location.id)}" ${location.id === row.locationId ? "selected" : ""}>${escapeHtml(formatInventoryLocation(location))}</option>`).join("")}</select></label>
+            <label class="catalog-field"><span>Quantity</span><input data-inventory-receive-field="quantity" min="1" step="1" inputmode="numeric" type="number" value="${quantity}" ${disabled ? "disabled" : ""} required></label>
+            <label class="catalog-field"><span>Source Reference</span><input data-inventory-receive-field="sourceReference" value="${escapeHtml(inventoryReceiveDrawer.sourceReference)}" ${disabled ? "disabled" : ""} placeholder="Receipt, invoice, or manual reference"></label>
+            <label class="catalog-field"><span>Reason / Note</span><textarea data-inventory-receive-field="reason" rows="3" ${disabled ? "disabled" : ""} placeholder="Operational note">${escapeHtml(inventoryReceiveDrawer.reason)}</textarea></label>
+          </section>
+        ` : `<section class="catalog-drawer-section"><p>No stock row selected.</p></section>`}
+        <footer class="catalog-drawer-footer">
+          <span>${inventoryReceiveDrawer.idempotencyKey ? `Idempotency: ${escapeHtml(inventoryReceiveDrawer.idempotencyKey)}` : "Idempotency key is created on submit."}</span>
+          <div>
+            <button class="note-button" data-inventory-close-receive type="button" ${inventoryReceiveDrawer.status === "saving" ? "disabled" : ""}>Cancel</button>
+            <button class="primary-button catalog-save-button" type="submit" ${disabled ? "disabled" : ""}>${inventoryReceiveDrawer.status === "saving" ? "Receiving..." : "Confirm Receive"}</button>
+          </div>
+        </footer>
+      </form>
+    </aside>
+  `;
+}
+
+function getInventorySummary() {
+  return {
+    totalRows: inventoryRows.length,
+    onHand: inventoryRows.reduce((sum, row) => sum + row.onHand, 0),
+    lowStock: inventoryRows.filter((row) => row.stockState === "LOW STOCK").length,
+    outOfStock: inventoryRows.filter((row) => row.stockState === "OUT OF STOCK").length,
+    incoming: inventoryRows.reduce((sum, row) => sum + row.incoming, 0),
+  };
+}
+
+function getVisibleInventoryRows() {
+  const normalizedQuery = inventoryQuery.trim().toLowerCase();
+  return inventoryRows.filter((row) => {
+    const matchesQuery = !normalizedQuery || [row.productName, row.variantLabel, row.sku, row.locationName, row.category, row.brand].join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesLocation = inventoryLocationFilter === "all" || row.locationId === inventoryLocationFilter;
+    const stockKey = row.stockState === "LOW STOCK" ? "low" : row.stockState === "OUT OF STOCK" ? "out" : "healthy";
+    const matchesStock = inventoryStockStateFilter === "all" || inventoryStockStateFilter === stockKey;
+    return matchesQuery && matchesLocation && matchesStock;
+  });
+}
+
+function getVisibleInventoryMovements() {
+  const normalizedQuery = inventoryQuery.trim().toLowerCase();
+  return inventoryMovements.filter((row) => {
+    const matchesQuery = !normalizedQuery || [row.productName, row.variantLabel, row.sku, row.locationName, row.source, row.reference, row.reason, row.operator].join(" ").toLowerCase().includes(normalizedQuery);
+    const matchesType = inventoryMovementTypeFilter === "all" || row.movementType === inventoryMovementTypeFilter;
+    const matchesSource = inventoryMovementSourceFilter === "all" || row.source === inventoryMovementSourceFilter;
+    return matchesQuery && matchesType && matchesSource;
+  });
+}
+
+function renderInventoryStockEmptyState(rows) {
+  if (rows.length) return "";
+  if (inventoryLoadState === "loading") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading inventory...</strong><span>Checking canonical Product, Variant, SKU, Location, and Balance records.</span></div>`;
+  if (inventoryLoadState === "error") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Inventory unavailable</strong><span>${escapeHtml(inventoryLoadError || "Canonical inventory data could not be loaded.")}</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No inventory rows</strong><span>No eligible physical, sellable, ready-for-sale SKU is currently bound to an active inventory location.</span></div>`;
+}
+
+function renderInventoryMovementEmptyState(rows) {
+  if (rows.length) return "";
+  if (inventoryLoadState === "loading") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading movements...</strong><span>Checking canonical stock movement records.</span></div>`;
+  if (inventoryLoadState === "error") return `<div class="empty-state compact-empty catalog-empty-state"><strong>Movement history unavailable</strong><span>${escapeHtml(inventoryLoadError || "Canonical stock movements could not be loaded.")}</span></div>`;
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No movement history</strong><span>No append-only stock movement records match the current filters.</span></div>`;
+}
+
+function renderInventoryStockPill(state) {
+  const className = state === "OUT OF STOCK" ? "out-of-stock" : state === "LOW STOCK" ? "low-stock" : "healthy";
+  return `<span class="status-pill inventory-${className}">${escapeHtml(state || "UNKNOWN")}</span>`;
+}
+
+function renderInventoryMovementPill(type) {
+  const normalized = String(type || "UNKNOWN").toUpperCase();
+  const className = normalized.includes("RECEIPT") || normalized.includes("RECEIVE") || normalized.includes("RETURN")
+    ? "inventory-healthy"
+    : normalized.includes("SALE")
+      ? "inventory-sale"
+      : normalized.includes("ADJUST")
+        ? "inventory-out-of-stock"
+        : "inventory-low-stock";
+  return `<span class="status-pill ${className}">${escapeHtml(normalized)}</span>`;
+}
+
+function renderInventoryReadonlyFact(label, value) {
+  return `<div><span>${escapeHtml(label)}</span><strong>${escapeHtml(String(value ?? "-"))}</strong></div>`;
+}
+
+function isPositiveMovement(item) {
+  return Number(item?.quantityDelta || 0) > 0;
+}
+
+function formatSignedQuantity(value) {
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${number} pcs`;
+}
+
+function formatMovementQuantityDelta(value) {
+  const number = Number(value || 0);
+  return `${number > 0 ? "+" : ""}${number}`;
+}
+
+function formatInventoryMoney(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  return Number.isFinite(number) ? `PHP ${number.toLocaleString("en-US", { maximumFractionDigits: 2 })}` : "—";
+}
+
+function formatInventoryOptionalNumber(value) {
+  if (value === null || value === undefined || value === "") return "—";
+  const number = Number(value);
+  return Number.isFinite(number) ? number.toLocaleString("en-US") : "—";
+}
+
+function formatInventoryDateTime(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+}
+
+function formatInventoryLocation(location) {
+  return [location.branchName || location.branchCode, location.name].filter(Boolean).join(" / ") || location.id;
+}
+
+function createClosedInventoryReceiveDrawer() {
+  return { open: false, rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
+}
+
+function openInventoryReceiveDrawer(rowId = "") {
+  if (!canReceiveInventoryForRole(adminUser?.role)) return;
+  const row = inventoryRows.find((item) => item.id === rowId) ?? getVisibleInventoryRows()[0];
+  if (!row) return;
+  inventoryReceiveDrawer = {
+    open: true,
+    rowId: row.id,
+    quantity: "",
+    sourceReference: "",
+    reason: "",
+    error: "",
+    status: "idle",
+    idempotencyKey: "",
+  };
+  render();
+}
+
+function updateInventoryReceiveField(field, value) {
+  if (field === "locationId") {
+    const currentRow = inventoryRows.find((row) => row.id === inventoryReceiveDrawer.rowId);
+    const nextRow = inventoryRows.find((row) => row.variantId === currentRow?.variantId && row.locationId === value);
+    inventoryReceiveDrawer = { ...inventoryReceiveDrawer, rowId: nextRow?.id || inventoryReceiveDrawer.rowId, error: "" };
+    render();
+    return;
+  }
+  inventoryReceiveDrawer = { ...inventoryReceiveDrawer, [field]: value, error: "" };
+}
+
+function validateInventoryReceive(row) {
+  if (!canReceiveInventoryForRole(adminUser?.role)) return "Only Owner and Admin can receive stock.";
+  if (!adminAuthSession?.access_token) return "Authenticated Owner/Admin session is required.";
+  if (!row?.variantId) return "Select a product variant.";
+  if (!row?.locationId) return "Select an inventory location.";
+  const quantity = Number(inventoryReceiveDrawer.quantity);
+  if (!Number.isInteger(quantity) || quantity <= 0) return "Quantity must be a positive whole number.";
+  return "";
+}
+
+async function submitInventoryReceive() {
+  if (inventoryReceiveDrawer.status === "saving") return;
+  const row = inventoryRows.find((item) => item.id === inventoryReceiveDrawer.rowId);
+  const validationError = validateInventoryReceive(row);
+  if (validationError) {
+    inventoryReceiveDrawer = { ...inventoryReceiveDrawer, error: validationError };
+    render();
+    return;
+  }
+
+  const idempotencyKey = inventoryReceiveDrawer.idempotencyKey || createInventoryIdempotencyKey();
+  inventoryReceiveDrawer = { ...inventoryReceiveDrawer, status: "saving", error: "", idempotencyKey };
+  render();
+
+  try {
+    await receiveAdminInventoryStock({
+      variantId: row.variantId,
+      locationId: row.locationId,
+      quantity: Number(inventoryReceiveDrawer.quantity),
+      idempotencyKey,
+      sourceReference: inventoryReceiveDrawer.sourceReference,
+      reason: inventoryReceiveDrawer.reason,
+    }, adminAuthSession);
+    inventoryReceiveDrawer = { ...createClosedInventoryReceiveDrawer(), status: "success" };
+    hasLoadedInventory = false;
+    await loadInventory({ force: true });
+  } catch (error) {
+    console.error("Unable to receive inventory stock.", error);
+    inventoryReceiveDrawer = { ...inventoryReceiveDrawer, status: "idle", error: error.message || "Receive Stock failed." };
+    render();
+  }
 }
 
 function getVisibleCatalogProducts() {
   const normalizedQuery = productQuery.trim().toLowerCase();
 
   return catalogProducts.filter((item) => {
-    const matchesCatalog = item.catalogKey === activeCatalogKey;
     const matchesStatus =
       catalogStatusFilter === "active"
         ? item.status !== "archived"
         : catalogStatusFilter === "all"
           ? true
           : item.status === catalogStatusFilter;
+    const matchesBrand = catalogBrandFilter === "all" || item.brandId === catalogBrandFilter;
     const matchesCategory = catalogCategoryFilter === "all" || item.category === catalogCategoryFilter;
+    const itemProductType = item.productType || inferCatalogProductType(item) || "";
+    const matchesProductType = catalogProductTypeFilter === "all" || itemProductType === catalogProductTypeFilter;
     const matchesFeatured =
       catalogFeaturedFilter === "all" ||
       (catalogFeaturedFilter === "featured" && item.isFeatured) ||
@@ -5348,13 +6981,642 @@ function getVisibleCatalogProducts() {
     const sourceProduct = getCatalogSourceProduct(item);
     const matchesQuery =
       !normalizedQuery ||
-      [item.name, item.slug, item.category, item.description, item.priceLabel, sourceProduct?.product, sourceProduct?.code]
+      [item.name, item.productCode, item.slug, item.category, item.description, item.priceLabel, sourceProduct?.product, sourceProduct?.code]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
 
-    return matchesCatalog && matchesStatus && matchesCategory && matchesFeatured && matchesQuery;
+    return matchesStatus && matchesBrand && matchesCategory && matchesProductType && matchesFeatured && matchesQuery;
   });
+}
+
+function getVisibleProductCategories() {
+  const normalizedQuery = productQuery.trim().toLowerCase();
+
+  return sortProductCategories(productCategories).filter((item) => {
+    const matchesStatus =
+      categoryStatusFilter === "active"
+        ? item.active && !item.archivedAt
+        : categoryStatusFilter === "archived"
+          ? !item.active || Boolean(item.archivedAt)
+          : true;
+    const matchesProductType = categoryProductTypeFilter === "all" || item.productType === categoryProductTypeFilter;
+    const matchesHierarchy =
+      categoryHierarchyFilter === "all" ||
+      (categoryHierarchyFilter === "root" && !item.parentCategoryId) ||
+      (categoryHierarchyFilter === "child" && Boolean(item.parentCategoryId));
+    const parent = getProductCategoryParent(item);
+    const matchesQuery =
+      !normalizedQuery ||
+      [item.name, item.code, parent?.name, item.archiveReason]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+
+    return matchesStatus && matchesProductType && matchesHierarchy && matchesQuery;
+  });
+}
+
+function getVisibleBrands() {
+  const normalizedQuery = productQuery.trim().toLowerCase();
+
+  return sortBrands(brands).filter((item) => {
+    const matchesStatus =
+      brandStatusFilter === "active"
+        ? item.status === "active"
+        : brandStatusFilter === "archived"
+          ? item.status === "archived"
+          : true;
+    const matchesQuery =
+      !normalizedQuery ||
+      [item.name, item.brandCode, item.ownerName, item.ownershipType, item.websiteSlug]
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+
+    return matchesStatus && matchesQuery;
+  });
+}
+
+function getCatalogProductSummaryCards(effectiveProducts = getVisibleCatalogProducts()) {
+  const ready = effectiveProducts.filter((item) => item.status === "published").length;
+  const archived = effectiveProducts.filter((item) => item.status === "archived").length;
+  const needsSetup = effectiveProducts.filter((item) => getCatalogProductHealthChecks(item).some((check) => !check.ready)).length;
+  const categories = new Set(effectiveProducts.map((item) => item.category).filter(Boolean)).size;
+  const variants = effectiveProducts.reduce((count, item) => count + getCatalogVariantCount(item), 0);
+
+  return [
+    { label: "Ready for Sale", value: ready, helper: "Published products" },
+    { label: "Needs Setup", value: needsSetup, helper: "Incomplete checks" },
+    { label: "Categories", value: categories, helper: "Used by products" },
+    { label: "Variants", value: variants, helper: "Listed combinations" },
+    { label: "Archived", value: archived, helper: "Hidden from active catalog" },
+  ];
+}
+
+function getCategorySummaryCards() {
+  const active = productCategories.filter((item) => item.active && !item.archivedAt).length;
+  const roots = productCategories.filter((item) => !item.parentCategoryId).length;
+  const children = productCategories.filter((item) => item.parentCategoryId).length;
+  const assignedProducts = productCategories.reduce((sum, item) => sum + Number(item.productCount ?? 0), 0);
+  const archived = productCategories.filter((item) => !item.active || Boolean(item.archivedAt)).length;
+
+  return [
+    { label: "Active Categories", value: active, helper: "Available for products" },
+    { label: "Root Categories", value: roots, helper: "Top-level taxonomy" },
+    { label: "Subcategories", value: children, helper: "Depth-two children" },
+    { label: "Assigned Products", value: assignedProducts, helper: "Canonical products" },
+    { label: "Archived", value: archived, helper: "Inactive taxonomy" },
+  ];
+}
+
+function getBrandSummaryCards() {
+  const active = brands.filter((item) => item.status === "active").length;
+  const partners = brands.filter((item) => item.ownershipType === "partner").length;
+  const assignedProducts = brands.reduce((sum, item) => sum + Number(item.productCount ?? 0), 0);
+  const storefronts = brands.filter((item) => item.websiteSlug).length;
+  const archived = brands.filter((item) => item.status === "archived").length;
+
+  return [
+    { label: "Active Brands", value: active, helper: "Ready for assignment" },
+    { label: "External Owners", value: partners, helper: "Partner brands onboarded" },
+    { label: "Products Assigned", value: assignedProducts, helper: "Canonical products" },
+    { label: "Storefronts", value: storefronts, helper: "Live or planned slugs" },
+    { label: "Archived", value: archived, helper: "Unavailable for products" },
+  ];
+}
+
+function renderCatalogSummaryCard(card) {
+  return `
+    <article class="catalog-summary-card">
+      <span>${escapeHtml(card.label)}</span>
+      <strong>${escapeHtml(String(card.value))}</strong>
+      <small>${escapeHtml(card.helper)}</small>
+    </article>
+  `;
+}
+
+function renderCategoryNotice() {
+  if (categorySaveState === "success") {
+    return `<div class="catalog-notice success">Category saved successfully.</div>`;
+  }
+
+  if (categoryLoadState === "loading") {
+    return `<div class="catalog-notice">Loading product category taxonomy...</div>`;
+  }
+
+  if (categoryLoadState === "error") {
+    return `<div class="catalog-notice error">Unable to load product categories. Check Supabase access and M1 RLS policies.</div>`;
+  }
+
+  if (!canManageProductCategories()) {
+    return `<div class="catalog-notice">Viewer access: product category taxonomy is read-only.</div>`;
+  }
+
+  return "";
+}
+
+function renderBrandNotice() {
+  if (brandSaveState === "success") {
+    return `<div class="catalog-notice success">Brand saved successfully.</div>`;
+  }
+
+  if (brandLoadState === "loading") {
+    return `<div class="catalog-notice">Loading canonical Brands...</div>`;
+  }
+
+  if (brandLoadState === "error") {
+    return `<div class="catalog-notice error">Unable to load Brands. Check Supabase grants and Brand RLS policies.</div>`;
+  }
+
+  if (!canManageBrands()) {
+    return `<div class="catalog-notice">Viewer access: Brands are read-only.</div>`;
+  }
+
+  return "";
+}
+
+function renderBrandEmptyState(visibleBrands) {
+  if (visibleBrands.length > 0) return "";
+
+  if (brandLoadState === "loading") {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading brands...</strong><span>Checking canonical Brand reference records.</span></div>`;
+  }
+
+  if (!brands.length) {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No brands yet</strong><span>The Brand Foundation migration must create STLO, TRRY Apparel, and Generic / Unbranded.</span></div>`;
+  }
+
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No brands match</strong><span>Try another search term or status filter.</span></div>`;
+}
+
+function renderBrandRow(brand) {
+  const statusMarkup = brand.status === "active"
+    ? `<span class="status-pill active">Active</span>`
+    : `<span class="status-pill archived">Archived</span>`;
+  const canWrite = canManageBrands();
+  const archiveDisabled = !canWrite || brand.status === "archived" || Number(brand.productCount ?? 0) > 0;
+  const actionLabel = brand.status === "archived" ? "Archived" : "Archive";
+  return `
+    <tr class="${brand.id === selectedBrandId ? "selected" : ""}" data-brand-edit="${escapeHtml(brand.id)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(brand.name)} brand details">
+      <td class="brand-main-cell" data-mobile-label="Brand"><div class="brand-row-stack"><strong title="${escapeHtml(brand.name)}">${escapeHtml(brand.name)}</strong><span title="Code: ${escapeHtml(brand.brandCode)}">Code: ${escapeHtml(brand.brandCode)}</span></div></td>
+      <td class="brand-owner-cell" data-mobile-label="Owner"><div class="brand-row-stack"><strong title="${escapeHtml(brand.ownerName)}">${escapeHtml(brand.ownerName)}</strong><span>${escapeHtml(formatOwnershipType(brand.ownershipType))} owner</span></div></td>
+      <td class="category-count-cell" data-mobile-label="Products">${Number(brand.productCount ?? 0)}</td>
+      <td class="brand-slug-cell" data-mobile-label="Website Slug">${escapeHtml(brand.websiteSlug || "Not published")}</td>
+      <td class="category-status-cell" data-mobile-label="Status">${statusMarkup}</td>
+      <td class="category-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(brand.updatedAt))}</span></td>
+      <td class="category-action-cell" data-mobile-label="Action">
+        <button class="note-button compact-action" data-brand-edit="${escapeHtml(brand.id)}" type="button">${canWrite ? "Edit" : "View"}</button>
+        <button class="note-button compact-action danger" data-brand-archive="${escapeHtml(brand.id)}" type="button" ${archiveDisabled ? "disabled" : ""}>${actionLabel}</button>
+      </td>
+    </tr>
+  `;
+}
+
+function renderBrandDrawer(selectedBrand) {
+  const draft = brandDraft ?? createBrandDraft(selectedBrand);
+  const isSaving = brandSaveState === "saving";
+  const canWrite = canManageBrands();
+  const isEdit = brandDrawerMode === "edit";
+  const assignedProducts = Number(draft.productCount ?? selectedBrand?.productCount ?? 0);
+  const title = draft.name || (isEdit ? "Edit Brand" : "Create Brand");
+  const normalizedDraft = normalizeBrandDraft(draft);
+  const isDirty = !isEdit || isBrandDraftDirty(selectedBrand, normalizedDraft);
+  const canSave = canWrite && !isSaving && isDirty && !validateBrand(normalizedDraft);
+
+  return `
+    <div class="catalog-drawer-backdrop" data-brand-close></div>
+    <aside class="catalog-drawer brand-drawer" aria-label="${escapeHtml(title)} brand details">
+      <header>
+        <div>
+          <span>BRAND DIRECTORY</span>
+          <h2>${escapeHtml(isEdit ? title : "Create Brand")}</h2>
+          <p>${isEdit ? "Update brand identity, owner, storefront slug, and assignment status." : "Create a brand identity for product assignment and future storefront publishing."}</p>
+          ${draft.status === "archived" ? `<span class="status-pill archived">Archived</span>` : `<span class="status-pill active">Active</span>`}
+        </div>
+        <button class="catalog-drawer-close" data-brand-close type="button" aria-label="Close brand drawer">X</button>
+      </header>
+      <form class="catalog-form" id="brand-form">
+        ${brandValidationError ? `<p class="catalog-form-error">${escapeHtml(brandValidationError)}</p>` : ""}
+        ${brandSaveError ? `<p class="catalog-form-error">${escapeHtml(brandSaveError)}</p>` : ""}
+
+        <section class="catalog-drawer-section" aria-label="Brand identity">
+          <h3>Identity</h3>
+          ${renderBrandInput("name", "Brand Name", draft.name, "text", true, isSaving || !canWrite, "Customer-facing label shown across catalog and storefront.")}
+          ${renderBrandInput("brandCode", "Brand Code", draft.brandCode, "text", true, isSaving || !canWrite, isEdit ? "Stable and immutable after creation." : "Manually entered, normalized to uppercase, and never derived from slug.", { readonly: isEdit, locked: isEdit })}
+          ${renderBrandInput("ownerName", "Brand Owner", draft.ownerName, "text", true, isSaving || !canWrite, "Internal team or partner owner name.")}
+          ${renderBrandField("ownershipType", "Ownership Type", renderBrandOwnershipSelect(draft, isSaving || !canWrite))}
+          ${renderBrandInput("websiteSlug", "Website Slug", draft.websiteSlug || "", "text", false, isSaving || !canWrite, "Optional; unique when present.")}
+          ${renderBrandField("status", "Status", renderBrandStatusSelect(draft, isSaving || !canWrite || (assignedProducts > 0 && draft.status === "active")), assignedProducts > 0 ? "Archive is blocked while products are assigned." : "Active brands can be assigned to products.")}
+        </section>
+
+        <footer class="catalog-drawer-footer">
+          <span>${assignedProducts} ${assignedProducts === 1 ? "product" : "products"} assigned</span>
+          <div>
+            <button class="note-button" data-brand-close type="button" ${isSaving ? "disabled" : ""}>Cancel</button>
+            <button class="primary-button catalog-save-button" type="submit" ${canSave ? "" : "disabled"}>${isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Create Brand")}</button>
+          </div>
+        </footer>
+      </form>
+    </aside>
+  `;
+}
+
+function renderCategoryEmptyState(visibleCategories) {
+  if (visibleCategories.length > 0) return "";
+
+  if (categoryLoadState === "loading") {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading categories...</strong><span>Checking Master Catalog taxonomy records.</span></div>`;
+  }
+
+  if (!productCategories.length) {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No categories yet</strong><span>Add the first Master Catalog category before creating M1 products.</span></div>`;
+  }
+
+  return `<div class="empty-state compact-empty catalog-empty-state"><strong>No categories match</strong><span>Try another search term or status filter.</span></div>`;
+}
+
+function renderProductCategoryRow(category) {
+  const parent = getProductCategoryParent(category);
+  const children = productCategories.filter((item) => item.parentCategoryId === category.id).length;
+  const indent = getCategoryDepth(category) * 18;
+  const assignedProducts = Number(category.productCount ?? 0);
+  const statusMarkup = category.active && !category.archivedAt
+    ? `<span class="status-pill active">Active</span>`
+    : `<span class="status-pill archived">Archived</span>`;
+
+  return `
+    <tr class="${category.id === selectedCategoryId ? "selected" : ""}" data-category-edit="${escapeHtml(category.id)}" role="button" tabindex="0" aria-label="Open ${escapeHtml(category.name)} category details">
+      <td class="catalog-name-cell category-main-cell"><div class="category-name-stack" style="--category-indent: ${indent}px"><strong title="${escapeHtml(category.name)}">${escapeHtml(category.name)}</strong><span title="${escapeHtml(getCategoryPath(category))}">${escapeHtml(getCategoryPath(category))}</span></div></td>
+      <td class="mono-value category-code-cell" data-mobile-label="Code" title="${escapeHtml(category.code)}">${escapeHtml(category.code)}</td>
+      <td class="category-product-type-cell" data-mobile-label="Product Type" title="${escapeHtml(formatProductType(category.productType))}">${escapeHtml(formatProductType(category.productType))}</td>
+      <td class="category-parent-cell" data-mobile-label="Parent" title="${escapeHtml(parent?.name || "Root")}">${escapeHtml(parent?.name || "Root")}</td>
+      <td class="category-count-cell" data-mobile-label="Children">${children}</td>
+      <td class="category-count-cell" data-mobile-label="Products">${assignedProducts}</td>
+      <td class="category-status-cell" data-mobile-label="Status">${statusMarkup}</td>
+      <td class="category-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(category.updatedAt))}</span></td>
+      <td class="category-action-cell" data-mobile-label="Action"><button class="note-button compact-action" data-category-edit="${escapeHtml(category.id)}" type="button">Edit</button></td>
+    </tr>
+  `;
+}
+
+function renderCategoryDrawer(selectedCategory) {
+  const draft = categoryDraft ?? createCategoryDraft(selectedCategory);
+  const isSaving = categorySaveState === "saving";
+  const canWrite = canManageProductCategories();
+  const isArchived = !draft.active || Boolean(draft.archivedAt);
+  const isEdit = categoryDrawerMode === "edit";
+  const categoryChildren = getCategoryDirectChildren(draft.id).length;
+  const assignedProducts = Number(draft.productCount ?? selectedCategory?.productCount ?? 0);
+  const locksProductType = isEdit && (categoryChildren > 0 || assignedProducts > 0);
+  const title = draft.name || (isEdit ? "Edit Category" : "New Category");
+  const productTypeHelper = locksProductType
+    ? "Product Type is locked while products or child categories exist."
+    : "Select the product type before choosing a parent category.";
+  const archiveRule = isEdit
+    ? assignedProducts > 0
+      ? "Blocked while assigned"
+      : isArchived
+        ? "Ready to restore"
+        : "Available with archive reason"
+    : "Available after creation";
+
+  return `
+    <div class="catalog-drawer-backdrop" data-category-close></div>
+    <aside class="catalog-drawer category-drawer" aria-label="${escapeHtml(title)} category details">
+      <header>
+        <div>
+          <span>MASTER CATALOG TAXONOMY</span>
+          <h2>${escapeHtml(isEdit ? title : "New Category")}</h2>
+          <p>${isEdit ? "Update taxonomy governance. Product Type is locked while products or child categories exist." : "Create a taxonomy record. Product Type must be selected before choosing a parent."}</p>
+          ${isArchived ? `<span class="status-pill archived">Archived</span>` : `<span class="status-pill active">Active</span>`}
+        </div>
+        <button class="catalog-drawer-close" data-category-close type="button" aria-label="Close category drawer">X</button>
+      </header>
+      <form class="catalog-form" id="category-form">
+        ${categoryValidationError ? `<p class="catalog-form-error">${escapeHtml(categoryValidationError)}</p>` : ""}
+        ${categorySaveError ? `<p class="catalog-form-error">${escapeHtml(categorySaveError)}</p>` : ""}
+
+        <section class="catalog-drawer-section" aria-label="Category identity">
+          <h3>Identity</h3>
+          ${renderCategoryInput("name", "Category name", draft.name, "text", true, isSaving || !canWrite, "Use the customer-facing category name.")}
+          ${renderCategoryInput("code", "Category code", draft.code, "text", true, true, "Auto-generated from the category name and saved as the stable taxonomy reference.")}
+          ${renderCatalogField("productType", "Product Type", renderCategoryProductTypeSelect(draft, isSaving || !canWrite || locksProductType), productTypeHelper)}
+          ${renderCatalogField("parentCategoryId", "Parent category", renderCategoryParentSelect(draft, isSaving || !canWrite || !draft.productType), draft.productType ? "Only categories with the same product type are available." : "Select a product type before choosing a parent category.")}
+        </section>
+
+        <section class="catalog-drawer-section" aria-label="Governance">
+          <h3>Governance</h3>
+          <div class="catalog-kv-list">
+            ${renderCatalogDetailRow("Hierarchy", getCategoryDepth(draft) > 0 ? "Subcategory" : "Root category")}
+            ${renderCatalogDetailRow("Child categories", String(categoryChildren))}
+            ${renderCatalogDetailRow("Assigned products", String(assignedProducts))}
+            ${renderCatalogDetailRow("Status", isArchived ? "Archived" : "Active")}
+            ${renderCatalogDetailRow("Archive rule", archiveRule)}
+            ${renderCatalogDetailRow("Created", formatCatalogUpdated(draft.createdAt))}
+            ${renderCatalogDetailRow("Updated", formatCatalogUpdated(draft.updatedAt))}
+            ${renderCatalogDetailRow("Archived", draft.archivedAt ? formatCatalogUpdated(draft.archivedAt) : "Not archived")}
+          </div>
+          ${isArchived
+            ? renderCategoryInput("restoreReason", "Restore note", draft.restoreReason, "text", false, isSaving || !canWrite)
+            : renderCategoryInput("archiveReason", "Archive reason", draft.archiveReason, "text", false, isSaving || !canWrite)}
+        </section>
+        <section class="catalog-drawer-section" aria-label="Assignment rules">
+          <h3>Product-type binding rule</h3>
+          <p class="catalog-helper-text">A category belongs to exactly one product type. Parent and child categories must use the same type; hierarchy depth is limited to two levels. Parent options are active, non-archived, same Product Type, and cycle-safe. Product records are never reclassified automatically.</p>
+        </section>
+      </form>
+      <div class="catalog-drawer-actions">
+        <button class="note-button" data-category-close type="button">Cancel</button>
+        ${draft.id && canWrite ? `<button class="note-button category-archive-button" data-category-archive-action="${isArchived ? "restore" : "archive"}" type="button" ${isSaving ? "disabled" : ""}>${isArchived ? "Restore" : "Archive"}</button>` : ""}
+        <button class="primary-button catalog-save-button" form="category-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${isSaving ? "Saving..." : (isEdit ? "Save Changes" : "Create Category")}</button>
+      </div>
+    </aside>
+  `;
+}
+
+function renderCategoryInput(field, label, value, type = "text", required = false, disabled = false, helperText = "") {
+  return renderCatalogField(field, label, `<input id="catalog-${field}" data-category-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} ${disabled ? "disabled" : ""} />`, helperText);
+}
+
+function renderCategoryParentSelect(draft, disabled = false) {
+  const options = getCategoryParentOptions(draft);
+  return `<select id="catalog-parentCategoryId" data-category-field="parentCategoryId" ${disabled ? "disabled" : ""}><option value="">No parent - root category</option>${options.map((category) => `<option value="${escapeHtml(category.id)}" ${category.id === draft.parentCategoryId ? "selected" : ""}>${escapeHtml(getCategoryPath(category))}</option>`).join("")}</select>`;
+}
+
+function renderCategoryProductTypeSelect(draft, disabled = false) {
+  return `<select id="catalog-productType" data-category-field="productType" required ${disabled ? "disabled" : ""}><option value="" ${draft.productType ? "" : "selected"}>Select product type</option>${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === draft.productType ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select>`;
+}
+
+function getCategoryParentOptions(draft) {
+  const blockedIds = new Set(draft.id ? [draft.id, ...getCategoryDescendantIds(draft.id)] : []);
+  return sortProductCategories(productCategories).filter((category) =>
+    !blockedIds.has(category.id) &&
+    category.active &&
+    !category.archivedAt &&
+    !category.parentCategoryId &&
+    category.productType === draft.productType
+  );
+}
+
+function getCategoryDirectChildren(categoryId) {
+  if (!categoryId) return [];
+  return productCategories.filter((item) => item.parentCategoryId === categoryId);
+}
+
+function getCategoryDescendantIds(categoryId) {
+  const children = productCategories.filter((item) => item.parentCategoryId === categoryId);
+  return children.flatMap((child) => [child.id, ...getCategoryDescendantIds(child.id)]);
+}
+
+function getProductCategoryParent(category) {
+  return productCategories.find((item) => item.id === category?.parentCategoryId) ?? null;
+}
+
+function getCategoryPath(category) {
+  const names = [];
+  let current = category;
+  const seen = new Set();
+  while (current && !seen.has(current.id)) {
+    names.unshift(current.name);
+    seen.add(current.id);
+    current = getProductCategoryParent(current);
+  }
+  return names.join(" / ");
+}
+
+function getCategoryDepth(category) {
+  let depth = 0;
+  let current = getProductCategoryParent(category);
+  const seen = new Set([category?.id]);
+  while (current && !seen.has(current.id)) {
+    depth += 1;
+    seen.add(current.id);
+    current = getProductCategoryParent(current);
+  }
+  return depth;
+}
+
+function sortProductCategories(categories) {
+  const byId = new Map(categories.map((category) => [category.id, category]));
+  const pathFor = (category) => {
+    const names = [];
+    let current = category;
+    const seen = new Set();
+    while (current && !seen.has(current.id)) {
+      names.unshift(current.name);
+      seen.add(current.id);
+      current = byId.get(current.parentCategoryId);
+    }
+    return names.join(" / ");
+  };
+
+  return [...categories].sort((a, b) => pathFor(a).localeCompare(pathFor(b)) || a.code.localeCompare(b.code));
+}
+
+function createCategoryDraft(category = null) {
+  if (category) {
+    return {
+      ...category,
+      productType: category.productType || "",
+      originalProductType: category.productType || "",
+      restoreReason: "",
+    };
+  }
+
+  return {
+    name: "",
+    code: "",
+    productType: "",
+    originalProductType: "",
+    parentCategoryId: "",
+    active: true,
+    archivedAt: "",
+    archivedByUserId: "",
+    archiveReason: "",
+    restoreReason: "",
+  };
+}
+
+function updateCategoryDraftField(field, value) {
+  if (!categoryDraft) return;
+  const nextValue = String(value ?? "");
+  const shouldCreateCode = field === "name" && (!categoryDraft.code || categoryDraft.code === createCategoryCode(categoryDraft.name));
+  categoryDraft = {
+    ...categoryDraft,
+    [field]: nextValue,
+  };
+  if (field === "productType") {
+    categoryDraft.parentCategoryId = "";
+  }
+  if (shouldCreateCode) {
+    categoryDraft.code = createCategoryCode(nextValue);
+  }
+  categoryValidationError = "";
+  categorySaveError = "";
+}
+
+function normalizeCategoryDraft(draft) {
+  return {
+    ...draft,
+    name: String(draft.name || "").trim(),
+    code: createCategoryCode(draft.code || draft.name),
+    productType: productTypeOptions.some((option) => option.value === draft.productType) ? draft.productType : "",
+    originalProductType: String(draft.originalProductType || "").trim(),
+    parentCategoryId: String(draft.parentCategoryId || "").trim(),
+    active: draft.active !== false,
+    archiveReason: String(draft.archiveReason || "").trim(),
+    restoreReason: String(draft.restoreReason || "").trim(),
+  };
+}
+
+function validateCategory(category) {
+  if (!category.name) return "Category name is required.";
+  if (!category.code) return "Category code is required.";
+  if (!productTypeOptions.some((option) => option.value === category.productType)) return "Select a product type.";
+  if (category.parentCategoryId && category.parentCategoryId === category.id) return "A category cannot be its own parent.";
+  if (category.parentCategoryId && getCategoryDescendantIds(category.id).includes(category.parentCategoryId)) return "A category cannot be moved under its own child.";
+  const parent = getProductCategoryParent(category);
+  if (parent?.productType && parent.productType !== category.productType) return "Only categories with the same product type are available.";
+  if (parent?.parentCategoryId) return "Hierarchy depth is limited to two levels.";
+  if (category.id && category.originalProductType && category.originalProductType !== category.productType && (getCategoryDirectChildren(category.id).length > 0 || Number(category.productCount ?? 0) > 0)) {
+    return "Product type cannot be changed while this category is in use.";
+  }
+  const duplicateCode = productCategories.find((item) => item.id !== category.id && item.code.toLowerCase() === category.code.toLowerCase());
+  if (duplicateCode) return "Category code must be unique.";
+  const duplicateName = productCategories.find((item) =>
+    item.id !== category.id &&
+    item.name.toLowerCase() === category.name.toLowerCase() &&
+    item.productType === category.productType &&
+    (item.parentCategoryId || "") === (category.parentCategoryId || "")
+  );
+  if (duplicateName) return "Category name must be unique within the selected product type and parent.";
+  return "";
+}
+
+function formatProductType(value) {
+  return productTypeOptions.find((option) => option.value === value)?.label ?? "";
+}
+
+function createCategoryCode(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, "-")
+    .replace(/^-|-$/g, "");
+}
+
+function canManageProductCategories() {
+  return ["owner", "admin"].includes(adminUser?.role);
+}
+
+function canManageBrands() {
+  return ["owner", "admin"].includes(adminUser?.role);
+}
+
+function renderBrandInput(field, label, value, type = "text", required = false, disabled = false, helperText = "", options = {}) {
+  const className = options.locked ? ` class="locked-field"` : "";
+  return renderBrandField(field, label, `<input id="brand-${field}" data-brand-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}"${className} ${required ? "required" : ""} ${disabled ? "disabled" : ""} ${options.readonly ? "readonly aria-readonly=\"true\"" : ""} />`, helperText);
+}
+
+function renderBrandField(id, label, control, helperText = "") {
+  return `<label class="catalog-field" for="brand-${id}"><span>${label}</span>${control}${helperText ? `<small>${escapeHtml(helperText)}</small>` : ""}</label>`;
+}
+
+function renderBrandOwnershipSelect(draft, disabled = false) {
+  return `<select id="brand-ownershipType" data-brand-field="ownershipType" required ${disabled ? "disabled" : ""}>
+    <option value="internal" ${draft.ownershipType === "internal" ? "selected" : ""}>Internal</option>
+    <option value="partner" ${draft.ownershipType === "partner" ? "selected" : ""}>Partner</option>
+  </select>`;
+}
+
+function renderBrandStatusSelect(draft, disabled = false) {
+  return `<select id="brand-status" data-brand-field="status" required ${disabled ? "disabled" : ""}>
+    <option value="active" ${draft.status === "active" ? "selected" : ""}>Active</option>
+    <option value="archived" ${draft.status === "archived" ? "selected" : ""}>Archived</option>
+  </select>`;
+}
+
+function createBrandDraft(brand = null) {
+  if (brand) return { ...brand };
+  return {
+    name: "",
+    brandCode: "",
+    ownershipType: "internal",
+    ownerName: "",
+    websiteSlug: "",
+    status: "active",
+    productCount: 0,
+  };
+}
+
+function updateBrandDraftField(field, value) {
+  if (!brandDraft) return;
+  const nextValue = field === "brandCode" ? String(value ?? "").trim().toUpperCase() : String(value ?? "");
+  brandDraft = {
+    ...brandDraft,
+    [field]: nextValue,
+  };
+  brandValidationError = "";
+  brandSaveError = "";
+}
+
+function normalizeBrandDraft(draft) {
+  return {
+    ...draft,
+    name: String(draft.name || "").trim(),
+    brandCode: String(draft.brandCode || "").trim().toUpperCase(),
+    ownershipType: ["internal", "partner"].includes(draft.ownershipType) ? draft.ownershipType : "internal",
+    ownerName: String(draft.ownerName || "").trim(),
+    websiteSlug: String(draft.websiteSlug || "").trim(),
+    status: ["active", "archived"].includes(draft.status) ? draft.status : "active",
+  };
+}
+
+function validateBrand(brand) {
+  if (!brand.name) return "Brand name is required.";
+  if (!brand.id && !brand.brandCode) return "Brand Code is required.";
+  if (!brand.ownerName) return "Owner name is required.";
+  if (!["internal", "partner"].includes(brand.ownershipType)) return "Choose a valid ownership type.";
+  if (!["active", "archived"].includes(brand.status)) return "Choose a valid status.";
+  const duplicateCode = brand.brandCode ? brands.find((item) => item.id !== brand.id && item.brandCode.toLowerCase() === brand.brandCode.toLowerCase()) : null;
+  if (duplicateCode) return "Brand Code must be unique.";
+  const duplicateName = brands.find((item) => item.id !== brand.id && item.name.toLowerCase() === brand.name.toLowerCase());
+  if (duplicateName) return "Brand name must be unique.";
+  const duplicateSlug = brand.websiteSlug ? brands.find((item) => item.id !== brand.id && item.websiteSlug && item.websiteSlug.toLowerCase() === brand.websiteSlug.toLowerCase()) : null;
+  if (duplicateSlug) return "Website slug must be unique.";
+  if (brand.status === "archived" && Number(brand.productCount ?? 0) > 0) return "Archive is blocked while products are assigned to this Brand.";
+  return "";
+}
+
+function isBrandDraftDirty(originalBrand, draft) {
+  if (!originalBrand) return true;
+  const original = normalizeBrandDraft(originalBrand);
+  return ["name", "brandCode", "ownerName", "ownershipType", "websiteSlug", "status"].some((field) =>
+    String(original[field] ?? "") !== String(draft[field] ?? "")
+  );
+}
+
+function sortBrands(items) {
+  return [...items].sort((a, b) => {
+    const statusRank = Number(a.status === "archived") - Number(b.status === "archived");
+    return statusRank || a.name.localeCompare(b.name) || a.brandCode.localeCompare(b.brandCode);
+  });
+}
+
+function upsertBrand(items, brand) {
+  const nextItems = items.some((item) => item.id === brand.id)
+    ? items.map((item) => item.id === brand.id ? { ...item, ...brand } : item)
+    : [...items, brand];
+  return sortBrands(nextItems);
+}
+
+function formatOwnershipType(value) {
+  return value === "partner" ? "Partner owner" : "Internal owner";
+}
+
+function getAdminActorUserId() {
+  return adminUser?.userId || adminUser?.user_id || adminAuthSession?.user?.id || "";
 }
 
 function renderCatalogNotice() {
@@ -5384,9 +7646,8 @@ function renderCatalogEmptyState(visibleProducts) {
     return `<div class="empty-state compact-empty catalog-empty-state"><strong>Loading catalog...</strong><span>Checking customer-facing publishing records.</span></div>`;
   }
 
-  const catalogLabel = getCatalogLabel(activeCatalogKey);
-  if (!catalogProducts.some((item) => item.catalogKey === activeCatalogKey)) {
-    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No Catalog records</strong><span>${catalogLabel} does not have published presentation records yet.</span></div>`;
+  if (catalogProducts.length === 0) {
+    return `<div class="empty-state compact-empty catalog-empty-state"><strong>No Catalog records</strong><span>No canonical Products are available yet.</span></div>`;
   }
 
   return `<div class="empty-state compact-empty catalog-empty-state"><strong>No results from filters</strong><span>Try another search term, category, featured state, or publish status.</span></div>`;
@@ -5395,129 +7656,990 @@ function renderCatalogEmptyState(visibleProducts) {
 function renderCatalogProductRow(item) {
   const sourceProduct = getCatalogSourceProduct(item);
   const secondary = item.slug ? item.slug : sourceProduct?.code ? `Source: ${sourceProduct.code}` : "No source product linked";
+  const expanded = item.id === catalogExpandedProductId;
+  const sku = getCatalogEditorSku(item);
+  const margin = getCatalogEditorMargin(item);
 
   return `
-    <tr class="${item.id === selectedCatalogProductId ? "selected" : ""}" data-catalog-edit-product="${item.id}" role="button" tabindex="0" aria-label="Open ${escapeHtml(item.name)} catalog presentation details">
+    <tr class="${expanded ? "selected" : ""}" data-catalog-toggle-product="${item.id}" role="button" tabindex="0" aria-expanded="${expanded ? "true" : "false"}" aria-label="Open ${escapeHtml(item.name)} product quick controls">
       <td class="catalog-name-cell"><div class="client-cell"><span class="catalog-product-image ${item.imageUrl ? "has-image" : "empty"}" ${item.imageUrl ? `style="background-image: url('${escapeHtml(item.imageUrl)}')" aria-label="Catalog image"` : `role="img" aria-label="No catalog image"`}>${item.imageUrl ? "" : renderIcon("package", "catalog-placeholder-icon")}</span><div><strong title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</strong><span title="${escapeHtml(secondary)}">${escapeHtml(secondary)}</span></div></div></td>
-      <td class="catalog-destination-cell" data-mobile-label="Destination" title="${escapeHtml(getCatalogLabel(item.catalogKey))}" aria-label="Destination: ${escapeHtml(getCatalogLabel(item.catalogKey))}">${escapeHtml(getCatalogLabel(item.catalogKey))}</td>
+      <td class="catalog-category-cell" data-mobile-label="Brand">${escapeHtml(item.brandName || item.brand || "-")}</td>
       <td class="catalog-category-cell" data-mobile-label="Category">${escapeHtml(item.category || "-")}</td>
-      <td class="catalog-price-cell" data-mobile-label="Price">${escapeHtml(formatCatalogPrice(item))}</td>
-      <td class="catalog-moq-cell" data-mobile-label="Min Qty">${escapeHtml(item.minimumQuantity)}</td>
-      <td class="catalog-featured-cell" data-mobile-label="Featured">${item.isFeatured ? `<span class="status-pill visible">Featured</span>` : `<span class="catalog-featured-muted">No</span>`}</td>
+      <td class="mono-value catalog-sku-cell" data-mobile-label="SKU"><span title="${escapeHtml(sku)}">${escapeHtml(sku)}</span><button class="catalog-copy-sku-button" data-catalog-copy-sku="${escapeHtml(sku)}" type="button" aria-label="Copy SKU">Copy</button></td>
+      <td class="catalog-price-cell" data-mobile-label="Selling Price">${escapeHtml(formatCatalogPrice(item))}</td>
+      <td class="catalog-price-cell" data-mobile-label="Margin">${escapeHtml(margin.label)}</td>
       <td class="catalog-status-cell" data-mobile-label="Status">${renderStatusPill(item.status)}</td>
-      <td class="catalog-updated-cell" data-mobile-label="Updated"><span class="mono-value">${escapeHtml(formatCatalogUpdated(item.updatedAt))}</span></td>
+      <td class="catalog-expand-cell" data-mobile-label="Quick"><span class="catalog-expand-button">${renderIcon(expanded ? "chevron-down" : "chevron-right", "catalog-expand-icon")}</span></td>
+    </tr>
+    ${expanded ? renderCatalogProductQuickControl(item) : ""}
+  `;
+}
+
+function renderCatalogProductQuickControl(item) {
+  const canWrite = canWriteCatalogProducts();
+  const checks = getCatalogProductHealthChecks(item);
+  const readyCount = checks.filter((check) => check.ready).length;
+  const saving = catalogQuickSaveState === item.id;
+  const readinessLabel = readyCount === checks.length ? "READY" : "NEEDS SETUP";
+  const imageActionLabel = item.imageUrl ? "Update Image" : "Add Image";
+
+  return `
+    <tr class="catalog-product-quick-row">
+      <td colspan="11">
+        <section class="catalog-product-quick-control" aria-label="${escapeHtml(item.name)} quick control">
+          ${catalogQuickSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogQuickSaveError)}</p>` : ""}
+          <div class="catalog-quick-summary">
+            <span>${readinessLabel} · ${readyCount}/${checks.length} COMPLETE</span>
+            <strong>${escapeHtml(item.name)}</strong>
+            <small>${escapeHtml(item.brandName || item.brand || "No Brand")} · ${escapeHtml(item.category || "No Category")}</small>
+          </div>
+          <div class="catalog-quick-price">
+            <label class="catalog-quick-price-input">
+              <span>Price</span>
+              <input data-catalog-quick-selling-price="${escapeHtml(item.id)}" type="number" min="0" step="0.01" value="${escapeHtml(item.startingPrice ?? "")}" ${canWrite && !saving ? "" : "disabled"} />
+            </label>
+            <button class="primary-button catalog-quick-button" data-catalog-quick-price-save="${escapeHtml(item.id)}" type="button" ${canWrite && !saving ? "" : "disabled"}>${saving ? "Updating..." : "Update Price"}</button>
+          </div>
+          <div class="catalog-quick-status">
+            <label>
+              <span>Status / Visibility</span>
+              <select data-catalog-quick-status="${escapeHtml(item.id)}" ${canWrite && !saving ? "" : "disabled"}>
+                ${catalogStatusOptions.map((status) => `<option value="${status}" ${status === item.status ? "selected" : ""}>${status}</option>`).join("")}
+              </select>
+            </label>
+          </div>
+          <div class="catalog-quick-actions">
+            <label class="note-button catalog-quick-image-button ${canWrite && !saving ? "" : "disabled"}">
+              ${imageActionLabel}
+              <input data-catalog-quick-image-file="${escapeHtml(item.id)}" type="file" accept="image/jpeg,image/png,image/webp,image/avif" ${canWrite && !saving ? "" : "disabled"} />
+            </label>
+            <button class="primary-button catalog-quick-button" data-catalog-full-edit="${escapeHtml(item.id)}" type="button">Full Edit Product</button>
+            <details class="catalog-quick-more">
+              <summary>More</summary>
+              <div>
+                <button data-catalog-duplicate="${escapeHtml(item.id)}" type="button" ${canWrite && !saving ? "" : "disabled"}>Duplicate</button>
+                <button data-catalog-archive-product="${escapeHtml(item.id)}" type="button" ${canWrite && !saving && item.status !== "archived" ? "" : "disabled"}>Archive</button>
+              </div>
+            </details>
+          </div>
+        </section>
+      </td>
     </tr>
   `;
 }
 
-function renderCatalogDrawer(selectedProduct) {
-  const draft = catalogDraft ?? createCatalogDraft(selectedProduct);
+function getCatalogProductHealthChecks(item) {
+  return [
+    { label: "Brand", ready: Boolean(item.brandId) },
+    { label: "Image", ready: Boolean(item.imageUrl) },
+    { label: "Category", ready: Boolean(item.category) },
+    { label: "Cost", ready: Boolean(item.unitCost) },
+    { label: "Price", ready: Boolean(item.startingPrice) },
+    { label: "Variants", ready: getCatalogVariantCount(item) > 0 },
+  ];
+}
+
+function getCatalogVariantCount(item) {
+  const sizes = Array.isArray(item.availableSizes) ? item.availableSizes.filter(Boolean).length : 0;
+  const colors = Array.isArray(item.availableColors) ? item.availableColors.filter(Boolean).length : 0;
+  if (sizes && colors) return Math.min(sizes * colors, 99);
+  return sizes || colors || 0;
+}
+
+function formatCatalogMoney(value) {
+  if (value === "" || value === null || value === undefined || Number.isNaN(Number(value))) return "-";
+  return `PHP ${Number(value).toLocaleString("en-US")}`;
+}
+
+function renderCatalogProductEditorPage(editorRoute) {
+  const selectedProduct = editorRoute.mode === "edit"
+    ? catalogProducts.find((item) => item.id === editorRoute.productId) ?? null
+    : null;
+  if (editorRoute.mode === "edit" && !selectedProduct) {
+    const isLoading = catalogLoadState === "loading";
+    return `
+      <main class="orders-page catalog-page admin-saas-page catalog-product-editor-page" data-catalog-product-editor data-editor-mode="edit">
+        <section class="catalog-editor-denied">
+          <span>MASTER CATALOG</span>
+          <h1>${isLoading ? "Loading Product" : "Product not found"}</h1>
+          <p>${isLoading ? "Loading the selected catalog product before opening the editor." : "Return to Master Catalog and select an available product."}</p>
+          <button class="note-button" data-catalog-editor-cancel type="button">Back to Catalog</button>
+        </section>
+      </main>
+    `;
+  }
+  const draft = prepareCatalogEditorDraft(editorRoute, selectedProduct);
   const isSaving = catalogSaveState === "saving" || catalogSaveState === "uploading";
   const canWrite = canWriteCatalogProducts();
-  const title = draft.name || (catalogDrawerMode === "edit" ? "Catalog Item" : "Add Catalog Item");
-  const sourceProduct = getCatalogSourceProduct(draft);
+  const isEdit = editorRoute.mode === "edit";
+  const title = isEdit ? "Edit Product" : "New Product";
+  const displayName = draft.name || "New Product";
+  const typeLabel = formatProductType(draft.productType) || "Select type";
+  const brandLabel = getCatalogEditorBrandLabel(draft) || "Brand required";
+  const skuValue = getCatalogEditorSku(draft);
+  const categoryValue = getCatalogEditorCategoryLabel(draft);
+  const imageCount = getCatalogEditorImageCount(draft);
+  const margin = getCatalogEditorMargin(draft);
+  const readiness = getCatalogEditorReadiness(draft);
+  const status = draft.status || "draft";
+  const summaryMeta = isEdit ? `${brandLabel} - ${skuValue} - ${typeLabel}` : `${brandLabel} - Product code generated on save`;
+  const heroImage = getCatalogEditorPrimaryImage(draft);
+  const footerMessage = catalogValidationError
+    ? "Fix required fields before creating this product."
+    : isEdit
+      ? "Unsaved changes will remain in this frame only."
+      : "Creates as Draft. Ready stays locked until requirements pass.";
+
+  if (!canWrite && !isEdit) {
+    return `
+      <main class="orders-page catalog-page admin-saas-page catalog-product-editor-page" data-catalog-product-editor>
+        <section class="catalog-editor-denied">
+          <span>MASTER CATALOG</span>
+          <h1>Read-only access</h1>
+          <p>Your account can view catalog records, but cannot create products.</p>
+          <button class="note-button" data-catalog-editor-cancel type="button">Back to Catalog</button>
+        </section>
+      </main>
+    `;
+  }
 
   return `
-    <div class="catalog-drawer-backdrop" data-catalog-close-drawer></div>
-    <aside class="catalog-drawer" aria-label="${escapeHtml(title)} catalog presentation details">
-      <header>
+    <main class="orders-page catalog-page admin-saas-page catalog-product-editor-page" data-catalog-product-editor data-editor-mode="${escapeHtml(editorRoute.mode)}">
+      <div class="catalog-editor-mobile-topbar">
+        <button class="catalog-editor-icon-button" data-catalog-editor-cancel type="button" aria-label="Back to Master Catalog">${renderIcon("chevron-right", "catalog-editor-back-icon")}</button>
         <div>
-          <span>${escapeHtml(getCatalogLabel(draft.catalogKey))}</span>
           <h2>${escapeHtml(title)}</h2>
-          ${renderStatusPill(draft.status || "draft")}
+          <span>${escapeHtml(typeLabel)}</span>
         </div>
-        <button class="catalog-drawer-close" data-catalog-close-drawer type="button" aria-label="Close catalog drawer">X</button>
-      </header>
-      <form class="catalog-form" id="catalog-product-form">
-        ${catalogValidationError ? `<p class="catalog-form-error">${escapeHtml(catalogValidationError)}</p>` : ""}
-        ${catalogSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogSaveError)}</p>` : ""}
-
-        <section class="catalog-drawer-section catalog-preview-section" aria-label="Catalog preview">
-          <h3>Preview</h3>
-          <div class="catalog-preview-card">
-            <div class="catalog-preview-image ${draft.imageUrl || draft.imageFilePreviewUrl ? "has-image" : "empty"}">${draft.imageUrl || draft.imageFilePreviewUrl ? `<img src="${escapeHtml(draft.imageFilePreviewUrl || draft.imageUrl)}" alt="${escapeHtml(draft.name || "Catalog image")}" />` : `<span role="img" aria-label="No catalog image">${renderIcon("package", "catalog-placeholder-icon")}</span>`}</div>
-            <div>
-              <strong>${escapeHtml(draft.name || "Customer-facing name")}</strong>
-              <p>${escapeHtml(draft.description || "No short description yet.")}</p>
-              <span>${escapeHtml(formatCatalogPrice(draft))}</span>
-              <small>MOQ ${escapeHtml(draft.minimumQuantity || 1)}</small>
-            </div>
-          </div>
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Publishing">
-          <h3>Publishing</h3>
-          <div class="catalog-form-grid">
-            ${renderCatalogField("catalog", "Destination", renderCatalogSelect(draft))}
-            ${renderCatalogField("status", "Publish status", renderCatalogStatusSelect(draft))}
-          </div>
-          <div class="catalog-form-grid">
-            ${renderCatalogFeaturedSetting(draft)}
-            ${renderCatalogInput("sortOrder", "Sort order", draft.sortOrder, "number")}
-          </div>
-          <div class="catalog-kv-list">
-            ${renderCatalogDetailRow("Last published", draft.status === "published" ? formatCatalogUpdated(draft.updatedAt) : "Not published")}
-            ${renderCatalogDetailRow("Last updated", formatCatalogUpdated(draft.updatedAt))}
-          </div>
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Customer-facing details">
-          <h3>Customer-facing Details</h3>
-          ${renderCatalogInput("name", "Display name", draft.name, "text", true)}
-          ${renderCatalogInput("slug", "Slug", draft.slug, "text", true)}
-          ${renderCatalogInput("category", "Category", draft.category)}
-          ${renderCatalogTextarea("description", "Short description", draft.description)}
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Pricing display">
-          <h3>Pricing Display</h3>
-          <div class="catalog-form-grid">
-            ${renderCatalogInput("startingPrice", "Starting price", draft.startingPrice, "number")}
-            ${renderCatalogInput("priceLabel", "Price label", draft.priceLabel)}
-          </div>
-          ${renderCatalogInput("minimumQuantity", "Minimum quantity", draft.minimumQuantity, "number", true)}
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Customer options">
-          <h3>Customer Options</h3>
-          ${renderCatalogInput("availableSizesText", "Available sizes", draft.availableSizesText)}
-          ${renderCatalogInput("availableColorsText", "Available colors", draft.availableColorsText)}
-          ${renderCatalogInput("printMethodsText", "Print methods", draft.printMethodsText)}
-        </section>
-
-        <section class="catalog-drawer-section catalog-source-section" aria-label="Source product">
-          <h3>Source Product</h3>
-          ${sourceProduct
-            ? `<div class="catalog-kv-list">
-                ${renderCatalogDetailRow("Linked product", sourceProduct.product)}
-                ${renderCatalogDetailRow("Internal code", sourceProduct.code, true)}
-                ${renderCatalogDetailRow("Availability", sourceProduct.status || "Available")}
-              </div>`
-            : `<div class="catalog-source-empty"><strong>No source Product linked</strong><span>This Catalog item can still be edited, but staff should confirm the matching internal Product record before publishing.</span></div>`}
-        </section>
-
-        <section class="catalog-drawer-section" aria-label="Media">
-          <h3>Media</h3>
-          ${renderCatalogImageField(draft, canWrite, isSaving)}
-        </section>
-
-      </form>
-      <div class="catalog-drawer-actions">
-        <button class="primary-button catalog-save-button" form="catalog-product-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${catalogSaveState === "uploading" ? "Uploading..." : isSaving ? "Saving..." : getCatalogPrimaryActionLabel(draft)}</button>
-        <button class="note-button" data-catalog-close-drawer type="button">Cancel</button>
+        ${renderStatusPill(status)}
       </div>
-    </aside>
+
+      ${catalogValidationError ? `<div class="catalog-editor-toast error" role="alert"><strong>Fix required fields before creating product</strong><span>${escapeHtml(catalogValidationError)}</span></div>` : ""}
+      ${catalogSaveState === "success" ? `<div class="catalog-editor-toast success" role="status"><strong>${isEdit ? "Changes saved successfully" : "Product created successfully"}</strong><span>${escapeHtml(displayName)} is ${isEdit ? "updated" : "ready to review"}.</span></div>` : ""}
+      ${catalogSaveError ? `<div class="catalog-editor-toast error" role="alert"><strong>Save failed</strong><span>${escapeHtml(catalogSaveError)}</span></div>` : ""}
+
+      <section class="catalog-editor-header">
+        <nav class="catalog-editor-breadcrumb" aria-label="Breadcrumb">
+          <span>Home</span><span>Master Catalog</span><strong>${escapeHtml(title)}</strong>
+        </nav>
+        <div class="catalog-editor-heading-row">
+          <div>
+            <h1>${escapeHtml(title)}</h1>
+            <p class="subtitle">${isEdit ? "Update product images, catalog details, pricing, production information, variants, and status." : "Create a product draft. Required fields must pass before Ready for Sale."}</p>
+          </div>
+          <button class="note-button" data-catalog-editor-cancel type="button">Back to Catalog</button>
+        </div>
+      </section>
+
+      <section class="catalog-editor-summary-strip" aria-label="Product draft summary">
+        <div class="catalog-editor-summary-main">
+          <span class="catalog-editor-product-thumb ${heroImage ? "has-image" : "empty"}">${heroImage ? `<img src="${escapeHtml(heroImage)}" alt="${escapeHtml(displayName)}" />` : renderIcon("package", "catalog-placeholder-icon")}</span>
+          <div>
+            <strong>${escapeHtml(displayName)}</strong>
+            <span>${escapeHtml(summaryMeta)}</span>
+          </div>
+          ${renderStatusPill(status)}
+        </div>
+        <div class="catalog-editor-summary-stat">
+          <span>${isEdit ? "CURRENT MARGIN" : "PRODUCT STATUS"}</span>
+          <strong>${isEdit ? escapeHtml(margin.label) : escapeHtml(status.toUpperCase())}</strong>
+          <small>${escapeHtml(isEdit ? margin.helper : readiness.every((item) => item.ready) ? "Ready checks passed" : "Not ready for sale")}</small>
+        </div>
+      </section>
+
+      <form class="catalog-editor-form" id="catalog-product-form">
+        <section class="catalog-editor-grid">
+          <div class="catalog-editor-main-column">
+            ${renderCatalogEditorProductInformation(draft, isSaving || !canWrite)}
+            ${renderCatalogEditorImages(draft, canWrite, isSaving)}
+            ${renderCatalogEditorPricing(draft, isSaving || !canWrite)}
+            ${renderCatalogEditorProduction(draft, isSaving || !canWrite)}
+          </div>
+          <aside class="catalog-editor-side-column">
+            ${renderCatalogEditorStatusCard(draft, isSaving || !canWrite)}
+            ${renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCount)}
+            ${renderCatalogEditorReadinessCard(readiness)}
+            ${renderCatalogEditorAvailabilityCard(draft)}
+          </aside>
+          ${renderCatalogEditorVariants(draft, isSaving || !canWrite)}
+        </section>
+      </form>
+
+      <div class="catalog-editor-footer">
+        <span class="${catalogValidationError ? "error" : ""}">${escapeHtml(footerMessage)}</span>
+        <div>
+          <button class="note-button" data-catalog-editor-cancel type="button" ${isSaving ? "disabled" : ""}>Cancel</button>
+          <button class="primary-button catalog-save-button" form="catalog-product-form" type="submit" ${canWrite && !isSaving ? "" : "disabled"}>${catalogSaveState === "uploading" ? "Uploading..." : isSaving ? "Saving..." : isEdit ? "Save Changes" : "Create Product"}</button>
+        </div>
+      </div>
+    </main>
   `;
 }
+
+function renderCatalogEditorProductInformation(draft, disabled = false) {
+  return `
+    <article class="catalog-editor-card" id="catalog-section-product-identity" tabindex="-1" aria-label="Product Information">
+      <header><h2>Product Information</h2><p>Customer-facing identity and category binding.</p></header>
+      <div class="catalog-editor-field-grid">
+        ${renderCatalogInput("name", "Product Name", draft.name, "text", true, disabled, "Enter product name")}
+        ${renderCatalogField("brandId", "Brand", renderCatalogBrandSelect(draft, disabled))}
+        ${renderCatalogField("productType", "Product Type", renderCatalogProductTypeSelect(draft, disabled))}
+        ${renderCatalogField("category", "Category", renderCatalogCategorySelect(draft, disabled || !draft.productType), draft.productType ? "" : "Select Product Type first.")}
+        ${renderCatalogInput("subcategory", "Subcategory", draft.subcategory || "", "text", false, disabled, "Select subcategory")}
+        ${renderCatalogField("productCode", "Product Code", `<input id="catalog-productCode" value="${escapeHtml(getCatalogEditorSku(draft))}" type="text" readonly />`, draft.productCode ? "" : "Generated on save.")}
+        ${renderCatalogField("salesChannels", "Sales Channels", renderCatalogSalesChannels(draft, disabled), "Choose where this Product is intentionally available. Brand stays separate.")}
+      </div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorImages(draft, canWrite, isSaving) {
+  const images = getCatalogEditorImages(draft);
+  const slots = Array.from({ length: CATALOG_PRODUCT_IMAGE_LIMIT }, (_, index) => {
+    const image = images[index] ?? null;
+    const isPrimary = Boolean(image?.isPrimary);
+    return `
+      <div class="catalog-editor-image-slot ${image ? "has-image" : "empty"}" data-image-slot="${index}" ${image && canWrite ? `draggable="true" data-catalog-image-drag="${index}"` : ""}>
+        <div class="catalog-editor-image-preview">
+          ${image ? `<img src="${escapeHtml(image.url)}" alt="${escapeHtml(image.altText || draft.name || "Product image")}" />` : renderIcon("package-plus", "catalog-placeholder-icon")}
+          ${isPrimary ? `<span class="catalog-primary-badge">PRIMARY</span>` : ""}
+        </div>
+        <div class="catalog-editor-image-actions">
+          <span>${image ? `${index + 1} of ${CATALOG_PRODUCT_IMAGE_LIMIT}` : "ADD IMAGE"}</span>
+          ${image && canWrite ? `<div class="catalog-image-card-actions">${isPrimary ? "" : `<button class="catalog-set-primary-button" type="button" data-catalog-set-primary-image="${index}" ${isSaving ? "disabled" : ""}>Primary</button>`}<button class="catalog-remove-image-button" type="button" data-catalog-remove-image="${index}" ${isSaving ? "disabled" : ""}>Remove</button></div>` : ""}
+        </div>
+      </div>
+    `;
+  }).join("");
+  const disabled = !canWrite || isSaving || images.length >= CATALOG_PRODUCT_IMAGE_LIMIT;
+
+  return `
+    <article class="catalog-editor-card ${catalogValidationError && images.length === 0 ? "has-error" : ""}" id="catalog-section-images" tabindex="-1" aria-label="Product Images">
+      <header>
+        <div><h2>Product Images</h2><p>Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product. Choose one PRIMARY image independently from order.</p></div>
+        <strong>${images.length} of ${CATALOG_PRODUCT_IMAGE_LIMIT} uploaded</strong>
+      </header>
+      <div class="catalog-editor-image-grid">${slots}</div>
+      <label class="catalog-editor-upload ${disabled ? "disabled" : ""}">
+        <span>${images.length ? "Add another image" : "Upload primary image"}</span>
+        <input data-catalog-image-file type="file" accept="image/jpeg,image/png,image/webp,image/avif" ${disabled ? "disabled" : ""} />
+      </label>
+      ${images.length >= CATALOG_PRODUCT_IMAGE_LIMIT ? `<p class="catalog-image-limit-note">Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images reached.</p>` : ""}
+      ${draft.imageError ? `<p class="catalog-form-error">${escapeHtml(draft.imageError)}</p>` : ""}
+    </article>
+  `;
+}
+
+function renderCatalogEditorPricing(draft, disabled = false) {
+  const margin = getCatalogEditorMargin(draft);
+  return `
+    <article class="catalog-editor-card" id="catalog-section-pricing" tabindex="-1" aria-label="Pricing">
+      <header><h2>Pricing</h2><p>Base cost, selling price, and calculated margin.</p></header>
+      <div class="catalog-editor-field-grid">
+        ${renderCatalogInput("unitCost", "Unit Cost", draft.unitCost || "", "number", false, disabled, "0.00")}
+        ${renderCatalogInput("startingPrice", "Selling Price", draft.startingPrice, "number", false, disabled, "0.00")}
+        ${renderCatalogInput("priceLabel", "Price Label", draft.priceLabel, "text", false, disabled, "Shown in catalog")}
+        ${renderCatalogInput("minimumQuantity", "Minimum Qty", draft.minimumQuantity, "number", true, disabled)}
+      </div>
+      <div class="catalog-editor-calculated-row"><span>Calculated Margin</span><strong>${escapeHtml(margin.label)}</strong><small>${escapeHtml(margin.helper)}</small></div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorProduction(draft, disabled = false) {
+  return `
+    <article class="catalog-editor-card ${catalogValidationError && !draft.productionUse ? "has-error" : ""}" aria-label="Production Information">
+      <header><h2>Production Information</h2><p>Manufacturing notes used by admin and production teams.</p></header>
+      <div class="catalog-editor-field-grid">
+        ${renderCatalogInput("material", "Material / Fabric", draft.material || "", "text", false, disabled)}
+        ${renderCatalogInput("weightGsm", "Weight / GSM", draft.weightGsm || "", "text", false, disabled)}
+        ${renderCatalogInput("fitCut", "Fit / Cut", draft.fitCut || "", "text", false, disabled)}
+        ${renderCatalogInput("productionUse", "Production Use", draft.productionUse || "", "text", false, disabled)}
+        ${renderCatalogInput("printMethodsText", "Compatible Methods", draft.printMethodsText, "text", false, disabled)}
+        ${renderCatalogTextarea("productionNotes", "Production Notes", draft.productionNotes || "", disabled)}
+      </div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorVariants(draft, disabled = false) {
+  const variants = getCatalogDraftVariantRows(draft);
+  const sizes = uniqueList(variants.map((variant) => variant.size).filter(Boolean));
+  const colors = uniqueList(variants.map((variant) => variant.color).filter(Boolean));
+  const canWrite = canWriteCatalogProducts();
+  const canAddVariant = canWrite && !disabled && Boolean(draft.id);
+  const addVariantMessage = !canWrite
+    ? "Catalog variants are read-only for this role."
+    : disabled
+      ? "Wait for the current Product save to finish before adding variants."
+      : !draft.id
+        ? "Save this Product before adding variants."
+        : "Use Add Variant to add the next size or color option, then save.";
+
+  return `
+    <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
+      <header class="catalog-variants-header">
+        <div><h2>Variants</h2><p>Size and color combinations for this catalog product.</p></div>
+        <button class="note-button catalog-add-variant-button" type="button" data-catalog-add-variant ${canAddVariant ? "" : "disabled"} title="${escapeHtml(addVariantMessage)}">${variants.length ? "Add Variant" : "Add First Variant"}</button>
+      </header>
+      ${canAddVariant ? "" : `<p class="catalog-editor-helper">${escapeHtml(addVariantMessage)}</p>`}
+      ${renderCatalogVariantGenerator(draft, variants, disabled || !canWrite)}
+      <div class="catalog-variant-attributes">
+        <div>
+          <span>Available Sizes</span>
+          <div class="catalog-chip-list">${sizes.length ? sizes.map((size) => `<span class="catalog-attribute-chip">${escapeHtml(size)}</span>`).join("") : `<span class="catalog-muted-chip">No sizes yet</span>`}</div>
+        </div>
+        <div>
+          <span>Available Colors</span>
+          <div class="catalog-chip-list">${colors.length ? colors.map((color) => `<span class="catalog-attribute-chip color-chip"><i></i>${escapeHtml(color)}</span>`).join("") : `<span class="catalog-muted-chip">No colors yet</span>`}</div>
+        </div>
+      </div>
+      ${(catalogVariantPanel.mode || variants.length)
+        ? `<div class="catalog-variant-row-stack">
+            <div class="catalog-variant-row-labels" aria-hidden="true"><span>Color</span><span>Size</span><span>SKU</span><span>Price</span><span>Action</span></div>
+            ${variants.map((variant, index) => renderCatalogVariantRow(draft, variant, index, disabled)).join("")}
+            ${catalogVariantPanel.mode ? renderCatalogVariantPanel(draft, variants, disabled) : ""}
+          </div>`
+        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Add size and color combinations for this product.</span></div>`}
+    </article>
+  `;
+}
+
+function renderCatalogVariantGenerator(draft, variants, disabled = false) {
+  const selectedSizes = new Set(uniqueList([...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(draft.availableSizesText)]).map(normalizeVariantToken));
+  const selectedColors = new Set(uniqueList([...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(draft.availableColorsText)]).map(normalizeVariantToken));
+  const sizeOptions = uniqueList([...catalogVariantSizeOptions, ...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(draft.availableSizesText)]);
+  const colorOptions = uniqueList([...catalogVariantColorOptions, ...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(draft.availableColorsText)]);
+  const generatedCount = selectedSizes.size * selectedColors.size;
+
+  return `
+    <div class="catalog-variant-generator" aria-label="Variant generator">
+      <div class="catalog-variant-generator-copy">
+        <span>Size x Color Generator</span>
+        <strong>${generatedCount ? `${generatedCount} combinations selected` : "Select sizes and colors"}</strong>
+      </div>
+      <div class="catalog-variant-generator-options">
+        <div>
+          <span>Sizes</span>
+          <div class="catalog-variant-option-list">
+            ${sizeOptions.map((size) => renderCatalogVariantOption("size", size, selectedSizes.has(normalizeVariantToken(size)), disabled)).join("")}
+          </div>
+        </div>
+        <div>
+          <span>Colors</span>
+          <div class="catalog-variant-option-list">
+            ${colorOptions.map((color) => renderCatalogVariantOption("color", color, selectedColors.has(normalizeVariantToken(color)), disabled)).join("")}
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function renderCatalogVariantOption(type, value, selected, disabled = false) {
+  return `
+    <label class="catalog-variant-option ${selected ? "selected" : ""}">
+      <input data-catalog-variant-generator="${escapeHtml(type)}" value="${escapeHtml(value)}" type="checkbox" ${selected ? "checked" : ""} ${disabled ? "disabled" : ""} />
+      <span>${escapeHtml(value)}</span>
+    </label>
+  `;
+}
+
+function addCatalogVariantDraft() {
+  if (!catalogDraft || !canWriteCatalogProducts() || !catalogDraft.id || catalogSaveState === "saving" || catalogSaveState === "uploading") return;
+  catalogVariantPanel = { mode: "add", index: -1, draftId: `variant-draft-${Date.now()}`, size: "", color: "", sellingPrice: "", error: "" };
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
+}
+
+function renderCatalogVariantPanel(draft, variants, disabled = false) {
+  const sizeOptions = uniqueList(variants.map((variant) => variant.size).filter(Boolean));
+  const colorOptions = uniqueList(variants.map((variant) => variant.color).filter(Boolean));
+  const saveDisabled = disabled || !String(catalogVariantPanel.size || "").trim() || !String(catalogVariantPanel.color || "").trim() || catalogVariantPanel.sellingPrice === "" || Number(catalogVariantPanel.sellingPrice) < 0;
+
+  return `
+    <div class="catalog-variant-inline-row is-new" data-catalog-variant-panel data-catalog-variant-draft-id="${escapeHtml(catalogVariantPanel.draftId || "variant-draft")}">
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <input type="text" list="catalog-variant-color-options" data-catalog-variant-field="color" value="${escapeHtml(catalogVariantPanel.color)}" ${disabled ? "disabled" : ""} placeholder="Black, White" aria-label="Variant color">
+          <datalist id="catalog-variant-color-options">${colorOptions.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
+        </label>
+      </div>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <input type="text" list="catalog-variant-size-options" data-catalog-variant-field="size" value="${escapeHtml(catalogVariantPanel.size)}" ${disabled ? "disabled" : ""} placeholder="S, M, XL, XXL" aria-label="Variant size">
+          <datalist id="catalog-variant-size-options">${sizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
+        </label>
+      </div>
+      <div class="catalog-variant-sku-note locked" aria-label="Variant SKU is auto-generated on save"><strong>Auto-generated on save</strong></div>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <input type="number" min="0" step="0.01" data-catalog-variant-field="sellingPrice" value="${escapeHtml(catalogVariantPanel.sellingPrice)}" ${disabled ? "disabled" : ""} placeholder="₱" aria-label="Variant price">
+        </label>
+      </div>
+      <div class="catalog-variant-row-actions">
+        <button class="primary-button" type="button" data-catalog-submit-variant ${saveDisabled ? "disabled" : ""}>Save</button>
+        <button class="icon-button" type="button" data-catalog-cancel-variant aria-label="Cancel new Variant">X</button>
+      </div>
+      ${catalogVariantPanel.error ? `<p class="catalog-form-error">${escapeHtml(catalogVariantPanel.error)}</p>` : ""}
+    </div>
+  `;
+}
+
+function renderCatalogVariantRow(draft, variant, index, disabled = false) {
+  const sizeOptions = uniqueList(getCatalogDraftVariantRows(draft).map((item) => item.size).filter(Boolean));
+  const colorOptions = uniqueList(getCatalogDraftVariantRows(draft).map((item) => item.color).filter(Boolean));
+  return `
+    <div class="catalog-variant-inline-row" data-catalog-variant-row="${index}" data-catalog-variant-id="${escapeHtml(variant.id || variant.masterVariantId || `variant-${index}`)}">
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <input type="text" list="catalog-existing-variant-color-options-${index}" data-catalog-existing-variant-field="color" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.color || "")}" ${disabled ? "disabled" : ""} aria-label="Variant color">
+          <datalist id="catalog-existing-variant-color-options-${index}">${colorOptions.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
+        </label>
+      </div>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <input type="text" list="catalog-existing-variant-size-options-${index}" data-catalog-existing-variant-field="size" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.size || "")}" ${disabled ? "disabled" : ""} aria-label="Variant size">
+          <datalist id="catalog-existing-variant-size-options-${index}">${sizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
+        </label>
+      </div>
+      <div class="catalog-variant-sku-note locked" aria-label="Variant SKU ${escapeHtml(getCatalogVariantSku(draft, variant, index))}"><strong>${escapeHtml(getCatalogVariantSku(draft, variant, index))}</strong></div>
+      <div class="catalog-variant-field-cell">
+        <label class="catalog-form-field">
+          <input type="number" min="0" step="0.01" data-catalog-existing-variant-field="sellingPrice" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.sellingPrice ?? "")}" ${disabled ? "disabled" : ""} aria-label="Variant price">
+        </label>
+      </div>
+      <div class="catalog-variant-row-actions">
+        <button class="primary-button" type="button" data-catalog-save-existing-variant="${index}" ${disabled ? "disabled" : ""}>Save</button>
+        <button class="icon-button danger" type="button" data-catalog-delete-variant="${index}" ${disabled ? "disabled" : ""} aria-label="Delete Variant">${renderIcon("trash-2")}</button>
+      </div>
+    </div>
+  `;
+}
+
+function openCatalogVariantEditor(index) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variant = getCatalogDraftVariantRows(catalogDraft)[index];
+  if (!variant) return;
+  catalogVariantPanel = {
+    mode: "edit",
+    index,
+    draftId: variant.id || variant.masterVariantId || `variant-edit-${index}`,
+    size: variant.size || "",
+    color: variant.color || "",
+    sellingPrice: variant.sellingPrice ?? catalogDraft.startingPrice ?? "",
+    error: "",
+  };
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
+}
+
+function updateCatalogVariantPanelField(field, value) {
+  catalogVariantPanel = { ...catalogVariantPanel, [field]: value, error: "" };
+  syncCatalogVariantPanelControls();
+}
+
+function syncCatalogVariantPanelControls() {
+  const submitButton = document.querySelector("[data-catalog-submit-variant]");
+  if (submitButton) {
+    submitButton.disabled = !String(catalogVariantPanel.size || "").trim()
+      || !String(catalogVariantPanel.color || "").trim()
+      || catalogVariantPanel.sellingPrice === ""
+      || Number(catalogVariantPanel.sellingPrice) < 0;
+  }
+  document.querySelector("[data-catalog-variant-panel] .catalog-form-error")?.remove();
+}
+
+function cancelCatalogVariantPanel() {
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+  render();
+}
+
+function submitCatalogVariantPanel() {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  const size = String(catalogVariantPanel.size || "").trim();
+  const color = String(catalogVariantPanel.color || "").trim();
+  const sellingPrice = catalogVariantPanel.sellingPrice === "" ? catalogDraft.startingPrice || 0 : Number(catalogVariantPanel.sellingPrice);
+  const editingIndex = catalogVariantPanel.mode === "edit" ? catalogVariantPanel.index : -1;
+
+  if (!size || !color) {
+    catalogVariantPanel = { ...catalogVariantPanel, error: "Enter a real size and color before adding a Variant." };
+    render();
+    return;
+  }
+
+  if (!Number.isFinite(Number(sellingPrice)) || Number(sellingPrice) < 0) {
+    catalogVariantPanel = { ...catalogVariantPanel, error: "Selling price cannot be negative." };
+    render();
+    return;
+  }
+
+  const duplicate = variants.some((variant, index) => index !== editingIndex && normalizeVariantToken(variant.size) === normalizeVariantToken(size) && normalizeVariantToken(variant.color) === normalizeVariantToken(color));
+  if (duplicate) {
+    catalogVariantPanel = { ...catalogVariantPanel, error: "This size and color combination already exists." };
+    render();
+    return;
+  }
+
+  const nextVariant = {
+    ...(editingIndex >= 0 ? variants[editingIndex] : {}),
+    size,
+    color,
+    sellingPrice: String(sellingPrice),
+    unitCost: editingIndex >= 0 ? variants[editingIndex].unitCost ?? catalogDraft.unitCost ?? "" : catalogDraft.unitCost ?? "",
+    variantType: getCatalogVariantType(catalogDraft.productType),
+    active: true,
+  };
+  const nextVariants = editingIndex >= 0
+    ? variants.map((variant, index) => index === editingIndex ? nextVariant : variant)
+    : [...variants, nextVariant].slice(0, 6);
+  catalogDraft = {
+    ...catalogDraft,
+    variants: nextVariants,
+    availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
+    availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
+  };
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+  catalogValidationError = "";
+  catalogSaveError = "";
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
+}
+
+function updateCatalogExistingVariantField(index, field, value) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  const current = variants[index];
+  if (!current) return;
+  const nextVariant = {
+    ...current,
+    [field]: field === "sellingPrice" ? value : String(value || ""),
+  };
+  const nextVariants = variants.map((variant, variantIndex) => variantIndex === index ? nextVariant : variant);
+  catalogDraft = {
+    ...catalogDraft,
+    variants: nextVariants,
+    availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
+    availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
+  };
+  catalogSaveError = "";
+  catalogValidationError = "";
+}
+
+function saveCatalogExistingVariant(index) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  const variant = variants[index];
+  if (!variant) return;
+  const size = String(variant.size || "").trim();
+  const color = String(variant.color || "").trim();
+  const price = variant.sellingPrice === "" ? 0 : Number(variant.sellingPrice);
+  if (!size || !color) {
+    catalogSaveError = "Enter a real size and color before saving a Variant.";
+    render();
+    return;
+  }
+  if (!Number.isFinite(price) || price < 0) {
+    catalogSaveError = "Selling price cannot be negative.";
+    render();
+    return;
+  }
+  const duplicate = variants.some((item, variantIndex) => variantIndex !== index && normalizeVariantToken(item.size) === normalizeVariantToken(size) && normalizeVariantToken(item.color) === normalizeVariantToken(color));
+  if (duplicate) {
+    catalogSaveError = "This size and color combination already exists.";
+    render();
+    return;
+  }
+  catalogSaveError = "Variant saved in draft. Use Save Changes to persist it.";
+  render();
+}
+
+function deleteCatalogVariantDraft(index) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  if (!variants[index]) return;
+  const nextVariants = variants.filter((_, variantIndex) => variantIndex !== index);
+  catalogDraft = {
+    ...catalogDraft,
+    variants: nextVariants,
+    availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
+    availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
+  };
+  catalogSaveError = "Variant removed in draft. Use Save Changes to persist the safe archive.";
+  render();
+}
+
+function updateCatalogVariantGeneratorSelection(type, value, checked) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  const currentSizes = uniqueList([...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(catalogDraft.availableSizesText)]);
+  const currentColors = uniqueList([...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(catalogDraft.availableColorsText)]);
+  const nextSizes = updateCatalogVariantOptionList(currentSizes, value, checked);
+  const nextColors = updateCatalogVariantOptionList(currentColors, value, checked);
+  const selectedSizes = type === "size" ? nextSizes : currentSizes;
+  const selectedColors = type === "color" ? nextColors : currentColors;
+  const nextVariants = buildCatalogVariantMatrixDraft(catalogDraft, variants, selectedSizes, selectedColors);
+
+  catalogDraft = {
+    ...catalogDraft,
+    variants: nextVariants,
+    availableSizesText: selectedSizes.join(", "),
+    availableColorsText: selectedColors.join(", "),
+  };
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+  catalogSaveError = "";
+  catalogValidationError = "";
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
+}
+
+function updateCatalogVariantOptionList(values, value, checked) {
+  const normalizedValue = normalizeVariantToken(value);
+  const withoutValue = values.filter((item) => normalizeVariantToken(item) !== normalizedValue);
+  return checked ? uniqueList([...withoutValue, String(value || "").trim()]) : withoutValue;
+}
+
+function buildCatalogVariantMatrixDraft(draft, variants, sizes, colors) {
+  if (!sizes.length || !colors.length) return [];
+  const existingByCombination = new Map();
+  variants.forEach((variant) => {
+    existingByCombination.set(getCatalogVariantCombinationKey(variant), variant);
+  });
+  return colors.flatMap((color) => sizes.map((size) => {
+    const existing = existingByCombination.get(getCatalogVariantCombinationKey({ color, size }));
+    return {
+      ...(existing || {}),
+      size,
+      color,
+      sellingPrice: existing?.sellingPrice ?? draft.startingPrice ?? 0,
+      unitCost: existing?.unitCost ?? draft.unitCost ?? 0,
+      variantType: existing?.variantType || getCatalogVariantType(draft.productType),
+      active: true,
+    };
+  }));
+}
+
+function getCatalogDraftVariantRows(draft) {
+  const supplied = Array.isArray(draft.variants) ? draft.variants.filter((variant) => variant?.active !== false) : [];
+  if (supplied.length) {
+    return supplied.map((variant) => ({
+      ...variant,
+      size: variant.size || "",
+      color: variant.color || "",
+      sellingPrice: variant.sellingPrice ?? draft.startingPrice ?? 0,
+      unitCost: variant.unitCost ?? draft.unitCost ?? 0,
+      variantType: variant.variantType || getCatalogVariantType(draft.productType),
+      active: true,
+    }));
+  }
+
+  const sizes = splitCatalogList(draft.availableSizesText);
+  const colors = splitCatalogList(draft.availableColorsText);
+  if (!sizes.length && !colors.length) return [];
+  return (colors.length ? colors : [""]).flatMap((color) => (sizes.length ? sizes : [""]).map((size) => ({
+    size,
+    color,
+    sellingPrice: draft.startingPrice || 0,
+    unitCost: draft.unitCost || 0,
+    variantType: getCatalogVariantType(draft.productType),
+    active: true,
+  })));
+}
+
+function groupCatalogVariantsByColor(variants) {
+  const groups = new Map();
+  variants.forEach((variant, index) => {
+    const color = variant.color || "Unassigned color";
+    const group = groups.get(color) ?? { color, variants: [] };
+    group.variants.push({ variant, index });
+    groups.set(color, group);
+  });
+  return [...groups.values()];
+}
+
+function getCatalogVariantSku(draft, variant, index) {
+  return variant?.sku || variant?.globalSku || variant?.masterVariantId || `${getCatalogEditorSku(draft)}-${index + 1}`;
+}
+
+function formatCatalogVariantPrice(variant, draft) {
+  const value = variant?.sellingPrice ?? draft.startingPrice ?? 0;
+  const numeric = Number(value || 0);
+  return `₱${Number.isFinite(numeric) ? numeric.toLocaleString("en-US") : "0"}`;
+}
+
+function getCatalogVariantType(productType) {
+  if (productType === "SERVICE") return "SERVICE_TIER";
+  if (productType === "MATERIAL_SUPPLY") return "SUPPLY_OPTION";
+  return "STANDARD";
+}
+
+function normalizeVariantToken(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function getCatalogVariantCombinationKey(variant) {
+  return `${normalizeVariantToken(variant?.color)}\u0000${normalizeVariantToken(variant?.size)}`;
+}
+
+function renderCatalogEditorStatusCard(draft, disabled = false) {
+  const statuses = [
+    { value: "draft", label: "Draft" },
+    { value: "published", label: "Ready" },
+    { value: "archived", label: "Archived" },
+  ];
+  return `
+    <article class="catalog-editor-card compact" aria-label="Catalog Status">
+      <header><h2>Catalog Status</h2></header>
+      <div class="catalog-editor-status-options">
+        ${statuses.map((status) => `<button class="${draft.status === status.value ? "active" : ""}" data-catalog-status-choice="${status.value}" type="button" ${disabled ? "disabled" : ""}>${escapeHtml(status.label)}</button>`).join("")}
+      </div>
+      ${renderStatusPill(draft.status || "draft")}
+    </article>
+  `;
+}
+
+function renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCount) {
+  return `
+    <article class="catalog-editor-card compact" aria-label="Product Summary">
+      <header><h2>Product Summary</h2></header>
+      <div class="catalog-kv-list">
+        ${renderCatalogDetailRow("SKU", skuValue)}
+        ${renderCatalogDetailRow("Brand", getCatalogEditorBrandLabel(draft) || "Not selected")}
+        ${renderCatalogDetailRow("Type", formatProductType(draft.productType) || "Not selected")}
+        ${renderCatalogDetailRow("Category", categoryValue || "Not selected")}
+        ${renderCatalogDetailRow("Variants", String(getCatalogDraftVariantRows(draft).length))}
+        ${renderCatalogDetailRow("Last updated", draft.updatedAt ? formatCatalogUpdated(draft.updatedAt) : "Not saved")}
+        ${renderCatalogDetailRow("Images", `${imageCount} of ${CATALOG_PRODUCT_IMAGE_LIMIT}`)}
+        ${renderCatalogDetailRow("Production info", draft.productionUse ? "Complete" : "Incomplete")}
+      </div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorReadinessCard(readiness) {
+  const completeCount = readiness.filter((item) => item.ready).length;
+  return `
+    <article class="catalog-editor-card compact" aria-label="Catalog Readiness">
+      <header><h2>Catalog Readiness</h2><p>${completeCount} of ${readiness.length} requirements complete</p></header>
+      <div class="catalog-editor-readiness-list" role="list">
+        ${readiness.map((item) => `
+          <button class="catalog-readiness-item ${item.ready ? "ready" : "pending"}" type="button" data-catalog-readiness-target="${escapeHtml(item.target)}" ${item.ready ? "disabled" : ""} role="listitem">
+            ${renderIcon(item.ready ? "circle-check" : "alert-circle", "catalog-readiness-icon")}
+            <span><strong>${escapeHtml(item.label)}</strong><small>${escapeHtml(item.ready ? "Complete" : item.missing)}</small></span>
+          </button>
+        `).join("")}
+      </div>
+    </article>
+  `;
+}
+
+function renderCatalogEditorAvailabilityCard(draft) {
+  const brand = brands.find((item) => item.id === draft.brandId);
+  const websiteLabel = brand?.websiteSlug ? `${brand.name} storefront` : "Admin only";
+  const channelLabels = getCatalogDraftSalesChannelCodes(draft)
+    .map((code) => canonicalSalesChannels.find((channel) => channel.code === code)?.label)
+    .filter(Boolean);
+  return `
+    <article class="catalog-editor-card compact" aria-label="Sales & Availability">
+      <header><h2>Sales & Availability</h2></header>
+      <div class="catalog-kv-list">
+        ${renderCatalogDetailRow("Sales Channels", channelLabels.join(", ") || "Not selected")}
+        ${renderCatalogDetailRow("POS", getCatalogDraftSalesChannelCodes(draft).includes("POS") ? "Available" : "Hidden")}
+        ${renderCatalogDetailRow("Website", websiteLabel)}
+        ${renderCatalogDetailRow("Inquiry / Quotation", "Available")}
+        ${renderCatalogDetailRow("Reorder", "Available")}
+      </div>
+    </article>
+  `;
+}
+
+function getCatalogProductEditorRoute() {
+  if (getRoutePath() !== "/catalog") return null;
+  const productParam = new URLSearchParams(window.location.search).get("product");
+  if (!productParam) return null;
+  return productParam === "new"
+    ? { mode: "create", productId: "" }
+    : { mode: "edit", productId: productParam };
+}
+
+function prepareCatalogEditorDraft(editorRoute, selectedProduct) {
+  const routeKey = `${editorRoute.mode}:${editorRoute.productId || "new"}`;
+  if (catalogEditorRouteKey !== routeKey) {
+    clearCatalogImagePreview();
+    catalogEditorMode = editorRoute.mode;
+    catalogEditorRouteKey = routeKey;
+    catalogDraft = createCatalogDraft(selectedProduct);
+    catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+    catalogValidationError = "";
+    catalogSaveError = "";
+    catalogSaveState = "idle";
+    selectedCatalogProductId = selectedProduct?.id ?? selectedCatalogProductId;
+  }
+
+  return catalogDraft ?? createCatalogDraft(selectedProduct);
+}
+
+function openCatalogProductEditor(mode, productId = "") {
+  if (mode === "create" && !canWriteCatalogProducts()) return;
+  navigateTo(mode === "create" ? "/catalog?product=new" : `/catalog?product=${encodeURIComponent(productId)}`);
+  render();
+}
+
+function closeCatalogProductEditor() {
+  clearCatalogImagePreview();
+  catalogEditorMode = "";
+  catalogEditorRouteKey = "";
+  catalogDraft = null;
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+  catalogValidationError = "";
+  catalogSaveError = "";
+  catalogSaveState = "idle";
+  navigateTo("/catalog");
+  render();
+}
+
+function toggleCatalogProductQuickControl(productId) {
+  catalogExpandedProductId = catalogExpandedProductId === productId ? null : productId;
+  selectedCatalogProductId = productId;
+  catalogQuickSaveError = "";
+  render();
+}
+
+function getCatalogEditorActiveCategories(draft) {
+  return sortProductCategories(productCategories).filter((category) =>
+    category.active &&
+    !category.archivedAt &&
+    (!draft.productType || category.productType === draft.productType)
+  );
+}
+
+function getCatalogEditorActiveBrands(draft) {
+  return sortBrands(brands).filter((brand) =>
+    brand.status === "active" || brand.id === draft.brandId
+  );
+}
+
+function renderCatalogBrandSelect(draft, disabled = false) {
+  const options = getCatalogEditorActiveBrands(draft);
+  return `<select id="catalog-brandId" data-catalog-field="brandId" required ${disabled ? "disabled" : ""}><option value="" ${draft.brandId ? "" : "selected"}>${brandLoadState === "loading" ? "Loading brands" : "Select brand"}</option>${options.map((brand) => `<option value="${escapeHtml(brand.id)}" ${brand.id === draft.brandId ? "selected" : ""}>${escapeHtml(brand.name)} (${escapeHtml(brand.brandCode)})</option>`).join("")}</select>`;
+}
+
+function getCatalogEditorBrandLabel(draft) {
+  const brand = brands.find((item) => item.id === draft.brandId);
+  return brand?.name || draft.brandName || draft.brand || "";
+}
+
+function renderCatalogProductTypeSelect(draft, disabled = false) {
+  return `<select id="catalog-productType" data-catalog-field="productType" required ${disabled ? "disabled" : ""}><option value="" ${draft.productType ? "" : "selected"}>Select Product Type</option>${productTypeOptions.map((option) => `<option value="${escapeHtml(option.value)}" ${option.value === draft.productType ? "selected" : ""}>${escapeHtml(option.label)}</option>`).join("")}</select>`;
+}
+
+function renderCatalogCategorySelect(draft, disabled = false) {
+  const options = getCatalogEditorActiveCategories(draft);
+  return `<select id="catalog-category" data-catalog-field="category" ${disabled ? "disabled" : ""}><option value="" ${draft.category ? "" : "selected"}>${draft.productType ? "Select category" : "Select Product Type first"}</option>${options.map((category) => `<option value="${escapeHtml(category.name)}" ${category.name === draft.category ? "selected" : ""}>${escapeHtml(getCategoryPath(category))}</option>`).join("")}</select>`;
+}
+
+function getCatalogEditorCategoryLabel(draft) {
+  const category = productCategories.find((item) => item.name === draft.category);
+  return category ? getCategoryPath(category) : draft.category || "";
+}
+
+function getCatalogEditorSku(draft) {
+  return draft.productCode || draft.slug || "Generated on save.";
+}
+
+function normalizeCatalogDraftImages(images) {
+  const normalized = (Array.isArray(images) ? images : [])
+    .map((image, index) => ({
+      id: image.id || "",
+      storagePath: image.storagePath || image.storage_path || "",
+      publicUrl: image.publicUrl || image.public_url || image.url || "",
+      url: image.url || image.publicUrl || image.public_url || image.previewUrl || "",
+      previewUrl: image.previewUrl || "",
+      altText: image.altText || image.alt_text || "",
+      file: image.file || null,
+      isNew: image.isNew === true,
+      position: index,
+      isPrimary: image.isPrimary === true || image.is_primary === true,
+    }))
+    .slice(0, CATALOG_PRODUCT_IMAGE_LIMIT);
+  const primaryIndex = normalized.findIndex((image) => image.isPrimary);
+  const resolvedPrimaryIndex = normalized.length ? Math.max(0, primaryIndex) : -1;
+  return normalized.map((image, index) => ({
+    ...image,
+    position: index,
+    isPrimary: index === resolvedPrimaryIndex,
+  }));
+}
+
+function getCatalogEditorImages(draft) {
+  return normalizeCatalogDraftImages(draft.images);
+}
+
+function getCatalogEditorImageCount(draft) {
+  return getCatalogEditorImages(draft).length;
+}
+
+function getCatalogEditorPrimaryImage(draft) {
+  const images = getCatalogEditorImages(draft);
+  return (images.find((image) => image.isPrimary) ?? images[0])?.url || "";
+}
+
+function getCatalogEditorMargin(draft) {
+  const unitCost = Number(draft.unitCost || 0);
+  const sellingPrice = Number(draft.startingPrice || 0);
+  if (!unitCost || !sellingPrice) return { label: "Pending", helper: "Calculated after cost and price" };
+  const margin = Math.round(((sellingPrice - unitCost) / sellingPrice) * 100);
+  return { label: `${margin}%`, helper: margin >= 35 ? "Healthy margin" : "Review pricing" };
+}
+
+function getCatalogEditorReadiness(draft) {
+  return [
+    { label: "Brand and product identity", ready: Boolean(draft.name && draft.brandId && draft.productType && draft.category), target: "catalog-section-product-identity", missing: "Add name, Brand, product type, and category." },
+    { label: "Sales Channels", ready: draft.status !== "published" || getCatalogDraftSalesChannelCodes(draft).length > 0, target: "catalog-section-product-identity", missing: "Choose at least one Sales Channel before publishing." },
+    { label: "Cost and selling price", ready: Boolean(draft.unitCost && draft.startingPrice), target: "catalog-section-pricing", missing: "Enter unit cost and selling price." },
+    { label: "Variants", ready: Boolean(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length), target: "catalog-section-variants", missing: "Add at least one size or color." },
+    { label: "At least one product image", ready: getCatalogEditorImageCount(draft) > 0, target: "catalog-section-images", missing: "Upload a product image." },
+  ];
+}
+
+function validateCatalogProductEditor(draft, product) {
+  const baseError = validateCatalogProduct(product);
+  if (baseError) return baseError;
+  if (!draft.brandId) return "Brand is required.";
+  const brand = brands.find((item) => item.id === draft.brandId);
+  if (!brand) return "Choose a valid Brand.";
+  if (brand.status !== "active") return "Only active Brands can be assigned to products.";
+  if (!draft.productType) return "Product Type is required.";
+  const category = productCategories.find((item) => item.name === draft.category);
+  if (!draft.category) return "Category is required.";
+  if (category && category.productType !== draft.productType) return "Category must match the selected Product Type.";
+  const legacyChannels = getCatalogDraftLegacyChannels(draft);
+  if (legacyChannels.length) return `Legacy channel requires correction: ${legacyChannels.join(", ")}`;
+  if (product.status === "published" && getCatalogDraftSalesChannelCodes(draft).length === 0) return "Ready for Sale sellable products require at least one Sales Channel.";
+  return "";
+}
+
 function getCatalogDestinationCounts() {
   return catalogOptions.reduce((counts, catalog) => {
-    counts[catalog.key] = catalogProducts.filter((item) => item.catalogKey === catalog.key).length;
+    counts[catalog.key] = catalogProducts.filter((item) => Array.isArray(item.catalogKeys) ? item.catalogKeys.includes(catalog.key) : item.catalogKey === catalog.key).length;
     return counts;
   }, {});
 }
 
+function getCatalogBrandOptions() {
+  const usedBrandIds = new Set(catalogProducts.map((item) => item.brandId).filter(Boolean));
+  const options = sortBrands(brands)
+    .filter((brand) => usedBrandIds.has(brand.id))
+    .map((brand) => ({ value: brand.id, label: brand.name }));
+  return [{ value: "all", label: "All brands" }, ...options];
+}
+
 function getCatalogCategoryOptions() {
-  const categories = Array.from(new Set(catalogProducts.map((item) => item.category).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const categories = Array.from(new Set(catalogProducts
+    .filter((item) => catalogProductTypeFilter === "all" || (item.productType || inferCatalogProductType(item) || "") === catalogProductTypeFilter)
+    .map((item) => item.category)
+    .filter(Boolean))).sort((a, b) => a.localeCompare(b));
   return [{ value: "all", label: "All categories" }, ...categories.map((category) => ({ value: category, label: category }))];
 }
 
@@ -5604,27 +8726,82 @@ function formatCatalogUpdated(value) {
     month: "short",
     day: "numeric",
     year: "numeric",
-  }).toUpperCase();
+  });
 }
 
-function renderCatalogSelect(draft) {
-  return `<select data-catalog-field="catalogKey">${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
+function renderCatalogSelect(draft, disabled = false) {
+  return `<select data-catalog-field="catalogKey" ${disabled ? "disabled" : ""}>${catalogOptions.map((catalog) => `<option value="${catalog.key}" ${catalog.key === draft.catalogKey ? "selected" : ""}>${catalog.label}</option>`).join("")}</select>`;
 }
 
-function renderCatalogStatusSelect(draft) {
-  return `<select data-catalog-field="status">${catalogStatusOptions.map((status) => `<option value="${status}" ${status === draft.status ? "selected" : ""}>${status}</option>`).join("")}</select>`;
+function renderCatalogSalesChannels(draft, disabled = false) {
+  const selectedCodes = new Set(getCatalogDraftSalesChannelCodes(draft));
+  const legacyChannels = getCatalogDraftLegacyChannels(draft);
+  return `
+    <div class="catalog-sales-channel-field" role="group" aria-label="Sales Channels">
+      <div class="catalog-sales-channel-options">
+        ${canonicalSalesChannels.map((channel) => `
+          <label class="catalog-sales-channel-chip ${selectedCodes.has(channel.code) ? "selected" : ""}">
+            <input data-catalog-sales-channel="${escapeHtml(channel.code)}" type="checkbox" ${selectedCodes.has(channel.code) ? "checked" : ""} ${disabled ? "disabled" : ""} />
+            <span>${escapeHtml(channel.label)}</span>
+          </label>
+        `).join("")}
+      </div>
+      ${legacyChannels.length ? `<p class="catalog-form-error">Legacy channel requires correction: ${escapeHtml(legacyChannels.join(", "))}</p>` : ""}
+    </div>
+  `;
 }
 
-function renderCatalogField(id, label, control) {
-  return `<label class="catalog-field" for="catalog-${id}"><span>${label}</span>${control}</label>`;
+function getCatalogDraftSalesChannelCodes(draft) {
+  const keys = Array.isArray(draft?.catalogKeys) ? draft.catalogKeys : [draft?.catalogKey].filter(Boolean);
+  return Array.from(new Set(keys
+    .map((key) => catalogOptions.find((catalog) => catalog.key === key)?.channel || String(key || "").trim().toUpperCase())
+    .filter((channel) => canonicalSalesChannelCodes.has(channel))));
 }
 
-function renderCatalogInput(field, label, value, type = "text", required = false) {
-  return renderCatalogField(field, label, `<input id="catalog-${field}" data-catalog-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} />`);
+function getCatalogDraftLegacyChannels(draft) {
+  const rawKeys = Array.isArray(draft?.catalogKeys) ? draft.catalogKeys : [draft?.catalogKey].filter(Boolean);
+  return Array.from(new Set(rawKeys
+    .map((key) => {
+      const option = catalogOptions.find((catalog) => catalog.key === key);
+      return option?.channel || String(key || "").trim().toUpperCase();
+    })
+    .filter((channel) => channel && !canonicalSalesChannelCodes.has(channel))));
 }
 
-function renderCatalogTextarea(field, label, value) {
-  return renderCatalogField(field, label, `<textarea id="catalog-${field}" data-catalog-field="${field}" rows="3">${escapeHtml(value ?? "")}</textarea>`);
+function channelCodeToCatalogKey(code) {
+  return catalogOptions.find((catalog) => catalog.channel === code)?.key || "";
+}
+
+function setCatalogDraftSalesChannel(channelCode, selected) {
+  if (!catalogDraft || !canonicalSalesChannelCodes.has(channelCode)) return;
+  const canonicalKeys = getCatalogDraftSalesChannelCodes(catalogDraft).map(channelCodeToCatalogKey).filter(Boolean);
+  const key = channelCodeToCatalogKey(channelCode);
+  const nextKeys = selected ? [...canonicalKeys, key] : canonicalKeys.filter((item) => item !== key);
+  const normalizedKeys = Array.from(new Set(nextKeys));
+  catalogDraft = {
+    ...catalogDraft,
+    catalogKey: normalizedKeys[0] || "",
+    catalogKeys: normalizedKeys,
+  };
+  catalogValidationError = "";
+  catalogSaveError = "";
+  render();
+}
+
+function renderCatalogStatusSelect(draft, disabled = false) {
+  return `<select data-catalog-field="status" ${disabled ? "disabled" : ""}>${catalogStatusOptions.map((status) => `<option value="${status}" ${status === draft.status ? "selected" : ""}>${status}</option>`).join("")}</select>`;
+}
+
+function renderCatalogField(id, label, control, helperText = "") {
+  return `<label class="catalog-field catalog-field-${id}" for="catalog-${id}"><span>${label}</span>${control}${helperText ? `<small>${escapeHtml(helperText)}</small>` : ""}</label>`;
+}
+
+function renderCatalogInput(field, label, value, type = "text", required = false, disabled = false, placeholder = "") {
+  return renderCatalogField(field, label, `<input id="catalog-${field}" data-catalog-field="${field}" value="${escapeHtml(value ?? "")}" type="${type}" ${required ? "required" : ""} ${disabled ? "disabled" : ""} ${placeholder ? `placeholder="${escapeHtml(placeholder)}"` : ""} />`);
+}
+
+function renderCatalogTextarea(field, label, value, disabled = false) {
+  return renderCatalogField(field, label, `<textarea id="catalog-${field}" data-catalog-field="${field}" rows="3" ${disabled ? "disabled" : ""}>${escapeHtml(value ?? "")}</textarea>`);
 }
 
 function getCatalogFilterOptions() {
@@ -5651,18 +8828,26 @@ function formatCatalogPrice(item) {
 }
 
 function canWriteCatalogProducts() {
-  return ["owner", "admin", "staff"].includes(adminUser?.role);
+  return ["owner", "admin"].includes(adminUser?.role);
 }
 
 function canManageStaffAccounts() {
   return ["owner", "admin"].includes(adminUser?.role);
 }
 
+function canViewSettingsRoute() {
+  return canManageStaffAccounts();
+}
+
 function createCatalogDraft(product = null) {
   if (product) {
+    const images = normalizeCatalogDraftImages(product.images?.length ? product.images : (product.imageUrl ? [{ url: product.imageUrl, publicUrl: product.imageUrl, storagePath: "", isPrimary: true }] : []));
     return {
       ...product,
+      productCode: product.productCode || product.slug || "",
+      slug: product.productCode || product.slug || "",
       imageDraftId: product.id,
+      images,
       imageFile: null,
       imageFilePreviewUrl: "",
       imageError: "",
@@ -5670,17 +8855,34 @@ function createCatalogDraft(product = null) {
       availableSizesText: product.availableSizes.join(", "),
       availableColorsText: product.availableColors.join(", "),
       printMethodsText: product.printMethods.join(", "),
+      brandId: product.brandId || "",
+      brandName: product.brandName || product.brand || "",
+      productType: product.productType || inferCatalogProductType(product) || "PHYSICAL",
+      subcategory: product.subcategory || "",
+      unitCost: product.unitCost || "",
+      material: product.material || "",
+      weightGsm: product.weightGsm || "",
+      fitCut: product.fitCut || "",
+      productionUse: product.productionUse || "",
+      productionNotes: product.productionNotes || "",
     };
   }
 
   return {
     imageDraftId: createDraftImageId(),
     catalogKey: activeCatalogKey,
+    catalogKeys: [activeCatalogKey],
     name: "",
     slug: "",
+    productCode: "",
     category: "",
+    categoryId: "",
+    brandId: "",
+    brandName: "",
+    brand: "",
     description: "",
     imageUrl: "",
+    images: [],
     imageFile: null,
     imageFilePreviewUrl: "",
     imageError: "",
@@ -5697,14 +8899,230 @@ function createCatalogDraft(product = null) {
     sortOrder: 0,
     isFeatured: false,
     status: "draft",
+    productType: "",
+    subcategory: "",
+    unitCost: "",
+    material: "",
+    weightGsm: "",
+    fitCut: "",
+    productionUse: "",
+    productionNotes: "",
   };
 }
+
 function createDraftImageId() {
   if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 }
+
+function inferCatalogProductType(product) {
+  const category = productCategories.find((item) => item.name === product?.category);
+  return category?.productType || "";
+}
+
 function createEmptyStaffDraft() {
   return { displayName: "", email: "", role: "staff" };
+}
+
+function getVisibleEmployeeUsers() {
+  const normalizedQuery = employeeQuery.trim().toLowerCase();
+
+  return staffUsers.filter((user) => {
+    const role = String(user.role || "").toLowerCase();
+    const active = user.isActive !== false;
+    const matchesQuery =
+      !normalizedQuery ||
+      [
+        user.displayName,
+        user.email,
+        role,
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(normalizedQuery);
+    const matchesRole = employeeRoleFilter === "all" || role === employeeRoleFilter;
+    const matchesStatus =
+      employeeStatusFilter === "all" ||
+      (employeeStatusFilter === "active" && active) ||
+      (employeeStatusFilter === "deactivated" && !active);
+
+    return matchesQuery && matchesRole && matchesStatus;
+  });
+}
+
+function getEmployeeKpis() {
+  const activeUsers = staffUsers.filter((user) => user.isActive !== false);
+  return {
+    teamMembers: activeUsers.length,
+    roles: new Set(activeUsers.map((user) => user.role).filter(Boolean)).size,
+    suspended: staffUsers.filter((user) => user.isActive === false).length,
+  };
+}
+
+function renderPeopleAccessEmployeesPage() {
+  if (!canManageStaffAccounts()) {
+    return `<main class="people-access-page"><section class="people-access-denied"><span>SETTINGS</span><h1>Access restricted</h1><p>Your account cannot manage employees.</p></section></main>`;
+  }
+
+  if (staffLoadState === "idle") {
+    staffLoadState = "loading";
+    window.setTimeout(loadStaffUsers, 0);
+  }
+
+  const visibleEmployees = getVisibleEmployeeUsers();
+  const kpis = getEmployeeKpis();
+  const loading = staffLoadState === "loading";
+  const activeCount = staffUsers.filter((user) => user.isActive !== false).length;
+
+  return `<main class="people-access-page admin-saas-page">
+    <section class="people-access-hero">
+      <div class="people-access-title">
+        <span>Home › Settings › People &amp; Access</span>
+        <h1>People &amp; Access</h1>
+        <p>Manage employees and assign their access role.</p>
+      </div>
+      <button class="people-access-primary" type="button" data-staff-new ${loading ? "disabled" : ""}>+ INVITE EMPLOYEE</button>
+    </section>
+
+    ${staffFeedback ? `<p class="staff-feedback" role="status">${escapeHtml(staffFeedback)}</p>` : ""}
+    ${staffLoadError ? `<p class="staff-feedback error" role="alert">${escapeHtml(staffLoadError)}</p>` : ""}
+
+    <section class="people-access-tabs" aria-label="People and Access sections">
+      <button class="active" type="button" aria-current="page">Employees</button>
+      <button type="button" disabled aria-disabled="true">Roles &amp; Permissions</button>
+      <span>${activeCount} ACTIVE</span>
+    </section>
+
+    <section class="people-access-kpis" aria-label="Employee summary">
+      ${renderEmployeeKpiCard("TEAM MEMBERS", kpis.teamMembers, "Active accounts")}
+      ${renderEmployeeKpiCard("ROLES", kpis.roles, "Access presets")}
+      ${renderEmployeeKpiCard("SUSPENDED", kpis.suspended, kpis.suspended ? "Deactivated accounts" : "No suspended users")}
+    </section>
+
+    <section class="employee-controls" aria-label="Employee filters">
+      <input id="employee-search" type="search" value="${escapeHtml(employeeQuery)}" placeholder="Search employee, role, email..." />
+      <select id="employee-role-filter" aria-label="Filter employees by role">
+        ${renderEmployeeRoleOptions()}
+      </select>
+      <select id="employee-status-filter" aria-label="Filter employees by status">
+        <option value="all" ${employeeStatusFilter === "all" ? "selected" : ""}>All statuses</option>
+        <option value="active" ${employeeStatusFilter === "active" ? "selected" : ""}>Active</option>
+        <option value="deactivated" ${employeeStatusFilter === "deactivated" ? "selected" : ""}>Deactivated</option>
+      </select>
+      <button type="button" data-employee-reset>RESET</button>
+    </section>
+
+    <section class="employees-panel" aria-label="Employees">
+      <div class="employees-panel-title">
+        <strong>EMPLOYEES</strong>
+        <span>Profile photo, assigned role, account status, and access are managed here.</span>
+      </div>
+      <div class="employees-table" role="table" aria-label="Employees">
+        <div class="employees-table-header" role="row">
+          <span>EMPLOYEE</span><span>ROLE</span><span>STATUS</span><span>LAST LOGIN</span><span>ACCESS</span><span>ACTION</span>
+        </div>
+        <div class="employees-table-body" role="rowgroup">
+          ${renderEmployeeTableBody(visibleEmployees, loading)}
+        </div>
+      </div>
+      <footer class="employees-panel-footer">
+        <span>${escapeHtml(getEmployeeShowingLabel(visibleEmployees.length))}</span>
+        <button type="button" data-employee-view-deactivated>VIEW DEACTIVATED</button>
+      </footer>
+    </section>
+    ${staffDrawerMode ? renderStaffDrawer() : ""}
+  </main>`;
+}
+
+function renderEmployeeKpiCard(label, value, helper) {
+  return `<article class="employee-kpi-card"><span>${escapeHtml(label)}</span><strong>${escapeHtml(value)}</strong><small>${escapeHtml(helper)}</small></article>`;
+}
+
+function renderEmployeeRoleOptions() {
+  const roles = Array.from(new Set(staffUsers.map((user) => String(user.role || "").toLowerCase()).filter(Boolean))).sort();
+  const options = [["all", "All roles"], ...roles.map((role) => [role, getEmployeeRoleLabel({ role })])];
+  return options.map(([value, label]) => `<option value="${escapeHtml(value)}" ${employeeRoleFilter === value ? "selected" : ""}>${escapeHtml(label)}</option>`).join("");
+}
+
+function renderEmployeeTableBody(visibleEmployees, loading) {
+  if (loading) return `<p class="employee-empty-state">Loading employees...</p>`;
+  if (staffLoadState === "error") return `<p class="employee-empty-state error"><strong>Unable to load employees</strong><span>${escapeHtml(staffLoadError || "Unable to load employees.")}</span></p>`;
+  if (!visibleEmployees.length) return `<p class="employee-empty-state">${escapeHtml(getEmployeeEmptyLabel())}</p>`;
+  return visibleEmployees.map(renderEmployeeRow).join("");
+}
+
+function renderEmployeeRow(user) {
+  const active = user.isActive !== false;
+  return `<div class="employee-row" role="row">
+    <div class="employee-profile-cell">
+      <span class="employee-avatar ${escapeHtml(getEmployeeAvatarTone(user))}"><b>${escapeHtml(getEmployeeInitial(user))}</b></span>
+      <div><strong>${escapeHtml(user.displayName || "Unnamed employee")}</strong><small>${escapeHtml(user.email || "No email")}</small></div>
+    </div>
+    <span class="employee-role-cell">${escapeHtml(getEmployeeRoleLabel(user))}</span>
+    <span>${renderEmployeeStatusChip(active)}</span>
+    <span class="employee-last-login">${escapeHtml(formatEmployeeLastLogin(user.lastSignInAt))}</span>
+    <span>${renderEmployeeAccessChip(user)}</span>
+    <span class="employee-row-actions">${renderStaffActions(user)}</span>
+  </div>`;
+}
+
+function renderEmployeeStatusChip(active) {
+  return `<b class="employee-chip ${active ? "active" : "deactivated"}">${active ? "ACTIVE" : "DEACTIVATED"}</b>`;
+}
+
+function renderEmployeeAccessChip(user) {
+  const role = String(user.role || "").toLowerCase();
+  const label = role === "owner" ? "FULL ACCESS" : role === "admin" ? "MANAGEMENT" : "MY WORK";
+  const tone = role === "owner" ? "full" : "summary";
+  return `<b class="employee-chip ${tone}">${label}</b>`;
+}
+
+function getEmployeeRoleLabel(user) {
+  const role = String(user?.role || "").toLowerCase();
+  if (role === "owner") return "Owner / Admin";
+  if (role === "admin") return "Admin / Operations";
+  if (role === "staff") return "Production Staff";
+  return formatAdminRole(role || "staff");
+}
+
+function getEmployeeInitial(user) {
+  const label = user.displayName || user.email || "Employee";
+  return label.trim().charAt(0).toUpperCase() || "E";
+}
+
+function getEmployeeAvatarTone(user) {
+  const tones = ["tone-blue", "tone-lavender", "tone-coral", "tone-green", "tone-gold"];
+  const seed = String(user.id || user.email || user.displayName || "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+  return tones[seed % tones.length];
+}
+
+function getEmployeeShowingLabel(count) {
+  if (employeeStatusFilter === "deactivated") return `Showing ${count} deactivated employees`;
+  if (employeeStatusFilter === "all") return `Showing ${count} employees`;
+  return `Showing ${count} active employees`;
+}
+
+function getEmployeeEmptyLabel() {
+  if (employeeQuery.trim() || employeeRoleFilter !== "all") return "No employees match the current filters";
+  if (employeeStatusFilter === "deactivated") return "No deactivated employees found";
+  return "No active employees found";
+}
+
+function formatEmployeeLastLogin(value) {
+  if (!value) return "Never";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "Never";
+  const manilaNow = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const manilaDate = new Date(date.toLocaleString("en-US", { timeZone: "Asia/Manila" }));
+  const diffMs = manilaNow.getTime() - manilaDate.getTime();
+  if (diffMs >= 0 && diffMs <= 5 * 60 * 1000) return "Now";
+  const dayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(date);
+  const todayKey = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Manila", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+  if (dayKey === todayKey) {
+    return `Today ${new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" }).format(date)}`;
+  }
+  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", month: "short", day: "numeric", year: "numeric" }).format(date);
 }
 
 function renderStaffAccessPage() {
@@ -5777,7 +9195,7 @@ function renderStaffBadge(label, tone) {
 
 function renderStaffDrawer() {
   const isEdit = staffDrawerMode === "edit";
-  const title = isEdit ? "EDIT STAFF ACCESS" : "NEW STAFF";
+  const title = isEdit ? "EDIT EMPLOYEE" : "INVITE EMPLOYEE";
   const roleOptions = getPermittedStaffRoleOptions(isEdit);
   const roleLocked = roleOptions.length <= 1;
   const saving = staffSaveState === "saving";
@@ -5786,14 +9204,15 @@ function renderStaffDrawer() {
     : `<select id="staff-role" ${saving ? "disabled" : ""}>${roleOptions.map((role) => `<option value="${role}" ${staffDraft.role === role ? "selected" : ""}>${escapeHtml(formatAdminRole(role))}</option>`).join("")}</select>`;
 
   return `<div class="staff-drawer-backdrop" data-staff-close></div><aside class="staff-drawer" aria-label="${escapeHtml(title)}">
-    <header><div><span>STAFF ACCESS</span><h2>${title}</h2></div><button type="button" data-staff-close aria-label="Close staff drawer">X</button></header>
+    <header><div><span>EMPLOYEES</span><h2>${title}</h2></div><button type="button" data-staff-close aria-label="Close employee modal">X</button></header>
     <form id="staff-form" class="staff-form">
       <label><span>Display name</span><input id="staff-display-name" value="${escapeHtml(staffDraft.displayName)}" autocomplete="name" ${saving ? "disabled" : ""} required /></label>
       <label><span>Email</span><input id="staff-email" value="${escapeHtml(staffDraft.email)}" type="email" autocomplete="email" ${isEdit || saving ? "disabled" : ""} required /></label>
       <label><span>Role</span>${roleControl}</label>
+      ${isEdit ? `<p class="staff-note">Email is read-only for employee lifecycle updates.</p>` : ""}
       ${adminUser?.role === "admin" && !isEdit ? `<p class="staff-note">Role is locked to STAFF for admin users.</p>` : ""}
       ${staffSaveError ? `<p class="staff-form-error" role="alert">${escapeHtml(staffSaveError)}</p>` : ""}
-      <button class="staff-primary-action" type="submit" ${saving ? "disabled" : ""}>${saving ? (isEdit ? "SAVING..." : "CREATING...") : (isEdit ? "SAVE CHANGES" : "CREATE STAFF")}</button>
+      <button class="staff-primary-action" type="submit" ${saving ? "disabled" : ""}>${saving ? (isEdit ? "SAVING..." : "SENDING...") : (isEdit ? "SAVE CHANGES" : "SEND INVITE")}</button>
     </form>
   </aside>`;
 }
@@ -5828,11 +9247,7 @@ function openEditStaffDrawer(id) {
 }
 
 function closeStaffDrawer() {
-  staffDrawerMode = "";
-  staffEditingId = null;
-  staffDraft = createEmptyStaffDraft();
-  staffSaveState = "idle";
-  staffSaveError = "";
+  resetStaffDrawerState();
   render();
 }
 
@@ -5853,50 +9268,90 @@ async function loadStaffUsers() {
 }
 
 async function submitStaffForm() {
+  const validationError = validateStaffDraft();
+  if (validationError) {
+    staffSaveError = validationError;
+    render();
+    return;
+  }
+
   staffSaveState = "saving";
   staffSaveError = "";
   render();
   try {
     if (staffDrawerMode === "edit") {
+      const editing = staffUsers.find((user) => user.id === staffEditingId);
+      const nextDisplayName = staffDraft.displayName.trim();
+      const nextRole = String(staffDraft.role || "staff").trim().toLowerCase();
+      const body = { action: "update", displayName: nextDisplayName };
+      if (editing && nextRole !== String(editing.role || "").toLowerCase()) body.role = nextRole;
+
+      if (editing && nextDisplayName === String(editing.displayName || "").trim() && body.role === undefined) {
+        staffFeedback = "Employee account unchanged.";
+        closeStaffDrawer();
+        return;
+      }
+
       const payload = await staffApiRequest(`/api/admin-users/${encodeURIComponent(staffEditingId)}`, {
         method: "PATCH",
-        body: { action: "update", displayName: staffDraft.displayName, role: staffDraft.role },
+        body,
       });
-      staffUsers = staffUsers.map((user) => user.id === payload.user.id ? payload.user : user);
-      staffFeedback = "Staff account updated.";
+      staffFeedback = payload.user ? "Employee account updated." : "Employee account updated.";
     } else {
       const payload = await staffApiRequest("/api/admin-users", {
         method: "POST",
-        body: { displayName: staffDraft.displayName, email: staffDraft.email, role: staffDraft.role },
+        body: { displayName: staffDraft.displayName.trim(), email: staffDraft.email.trim(), role: staffDraft.role },
       });
-      staffUsers = [payload.user, ...staffUsers.filter((user) => user.id !== payload.user.id)];
-      staffFeedback = payload.inviteSent ? "Staff invite sent and access profile created." : "Staff account created.";
+      staffFeedback = payload.inviteSent ? "Employee invite sent." : "Employee account created.";
     }
-    closeStaffDrawer();
+    resetStaffDrawerState();
+    await loadStaffUsers();
   } catch (error) {
     staffSaveState = "idle";
-    staffSaveError = error.message || "Staff account save failed.";
+    staffSaveError = error.message || "Employee account save failed.";
     render();
   }
 }
 
 async function updateStaffStatus(id, action) {
+  const target = staffUsers.find((user) => user.id === id);
+  if (!target) return;
+  if (action === "disable") {
+    const label = target.displayName || target.email || "this employee";
+    if (!window.confirm(`Deactivate ${label}? This keeps their employee record but disables portal access.`)) return;
+  }
+
   staffActionId = id;
   staffFeedback = "";
   staffLoadError = "";
   render();
   try {
-    const payload = await staffApiRequest(`/api/admin-users/${encodeURIComponent(id)}`, {
+    await staffApiRequest(`/api/admin-users/${encodeURIComponent(id)}`, {
       method: "PATCH",
       body: { action },
     });
-    staffUsers = staffUsers.map((user) => user.id === payload.user.id ? payload.user : user);
-    staffFeedback = action === "disable" ? "Staff account disabled." : "Staff account activated.";
+    staffFeedback = action === "disable" ? "Employee account deactivated." : "Employee account activated.";
+    await loadStaffUsers();
   } catch (error) {
-    staffLoadError = error.message || "Staff account update failed.";
+    staffLoadError = error.message || "Employee account update failed.";
   }
   staffActionId = "";
   render();
+}
+
+function validateStaffDraft() {
+  if (!staffDraft.displayName.trim()) return "Display name is required.";
+  if (staffDrawerMode !== "edit" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(staffDraft.email.trim())) return "Enter a valid email address.";
+  if (!["owner", "admin", "staff"].includes(String(staffDraft.role || "").toLowerCase())) return "Choose Owner, Admin, or Staff.";
+  return "";
+}
+
+function resetStaffDrawerState() {
+  staffDrawerMode = "";
+  staffEditingId = null;
+  staffDraft = createEmptyStaffDraft();
+  staffSaveState = "idle";
+  staffSaveError = "";
 }
 
 async function staffApiRequest(path, { method = "GET", body } = {}) {
@@ -5917,12 +9372,12 @@ async function staffApiRequest(path, { method = "GET", body } = {}) {
 function getStaffApiErrorMessage(status, error) {
   const normalized = String(error || "").toLowerCase();
   if (status === 401) return "Admin session required. Sign in again.";
-  if (status === 403) return normalized.includes("role") ? "Role change is not permitted." : "You do not have permission for that staff account.";
+  if (status === 403) return normalized.includes("role") ? "Role change is not permitted." : (error || "You do not have permission for that employee account.");
   if (status === 409) return normalized.includes("auth") ? "That email already has a login account." : "That email already has admin access.";
-  if (status === 503) return normalized.includes("server key") ? "Staff invite service is not configured. Check the Supabase server key." : "Staff invite email could not be sent. Configure Supabase email delivery.";
+  if (status === 503) return normalized.includes("server key") ? "Employee invite service is not configured. Check the Supabase server key." : "Employee invite email could not be sent. Configure Supabase email delivery.";
   if (normalized.includes("display")) return "Display name is required.";
   if (normalized.includes("email")) return "Enter a valid email address.";
-  return "Staff account request failed. Try again.";
+  return error || "Employee account request failed. Try again.";
 }
 
 function formatStaffDate(value, fallback = "-") {
@@ -6331,6 +9786,7 @@ function renderClientPanel() {
         <a class="primary-drawer-action" href="https://${clientProgram.domain}" target="_blank" rel="noreferrer">Open Portal</a>
         <details class="drawer-more-actions"><summary>More Actions</summary><div>
           <button data-copy-value="https://${clientProgram.domain}" data-copy-message="Portal link copied" type="button">Copy Portal Link</button>
+          <button disabled type="button">Products module parked</button>
           <button data-route-target="/orders" type="button">View Orders</button>
           <button disabled title="Editing requires a connected client management backend." type="button">Edit Client</button>
         </div></details>
@@ -6461,375 +9917,92 @@ function renderProductImageManager(product) {
   `;
 }
 
-
-
-function canUseWorkChat() {
-  return isSupabaseReady() && Boolean(adminAuthSession?.access_token && adminUser);
-}
-function renderWorkChatShell() {
-  if (!canUseWorkChat()) return "";
-  const unread = Number(workChatState.globalUnreadCount || 0);
-  const activeChannel = getActiveWorkChatChannel();
-  const messages = workChatState.activeView === "mentions" ? workChatState.mentionMessages : (activeChannel ? workChatState.messagesByChannel[activeChannel.id] || [] : []);
-  const drawer = workChatState.isOpen ? `
-    <aside class="work-chat-drawer" aria-label="Work Chat">
-      <header class="work-chat-header">
-        <div>
-          <span>WORK CHAT</span>
-          <strong>${escapeHtml(workChatState.activeView === "mentions" ? "MENTIONS" : activeChannel?.name || "GENERAL")}</strong>
-        </div>
-        <button class="work-chat-close" data-work-chat-close type="button" aria-label="Close Work Chat">X</button>
-      </header>
-      <section class="work-chat-body">
-        <nav class="work-chat-nav" aria-label="Work Chat channels">
-          <div class="work-chat-nav-group">
-            <span>Channels</span>
-            ${workChatState.channels.map(renderWorkChatChannelButton).join("")}
-            ${renderWorkChatMentionsButton()}
-          </div>
-          <div class="work-chat-nav-group order">
-            <span>Order Threads</span>
-            <input id="work-chat-order-search" value="${escapeHtml(workChatState.orderSearch)}" placeholder="Find order thread" type="search" />
-            <div class="work-chat-order-list">
-              ${getVisibleWorkChatOrderThreads().map(renderWorkChatChannelButton).join("") || `<p>No order threads yet.</p>`}
-            </div>
-          </div>
-        </nav>
-        <main class="work-chat-conversation">
-          ${renderWorkChatStatus()}
-          <div class="work-chat-messages" data-work-chat-messages>
-            ${messages.length ? messages.map(renderWorkChatMessage).join("") : renderWorkChatEmpty(workChatState.activeView === "mentions" ? { channelType: "MENTIONS" } : activeChannel)}
-          </div>
-          ${workChatState.activeView === "mentions" ? "" : renderWorkChatComposer(activeChannel)}
-        </main>
-      </section>
-    </aside>` : "";
-
-  return `
-    <button class="work-chat-launcher" data-work-chat-open type="button" aria-label="Open Work Chat">
-      ${renderIcon("message-circle", "work-chat-launcher-icon")}
-      ${unread ? `<span class="work-chat-unread">${unread > 99 ? "99+" : unread}</span>` : ""}
-    </button>
-    ${drawer}`;
-}
-
-function renderWorkChatChannelButton(channel) {
-  const unread = Number(workChatState.unreadByChannel[channel.id] || 0);
-  const active = workChatState.activeView === "channel" && channel.id === workChatState.activeChannelId;
-  const iconName = channel.channelType === "ORDER" ? "factory" : "hash";
-  return `<button class="work-chat-channel ${active ? "active" : ""}" data-work-chat-channel="${escapeHtml(channel.id)}" type="button">
-    ${renderIcon(iconName, "work-chat-channel-icon")}
-    <span>${escapeHtml(channel.name)}</span>
-    ${unread ? `<b>${unread > 99 ? "99+" : unread}</b>` : ""}
-  </button>`;
-}
-
-
-function renderWorkChatMentionsButton() {
-  const unread = Number(workChatState.unreadMentionCount || 0);
-  const active = workChatState.activeView === "mentions";
-  return `<button class="work-chat-channel ${active ? "active" : ""}" data-work-chat-mentions type="button">
-    ${renderIcon("at", "work-chat-channel-icon")}
-    <span>MENTIONS</span>
-    ${unread ? `<b>${unread > 99 ? "99+" : unread}</b>` : ""}
-  </button>`;
-}
-function renderWorkChatStatus() {
-  if (workChatState.error) return `<p class="work-chat-error" role="alert">${escapeHtml(workChatState.error)}</p>`;
-  if (workChatState.loadState === "loading") return `<p class="work-chat-note">Loading Work Chat...</p>`;
-  if (workChatState.realtimeStatus === "unavailable") return `<p class="work-chat-note">Realtime is unavailable. Messages refresh when you open a channel.</p>`;
-  return "";
-}
-
-function renderWorkChatEmpty(channel) {
-  const text = channel?.channelType === "ORDER" ? "No messages in this order thread yet." : channel?.channelType === "MENTIONS" ? "No mentions yet." : "No messages in this channel yet.";
-  return `<div class="work-chat-empty"><strong>${escapeHtml(text)}</strong><span>Start the conversation below.</span></div>`;
-}
-
-function renderWorkChatMessage(message) {
-  const mine = message.senderUserId === adminUser?.userId;
-  const contextLabel = message.channel?.name && workChatState.activeView === "mentions" ? `<button class="work-chat-source" data-work-chat-source-channel="${escapeHtml(message.channelId)}" type="button">${escapeHtml(message.channel.name)}</button>` : "";
-  const attachments = message.attachments?.length
-    ? `<div class="work-chat-attachments">${message.attachments.map((attachment) => `<button data-work-chat-attachment="${escapeHtml(attachment.id)}" type="button">${renderIcon("paperclip")}<span>${escapeHtml(attachment.filename)}</span></button>`).join("")}</div>`
-    : "";
-  return `<article class="work-chat-message ${mine ? "mine" : ""}">
-    <header><strong>${escapeHtml(message.sender?.displayName || "Staff")}</strong><span>${escapeHtml(formatWorkChatDateTime(message.createdAt))}</span></header>
-    ${contextLabel}
-    ${message.body ? `<p>${formatWorkChatBody(message.body)}</p>` : ""}
-    ${attachments}
-  </article>`;
-}
-
-function renderWorkChatComposer(channel) {
-  if (!channel) return `<div class="work-chat-composer disabled">Select a channel to send messages.</div>`;
-  const canSend = !workChatState.sending && (workChatState.composerBody.trim() || workChatState.pendingAttachments.length);
-  return `<form class="work-chat-composer" id="work-chat-composer">
-    ${renderWorkChatMentionChoices()}
-    ${workChatState.pendingAttachments.length ? `<div class="work-chat-pending-files">${workChatState.pendingAttachments.map((file) => `<span>${renderIcon("paperclip")} ${escapeHtml(file.filename)} <button data-work-chat-remove-attachment="${escapeHtml(file.id)}" type="button" aria-label="Remove ${escapeHtml(file.filename)}">X</button></span>`).join("")}</div>` : ""}
-    <textarea id="work-chat-body" maxlength="4000" placeholder="Message ${escapeHtml(channel.name)}" rows="3">${escapeHtml(workChatState.composerBody)}</textarea>
-    <div class="work-chat-composer-actions">
-      <label class="work-chat-file-button">${renderIcon("paperclip")}<input id="work-chat-file" type="file" multiple /></label>
-      <span>${workChatState.attachmentUploadState === "uploading" ? "Uploading..." : `${workChatState.composerBody.length}/4000`}</span>
-      <button class="work-chat-send" type="submit" ${canSend ? "" : "disabled"}>${renderIcon("send")} Send</button>
-    </div>
-  </form>`;
-}
-
-function renderWorkChatMentionChoices() {
-  const query = getWorkChatMentionQuery();
-  if (!query) return "";
-  const matches = workChatState.activeUsers
-    .filter((user) => user.userId !== adminUser?.userId)
-    .filter((user) => (user.displayName || user.email || "").toLowerCase().includes(query.toLowerCase()))
-    .slice(0, 5);
-  if (!matches.length) return "";
-  return `<div class="work-chat-mentions" role="listbox">${matches.map((user) => `<button data-work-chat-mention="${escapeHtml(user.userId)}" type="button">${renderIcon("at")}<span>${escapeHtml(user.displayName || user.email)}</span></button>`).join("")}</div>`;
-}
-
-function getVisibleWorkChatOrderThreads() {
-  const query = workChatState.orderSearch.trim().toLowerCase();
-  return workChatState.orderThreads.filter((channel) => !query || [channel.name, channel.sourceRecordId].join(" ").toLowerCase().includes(query));
-}
-
-function getActiveWorkChatChannel() {
-  const allChannels = [...workChatState.channels, ...workChatState.orderThreads];
-  return allChannels.find((channel) => channel.id === workChatState.activeChannelId) || allChannels[0] || null;
-}
-
-async function initializeWorkChat() {
-  if (!canUseWorkChat() || workChatState.loadState === "loading" || workChatState.initialized) return;
-  workChatState.loadState = "loading";
-  workChatState.error = "";
-  try {
-    const payload = await getWorkChatBootstrap(adminAuthSession);
-    workChatState = {
-      ...workChatState,
-      initialized: true,
-      loadState: "ready",
-      channels: normalizeWorkChatChannels(payload.channels).sort(sortStandardWorkChatChannels),
-      orderThreads: normalizeWorkChatChannels(payload.orderThreads),
-      activeUsers: payload.activeUsers || [],
-      unreadByChannel: payload.unreadByChannel || {},
-      globalUnreadCount: payload.globalUnreadCount || 0,
-      unreadMentionCount: payload.unreadMentionCount || 0,
-      mentionMessages: payload.mentionMessages || [],
-      mentionMessages: payload.mentionMessages || [],
-      activeChannelId: workChatState.activeChannelId || payload.defaultChannelId || payload.channels?.[0]?.id || "",
-    };
-    startWorkChatRealtime();
-    if (workChatState.isOpen && workChatState.activeChannelId) await loadWorkChatChannelMessages(workChatState.activeChannelId);
-  } catch (error) {
-    console.error("Unable to initialize Work Chat.", error);
-    workChatState.loadState = "error";
-    workChatState.error = error.message || "Unable to load Work Chat.";
-  }
-  render();
-}
-
-async function loadWorkChatChannelMessages(channelId, { force = false } = {}) {
-  if (!channelId || (!force && workChatState.messagesByChannel[channelId]?.length)) return;
-  workChatState.messageLoadState = "loading";
-  workChatState.error = "";
-  try {
-    const payload = await getWorkChatMessages(channelId, adminAuthSession);
-    workChatState.messagesByChannel = { ...workChatState.messagesByChannel, [channelId]: payload.messages || [] };
-    workChatState.messageLoadState = "ready";
-    await markLatestWorkChatMessageRead(channelId);
-  } catch (error) {
-    console.error("Unable to load Work Chat messages.", error);
-    workChatState.messageLoadState = "error";
-    workChatState.error = error.message || "Unable to load messages.";
-  }
-}
-
-function startWorkChatRealtime() {
-  if (workChatSubscription || !canUseWorkChat()) return;
-  workChatSubscription = subscribeToWorkChatMessages(adminAuthSession, async (row) => {
-    if (!row?.channel_id) return;
-    const known = workChatState.messagesByChannel[row.channel_id]?.some((message) => message.id === row.id);
-    if (known) return;
-    if (workChatState.isOpen && row.channel_id === workChatState.activeChannelId) {
-      await loadWorkChatChannelMessages(row.channel_id, { force: true });
-      render();
-      return;
-    }
-    if (row.sender_user_id !== adminUser?.userId) {
-      workChatState.unreadByChannel = {
-        ...workChatState.unreadByChannel,
-        [row.channel_id]: Number(workChatState.unreadByChannel[row.channel_id] || 0) + 1,
-      };
-      workChatState.globalUnreadCount = Number(workChatState.globalUnreadCount || 0) + 1;
-      render();
-    }
-  }, (status) => {
-    workChatState.realtimeStatus = status;
-  });
-}
-
-function resetWorkChatState() {
-  if (workChatSubscription) {
-    workChatSubscription.unsubscribe();
-    workChatSubscription = null;
-  }
-  workChatState = createWorkChatInitialState();
-}
-
-async function openWorkChat(channelId = "") {
-  workChatState.isOpen = true;
-  if (channelId) workChatState.activeChannelId = channelId;
-  workChatState.activeView = "channel";
-  workChatState.activeView = "channel";
-  render();
-  await initializeWorkChat();
-  const activeChannel = getActiveWorkChatChannel();
-  if (activeChannel) {
-    workChatState.activeChannelId = activeChannel.id;
-    await loadWorkChatChannelMessages(activeChannel.id);
-    render();
-    window.requestAnimationFrame(() => document.getElementById("work-chat-body")?.focus());
-  }
-}
-
-async function openWorkChatOrderThread(orderId) {
-  if (!orderId) return;
-  workChatState.isOpen = true;
-  workChatState.error = "";
-  render();
-  try {
-    const payload = await createWorkChatOrderThread(orderId, adminAuthSession);
-    const channel = payload.channel;
-    workChatState.orderThreads = upsertWorkChatChannel(workChatState.orderThreads, channel);
-    workChatState.activeChannelId = channel.id;
-    workChatState.activeView = "channel";
-    workChatState.activeView = "channel";
-    await loadWorkChatChannelMessages(channel.id, { force: true });
-  } catch (error) {
-    console.error("Unable to open order thread.", error);
-    workChatState.error = error.message || "Unable to open order thread.";
-  }
-  render();
-}
-
-async function submitWorkChatComposer() {
-  const channelId = workChatState.activeChannelId;
-  if (!channelId || workChatState.sending) return;
-  const body = workChatState.composerBody.trim();
-  const attachmentIds = workChatState.pendingAttachments.map((attachment) => attachment.id);
-  if (!body && !attachmentIds.length) return;
-  workChatState.sending = true;
-  workChatState.error = "";
-  render();
-  try {
-    const payload = await sendWorkChatMessage(channelId, {
-      body,
-      mentionedUserIds: workChatState.mentionedUserIds,
-      attachmentIds,
-    }, adminAuthSession);
-    const previous = workChatState.messagesByChannel[channelId] || [];
-    workChatState.messagesByChannel = { ...workChatState.messagesByChannel, [channelId]: [...previous, payload.message].filter(Boolean) };
-    workChatState.composerBody = "";
-    workChatState.mentionedUserIds = [];
-    workChatState.pendingAttachments = [];
-    await markLatestWorkChatMessageRead(channelId);
-  } catch (error) {
-    console.error("Unable to send Work Chat message.", error);
-    workChatState.error = error.message || "Unable to send message.";
-  }
-  workChatState.sending = false;
-  render();
-}
-
-async function addWorkChatFiles(files) {
-  const incoming = [...files].slice(0, WORK_CHAT_MAX_ATTACHMENTS - workChatState.pendingAttachments.length);
-  if (!incoming.length) return;
-  workChatState.attachmentUploadState = "uploading";
-  workChatState.error = "";
-  render();
-  try {
-    for (const file of incoming) {
-      if (file.size > WORK_CHAT_MAX_FILE_BYTES) throw new Error(`${file.name} exceeds the 10 MB limit.`);
-      const attachment = await prepareWorkChatAttachment(file, adminAuthSession);
-      workChatState.pendingAttachments = [...workChatState.pendingAttachments, attachment];
-    }
-  } catch (error) {
-    console.error("Unable to attach Work Chat file.", error);
-    workChatState.error = error.message || "Unable to attach file.";
-  }
-  workChatState.attachmentUploadState = "idle";
-  render();
-}
-
-async function markLatestWorkChatMessageRead(channelId) {
-  const messages = workChatState.messagesByChannel[channelId] || [];
-  const latestMessage = messages[messages.length - 1];
-  if (!latestMessage) return;
-  workChatState.unreadByChannel = { ...workChatState.unreadByChannel, [channelId]: 0 };
-  workChatState.globalUnreadCount = Object.values(workChatState.unreadByChannel).reduce((sum, value) => sum + Number(value || 0), 0);
-  await markWorkChatRead(channelId, latestMessage.id, adminAuthSession);
-}
-
-function selectWorkChatMention(userId) {
-  const user = workChatState.activeUsers.find((item) => item.userId === userId);
-  if (!user) return;
-  workChatState.mentionedUserIds = [...new Set([...workChatState.mentionedUserIds, userId])];
-  workChatState.composerBody = replaceWorkChatMentionQuery(workChatState.composerBody, `@${user.displayName || user.email} `);
-  render();
-  focusFieldAtEnd("work-chat-body");
-}
-
-function getWorkChatMentionQuery() {
-  const match = workChatState.composerBody.match(/(^|\s)@([A-Za-z0-9._-]{0,32})$/);
-  return match ? match[2] : "";
-}
-
-function replaceWorkChatMentionQuery(body, replacement) {
-  return body.replace(/(^|\s)@([A-Za-z0-9._-]{0,32})$/, (match, prefix) => `${prefix}${replacement}`);
-}
-
-function normalizeWorkChatChannels(channels = []) {
-  return (channels || []).filter(Boolean).map((channel) => ({ ...channel, name: channel.name || channel.channelKey || "Channel" }));
-}
-
-function sortStandardWorkChatChannels(a, b) {
-  return WORK_CHAT_STANDARD_KEYS.indexOf(a.channelKey) - WORK_CHAT_STANDARD_KEYS.indexOf(b.channelKey);
-}
-
-function upsertWorkChatChannel(channels, channel) {
-  if (!channel?.id) return channels;
-  const next = channels.filter((item) => item.id !== channel.id);
-  return [channel, ...next];
-}
-
-function formatWorkChatDateTime(value) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
-}
-
-function formatWorkChatBody(value) {
-  return escapeHtml(value).replace(/(^|\s)@([A-Za-z][A-Za-z0-9 ._-]{1,48})/g, '$1<span class="work-chat-mention">@$2</span>');
-}
 function renderSidebar(currentRoute) {
-  const navItems = [
+  const routePath = getRoutePath();
+  const isMasterCatalogRoute = MASTER_CATALOG_PATHS.includes(routePath);
+  const isSupplyInventoryRoute = SUPPLY_INVENTORY_PATHS.includes(routePath);
+  const masterCatalogExpanded = isMasterCatalogRoute || isMasterCatalogNavExpanded;
+  const supplyInventoryExpanded = isSupplyInventoryRoute || isSupplyInventoryNavExpanded;
+
+  const topNavItems = [
     { label: "Overview", path: "/overview" },
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
-    ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
-    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
-    { label: "Catalog", path: "/catalog" },
-    ...(canManageStaffAccounts() ? [{ label: "Staff", path: "/staff", icon: "users" }] : []),
-    { label: "Settings", path: "/settings" },
   ];
+
+  const masterCatalogItems = [
+    { label: "Products", path: "/catalog", icon: "package", activePaths: ["/catalog"] },
+    { label: "Brands", path: "/catalog/brands", icon: "tag", activePaths: ["/catalog/brands"] },
+    { label: "Categories", path: "/catalog/categories", icon: "layers", activePaths: ["/catalog/categories"] },
+  ];
+
+  const supplyInventoryItems = [
+    { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"] },
+    { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", activePaths: ["/catalog/purchasing"] },
+    { label: "Inventory", path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"] },
+  ];
+
+  const workflowNavItems = [
+    ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
+    ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
+    ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewSettingsRoute() ? [{ label: "Settings", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
+  ];
+
+  const renderNavItem = (item) => {
+    const isActive = item.activePaths ? item.activePaths.includes(routePath) : item.label === currentRoute;
+    const itemLabel = item.label === "Staff" ? "Staff Access" : item.label;
+    if (item.disabled) {
+      return `<div class="sidebar-nav-group">
+        <span class="catalog-supply-link disabled" aria-disabled="true" title="${itemLabel}" aria-label="${itemLabel}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${itemLabel}</span></span>
+      </div>`;
+    }
+    return `<div class="sidebar-nav-group">
+      <a class="${isActive ? "active" : ""}" href="${item.path}" data-route-link title="${itemLabel}" aria-label="${itemLabel}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${itemLabel}</span></a>
+    </div>`;
+  };
+
+  const renderGroupChild = (item) => {
+    const isActive = routePath === item.path;
+    return `<a class="sidebar-group-child ${isActive ? "active" : ""}" href="${item.path}" data-route-link title="${item.label}" aria-label="${item.label}" aria-current="${isActive ? "page" : "false"}"><span class="nav-label">${item.label}</span></a>`;
+  };
+
+  const renderGroup = ({ key, label, icon, expanded, active, items }) => `
+    <div class="sidebar-group ${expanded ? "expanded" : ""}" data-sidebar-group="${key}">
+      <button class="sidebar-group-toggle ${expanded ? "expanded" : ""} ${active ? "active" : ""}" type="button"
+        data-sidebar-group-toggle="${key}" aria-expanded="${expanded ? "true" : "false"}"
+        title="${label}" aria-label="${expanded ? `Collapse ${label}` : `Expand ${label}`}">
+        ${renderIcon(icon, "nav-icon")}<span class="nav-label">${label}</span>
+      </button>
+      <div class="sidebar-group-children" ${expanded ? "" : "hidden"}>
+        ${items.map(renderGroupChild).join("")}
+      </div>
+    </div>`;
 
   return `
     <aside class="sidebar ${isSidebarCollapsed ? "is-collapsed" : ""}">
       <button class="sidebar-close-button" type="button" aria-label="Close navigation">X</button>
       <div class="brand-lockup"><strong>TRRY</strong><span>ADMIN PORTAL</span></div>
       <nav>
-        ${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link title="${item.label === "Staff" ? "Staff Access" : item.label}" aria-label="${item.label === "Staff" ? "Staff Access" : item.label}">${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<span class="nav-label">${item.label === "Staff" ? "Staff Access" : item.label}</span></a>`).join("")}
-        <span class="sidebar-phase-item" aria-disabled="true">${renderIcon("calendar-check", "nav-icon")}<span class="nav-label">Calendar<small>Phase 2</small></span></span><span class="sidebar-phase-item" aria-disabled="true">${renderIcon("clipboard-list", "nav-icon")}<span class="nav-label">Reports</span></span>
+        ${topNavItems.map(renderNavItem).join("")}
+        ${renderGroup({
+          key: "master-catalog",
+          label: "Master Catalog",
+          icon: "factory",
+          expanded: masterCatalogExpanded,
+          active: isMasterCatalogRoute,
+          items: masterCatalogItems,
+        })}
+        ${renderGroup({
+          key: "supply-inventory",
+          label: "Supply & Inventory",
+          icon: "boxes",
+          expanded: supplyInventoryExpanded,
+          active: isSupplyInventoryRoute,
+          items: supplyInventoryItems,
+        })}
+        ${workflowNavItems.map(renderNavItem).join("")}
       </nav>
       <div class="system-card">${renderIcon("shield-check", "shield-icon")}<div><strong>System Status</strong><p><span></span> All systems operational</p></div></div>
     </aside>`;
@@ -6861,10 +10034,6 @@ function renderAccountMenu(surface = "desktop") {
   const menuClass = isMobile ? "mobile-account-popover" : "admin-account-popover";
   const avatarClass = isMobile ? "mobile-avatar" : "avatar";
   const accountLabel = isMobile ? `<span class="mobile-account-label">ACCOUNT</span>` : "";
-  const manageStaff = canManageStaffAccounts()
-    ? `<button type="button" data-admin-account-action="staff">MANAGE STAFF</button>`
-    : "";
-
   return `<div class="admin-account-menu ${isMobile ? "mobile" : "desktop"} ${isAccountMenuOpen ? "open" : ""}" data-admin-account-menu>
     <button class="${triggerClass}" type="button" data-admin-account-toggle aria-haspopup="menu" aria-expanded="${isAccountMenuOpen ? "true" : "false"}">
       <span class="${avatarClass}">${getAdminInitials()}</span>${accountLabel}
@@ -6875,7 +10044,6 @@ function renderAccountMenu(surface = "desktop") {
       <strong>${escapeHtml(getAdminDisplayName())}</strong>
       <span>${escapeHtml(formatAdminRole(adminUser?.role))}</span>
       <i aria-hidden="true"></i>
-      ${manageStaff}
       <button type="button" data-admin-logout>LOG OUT</button>
     </div>
   </div>`;
@@ -6892,7 +10060,7 @@ function renderTopHeader() {
       </div>
       <div class="global-search-wrap">
         <label class="global-search">
-          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders, clients, products..." type="search" />
+          <input id="global-search" value="${escapeHtml(globalSearchQuery)}" placeholder="Search orders..." type="search" />
           ${renderIcon("search", "search-icon")}
         </label>
         ${renderGlobalSearchHint()}
@@ -6924,7 +10092,9 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
     { label: "Orders", path: "/orders", icon: "package" },
     { label: "Production", path: "/production", icon: "factory" },
-  ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
+    { label: "Catalog", path: "/catalog", icon: "package" },
+    ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
+    ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
   ];
   return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
@@ -6932,18 +10102,6 @@ function renderMobileBottomNav(currentRoute) {
 function renderGlobalSearchHint() {
   const normalized = globalSearchQuery.trim().toLowerCase();
   if (!normalized) return "";
-
-  if ("urban coffee".includes(normalized)) {
-    return `<button class="search-suggestion" data-route-target="/orders" type="button">Search Orders</button>`;
-  }
-
-  if (
-    "admin polo uniform".includes(normalized) ||
-    "embroidered staff cap".includes(normalized) ||
-    normalized.includes("cap")
-  ) {
-    return `<button class="search-suggestion" data-route-target="/orders" type="button">Search Orders</button>`;
-  }
 
   if ("orders".includes(normalized) || "reorder".includes(normalized) || normalized.includes("trry-uc")) {
     return `<button class="search-suggestion" data-route-target="/orders" type="button">Open Orders</button>`;
@@ -7006,55 +10164,264 @@ function focusFieldAtEnd(id) {
     field.setSelectionRange(length, length);
   }
 }
-function openCatalogDrawer(mode, productId = null) {
-  if (mode === "create" && !canWriteCatalogProducts()) return;
-  const product = catalogProducts.find((item) => item.id === productId) ?? null;
-  clearCatalogImagePreview();
-  catalogDrawerMode = mode;
-  selectedCatalogProductId = product?.id ?? selectedCatalogProductId;
-  catalogDraft = createCatalogDraft(product);
-  catalogValidationError = "";
-  catalogSaveError = "";
-  catalogSaveState = "idle";
+
+function openCategoryDrawer(mode, categoryId = null) {
+  if (mode === "create" && !canManageProductCategories()) return;
+  const category = productCategories.find((item) => item.id === categoryId) ?? null;
+  categoryDrawerMode = mode;
+  selectedCategoryId = category?.id ?? selectedCategoryId;
+  categoryDraft = createCategoryDraft(category);
+  categoryValidationError = "";
+  categorySaveError = "";
+  categorySaveState = "idle";
   render();
 }
 
-function closeCatalogDrawer() {
-  clearCatalogImagePreview();
-  catalogDrawerMode = "";
-  catalogDraft = null;
-  catalogValidationError = "";
-  catalogSaveError = "";
-  catalogSaveState = "idle";
+function closeCategoryDrawer() {
+  categoryDrawerMode = "";
+  categoryDraft = null;
+  categoryValidationError = "";
+  categorySaveError = "";
+  categorySaveState = "idle";
   render();
+}
+
+function openBrandDrawer(mode, brandId = null) {
+  if (mode === "create" && !canManageBrands()) return;
+  const brand = brands.find((item) => item.id === brandId) ?? null;
+  brandDrawerMode = mode;
+  selectedBrandId = brand?.id ?? selectedBrandId;
+  brandDraft = createBrandDraft(brand);
+  brandValidationError = "";
+  brandSaveError = "";
+  brandSaveState = "idle";
+  render();
+}
+
+function closeBrandDrawer() {
+  brandDrawerMode = "";
+  brandDraft = null;
+  brandValidationError = "";
+  brandSaveError = "";
+  brandSaveState = "idle";
+  render();
+}
+
+async function saveBrandDraft() {
+  if (!canManageBrands() || !brandDraft || brandSaveState === "saving") return;
+
+  const brand = normalizeBrandDraft(brandDraft);
+  const validationError = validateBrand(brand);
+  if (validationError) {
+    brandValidationError = validationError;
+    render();
+    return;
+  }
+
+  brandSaveState = "saving";
+  brandSaveError = "";
+  brandValidationError = "";
+  render();
+
+  try {
+    const savedBrand = brandDrawerMode === "edit" && brand.id
+      ? await updateAdminBrand(brand.id, brand, adminAuthSession)
+      : await createAdminBrand(brand, adminAuthSession);
+
+    if (savedBrand) {
+      brands = upsertBrand(brands, { ...savedBrand, productCount: brand.productCount ?? savedBrand.productCount ?? 0 });
+      selectedBrandId = savedBrand.id;
+    }
+
+    brandDrawerMode = "";
+    brandDraft = null;
+    brandSaveState = "success";
+    hasLoadedBrands = false;
+    await loadBrands();
+    window.setTimeout(() => {
+      if (brandSaveState === "success") {
+        brandSaveState = "idle";
+        render();
+      }
+    }, 1800);
+    render();
+  } catch (error) {
+    console.error("Unable to save brand.", error);
+    brandSaveState = "idle";
+    brandSaveError = error.message || "Save failed. Check Brand RLS and constraints.";
+    render();
+  }
+}
+
+async function archiveBrand(brandId) {
+  if (!canManageBrands() || brandSaveState === "saving") return;
+  const brand = brands.find((item) => item.id === brandId);
+  if (!brand || brand.status === "archived") return;
+  if (Number(brand.productCount ?? 0) > 0) {
+    brandSaveError = "Archive is blocked while products are assigned to this Brand.";
+    render();
+    return;
+  }
+
+  brandSaveState = "saving";
+  brandSaveError = "";
+  render();
+
+  try {
+    const savedBrand = await updateAdminBrand(brand.id, { ...brand, status: "archived" }, adminAuthSession);
+    if (savedBrand) brands = upsertBrand(brands, { ...brand, ...savedBrand, status: "archived" });
+    brandSaveState = "success";
+    window.setTimeout(() => {
+      if (brandSaveState === "success") {
+        brandSaveState = "idle";
+        render();
+      }
+    }, 1800);
+    render();
+  } catch (error) {
+    console.error("Unable to archive brand.", error);
+    brandSaveState = "idle";
+    brandSaveError = error.message || "Archive failed. Check Brand assignment guard.";
+    render();
+  }
+}
+
+async function saveCategoryDraft() {
+  if (!canManageProductCategories() || !categoryDraft || categorySaveState === "saving") return;
+
+  const category = normalizeCategoryDraft(categoryDraft);
+  const validationError = validateCategory(category);
+  if (validationError) {
+    categoryValidationError = validationError;
+    render();
+    return;
+  }
+
+  categorySaveState = "saving";
+  categorySaveError = "";
+  categoryValidationError = "";
+  render();
+
+  try {
+    const savedCategory = categoryDrawerMode === "edit" && category.id
+      ? await updateAdminProductCategory(category.id, category, adminAuthSession)
+      : await createAdminProductCategory(category, adminAuthSession);
+
+    if (savedCategory) {
+      productCategories = upsertProductCategory(productCategories, savedCategory);
+      selectedCategoryId = savedCategory.id;
+    }
+
+    categoryDrawerMode = "";
+    categoryDraft = null;
+    categorySaveState = "success";
+    window.setTimeout(() => {
+      if (categorySaveState === "success") {
+        categorySaveState = "idle";
+        render();
+      }
+    }, 1800);
+    render();
+  } catch (error) {
+    console.error("Unable to save product category.", error);
+    categorySaveState = "idle";
+    categorySaveError = error.message || "Save failed. Check M1 category RLS and constraints.";
+    render();
+  }
+}
+
+async function archiveOrRestoreCategory(action) {
+  if (!canManageProductCategories() || !categoryDraft?.id || categorySaveState === "saving") return;
+
+  const isRestore = action === "restore";
+  const reason = String(isRestore ? categoryDraft.restoreReason : categoryDraft.archiveReason).trim();
+  if (!isRestore && !reason) {
+    categoryValidationError = "Archive reason is required.";
+    render();
+    return;
+  }
+
+  const nextCategory = normalizeCategoryDraft({
+    ...categoryDraft,
+    active: isRestore,
+    archivedAt: isRestore ? "" : new Date().toISOString(),
+    archivedByUserId: isRestore ? "" : getAdminActorUserId(),
+    archiveReason: isRestore ? "" : reason,
+  });
+
+  categorySaveState = "saving";
+  categorySaveError = "";
+  categoryValidationError = "";
+  render();
+
+  try {
+    const savedCategory = await updateAdminProductCategory(nextCategory.id, nextCategory, adminAuthSession);
+    if (savedCategory) {
+      productCategories = upsertProductCategory(productCategories, savedCategory);
+      selectedCategoryId = savedCategory.id;
+    }
+    categoryDrawerMode = "";
+    categoryDraft = null;
+    categorySaveState = "success";
+    render();
+  } catch (error) {
+    console.error("Unable to update category archive state.", error);
+    categorySaveState = "idle";
+    categorySaveError = error.message || "Archive update failed. Check linked products and category state.";
+    render();
+  }
+}
+
+function upsertProductCategory(items, category) {
+  const nextItems = items.some((item) => item.id === category.id)
+    ? items.map((item) => item.id === category.id ? category : item)
+    : [...items, category];
+
+  return sortProductCategories(nextItems);
 }
 
 function clearCatalogImagePreview() {
-  if (catalogDraft?.imageFilePreviewUrl) {
-    URL.revokeObjectURL(catalogDraft.imageFilePreviewUrl);
-  }
+  if (!catalogDraft?.images) return;
+  catalogDraft.images.forEach((image) => {
+    if (image.previewUrl && image.isNew) URL.revokeObjectURL(image.previewUrl);
+  });
 }
 
 async function updateCatalogImageFile(file) {
   if (!catalogDraft || !canWriteCatalogProducts()) return;
 
-  clearCatalogImagePreview();
-  const validationError = await validateCatalogImageFileWithDimensions(file);
-  if (validationError) {
-    catalogDraft = {
-      ...catalogDraft,
-      imageFile: null,
-      imageFilePreviewUrl: "",
-      imageError: validationError,
-    };
+  const images = getCatalogEditorImages(catalogDraft);
+  if (images.length >= CATALOG_PRODUCT_IMAGE_LIMIT) {
+    catalogDraft = { ...catalogDraft, imageError: `Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product.` };
     render();
     return;
   }
 
+  const validationError = await validateCatalogImageFileWithDimensions(file);
+  if (validationError) {
+    catalogDraft = { ...catalogDraft, imageError: validationError };
+    render();
+    return;
+  }
+
+  const previewUrl = URL.createObjectURL(file);
   catalogDraft = {
     ...catalogDraft,
+    images: normalizeCatalogDraftImages([
+      ...images,
+      {
+        id: "",
+        storagePath: "",
+        publicUrl: "",
+        url: previewUrl,
+        previewUrl,
+        altText: catalogDraft.name || "Product image",
+        file,
+        isNew: true,
+      },
+    ]),
     imageFile: file,
-    imageFilePreviewUrl: URL.createObjectURL(file),
+    imageFilePreviewUrl: "",
     imageError: "",
     removeImage: false,
   };
@@ -7062,53 +10429,287 @@ async function updateCatalogImageFile(file) {
   render();
 }
 
-function removeCatalogImageFromDraft() {
+function removeCatalogImageFromDraft(index = 0) {
   if (!catalogDraft || !canWriteCatalogProducts()) return;
 
-  clearCatalogImagePreview();
+  const images = getCatalogEditorImages(catalogDraft);
+  const removed = images[index];
+  if (removed?.previewUrl && removed.isNew) URL.revokeObjectURL(removed.previewUrl);
   catalogDraft = {
     ...catalogDraft,
+    images: normalizeCatalogDraftImages(images.filter((_, imageIndex) => imageIndex !== index)),
     imageFile: null,
     imageFilePreviewUrl: "",
     imageError: "",
-    removeImage: true,
+    removeImage: images.length === 1,
   };
   catalogSaveError = "";
   render();
 }
+
+function moveCatalogImageInDraft(index, direction) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const images = getCatalogEditorImages(catalogDraft);
+  const nextIndex = direction === "left" ? index - 1 : index + 1;
+  if (index < 0 || nextIndex < 0 || index >= images.length || nextIndex >= images.length) return;
+  const reordered = [...images];
+  const [moved] = reordered.splice(index, 1);
+  reordered.splice(nextIndex, 0, moved);
+  catalogDraft = { ...catalogDraft, images: normalizeCatalogDraftImages(reordered), imageError: "" };
+  catalogSaveError = "";
+  render();
+}
+
+function setCatalogPrimaryImageInDraft(index) {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const images = getCatalogEditorImages(catalogDraft);
+  if (index < 0 || index >= images.length) return;
+  catalogDraft = {
+    ...catalogDraft,
+    images: normalizeCatalogDraftImages(images.map((image, imageIndex) => ({
+      ...image,
+      isPrimary: imageIndex === index,
+    }))),
+    imageError: "",
+  };
+  catalogSaveError = "";
+  render();
+}
+
+async function updateCatalogQuickPrice(productId) {
+  if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle") return;
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return;
+  const priceInput = document.querySelector(`[data-catalog-quick-selling-price="${cssEscape(productId)}"]`);
+  const nextPrice = String(priceInput?.value ?? "").trim();
+  if (nextPrice && Number(nextPrice) < 0) {
+    catalogQuickSaveError = "Selling price cannot be negative.";
+    render();
+    return;
+  }
+
+  await saveCatalogQuickProduct(productId, { startingPrice: nextPrice });
+}
+
+async function updateCatalogQuickStatus(productId, status) {
+  if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle" || !catalogStatusOptions.includes(status)) return;
+  await saveCatalogQuickProduct(productId, { status });
+}
+
+async function archiveCatalogQuickProduct(productId) {
+  if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle") return;
+  await saveCatalogQuickProduct(productId, { status: "archived" });
+}
+
+async function saveCatalogQuickProduct(productId, updates) {
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return;
+
+  catalogQuickSaveState = productId;
+  catalogQuickSaveError = "";
+  render();
+
+  try {
+    const savedProduct = await runCatalogAuthenticatedWrite(() => updateAdminProduct(productId, { ...product, ...updates }, adminAuthSession));
+    if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
+    catalogQuickSaveState = "idle";
+    catalogSaveState = "success";
+    window.setTimeout(() => {
+      if (catalogSaveState === "success") {
+        catalogSaveState = "idle";
+        render();
+      }
+    }, 1400);
+    render();
+  } catch (error) {
+    console.error("Unable to update catalog product quick control.", error);
+    catalogQuickSaveState = "idle";
+    catalogQuickSaveError = error.message || "Quick update failed. Check catalog product permissions.";
+    render();
+  }
+}
+
+async function updateCatalogQuickImage(productId, file) {
+  if (!canWriteCatalogProducts() || !file || catalogQuickSaveState !== "idle") return;
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return;
+
+  const validationError = await validateCatalogImageFileWithDimensions(file);
+  if (validationError) {
+    catalogQuickSaveError = validationError;
+    render();
+    return;
+  }
+
+  let uploadedImage = null;
+  catalogQuickSaveState = productId;
+  catalogQuickSaveError = "";
+  render();
+
+  try {
+    adminAuthSession = await getFreshCatalogAuthSession();
+    uploadedImage = await uploadCatalogImage(file, product, adminAuthSession);
+    const nextImages = normalizeCatalogDraftImages([
+      {
+        storagePath: uploadedImage.path,
+        publicUrl: uploadedImage.publicUrl,
+        url: uploadedImage.publicUrl,
+        altText: product.name || "Product image",
+        isPrimary: true,
+      },
+      ...(product.images ?? [])
+        .filter((image) => image.storagePath)
+        .slice(0, CATALOG_PRODUCT_IMAGE_LIMIT - 1)
+        .map((image) => ({ ...image, isPrimary: false })),
+    ]);
+    const savedProduct = await runCatalogAuthenticatedWrite(() => updateAdminProduct(productId, { ...product, images: nextImages }, adminAuthSession));
+    if (savedProduct) catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
+    catalogQuickSaveState = "idle";
+    catalogSaveState = "success";
+    render();
+  } catch (error) {
+    console.error("Unable to update catalog product image.", error);
+    if (uploadedImage?.path) {
+      deleteCatalogImagePath(uploadedImage.path, adminAuthSession).catch((cleanupError) => console.warn("Unable to clean up failed quick image upload.", cleanupError));
+    }
+    catalogQuickSaveState = "idle";
+    catalogQuickSaveError = error.message || "Image update failed. Check catalog image storage permissions.";
+    render();
+  }
+}
+
+async function duplicateCatalogProduct(productId) {
+  if (!canWriteCatalogProducts() || catalogQuickSaveState !== "idle") return;
+  const product = catalogProducts.find((item) => item.id === productId);
+  if (!product) return;
+
+  catalogQuickSaveState = productId;
+  catalogQuickSaveError = "";
+  render();
+
+  try {
+    const savedProduct = await runCatalogAuthenticatedWrite(() => duplicateAdminProduct(product, adminAuthSession));
+    if (savedProduct) {
+      catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
+      catalogExpandedProductId = savedProduct.id;
+      selectedCatalogProductId = savedProduct.id;
+    }
+    catalogQuickSaveState = "idle";
+    render();
+  } catch (error) {
+    console.error("Unable to duplicate catalog product.", error);
+    catalogQuickSaveState = "idle";
+    catalogQuickSaveError = error.message || "Duplicate failed. Check catalog product permissions.";
+    render();
+  }
+}
+
+function cssEscape(value) {
+  if (window.CSS?.escape) return window.CSS.escape(value);
+  return String(value).replace(/["\\]/g, "\\$&");
+}
+
+async function runCatalogAuthenticatedWrite(operation) {
+  adminAuthSession = await getFreshCatalogAuthSession();
+  try {
+    return await operation();
+  } catch (error) {
+    if (!isCatalogSessionExpiryError(error)) throw error;
+    adminAuthSession = await getFreshCatalogAuthSession({ forceRefresh: true });
+    return operation();
+  }
+}
+
+async function getFreshCatalogAuthSession({ forceRefresh = false } = {}) {
+  try {
+    if (forceRefresh) {
+      const refreshToken = adminAuthSession?.refresh_token;
+      if (!refreshToken) throw new Error("Admin session expired.");
+      const refreshedSession = await refreshAdminAuthSession(refreshToken);
+      if (refreshedSession?.access_token) return refreshedSession;
+    }
+
+    const currentSession = await getCurrentAdminAuthSession();
+    if (currentSession?.access_token) return currentSession;
+  } catch (error) {
+    console.warn("Unable to refresh Admin Catalog session.", error);
+  }
+
+  throw new Error("Your session expired. Sign in again to continue. Your unsaved form remains open.");
+}
+
+function isCatalogSessionExpiryError(error) {
+  const message = String(error?.message || error || "").toLowerCase();
+  return message.includes("pgrst303")
+    || message.includes("jwt expired")
+    || message.includes("token expired")
+    || message.includes("admin session expired")
+    || message.includes("auth session is missing")
+    || message.includes("supabase auth session is required");
+}
+
 function updateCatalogDraftField(field, value, inputType = "text") {
   if (!catalogDraft) return;
   const nextValue = inputType === "checkbox" ? Boolean(value) : value;
-  const shouldCreateSlug = field === "name" && (!catalogDraft.slug || catalogDraft.slug === slugify(catalogDraft.name));
 
   catalogDraft = {
     ...catalogDraft,
     [field]: nextValue,
   };
 
-  if (shouldCreateSlug) {
-    catalogDraft.slug = slugify(nextValue);
+  if (field === "catalogKey") {
+    catalogDraft.catalogKeys = [nextValue];
+  }
+
+  if (field === "brandId") {
+    const brand = brands.find((item) => item.id === nextValue);
+    catalogDraft.brandName = brand?.name || "";
+    catalogDraft.brand = brand?.name || "";
+  }
+
+  if (field === "category") {
+    const category = productCategories.find((item) => item.name === nextValue);
+    catalogDraft.categoryId = category?.id || "";
+  }
+
+  if (field === "productType") {
+    const category = productCategories.find((item) => item.name === catalogDraft.category);
+    if (category && category.productType !== nextValue) {
+      catalogDraft.category = "";
+      catalogDraft.categoryId = "";
+    }
   }
 
   catalogValidationError = "";
   catalogSaveError = "";
 }
 
+function focusCatalogEditorSection(sectionId) {
+  if (!sectionId) return;
+  const section = document.getElementById(sectionId);
+  if (!section) return;
+  section.scrollIntoView({ behavior: "smooth", block: "start" });
+  section.focus({ preventScroll: true });
+  const control = section.querySelector("input:not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled])");
+  if (control) control.focus({ preventScroll: true });
+}
+
 async function saveCatalogDraft() {
   if (!canWriteCatalogProducts() || !catalogDraft || catalogSaveState === "saving" || catalogSaveState === "uploading") return;
 
   const draft = catalogDraft;
-  const previousImageUrl = String(draft.imageUrl || "").trim();
   const product = normalizeCatalogDraft(draft);
-  const validationError = validateCatalogProduct(product);
+  const validationError = validateCatalogProductEditor(draft, product);
   if (validationError) {
     catalogValidationError = validationError;
     render();
     return;
   }
 
-  if (draft.imageFile) {
-    const imageValidationError = await validateCatalogImageFileWithDimensions(draft.imageFile);
+  const draftImages = getCatalogEditorImages(draft);
+  for (const image of draftImages) {
+    if (!image.file) continue;
+    const imageValidationError = await validateCatalogImageFileWithDimensions(image.file);
     if (imageValidationError) {
       catalogDraft = { ...draft, imageError: imageValidationError };
       render();
@@ -7116,29 +10717,44 @@ async function saveCatalogDraft() {
     }
   }
 
-  let uploadedImage = null;
-  let failedPhase = "save";
-  catalogSaveState = draft.imageFile ? "uploading" : "saving";
+  const uploadedImages = [];
+  const isEdit = catalogEditorMode === "edit" && draft.id;
+  catalogSaveState = draftImages.some((image) => image.file) ? "uploading" : "saving";
   catalogSaveError = "";
   catalogValidationError = "";
   catalogDraft = { ...draft, imageError: "" };
   render();
 
   try {
-    if (draft.imageFile) {
-      failedPhase = "upload";
-      uploadedImage = await uploadCatalogImage(draft.imageFile, product, adminAuthSession);
-      product.imageUrl = uploadedImage.publicUrl;
-      failedPhase = "save";
-      catalogSaveState = "saving";
-      render();
-    } else if (draft.removeImage) {
-      product.imageUrl = "";
+    adminAuthSession = await getFreshCatalogAuthSession();
+    const baseProduct = { ...product };
+    delete baseProduct.images;
+    let savedProduct = isEdit
+      ? await runCatalogAuthenticatedWrite(() => updateAdminProduct(draft.id, baseProduct, adminAuthSession))
+      : await runCatalogAuthenticatedWrite(() => createAdminProduct(baseProduct, adminAuthSession));
+
+    const finalImages = [];
+    for (const image of draftImages) {
+      if (image.file) {
+        catalogSaveState = "uploading";
+        render();
+        const uploadedImage = await uploadCatalogImage(image.file, savedProduct, adminAuthSession);
+        uploadedImages.push(uploadedImage);
+        finalImages.push({
+          storagePath: uploadedImage.path,
+          publicUrl: uploadedImage.publicUrl,
+          url: uploadedImage.publicUrl,
+          altText: image.altText || savedProduct.name || "Product image",
+          isPrimary: image.isPrimary === true,
+        });
+      } else if (image.storagePath) {
+        finalImages.push(image);
+      }
     }
 
-    const savedProduct = catalogDrawerMode === "edit" && draft.id
-      ? await updateAdminCatalogProduct(draft.id, product, adminAuthSession)
-      : await createAdminCatalogProduct(product, adminAuthSession);
+    catalogSaveState = "saving";
+    render();
+    savedProduct = await runCatalogAuthenticatedWrite(() => updateAdminProduct(savedProduct.id, { ...savedProduct, images: normalizeCatalogDraftImages(finalImages) }, adminAuthSession));
 
     if (savedProduct) {
       catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
@@ -7146,17 +10762,14 @@ async function saveCatalogDraft() {
       activeCatalogKey = savedProduct.catalogKey;
     }
 
-    const shouldDeletePreviousImage = Boolean(
-      savedProduct &&
-      previousImageUrl &&
-      previousImageUrl !== savedProduct.imageUrl &&
-      (uploadedImage || draft.removeImage)
-    );
-
     clearCatalogImagePreview();
-    catalogDrawerMode = "";
-    catalogDraft = null;
+    catalogEditorMode = savedProduct?.id ? "edit" : catalogEditorMode;
+    catalogEditorRouteKey = savedProduct?.id ? `edit:${savedProduct.id}` : catalogEditorRouteKey;
+    catalogDraft = createCatalogDraft(savedProduct ?? product);
     catalogSaveState = "success";
+    if (savedProduct?.id && !isEdit) {
+      window.history.replaceState({}, "", `/catalog?product=${encodeURIComponent(savedProduct.id)}`);
+    }
     window.setTimeout(() => {
       if (catalogSaveState === "success") {
         catalogSaveState = "idle";
@@ -7164,18 +10777,14 @@ async function saveCatalogDraft() {
       }
     }, 1800);
     render();
-
-    if (shouldDeletePreviousImage) {
-      deleteCatalogImageByUrl(previousImageUrl, adminAuthSession).catch((error) => {
-        console.warn("Unable to remove replaced catalog image.", error);
-      });
-    }
   } catch (error) {
-    if (uploadedImage?.path) {
-      try {
-        await deleteCatalogImagePath(uploadedImage.path, adminAuthSession);
-      } catch (cleanupError) {
-        console.warn("Unable to clean up uploaded catalog image after failed save.", cleanupError);
+    for (const uploadedImage of uploadedImages) {
+      if (uploadedImage?.path) {
+        try {
+          await deleteCatalogImagePath(uploadedImage.path, adminAuthSession);
+        } catch (cleanupError) {
+          console.warn("Unable to clean up uploaded catalog image after failed save.", cleanupError);
+        }
       }
     }
 
@@ -7185,7 +10794,7 @@ async function saveCatalogDraft() {
     if (catalogDraft) {
       catalogDraft = {
         ...catalogDraft,
-        imageError: failedPhase === "upload" ? catalogSaveError : catalogDraft.imageError,
+        imageError: catalogSaveError,
       };
     }
     render();
@@ -7193,18 +10802,28 @@ async function saveCatalogDraft() {
 }
 
 function normalizeCatalogDraft(draft) {
+  const category = productCategories.find((item) => item.name === draft.category);
+  const catalogKeys = getCatalogDraftSalesChannelCodes(draft).map(channelCodeToCatalogKey).filter(Boolean);
   return {
     ...draft,
     name: String(draft.name || "").trim(),
-    slug: slugify(draft.slug || draft.name),
+    productCode: String(draft.productCode || "").trim(),
+    slug: String(draft.productCode || draft.slug || "").trim(),
+    catalogKey: catalogKeys[0] || "",
+    catalogKeys,
+    brandId: String(draft.brandId || "").trim(),
+    brandName: getCatalogEditorBrandLabel(draft),
     category: String(draft.category || "").trim(),
+    categoryId: draft.categoryId || category?.id || "",
     description: String(draft.description || "").trim(),
-    imageUrl: draft.removeImage ? "" : String(draft.imageUrl || "").trim(),
+    imageUrl: getCatalogEditorPrimaryImage(draft),
+    images: getCatalogEditorImages(draft),
     startingPrice: draft.startingPrice === "" ? "" : Number(draft.startingPrice),
     priceLabel: String(draft.priceLabel || "").trim(),
     minimumQuantity: Number(draft.minimumQuantity || 1),
-    availableSizes: splitCatalogList(draft.availableSizesText),
-    availableColors: splitCatalogList(draft.availableColorsText),
+    availableSizes: uniqueList(getCatalogDraftVariantRows(draft).map((variant) => variant.size).filter(Boolean)),
+    availableColors: uniqueList(getCatalogDraftVariantRows(draft).map((variant) => variant.color).filter(Boolean)),
+    variants: getCatalogDraftVariantRows(draft),
     printMethods: splitCatalogList(draft.printMethodsText),
     sortOrder: Number(draft.sortOrder || 0),
     isFeatured: draft.isFeatured === true,
@@ -7213,13 +10832,14 @@ function normalizeCatalogDraft(draft) {
 }
 
 function validateCatalogProduct(product) {
-  if (!catalogOptions.some((catalog) => catalog.key === product.catalogKey)) return "Choose a valid catalog.";
+  if (product.catalogKeys.some((key) => !catalogOptions.some((catalog) => catalog.key === key))) return "Choose valid Sales Channels.";
+  if (new Set(product.catalogKeys).size !== product.catalogKeys.length) return "Duplicate Sales Channels are not allowed.";
   if (!product.name) return "Product name is required.";
-  if (!product.slug) return "Slug is required.";
   if (!catalogStatusOptions.includes(product.status)) return "Choose a valid status.";
   if (!Number.isFinite(product.minimumQuantity) || product.minimumQuantity < 1) return "Minimum quantity must be at least 1.";
   if (product.startingPrice !== "" && (!Number.isFinite(product.startingPrice) || product.startingPrice < 0)) return "Starting price cannot be negative.";
   if (!Number.isFinite(product.sortOrder) || product.sortOrder < 0) return "Sort order cannot be negative.";
+  if (getCatalogEditorImageCount(product) > CATALOG_PRODUCT_IMAGE_LIMIT) return `Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product.`;
   return "";
 }
 
@@ -7238,6 +10858,10 @@ function splitCatalogList(value) {
     .filter(Boolean);
 }
 
+function uniqueList(values) {
+  return Array.from(new Set(values.map((value) => String(value || "").trim()).filter(Boolean)));
+}
+
 function slugify(value) {
   return String(value || "")
     .trim()
@@ -7254,6 +10878,7 @@ function handleAccountOutsideClick(event) {
 
 function handleAccountEscape(event) {
   if (event.key !== "Escape") return;
+  if (isEditableElement(event.target)) return;
   let changed = false;
   if (isAccountMenuOpen) {
     isAccountMenuOpen = false;
@@ -7271,18 +10896,23 @@ function handleAccountEscape(event) {
 }
 function bindWorkboardEvents() {
   document.querySelector("[data-workboard-create]")?.addEventListener("click", openWorkboardCreate);
+  document.querySelector("[data-auto-plan-submit]")?.addEventListener("click", submitAutoPlanToday);
+  document.querySelector("[data-auto-plan-drafts]")?.addEventListener("click", openAutoPlanDraftView);
+  document.getElementById("auto-plan-quick-direction")?.addEventListener("input", (event) => {
+    autoPlanQuickDirection = event.target.value;
+    autoPlanError = "";
+  });
   document.querySelectorAll("[data-workboard-open]").forEach((button) => button.addEventListener("click", () => openWorkboardTask(button.dataset.workboardOpen)));
   document.querySelectorAll("[data-workboard-close]").forEach((button) => button.addEventListener("click", closeWorkboardDrawer));
   document.querySelectorAll("[data-workboard-edit-draft]").forEach((button) => button.addEventListener("click", () => openWorkboardEditDraft(button.dataset.workboardEditDraft)));
-  document.querySelectorAll("[data-workboard-view]").forEach((button) => button.addEventListener("click", () => { workboardFilterStatus = button.dataset.workboardView; loadWorkboardTasks(); }));
 
-  const due = document.getElementById("workboard-due-filter");
+  const status = document.getElementById("workboard-status-filter");
   const priority = document.getElementById("workboard-priority-filter");
   const source = document.getElementById("workboard-source-filter");
   const assignee = document.getElementById("workboard-assignee-filter");
   const reviewer = document.getElementById("workboard-reviewer-filter");
   const search = document.getElementById("workboard-search");
-  due?.addEventListener("change", (event) => { workboardFilterDue = event.target.value; render(); });
+  status?.addEventListener("change", (event) => { workboardFilterStatus = event.target.value; loadWorkboardTasks(); });
   priority?.addEventListener("change", (event) => { workboardFilterPriority = event.target.value; loadWorkboardTasks(); });
   source?.addEventListener("change", (event) => { workboardFilterSource = event.target.value; loadWorkboardTasks(); });
   assignee?.addEventListener("change", (event) => { workboardFilterAssignee = event.target.value; loadWorkboardTasks(); });
@@ -7294,7 +10924,6 @@ function bindWorkboardEvents() {
   });
   document.querySelectorAll("[data-workboard-clear]").forEach((button) => button.addEventListener("click", () => {
     workboardFilterStatus = "active";
-    workboardFilterDue = "";
     workboardFilterPriority = "";
     workboardFilterSource = "";
     workboardFilterAssignee = "";
@@ -7308,6 +10937,7 @@ function bindWorkboardEvents() {
     saveWorkboardDraft();
   });
   document.querySelectorAll("[data-workboard-assign]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardAssign, "assign")));
+  document.querySelectorAll("[data-workboard-approve-assign]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveAssign, "approve-and-assign")));
   document.querySelectorAll("[data-workboard-approve-draft]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveDraft, "approve-draft")));
   document.querySelectorAll("[data-workboard-request-revision]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardRequestRevision, "request-revision")));
   document.querySelectorAll("[data-workboard-approve-work]").forEach((button) => button.addEventListener("click", () => runWorkboardCommand(button.dataset.workboardApproveWork, "approve-work")));
@@ -7399,158 +11029,58 @@ function bindMyTasksEvents() {
   });
 }
 
-function bindWorkChatEvents() {
-  const openLauncher = async () => {
-    await openWorkChat();
-  };
-  const launcher = document.querySelector("[data-work-chat-open]");
-  launcher?.addEventListener("click", openLauncher);
-  launcher?.addEventListener("keydown", async (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    await openLauncher();
+function bindCalendarEvents() {
+  document.querySelector("[data-calendar-login-again]")?.addEventListener("click", async () => {
+    await logoutAdminUser();
   });
-
-  document.querySelector("[data-work-chat-close]")?.addEventListener("click", () => {
-    workChatState.isOpen = false;
-    render();
+  document.querySelector("[data-calendar-prev]")?.addEventListener("click", () => shiftCalendarMonth(-1));
+  document.querySelector("[data-calendar-next]")?.addEventListener("click", () => shiftCalendarMonth(1));
+  document.querySelector("[data-calendar-today]")?.addEventListener("click", () => {
+    calendarSelectedDate = getManilaTodayKey();
+    calendarVisibleMonth = getMonthKey(calendarSelectedDate);
+    calendarSelectedTask = null;
+    loadTaskCalendar();
   });
-
-  document.querySelectorAll("[data-work-chat-channel]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      workChatState.activeView = "channel";
-      workChatState.activeChannelId = button.dataset.workChatChannel;
-      workChatState.error = "";
-      render();
-      await loadWorkChatChannelMessages(workChatState.activeChannelId);
-      render();
-    });
-  });
-
-  document.querySelector("[data-work-chat-mentions]")?.addEventListener("click", () => {
-    workChatState.activeView = "mentions";
-    workChatState.error = "";
-    render();
-  });
-
-  document.querySelectorAll("[data-work-chat-source-channel]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      workChatState.activeView = "channel";
-      workChatState.activeChannelId = button.dataset.workChatSourceChannel;
-      render();
-      await loadWorkChatChannelMessages(workChatState.activeChannelId, { force: true });
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-work-chat-open-order-thread]").forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.stopPropagation();
-      await openWorkChatOrderThread(button.dataset.workChatOpenOrderThread);
-    });
-  });
-
-  document.getElementById("work-chat-order-search")?.addEventListener("input", (event) => {
-    workChatState.orderSearch = event.target.value;
-    render();
-    focusFieldAtEnd("work-chat-order-search");
-  });
-
-  document.getElementById("work-chat-body")?.addEventListener("input", (event) => {
-    workChatState.composerBody = event.target.value;
-    workChatState.error = "";
-    render();
-    focusFieldAtEnd("work-chat-body");
-  });
-
-  document.getElementById("work-chat-file")?.addEventListener("change", async (event) => {
-    await addWorkChatFiles(event.target.files || []);
-  });
-
-  document.getElementById("work-chat-composer")?.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    await submitWorkChatComposer();
-  });
-
-  document.querySelectorAll("[data-work-chat-mention]").forEach((button) => {
-    button.addEventListener("click", () => selectWorkChatMention(button.dataset.workChatMention));
-  });
-
-  document.querySelectorAll("[data-work-chat-remove-attachment]").forEach((button) => {
+  document.querySelectorAll("[data-calendar-date]").forEach((button) => {
     button.addEventListener("click", () => {
-      workChatState.pendingAttachments = workChatState.pendingAttachments.filter((attachment) => attachment.id !== button.dataset.workChatRemoveAttachment);
+      calendarSelectedDate = button.dataset.calendarDate;
+      calendarSelectedTask = null;
       render();
     });
   });
-
-  document.querySelectorAll("[data-work-chat-attachment]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      try {
-        await openWorkChatAttachment(button.dataset.workChatAttachment, adminAuthSession);
-      } catch (error) {
-        workChatState.error = error.message || "Unable to open attachment.";
-        render();
-      }
+  document.querySelectorAll("[data-calendar-event]").forEach((button) => {
+    button.addEventListener("click", () => {
+      calendarSelectedTask = calendarEvents.find((event) => event.key === button.dataset.calendarEvent) || null;
+      render();
     });
   });
-
-  document.removeEventListener("keydown", handleWorkChatEscape);
-  document.addEventListener("keydown", handleWorkChatEscape);
-}
-
-function handleWorkChatEscape(event) {
-  if (event.key !== "Escape" || !workChatState.isOpen) return;
-  workChatState.isOpen = false;
-  render();
-}
-
-function bindMvpDetailDrawerKeyboard() {
-  document.removeEventListener("keydown", handleMvpDetailDrawerKeydown);
-  if (document.querySelector(".mvp-order-detail-drawer, .mvp-production-detail-drawer, .ops-detail-drawer")) {
-    document.addEventListener("keydown", handleMvpDetailDrawerKeydown);
-  }
-}
-
-function handleMvpDetailDrawerKeydown(event) {
-  const drawer = document.querySelector(".mvp-order-detail-drawer, .mvp-production-detail-drawer, .ops-detail-drawer");
-  if (!drawer) return;
-  const confirmation = drawer.querySelector(".mvp-production-confirm-dialog, .payment-review-dialog");
-
-  if (event.key === "Escape") {
-    event.preventDefault();
-    if (confirmation) {
-      confirmation.querySelector("[data-mvp-cancel-production-confirm], [data-payment-review-cancel]")?.click();
-      return;
-    }
-    drawer.querySelector("[data-mvp-close], [data-ops-close-details]")?.click();
-    return;
-  }
-  if (event.key !== "Tab") return;
-
-  const focusRoot = confirmation || drawer;
-  const focusable = [...focusRoot.querySelectorAll(
-    'button:not([disabled]),a[href],input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
-  )].filter((element) => {
-    const rect = element.getBoundingClientRect();
-    return rect.width > 0 && rect.height > 0;
+  document.querySelectorAll("[data-calendar-close]").forEach((button) => button.addEventListener("click", () => {
+    calendarSelectedTask = null;
+    render();
+  }));
+  document.getElementById("calendar-assignee-filter")?.addEventListener("change", (event) => {
+    calendarAssigneeFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
   });
-  if (!focusable.length) {
-    event.preventDefault();
-    focusRoot.focus();
-    return;
-  }
-
-  const first = focusable[0];
-  const last = focusable[focusable.length - 1];
-  if (event.shiftKey && document.activeElement === first) {
-    event.preventDefault();
-    last.focus();
-  } else if (!event.shiftKey && document.activeElement === last) {
-    event.preventDefault();
-    first.focus();
-  }
+  document.getElementById("calendar-source-filter")?.addEventListener("change", (event) => {
+    calendarSourceFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.getElementById("calendar-status-filter")?.addEventListener("change", (event) => {
+    calendarStatusFilter = event.target.value;
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
+  document.querySelector("[data-calendar-clear]")?.addEventListener("click", () => {
+    calendarAssigneeFilter = "";
+    calendarSourceFilter = "";
+    calendarStatusFilter = "";
+    calendarSelectedTask = null;
+    loadTaskCalendar();
+  });
 }
-
 function bindEvents() {
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -7567,14 +11097,6 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-admin-account-action='staff']").forEach((button) => {
-    button.addEventListener("click", () => {
-      isAccountMenuOpen = false;
-      navigateTo("/staff");
-      render();
-    });
-  });
-
   document.removeEventListener("click", handleAccountOutsideClick);
   document.addEventListener("click", handleAccountOutsideClick);
   document.removeEventListener("keydown", handleAccountEscape);
@@ -7585,6 +11107,29 @@ function bindEvents() {
   document.querySelectorAll("[data-staff-disable]").forEach((button) => button.addEventListener("click", () => updateStaffStatus(button.dataset.staffDisable, "disable")));
   document.querySelectorAll("[data-staff-activate]").forEach((button) => button.addEventListener("click", () => updateStaffStatus(button.dataset.staffActivate, "activate")));
   document.querySelectorAll("[data-staff-close]").forEach((button) => button.addEventListener("click", closeStaffDrawer));
+  document.getElementById("employee-search")?.addEventListener("input", (event) => {
+    employeeQuery = event.target.value;
+    render();
+    focusFieldAtEnd("employee-search");
+  });
+  document.getElementById("employee-role-filter")?.addEventListener("change", (event) => {
+    employeeRoleFilter = event.target.value;
+    render();
+  });
+  document.getElementById("employee-status-filter")?.addEventListener("change", (event) => {
+    employeeStatusFilter = event.target.value;
+    render();
+  });
+  document.querySelector("[data-employee-reset]")?.addEventListener("click", () => {
+    employeeQuery = "";
+    employeeRoleFilter = "all";
+    employeeStatusFilter = "active";
+    render();
+  });
+  document.querySelector("[data-employee-view-deactivated]")?.addEventListener("click", () => {
+    employeeStatusFilter = "deactivated";
+    render();
+  });
 
   const staffForm = document.getElementById("staff-form");
   if (staffForm) {
@@ -7623,9 +11168,25 @@ function bindEvents() {
     });
   });
 
+  document.querySelectorAll("[data-sidebar-group-toggle]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const group = button.dataset.sidebarGroupToggle;
+      const targetPath = group === "master-catalog" ? "/catalog" : "/catalog/suppliers";
+      isMasterCatalogNavExpanded = group === "master-catalog";
+      isSupplyInventoryNavExpanded = group === "supply-inventory";
+      navigateTo(targetPath);
+      isMobileSidebarOpen = false;
+      render();
+    });
+  });
+
   document.querySelectorAll("[data-route-link]").forEach((link) => {
     const openRoute = () => {
-      navigateTo(link.getAttribute("href"));
+      const href = link.getAttribute("href");
+      const targetPath = new URL(href, window.location.origin).pathname;
+      if (!MASTER_CATALOG_PATHS.includes(targetPath)) isMasterCatalogNavExpanded = false;
+      if (!SUPPLY_INVENTORY_PATHS.includes(targetPath)) isSupplyInventoryNavExpanded = false;
+      navigateTo(href);
       isMobileSidebarOpen = false;
       render();
     };
@@ -7664,32 +11225,160 @@ function bindEvents() {
     rerender: render,
     navigate: navigateTo,
     copy: copyToClipboard,
-    openOrder: loadMvpOrderDetails,
-    closeOrder: closeMvpOrderDetails,
-    retryOrder: (id) => loadMvpOrderDetails(id, { force: true }),
-    openProduction: loadMvpProductionJob,
-    closeProduction: closeMvpProductionJob,
-    retryProduction: (id) => loadMvpProductionJob(id, { force: true }),
-    runProductionAction: runMvpProductionAction,
+    createOrder: createNativeOrderFromInquiry,
+    saveProduction: saveMvpProductionFields,
+    approveOrderArtwork: approveMvpOrderArtwork,
+    confirmPayment: confirmMvpOrderPayment,
+    saveFulfillment: saveMvpFulfillmentFields,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,
-    saveInquiryFollowUpEvent: handleMvpInquiryFollowUpOutcome,
+    handleInquiryFollowUpOutcome: handleMvpInquiryFollowUpOutcome,
   });
-  bindMvpDetailDrawerKeyboard();
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
-  document.body.classList.toggle("work-chat-open", workChatState.isOpen);
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
+  document.body.classList.toggle("my-task-drawer-open", Boolean(document.querySelector(".my-task-drawer")));
   bindOpsBoardEvents();
   bindOrderDashboardEvents();
   bindWorkboardEvents();
   bindMyTasksEvents();
-  bindWorkChatEvents();
+  bindCalendarEvents();
+
+  document.getElementById("category-status-filter")?.addEventListener("change", (event) => {
+    categoryStatusFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("category-product-type-filter")?.addEventListener("change", (event) => {
+    categoryProductTypeFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("category-hierarchy-filter")?.addEventListener("change", (event) => {
+    categoryHierarchyFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-category-reset-filters]")?.addEventListener("click", () => {
+    productQuery = "";
+    categoryProductTypeFilter = "all";
+    categoryHierarchyFilter = "all";
+    categoryStatusFilter = "active";
+    render();
+  });
+
+  document.getElementById("brand-status-filter")?.addEventListener("change", (event) => {
+    brandStatusFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-brand-reset-filters]")?.addEventListener("click", () => {
+    productQuery = "";
+    brandStatusFilter = "active";
+    render();
+  });
+
+  document.querySelector("[data-brand-add]")?.addEventListener("click", () => {
+    openBrandDrawer("create");
+  });
+
+  document.querySelectorAll("[data-brand-edit]").forEach((element) => {
+    const openBrandRow = () => openBrandDrawer("edit", element.dataset.brandEdit);
+
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openBrandRow();
+    });
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openBrandRow();
+    });
+  });
+
+  document.querySelectorAll("[data-brand-close]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeBrandDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-brand-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      updateBrandDraftField(field.dataset.brandField, event.target.value);
+    });
+    field.addEventListener("change", (event) => {
+      updateBrandDraftField(field.dataset.brandField, event.target.value);
+    });
+  });
+
+  document.querySelectorAll("[data-brand-archive]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await archiveBrand(button.dataset.brandArchive);
+    });
+  });
+
+  document.getElementById("brand-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveBrandDraft();
+  });
+
+  document.querySelector("[data-category-add]")?.addEventListener("click", () => {
+    openCategoryDrawer("create");
+  });
+
+  document.querySelectorAll("[data-category-edit]").forEach((element) => {
+    const openCategoryRow = () => openCategoryDrawer("edit", element.dataset.categoryEdit);
+
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openCategoryRow();
+    });
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openCategoryRow();
+    });
+  });
+
+  document.querySelectorAll("[data-category-close]").forEach((element) => {
+    element.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeCategoryDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-category-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      updateCategoryDraftField(field.dataset.categoryField, event.target.value);
+      if (field.dataset.categoryField === "name") {
+        const codeInput = document.getElementById("catalog-code");
+        if (codeInput && categoryDraft?.code) codeInput.value = categoryDraft.code;
+      }
+    });
+    field.addEventListener("change", (event) => {
+      updateCategoryDraftField(field.dataset.categoryField, event.target.value);
+    });
+  });
+
+  document.querySelector("[data-category-archive-action]")?.addEventListener("click", async (event) => {
+    await archiveOrRestoreCategory(event.currentTarget.dataset.categoryArchiveAction);
+  });
+
+  document.getElementById("category-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveCategoryDraft();
+  });
+
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
       activeCatalogKey = button.dataset.catalogTab;
       catalogStatusFilter = catalogStatusFilter || "active";
-      selectedCatalogProductId = catalogProducts.find((item) => item.catalogKey === activeCatalogKey)?.id ?? null;
+      selectedCatalogProductId = catalogProducts[0]?.id ?? null;
       clearCatalogImagePreview();
-      catalogDrawerMode = "";
+      catalogEditorMode = "";
+      catalogEditorRouteKey = "";
       catalogDraft = null;
       render();
     });
@@ -7700,8 +11389,323 @@ function bindEvents() {
     render();
   });
 
+  document.querySelectorAll("[data-inventory-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const tab = button.dataset.inventoryTab;
+      if (tab === "movements") {
+        inventoryView = "movements";
+        inventoryStockStateFilter = "all";
+      } else if (tab === "low" || tab === "out") {
+        inventoryView = "stock";
+        inventoryStockStateFilter = tab;
+      } else {
+        inventoryView = "stock";
+        inventoryStockStateFilter = "all";
+      }
+      render();
+    });
+  });
+
+  document.getElementById("inventory-search")?.addEventListener("input", (event) => {
+    inventoryQuery = event.target.value;
+    render();
+    focusFieldAtEnd("inventory-search");
+  });
+
+  document.getElementById("inventory-location-filter")?.addEventListener("change", (event) => {
+    inventoryLocationFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("inventory-stock-state-filter")?.addEventListener("change", (event) => {
+    inventoryStockStateFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("inventory-movement-type-filter")?.addEventListener("change", (event) => {
+    inventoryMovementTypeFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("inventory-movement-source-filter")?.addEventListener("change", (event) => {
+    inventoryMovementSourceFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-inventory-reset-filters]")?.addEventListener("click", () => {
+    inventoryQuery = "";
+    inventoryLocationFilter = inventoryLocations.length === 1 ? inventoryLocations[0].id : "all";
+    inventoryStockStateFilter = "all";
+    inventoryMovementTypeFilter = "all";
+    inventoryMovementSourceFilter = "all";
+    render();
+  });
+
+  document.querySelector("[data-inventory-open-receive]")?.addEventListener("click", () => openInventoryReceiveDrawer());
+  document.querySelectorAll("[data-inventory-receive]").forEach((button) => {
+    button.addEventListener("click", () => openInventoryReceiveDrawer(button.dataset.inventoryReceive));
+  });
+  document.querySelectorAll("[data-inventory-close-receive]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      inventoryReceiveDrawer = createClosedInventoryReceiveDrawer();
+      render();
+    });
+  });
+  document.querySelectorAll("[data-inventory-receive-field]").forEach((field) => {
+    const eventName = field.tagName === "SELECT" ? "change" : "input";
+    field.addEventListener(eventName, (event) => updateInventoryReceiveField(field.dataset.inventoryReceiveField, event.target.value));
+  });
+  document.getElementById("inventory-receive-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitInventoryReceive();
+  });
+
+  document.getElementById("supplier-search")?.addEventListener("input", (event) => {
+    supplierQuery = event.target.value;
+    render();
+    focusFieldAtEnd("supplier-search");
+  });
+
+  document.getElementById("supplier-status-filter")?.addEventListener("change", (event) => {
+    supplierStatusFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("supplier-supply-type-filter")?.addEventListener("change", (event) => {
+    supplierSupplyTypeFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-supplier-reset-filters]")?.addEventListener("click", () => {
+    supplierQuery = "";
+    supplierStatusFilter = "active";
+    supplierSupplyTypeFilter = "all";
+    render();
+  });
+
+  document.querySelector("[data-supplier-add]")?.addEventListener("click", () => openSupplierDrawer("add"));
+
+  document.querySelectorAll("[data-supplier-row]").forEach((row) => {
+    const openRow = () => openSupplierDrawer("view", row.dataset.supplierRow);
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea")) return;
+      openRow();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openRow();
+    });
+  });
+
+  document.querySelectorAll("[data-supplier-view]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openSupplierDrawer("view", button.dataset.supplierView);
+    });
+  });
+
+  document.querySelectorAll("[data-supplier-edit]").forEach((button) => {
+    button.addEventListener("click", () => openSupplierDrawer("edit", button.dataset.supplierEdit));
+  });
+
+  document.querySelectorAll("[data-supplier-close]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      closeSupplierDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-supplier-field]").forEach((field) => {
+    const eventName = field.tagName === "SELECT" ? "change" : "input";
+    field.addEventListener(eventName, (event) => updateSupplierDraftField(field.dataset.supplierField, event.target.value));
+  });
+
+  document.getElementById("supplier-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await saveSupplierDraft();
+  });
+
+  document.getElementById("purchase-order-search")?.addEventListener("input", (event) => {
+    purchasingQuery = event.target.value;
+    render();
+    focusFieldAtEnd("purchase-order-search");
+  });
+
+  document.getElementById("purchase-order-status-filter")?.addEventListener("change", (event) => {
+    purchasingStatusFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("purchase-order-supplier-filter")?.addEventListener("change", (event) => {
+    purchasingSupplierFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("purchase-order-expected-filter")?.addEventListener("change", (event) => {
+    purchasingExpectedFilter = event.target.value;
+    render();
+  });
+
+  document.querySelector("[data-purchase-order-reset-filters]")?.addEventListener("click", () => {
+    purchasingQuery = "";
+    purchasingStatusFilter = "all";
+    purchasingSupplierFilter = "all";
+    purchasingExpectedFilter = "all";
+    render();
+  });
+
+  document.querySelector("[data-purchase-order-create]")?.addEventListener("click", () => openPurchaseOrderDrawer());
+
+  document.querySelectorAll("[data-purchase-order-row]").forEach((row) => {
+    const openRow = () => openPurchaseOrderDetail(row.dataset.purchaseOrderRow);
+    row.addEventListener("click", (event) => {
+      if (event.target.closest("button, a, input, select, textarea")) return;
+      openRow();
+    });
+    row.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      openRow();
+    });
+  });
+
+  document.querySelectorAll("[data-purchase-order-view]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openPurchaseOrderDetail(button.dataset.purchaseOrderView);
+    });
+  });
+
+  document.querySelector("[data-purchase-order-back]")?.addEventListener("click", () => {
+    selectedPurchaseOrderId = null;
+    purchaseOrderDetailTab = "items";
+    render();
+  });
+
+  document.querySelectorAll("[data-po-detail-tab]").forEach((button) => {
+    button.addEventListener("click", () => {
+      purchaseOrderDetailTab = button.dataset.poDetailTab;
+      render();
+    });
+  });
+
+  document.querySelector("[data-purchase-order-supplier]")?.addEventListener("click", (event) => {
+    navigateTo("/catalog/suppliers");
+    openSupplierDrawer("view", event.currentTarget.dataset.purchaseOrderSupplier);
+  });
+
+  document.querySelector("[data-purchase-order-mark-ordered]")?.addEventListener("click", async (event) => {
+    event.preventDefault();
+    await markSelectedPurchaseOrderOrdered(event.currentTarget.dataset.purchaseOrderMarkOrdered);
+  });
+
+  document.querySelectorAll("[data-purchase-order-close]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      closePurchaseOrderDrawer();
+    });
+  });
+
+  document.querySelectorAll("[data-po-field]").forEach((field) => {
+    const eventName = field.tagName === "SELECT" ? "change" : "input";
+    field.addEventListener(eventName, (event) => updatePurchaseDraftField(field.dataset.poField, event.target.value));
+  });
+
+  document.querySelectorAll("[data-po-line-field]").forEach((field) => {
+    field.addEventListener("input", (event) => updatePurchaseLineField(Number(field.dataset.poLineIndex || 0), field.dataset.poLineField, event.target.value));
+  });
+
+  document.querySelectorAll("[data-po-variant-picker]").forEach((picker) => {
+    picker.addEventListener("click", (event) => {
+      const changeButton = event.target.closest("[data-po-change-variant]");
+      if (changeButton) {
+        event.preventDefault();
+        const index = Number(picker.dataset.poVariantPicker || 0);
+        openPurchaseVariantPicker(index);
+        document.querySelector(`[data-po-line-search="${index}"]`)?.focus();
+        return;
+      }
+      const optionButton = event.target.closest("[data-po-select-variant]");
+      if (optionButton) {
+        event.preventDefault();
+        selectPurchaseVariantInPlace(Number(optionButton.dataset.poSelectIndex || 0), optionButton.dataset.poSelectVariant);
+      }
+    });
+  });
+
+  document.querySelectorAll("[data-po-line-search]").forEach((field) => {
+    const index = Number(field.dataset.poLineSearch || 0);
+    field.addEventListener("focus", () => openPurchaseVariantPicker(index));
+    field.addEventListener("input", (event) => updatePurchaseVariantQuery(index, event.target.value));
+    field.addEventListener("keydown", (event) => {
+      if (event.key === "ArrowDown") {
+        event.preventDefault();
+        openPurchaseVariantPicker(index);
+        movePurchaseVariantHighlight(index, 1);
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault();
+        openPurchaseVariantPicker(index);
+        movePurchaseVariantHighlight(index, -1);
+      }
+      if (event.key === "Enter") {
+        event.preventDefault();
+        selectHighlightedPurchaseVariant(index);
+      }
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closePurchaseVariantPicker(index);
+      }
+    });
+  });
+
+  if (!purchaseOrderOutsideClickBound) {
+    document.addEventListener("click", (event) => {
+      if (purchaseOrderPickerState.activeIndex >= 0 && !event.target.closest("[data-po-variant-picker]")) {
+        closePurchaseVariantPicker(purchaseOrderPickerState.activeIndex);
+      }
+    });
+    purchaseOrderOutsideClickBound = true;
+  }
+
+  document.querySelector("[data-po-add-line]")?.addEventListener("click", addPurchaseOrderLine);
+
+  document.querySelectorAll("[data-po-remove-line]").forEach((button) => {
+    button.addEventListener("click", () => removePurchaseOrderLine(Number(button.dataset.poRemoveLine || 0)));
+  });
+
+  document.querySelectorAll("[data-po-save-status]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      await savePurchaseOrder(button.dataset.poSaveStatus);
+    });
+  });
+
+  document.querySelectorAll("[data-supplier-create-po-hook]").forEach((button) => {
+    button.addEventListener("click", () => {
+      navigateTo("/catalog/purchasing");
+      openPurchaseOrderDrawer(button.dataset.supplierCreatePoHook);
+    });
+  });
+
+  document.getElementById("catalog-brand-filter")?.addEventListener("change", (event) => {
+    catalogBrandFilter = event.target.value;
+    render();
+  });
+
   document.getElementById("catalog-category-filter")?.addEventListener("change", (event) => {
     catalogCategoryFilter = event.target.value;
+    render();
+  });
+
+  document.getElementById("catalog-product-type-filter")?.addEventListener("change", (event) => {
+    catalogProductTypeFilter = event.target.value;
+    const category = productCategories.find((item) => item.name === catalogCategoryFilter);
+    if (catalogProductTypeFilter !== "all" && category && category.productType !== catalogProductTypeFilter) {
+      catalogCategoryFilter = "all";
+    }
     render();
   });
 
@@ -7710,13 +11714,23 @@ function bindEvents() {
     render();
   });
 
+  document.querySelector("[data-catalog-reset-filters]")?.addEventListener("click", () => {
+    productQuery = "";
+    catalogStatusFilter = "active";
+    catalogBrandFilter = "all";
+    catalogCategoryFilter = "all";
+    catalogProductTypeFilter = "all";
+    catalogFeaturedFilter = "all";
+    render();
+  });
+
 
   document.querySelector("[data-catalog-add-product]")?.addEventListener("click", () => {
-    openCatalogDrawer("create");
+    openCatalogProductEditor("create");
   });
 
   document.querySelectorAll("[data-catalog-edit-product]").forEach((element) => {
-    const openCatalogRow = () => openCatalogDrawer("edit", element.dataset.catalogEditProduct);
+    const openCatalogRow = () => openCatalogProductEditor("edit", element.dataset.catalogEditProduct);
 
     element.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -7730,10 +11744,76 @@ function bindEvents() {
     });
   });
 
-  document.querySelectorAll("[data-catalog-close-drawer]").forEach((element) => {
+  document.querySelectorAll("[data-catalog-toggle-product]").forEach((element) => {
+    const toggleRow = () => toggleCatalogProductQuickControl(element.dataset.catalogToggleProduct);
+
+    element.addEventListener("click", (event) => {
+      event.stopPropagation();
+      toggleRow();
+    });
+
+    element.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      toggleRow();
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-full-edit]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      openCatalogProductEditor("edit", button.dataset.catalogFullEdit);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-copy-sku]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await copyToClipboard(button.dataset.catalogCopySku);
+      showFeedback("SKU copied.");
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-quick-price-save]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await updateCatalogQuickPrice(button.dataset.catalogQuickPriceSave);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-quick-status]").forEach((select) => {
+    select.addEventListener("change", async (event) => {
+      event.stopPropagation();
+      await updateCatalogQuickStatus(select.dataset.catalogQuickStatus, event.target.value);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-archive-product]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await archiveCatalogQuickProduct(button.dataset.catalogArchiveProduct);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-duplicate]").forEach((button) => {
+    button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      await duplicateCatalogProduct(button.dataset.catalogDuplicate);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-quick-image-file]").forEach((field) => {
+    field.addEventListener("change", async (event) => {
+      event.stopPropagation();
+      const file = event.target.files?.[0] ?? null;
+      if (file) await updateCatalogQuickImage(field.dataset.catalogQuickImageFile, file);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-editor-cancel]").forEach((element) => {
     element.addEventListener("click", (event) => {
       event.preventDefault();
-      closeCatalogDrawer();
+      closeCatalogProductEditor();
     });
   });
 
@@ -7741,10 +11821,67 @@ function bindEvents() {
     const eventName = field.type === "checkbox" ? "change" : "input";
     field.addEventListener(eventName, (event) => {
       updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
-      if (field.dataset.catalogField === "name") {
-        const slugInput = document.getElementById("catalog-slug");
-        if (slugInput && catalogDraft?.slug) slugInput.value = catalogDraft.slug;
-      }
+      if (field.dataset.catalogField === "productType") render();
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-sales-channel]").forEach((field) => {
+    field.addEventListener("change", () => {
+      setCatalogDraftSalesChannel(field.dataset.catalogSalesChannel, field.checked);
+    });
+  });
+
+  document.querySelector("[data-catalog-add-variant]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    addCatalogVariantDraft();
+  });
+
+  document.querySelectorAll("[data-catalog-variant-generator]").forEach((field) => {
+    field.addEventListener("change", () => {
+      updateCatalogVariantGeneratorSelection(field.dataset.catalogVariantGenerator, field.value, field.checked);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-variant-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      updateCatalogVariantPanelField(field.dataset.catalogVariantField, event.target.value);
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-existing-variant-field]").forEach((field) => {
+    field.addEventListener("input", (event) => {
+      updateCatalogExistingVariantField(Number(field.dataset.catalogExistingVariantIndex || -1), field.dataset.catalogExistingVariantField, event.target.value);
+    });
+  });
+
+  document.querySelector("[data-catalog-cancel-variant]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    cancelCatalogVariantPanel();
+  });
+
+  document.querySelector("[data-catalog-submit-variant]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    submitCatalogVariantPanel();
+  });
+
+  document.querySelectorAll("[data-catalog-save-existing-variant]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      saveCatalogExistingVariant(Number(button.dataset.catalogSaveExistingVariant || -1));
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-delete-variant]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      deleteCatalogVariantDraft(Number(button.dataset.catalogDeleteVariant || -1));
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-status-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      updateCatalogDraftField("status", button.dataset.catalogStatusChoice);
+      render();
     });
   });
 
@@ -7753,9 +11890,42 @@ function bindEvents() {
     if (file) await updateCatalogImageFile(file);
   });
 
-  document.querySelector("[data-catalog-remove-image]")?.addEventListener("click", () => {
-    removeCatalogImageFromDraft();
+  document.querySelectorAll("[data-catalog-remove-image]").forEach((button) => {
+    button.addEventListener("click", () => removeCatalogImageFromDraft(Number(button.dataset.catalogRemoveImage || 0)));
   });
+
+  document.querySelectorAll("[data-catalog-move-image]").forEach((button) => {
+    button.addEventListener("click", () => moveCatalogImageInDraft(Number(button.dataset.catalogMoveImage || 0), button.dataset.direction));
+  });
+
+  document.querySelectorAll("[data-catalog-set-primary-image]").forEach((button) => {
+    button.addEventListener("click", () => setCatalogPrimaryImageInDraft(Number(button.dataset.catalogSetPrimaryImage || 0)));
+  });
+
+  document.querySelectorAll("[data-catalog-image-drag]").forEach((slot) => {
+    slot.addEventListener("dragstart", (event) => { event.dataTransfer?.setData("text/plain", slot.dataset.catalogImageDrag); });
+    slot.addEventListener("dragover", (event) => event.preventDefault());
+    slot.addEventListener("drop", (event) => {
+      event.preventDefault();
+      const fromIndex = Number(event.dataTransfer?.getData("text/plain") || -1);
+      const toIndex = Number(slot.dataset.catalogImageDrag || -1);
+      if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex || !catalogDraft) return;
+      const images = getCatalogEditorImages(catalogDraft);
+      const reordered = [...images];
+      const [moved] = reordered.splice(fromIndex, 1);
+      reordered.splice(toIndex, 0, moved);
+      catalogDraft = { ...catalogDraft, images: normalizeCatalogDraftImages(reordered), imageError: "" };
+      catalogSaveError = "";
+      render();
+    });
+  });
+
+  document.querySelectorAll("[data-catalog-readiness-target]").forEach((button) => {
+    button.addEventListener("click", () => {
+      focusCatalogEditorSection(button.dataset.catalogReadinessTarget);
+    });
+  });
+
   document.getElementById("catalog-product-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await saveCatalogDraft();
@@ -7995,7 +12165,7 @@ async function saveMvpInquiryFollowUp(id, updates) {
     opsInquiries = opsInquiries.map((item) =>
       item.id === id ? { ...item, ...normalizedUpdates } : item
     );
-    return;
+    return { ok: true };
   }
 
   try {
@@ -8012,32 +12182,46 @@ async function saveMvpInquiryFollowUp(id, updates) {
     opsInquiries = opsInquiries.map((item) =>
       item.id === id ? { ...item, ...savedInquiry } : item
     );
+    return { ok: true, inquiry: savedInquiry };
   } catch (error) {
     console.error("Unable to save inquiry follow-up fields.", error);
     showFeedback(error.message || "Unable to save inquiry follow-up.");
+    return { ok: false, error: error.message || "Unable to save inquiry follow-up." };
   }
 }
 async function saveMvpProductionFields(id, changes) {
-  const current = opsInquiries.find((item) => item.id === id);
-  if (!current || !isConfirmedOpsOrder(current)) return;
+  const inquiryId = resolveMvpOrderInquiryId(id);
+  const current = opsInquiries.find((item) => item.id === inquiryId);
+  if (!current || !hasNativeOrderAuthority(nativeOrderRows, inquiryId)) return { ok: false, error: "Confirmed native Order required." };
   if (shouldLoadSupabaseOps && !current.productionFieldsReady) {
     orderDashboardSaveError = "Production fields are not ready. Apply the pending migration before saving.";
-    return;
+    return { ok: false, error: orderDashboardSaveError };
   }
 
   const updates = {
     ...changes,
     productionUpdatedAt: new Date().toISOString(),
   };
+  if (changes.startProduction) updates.productionStartedAt = updates.productionUpdatedAt;
+  if (changes.productionStage === "qc" && !current.qcStartedAt) {
+    updates.qcStartedAt = updates.productionUpdatedAt;
+    updates.qcStartedBy = adminUser?.userId || null;
+  }
+  if (changes.productionStage === "ready" && String(current.productionStage || "").toLowerCase() === "qc" && !current.qcCompletedAt) {
+    updates.qcCompletedAt = updates.productionUpdatedAt;
+    updates.qcCompletedBy = adminUser?.userId || null;
+  }
   let savedInquiry = null;
 
   if (shouldLoadSupabaseOps) {
     try {
-      const payload = await requestOpsWorkflowAction(id, {
-        action: changes.productionStage ? "advance_production" : "save_production",
+      const payload = await requestOpsWorkflowAction(inquiryId, {
+        action: changes.releaseProduction ? "release_production" : changes.startProduction ? "start_production" : changes.productionStage ? "advance_production" : Object.prototype.hasOwnProperty.call(changes, "qcNote") ? "save_qc_note" : "save_production",
         productionStage: changes.productionStage,
         assignedUserId: changes.assignedUserId,
+        dueDate: changes.dueDate,
         productionNote: changes.productionNote,
+        qcNote: changes.qcNote,
         blockedReason: changes.blockedReason,
       });
       savedInquiry = payload.inquiry;
@@ -8046,11 +12230,85 @@ async function saveMvpProductionFields(id, changes) {
     } catch (error) {
       console.error("Unable to save MVP production fields.", error);
       orderDashboardSaveError = error.message || "Unable to save production fields.";
-      return;
+      return { ok: false, error: orderDashboardSaveError };
     }
   }
 
-  opsInquiries = opsInquiries.map((item) => item.id === id ? { ...item, ...(savedInquiry || updates) } : item);
+  opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...(savedInquiry || updates) } : item);
+  return savedInquiry || updates;
+}
+
+async function approveMvpOrderArtwork(id) {
+  const inquiryId = resolveMvpOrderInquiryId(id);
+  const current = opsInquiries.find((item) => item.id === inquiryId);
+  if (!current || !isConfirmedOpsOrder(current)) return { ok: false, error: "Confirmed native Order required." };
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      const payload = await requestOpsCustomerAction(inquiryId, { action: "approve_artwork" });
+      if (!payload?.inquiry) throw new Error("Artwork approval returned no saved inquiry.");
+      opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...payload.inquiry } : item);
+      return { ok: true, inquiry: payload.inquiry };
+    } catch (error) {
+      console.error("Unable to approve Order artwork.", error);
+      return { ok: false, error: error.message || "Unable to approve artwork." };
+    }
+  }
+
+  const updates = { artworkStatus: "approved", artworkApprovedAt: new Date().toISOString() };
+  opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...updates } : item);
+  return { ok: true, inquiry: updates };
+}
+
+async function saveMvpFulfillmentFields(id, changes) {
+  const inquiryId = resolveMvpOrderInquiryId(id);
+  const current = opsInquiries.find((item) => item.id === inquiryId);
+  if (!current || !hasNativeOrderAuthority(nativeOrderRows, inquiryId)) return { ok: false, error: "Confirmed native Order required." };
+
+  const trackingSubstatus = String(changes?.trackingSubstatus || "").trim();
+  const method = String(current.fulfillmentMethod || "").trim().toLowerCase();
+  const allowed = {
+    pickup: new Set(["ready_for_pickup", "completed"]),
+    delivery: new Set(["out_for_delivery", "delivered", "completed"]),
+  }[method];
+  if (!allowed || !allowed.has(trackingSubstatus)) {
+    return { ok: false, error: "Fulfillment action is not valid for this Order." };
+  }
+
+  const updates = {
+    trackingSubstatus,
+    trackingNote: changes?.trackingNote === undefined ? current.trackingNote || null : changes.trackingNote || null,
+    trackingUpdatedAt: new Date().toISOString(),
+  };
+  let savedInquiry = null;
+
+  if (shouldLoadSupabaseOps) {
+    try {
+      savedInquiry = await updateOpsInquiryFields(inquiryId, updates, adminAuthSession);
+      if (!savedInquiry) throw new Error("Fulfillment update returned no saved inquiry.");
+    } catch (error) {
+      console.error("Unable to save MVP fulfillment fields.", error);
+      return { ok: false, error: error.message || "Unable to save fulfillment fields." };
+    }
+  }
+
+  opsInquiries = opsInquiries.map((item) => item.id === inquiryId ? { ...item, ...(savedInquiry || updates) } : item);
+  return { ok: true, inquiry: savedInquiry || updates };
+}
+
+function resolveMvpOrderInquiryId(value) {
+  const target = String(value || "").trim().toLowerCase();
+  if (!target) return "";
+  const direct = opsInquiries.find((item) => String(item.id || "").trim().toLowerCase() === target);
+  if (direct) return direct.id;
+  const native = nativeOrderRows.find((row) => [
+    row?.id,
+    row?.order_reference,
+    row?.orderReference,
+    row?.source_inquiry_id,
+    row?.sourceInquiryId,
+  ].some((candidate) => String(candidate || "").trim().toLowerCase() === target));
+  return native?.source_inquiry_id || native?.sourceInquiryId || value;
 }
 
 function bindOrderDashboardEvents() {
@@ -8126,67 +12384,6 @@ function bindOrderDashboardEvents() {
     });
   });
 }
-
-function bindOpsPaymentScopedEvents(root = document) {
-  root.querySelectorAll("[data-ops-shop-field]").forEach((field) => {
-    const updateDraft = () => {
-      const dialog = field.closest(".ops-payment-dialog");
-      const stage = field.closest(".ops-stage-section");
-      const button = dialog?.querySelector("[data-ops-confirm-shop-payment]") || stage?.querySelector('[data-ops-customer-action="confirm_shop_payment"]');
-      const inquiryId = button?.dataset.opsConfirmShopPayment || button?.dataset.opsCustomerId;
-      if (!inquiryId) return;
-      const item = opsInquiries.find((inquiry) => inquiry.id === inquiryId);
-      const draft = getOpsShopPaymentFormPayload(inquiryId, button);
-      opsShopPaymentDrafts = { ...opsShopPaymentDrafts, [inquiryId]: draft };
-      if (opsShopPaymentConfirmation?.inquiryId === inquiryId && item) {
-        opsShopPaymentConfirmation = {
-          ...opsShopPaymentConfirmation,
-          ...draft,
-          receivedAmount: getOpsShopPaymentChoiceAmount(item, draft.paymentChoice),
-          error: "",
-        };
-        syncOpsShopPaymentDialog();
-        return;
-      }
-      if (field.dataset.opsShopField === "internalNote") {
-        const counter = field.parentElement?.querySelector(":scope > small:last-child");
-        if (counter) counter.textContent = `${field.value.length}/${PAYMENT_INTERNAL_NOTE_MAX_LENGTH}`;
-      }
-    };
-    field.addEventListener("input", updateDraft);
-    field.addEventListener("change", updateDraft);
-  });
-
-  root.querySelectorAll("[data-ops-open-shop-payment]").forEach((button) => {
-    button.addEventListener("click", () => {
-      openOpsShopPaymentConfirmation(button.dataset.opsOpenShopPayment, button);
-    });
-  });
-
-  root.querySelectorAll("[data-ops-view-shop-payment]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const inquiryId = button.dataset.opsViewShopPayment;
-      opsShopPaymentConfirmation = { inquiryId, viewOnly: true, status: "ready", error: "" };
-      syncOpsShopPaymentDialog();
-    });
-  });
-
-  root.querySelectorAll("[data-ops-cancel-shop-payment]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (opsShopPaymentConfirmation?.status === "loading") return;
-      const inquiryId = opsShopPaymentConfirmation?.inquiryId;
-      opsShopPaymentConfirmation = null;
-      syncOpsShopPaymentDialog();
-      if (inquiryId) replaceActiveInquiryPaymentSection(inquiryId, { includeHistory: true });
-    });
-  });
-
-  root.querySelectorAll("[data-ops-confirm-shop-payment]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      await confirmOpsShopPayment(button.dataset.opsConfirmShopPayment);
-    });
-  });
-}
 function bindOpsBoardEvents() {
   const rawMessage = document.getElementById("ops-raw-message");
   if (rawMessage) {
@@ -8239,22 +12436,15 @@ function bindOpsBoardEvents() {
 
   document.querySelectorAll("[data-ops-customer-action]").forEach((button) => {
     button.addEventListener("click", async () => {
-      if (button.dataset.opsCustomerAction === "confirm_shop_payment") {
-        openOpsShopPaymentConfirmation(button.dataset.opsCustomerId, button);
-        return;
-      }
       await saveOpsCustomerAction(button.dataset.opsCustomerId, button.dataset.opsCustomerAction, button);
     });
   });
-
-  bindOpsPaymentScopedEvents(document);
 
   document.querySelectorAll("[data-ops-customer-asset]").forEach((button) => {
     button.addEventListener("click", async () => {
       await openOpsCustomerAsset(button.dataset.opsCustomerId, button.dataset.opsCustomerAsset);
     });
   });
-  bindOnlinePaymentReviewEvents();
 
   document.querySelectorAll("[data-ops-final-proof-file]").forEach((input) => {
     input.addEventListener("change", async (event) => {
@@ -8285,7 +12475,6 @@ function bindOpsBoardEvents() {
       if (!id) return;
       expandedOpsInquiryId = id;
       render();
-      void loadOpsPaymentHistory(id);
       requestAnimationFrame(() => {
         document.querySelector(`[data-ops-card-id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: "nearest", inline: "center", behavior: "smooth" });
       });
@@ -8296,43 +12485,14 @@ function bindOpsBoardEvents() {
       const id = button.dataset.opsToggleDetails;
       expandedOpsInquiryId = expandedOpsInquiryId === id ? null : id;
       render();
-      if (expandedOpsInquiryId) void loadOpsPaymentHistory(expandedOpsInquiryId);
     });
   });
 
   document.querySelectorAll("[data-ops-close-details]").forEach((button) => {
     button.addEventListener("click", () => {
       expandedOpsInquiryId = null;
-      opsSoDraft = null;
       opsArtworkRequests = {};
       opsCustomerActionRequests = {};
-      opsShopPaymentConfirmation = null;
-      render();
-    });
-  });
-  document.querySelectorAll("[data-ops-add-so]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (button.disabled || opsSoSavingId) return;
-      opsSoDraft = { id: button.dataset.opsAddSo };
-      render();
-      document.querySelector(`[data-ops-confirm-so="${button.dataset.opsAddSo}"]`)?.focus();
-    });
-  });
-
-  document.querySelectorAll("[data-ops-confirm-so]").forEach((button) => {
-    button.addEventListener("click", async () => {
-      if (button.disabled || opsSoSavingId) return;
-      button.disabled = true;
-      button.textContent = "Saving...";
-      await confirmOpsSO(button.dataset.opsConfirmSo);
-      render();
-    });
-  });
-
-  document.querySelectorAll("[data-ops-cancel-so]").forEach((button) => {
-    button.addEventListener("click", () => {
-      if (opsSoSavingId) return;
-      opsSoDraft = null;
       render();
     });
   });
@@ -8410,18 +12570,6 @@ function getFilteredOrders() {
 function getSearchRoute(value) {
   const normalized = value.trim().toLowerCase();
   if (!normalized) return null;
-
-  if ("urban coffee".includes(normalized)) {
-    return { path: "/orders", orderQuery: value.trim() };
-  }
-
-  if ("admin polo uniform".includes(normalized)) {
-    return { path: "/orders", orderQuery: value.trim() };
-  }
-
-  if ("embroidered staff cap".includes(normalized) || normalized.includes("cap")) {
-    return { path: "/orders", orderQuery: value.trim() };
-  }
 
   if (normalized.includes("trry-uc") || "orders".includes(normalized) || "reorder".includes(normalized)) {
     return { path: "/orders", orderQuery: value.trim() };
@@ -8600,18 +12748,29 @@ function statusToClass(status) {
 function isPasswordSetupRoute() {
   return window.location.pathname.replace(/\/+$/, "") === "/set-password";
 }
+
+function isPasswordResetRoute() {
+  return window.location.pathname.replace(/\/+$/, "") === "/reset-password";
+}
+
+function isForgotPasswordRoute() {
+  return window.location.pathname.replace(/\/+$/, "") === "/forgot-password";
+}
+
+function isLoginRoute() {
+  return window.location.pathname.replace(/\/+$/, "") === "/login";
+}
 function getCurrentRoute() {
   return routes[getRoutePath()] ?? routes[defaultRoutePath];
 }
 
 function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
-  if (parkedAdminRoutes.has(path)) {
-    window.history.replaceState({}, "", defaultRoutePath);
-    return defaultRoutePath;
-  }
+  if (path === legacyOrderDashboardPath) return activeOrdersPath;
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
+  if (path === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
+  if ((path === "/settings" || path === "/settings/people-access") && !canViewSettingsRoute()) return defaultRoutePath;
   return routes[path] ? path : defaultRoutePath;
 }
 
@@ -8623,10 +12782,23 @@ function navigateTo(path) {
 function normalizeRoutePath(path) {
   const url = new URL(String(path || defaultRoutePath), window.location.origin);
   const routePath = url.pathname.replace(/\/+$/, "") || "/";
-  if (parkedAdminRoutes.has(routePath)) return defaultRoutePath;
+  if (routePath === legacyOrderDashboardPath) return `${activeOrdersPath}${url.search}`;
+  if (["/forgot-password", "/reset-password", "/set-password", "/login"].includes(routePath)) {
+    return `${routePath}${url.search}${url.hash}`;
+  }
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
+  if (routePath === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
+  if ((routePath === "/settings" || routePath === "/settings/people-access") && !canViewSettingsRoute()) return defaultRoutePath;
   return routes[routePath] ? `${routePath}${url.search}` : defaultRoutePath;
+}
+
+function normalizeLegacyOrderDashboardRoute() {
+  const path = window.location.pathname.replace(/\/+$/, "") || "/";
+  if (path !== legacyOrderDashboardPath) return false;
+  window.history.replaceState({}, "", `${activeOrdersPath}${window.location.search}`);
+  render();
+  return true;
 }
 
 function escapeHtml(value) {

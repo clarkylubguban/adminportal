@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260803092928
+-- Original filename: 20260803092928_phase_8_1_align_task_foundation.sql
+-- Original fetched SHA-256: 0FDA205AD1700370C7C065212CC2B49F8569B0E5F020BFE36200C31F0E86F00C
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202608010001_align_task_foundation_phase_8_1.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260803092928_phase_8_1_align_task_foundation.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

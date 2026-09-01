@@ -1,3 +1,8 @@
+import {
+  nativeOrderPaymentFullyConfirmed,
+  nativeOrderReleaseRequirementsMissing,
+} from "../../src/shared/nativeOrderStatus.js";
+
 const TERMINAL_STATUSES = new Set(["lost", "cancelled", "canceled"]);
 const ACTIVE_STAGES = new Set(["printing", "embroidery", "screen_printing"]);
 
@@ -6,36 +11,107 @@ export function buildOpsWorkflowUpdates(action, body, inquiry, now = new Date().
     return failure("lost or cancelled inquiries cannot enter the order workflow");
   }
 
-  if (action === "confirm_order") {
-    if (key(inquiry.quote_status) !== "approved") return failure("quote approval is required");
-    if (!(Number(inquiry.quoted_amount) > 0)) return failure("a valid quoted amount is required");
-    return success({ status: "won", next_action: "TRRY order confirmed - ready for production handoff" });
-  }
-
-  if (!["save_production", "advance_production"].includes(action)) {
+  if (!["save_production", "save_qc_note", "release_production", "start_production", "advance_production"].includes(action)) {
     return failure("invalid workflow action");
   }
   if (!isConfirmedOrder(inquiry)) return failure("a confirmed TRRY order is required");
 
   const currentStage = canonicalStage(inquiry.production_stage);
+  const alreadyStarted = Boolean(inquiry.production_started_at);
+  const actorUserId = cleanUuid(body.actorUserId || body.productionStartedBy || body.qcStartedBy || body.qcCompletedBy || body.productionCompletedBy);
+  if (action === "release_production") {
+    if (currentStage !== "queued") return failure("production is already released");
+    const missing = productionGate(inquiry);
+    if (missing.length) return failure(`production requirements missing: ${missing.join(", ")}`);
+    return success({
+      production_stage: "queued",
+      production_started_at: null,
+      production_started_by: null,
+      production_updated_at: now,
+    });
+  }
+
+  if (action === "start_production") {
+    if (alreadyStarted) return { ok: true, updates: {}, noop: true };
+    if (currentStage === "queued" && key(inquiry.nativeOrderStatus || inquiry.native_order_status) !== "released") {
+      return failure("production must be released before it can start");
+    }
+    if (currentStage !== "queued" && !ACTIVE_STAGES.has(currentStage)) return failure("production must be released before it can start");
+    if (cleanText(inquiry.blocked_reason, 500)) return failure("blocked production cannot start");
+    return success({
+      ...(currentStage === "queued" ? { production_stage: stationFor(inquiry) } : {}),
+      production_started_at: now,
+      production_started_by: actorUserId || null,
+      production_updated_at: now,
+    });
+  }
+
+  if (action === "save_qc_note") {
+    if (currentStage !== "qc") return failure("QC note can only be saved during quality check");
+    return success({
+      qc_note: cleanText(body.qcNote, 500) || null,
+      production_updated_at: now,
+    });
+  }
+
   if (["ready", "completed"].includes(currentStage) && action === "save_production") {
     return failure("ready and completed production details are locked");
   }
-
-  const updates = productionFields(body, now);
-  if (action === "save_production") return success(updates);
+  if (action === "save_production") return success(productionFields(body, now));
 
   const requestedStage = canonicalStage(body.productionStage);
+  if (currentStage === "completed" && requestedStage === "completed") {
+    return { ok: true, updates: {}, noop: true };
+  }
+  if (currentStage === "ready" && requestedStage === "ready" && inquiry.qc_completed_at) {
+    return { ok: true, updates: {}, noop: true };
+  }
   const expectedStage = nextStage(currentStage, inquiry);
   if (!expectedStage || requestedStage !== expectedStage) return failure("invalid production stage transition");
+
+  const updates = currentStage === "ready" && requestedStage === "completed"
+    ? { production_updated_at: now }
+    : productionFields(body, now);
 
   const candidate = { ...inquiry, ...updates, production_stage: requestedStage };
   if (currentStage === "queued") {
     const missing = productionGate(candidate);
     if (missing.length) return failure(`production requirements missing: ${missing.join(", ")}`);
+  } else if (ACTIVE_STAGES.has(currentStage) && requestedStage === "qc" && !alreadyStarted) {
+    return failure("production must be started before quality check");
   }
 
-  return success({ ...updates, production_stage: requestedStage });
+  const lifecycleUpdates = {};
+  if (requestedStage === "qc" && !inquiry.qc_started_at) {
+    lifecycleUpdates.qc_started_at = now;
+    lifecycleUpdates.qc_started_by = actorUserId || null;
+  }
+  if (currentStage === "qc" && requestedStage === "ready") {
+    if (cleanText(inquiry.blocked_reason, 500)) return failure("blocked production cannot complete quality check");
+    if (!inquiry.qc_started_at) {
+      lifecycleUpdates.qc_started_at = now;
+      lifecycleUpdates.qc_started_by = actorUserId || null;
+    }
+    if (!inquiry.qc_completed_at) {
+      lifecycleUpdates.qc_completed_at = now;
+      lifecycleUpdates.qc_completed_by = actorUserId || null;
+    }
+  }
+  if (currentStage === "ready" && requestedStage === "completed") {
+    if (cleanText(inquiry.blocked_reason, 500)) return failure("blocked production cannot be completed");
+    if (!inquiry.qc_completed_at) return failure("quality check completion is required before production completion");
+    if (!inquiry.production_completed_at) {
+      lifecycleUpdates.production_completed_at = now;
+      lifecycleUpdates.production_completed_by = actorUserId || null;
+    }
+  }
+
+  return success({
+    ...updates,
+    production_stage: requestedStage,
+    ...lifecycleUpdates,
+    ...(currentStage === "queued" ? { production_started_at: null, production_started_by: null } : {}),
+  });
 }
 
 export function canonicalStage(value) {
@@ -47,8 +123,17 @@ export function canonicalStage(value) {
 }
 
 export function isConfirmedOrder(inquiry) {
-  return key(inquiry.status) === "won"
+  return hasNativeOrderAuthority(inquiry)
     && key(inquiry.quote_status) === "approved";
+}
+
+export function hasNativeOrderAuthority(inquiry) {
+  return Boolean(
+    inquiry?.nativeOrderAuthority === true
+    || inquiry?._nativeOrderAuthority === true
+    || cleanText(inquiry?.nativeOrderId, 80)
+    || cleanText(inquiry?.native_order_id, 80)
+  );
 }
 
 function nextStage(stage, inquiry) {
@@ -59,23 +144,32 @@ function nextStage(stage, inquiry) {
   return "";
 }
 
+export function releaseRequirementsMissing(inquiry) {
+  return nativeOrderReleaseRequirementsMissing(inquiry);
+}
+
 function productionGate(inquiry) {
-  const missing = [];
-  if (!cleanText(inquiry.product_desc || inquiry.product, 500)) missing.push("product or service");
-  if (!cleanText(inquiry.quantity, 120)) missing.push("quantity");
-  if (!inquiry.due_date) missing.push("due date");
-  if (key(inquiry.artwork_status) !== "approved") missing.push("artwork approval");
-  if (!cleanText(inquiry.assigned_staff, 120)) missing.push("assigned staff");
-  if (cleanText(inquiry.blocked_reason, 500)) missing.push("blocked reason");
-  return missing;
+  return releaseRequirementsMissing(inquiry);
+}
+
+export function paymentSatisfiesProductionGate(inquiry) {
+  return nativeOrderPaymentFullyConfirmed(inquiry);
 }
 function productionFields(body, now) {
-  return {
-    assigned_staff: cleanText(body.assignedStaff, 120) || null,
-    production_note: cleanText(body.productionNote, 2000) || null,
-    blocked_reason: cleanText(body.blockedReason, 500) || null,
-    production_updated_at: now,
-  };
+  const updates = { production_updated_at: now };
+  if (Object.prototype.hasOwnProperty.call(body, "assignedStaff")) {
+    updates.assigned_staff = cleanText(body.assignedStaff, 120) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "productionNote")) {
+    updates.production_note = cleanText(body.productionNote, 2000) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "blockedReason")) {
+    updates.blocked_reason = cleanText(body.blockedReason, 500) || null;
+  }
+  if (Object.prototype.hasOwnProperty.call(body, "dueDate")) {
+    updates.due_date = cleanDate(body.dueDate);
+  }
+  return updates;
 }
 
 function stationFor(inquiry) {
@@ -87,6 +181,18 @@ function stationFor(inquiry) {
 
 function cleanText(value, maxLength) {
   return String(value ?? "").trim().slice(0, maxLength);
+}
+
+function cleanUuid(value) {
+  const text = String(value || "").trim();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(text)
+    ? text.toLowerCase()
+    : "";
+}
+
+function cleanDate(value) {
+  const text = String(value || "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
 function key(value) {

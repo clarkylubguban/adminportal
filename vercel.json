@@ -4,32 +4,24 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
-      "source": "/api/admin-users/:id",
-      "destination": "/api/admin-users?adminUserId=:id"
+      "source": "/api/my-tasks",
+      "destination": "/api/task-views"
     },
     {
-      "source": "/api/work-chat/bootstrap",
-      "destination": "/api/work-chat?_wcAction=bootstrap"
+      "source": "/api/task-calendar",
+      "destination": "/api/task-views"
     },
     {
-      "source": "/api/work-chat/channels/:channelId/messages",
-      "destination": "/api/work-chat?_wcAction=channel-messages&channelId=:channelId"
+      "source": "/api/planning/auto-plan-today",
+      "destination": "/api/task-automation"
     },
     {
-      "source": "/api/work-chat/channels/:channelId/read",
-      "destination": "/api/work-chat?_wcAction=channel-read&channelId=:channelId"
+      "source": "/api/integrations/n8n/task-drafts",
+      "destination": "/api/task-automation"
     },
     {
-      "source": "/api/work-chat/order-threads",
-      "destination": "/api/work-chat?_wcAction=order-threads"
-    },
-    {
-      "source": "/api/work-chat/attachments/prepare",
-      "destination": "/api/work-chat?_wcAction=attachment-prepare"
-    },
-    {
-      "source": "/api/work-chat/attachments/:attachmentId/url",
-      "destination": "/api/work-chat?_wcAction=attachment-url&attachmentId=:attachmentId"
+      "source": "/api/inquiries/:id/orders",
+      "destination": "/api/inquiries/:id/workflow?_nativeOrderAction=convert"
     },
     {
       "source": "/api/tasks/:id/history",
@@ -50,6 +42,10 @@
     {
       "source": "/api/tasks/:id/approve-draft",
       "destination": "/api/tasks/:id?_taskAction=approve-draft"
+    },
+    {
+      "source": "/api/tasks/:id/approve-and-assign",
+      "destination": "/api/tasks/:id?_taskAction=approve-and-assign"
     },
     {
       "source": "/api/tasks/:id/start",
@@ -90,22 +86,6 @@
     {
       "source": "/api/tasks/:id/time-entries/:entryId/correct",
       "destination": "/api/tasks/:id?_taskAction=time-entry-correct&entryId=:entryId"
-    },
-    {
-      "source": "/api/orders/:id",
-      "destination": "/api/inquiries/:id/workflow?_opsAction=order-details"
-    },
-    {
-      "source": "/api/production/:id",
-      "destination": "/api/inquiries/:id/workflow?_opsAction=production-job"
-    },
-    {
-      "source": "/api/inquiries/:id/payment-review",
-      "destination": "/api/inquiries/:id/workflow?_opsAction=payment-review"
-    },
-    {
-      "source": "/api/inquiries/:id/payment-proof",
-      "destination": "/api/inquiries/:id/workflow?_opsAction=payment-proof"
     },
     {
       "source": "/((?!api/).*)",

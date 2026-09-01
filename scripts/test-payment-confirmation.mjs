@@ -1,116 +1,201 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { buildUpdates } from "../api/inquiries/[id]/customer-actions.js";
+import { buildOpsWorkflowUpdates } from "../api/_lib/opsWorkflow.js";
+import { buildPaymentConfirmationUpdate } from "../api/_lib/paymentConfirmation.js";
 
-const NOW = "2026-07-31T12:00:00.000Z";
+const NOW = "2026-08-01T04:00:00.000Z";
 const ADMIN = { user_id: "00000000-0000-4000-8000-000000000123", role: "owner" };
-const migration = readFileSync(
-  "supabase/migrations/202607310001_allow_admin_down_payment_confirmations.sql",
-  "utf8",
-);
 
-test("850 down payment is rejected", () => {
-  const result = confirmOnline(inquiry({ quoted_amount: 850, payment_type: "down_payment", payment_selected_amount: 425 }), 425);
-  assert.equal(result.error, "confirmed amount must match the full quote total");
+test("pay at shop selection is not payment confirmation", () => {
+  const result = advanceProduction(order({ payment_status: "pay_at_shop", payment_method: "cash" }));
+  assert.equal(result.ok, false);
+  assert.match(result.error, /confirmed payment/);
 });
 
-test("850 full payment is accepted", () => {
-  const result = confirmOnline(inquiry({ quoted_amount: 850, payment_type: "full", payment_selected_amount: 850 }), 850);
-  assert.equal(result.payment_status, "paid");
-  assert.equal(result.payment_confirmed_amount, 850);
-  assert.equal(result.amount_due, 0);
+test("pay online selection without confirmation remains blocked", () => {
+  const result = advanceProduction(order({ payment_status: "proof_submitted", payment_method: "online" }));
+  assert.equal(result.ok, false);
+  assert.match(result.error, /confirmed payment/);
 });
 
-test("1050 down payment of 525 is accepted", () => {
-  const result = confirmOnline(inquiry({ quoted_amount: 1050, payment_type: "down_payment", payment_selected_amount: 525 }), 525);
-  assert.equal(result.payment_status, "down_payment_confirmed");
-  assert.equal(result.payment_confirmed_amount, 525);
-  assert.equal(result.payment_verified_amount, 525);
-  assert.equal(result.amount_due, 525);
+test("full payment confirmation updates paid amount and zero balance", () => {
+  const result = confirmPayment(order(), { amountReceived: 1050, paymentSource: "gcash", idempotencyKey: "pay-full" });
+  assert.equal(result.ok, true);
+  assert.equal(result.updates.payment_status, "paid");
+  assert.equal(result.updates.payment_method, "gcash");
+  assert.equal(result.updates.payment_confirmed_amount, 1050);
+  assert.equal(result.updates.payment_verified_amount, 1050);
+  assert.equal(result.updates.amount_due, 0);
+  assert.equal(result.updates.payment_confirmed_by, ADMIN.user_id);
+  assert.equal(result.updates.payment_history.length, 1);
 });
 
-test("1050 arbitrary partial payment is rejected", () => {
-  const result = confirmOnline(inquiry({ quoted_amount: 1050, payment_type: "down_payment", payment_selected_amount: 525 }), 700);
-  assert.equal(result.error, "confirmed amount must match the 50% down payment or full quote total");
+test("partial payment remains partially paid with remaining balance", () => {
+  const result = confirmPayment(order(), { amountReceived: 525, paymentSource: "cash", idempotencyKey: "pay-partial" });
+  assert.equal(result.ok, true);
+  assert.equal(result.updates.payment_status, "partially_paid");
+  assert.equal(result.updates.payment_confirmed_amount, 525);
+  assert.equal(result.updates.amount_due, 525);
 });
 
-test("1050 full payment is accepted", () => {
-  const result = confirmOnline(inquiry({ quoted_amount: 1050, payment_type: "full", payment_selected_amount: 1050 }), 1050);
-  assert.equal(result.payment_status, "paid");
-  assert.equal(result.payment_confirmed_amount, 1050);
-  assert.equal(result.amount_due, 0);
+test("partial payment does not satisfy production readiness", () => {
+  const partial = {
+    ...order(),
+    payment_status: "partially_paid",
+    payment_confirmed_amount: 525,
+    payment_verified_amount: 525,
+    amount_due: 525,
+  };
+  const result = advanceProduction(partial);
+  assert.equal(result.ok, false);
+  assert.match(result.error, /confirmed payment/);
 });
 
-test("online down payment review creates correct remaining balance", () => {
-  const result = confirmOnline(inquiry({ id: "TRRY-WZTBV9U2", quoted_amount: 1050, payment_type: "down_payment", payment_selected_amount: 525 }), 525);
-  assert.equal(result.payment_status, "down_payment_confirmed");
-  assert.equal(result.payment_verified_amount, 525);
-  assert.equal(result.amount_due, 525);
+test("duplicate idempotency key returns idempotent success without new update", () => {
+  const result = confirmPayment(order({
+    payment_history: [{ id: "same-click" }],
+  }), { amountReceived: 1050, paymentSource: "card", idempotencyKey: "same-click" });
+  assert.equal(result.ok, true);
+  assert.equal(result.idempotent, true);
+  assert.deepEqual(result.updates, {});
 });
 
-test("pay at shop down payment receiving creates correct remaining balance", () => {
-  assert.match(migration, /v_quote_total >= 1000 and v_received_amount = v_required_down_payment/i);
-  assert.match(migration, /v_next_status := 'down_payment_confirmed'/i);
-  assert.match(migration, /v_payment_type := 'down_payment'/i);
-  assert.match(migration, /amount_due = v_remaining_balance/i);
-});
-
-test("duplicate confirmation is rejected", () => {
-  const result = buildUpdates("confirm_payment", { confirmedAmount: 525 }, inquiry({
-    quoted_amount: 1050,
-    payment_status: "down_payment_confirmed",
-    payment_type: "down_payment",
-    payment_selected_amount: 525,
-  }), NOW, ADMIN);
-  assert.equal(result, null);
-});
-
-test("authenticated verifier or receiver is recorded", () => {
-  const online = confirmOnline(inquiry({ quoted_amount: 1050, payment_type: "down_payment", payment_selected_amount: 525 }), 525);
-  assert.equal(online.payment_verified_by, ADMIN.user_id);
-  assert.match(migration, /payment_verified_by = v_actor_user_id/i);
-});
-
-test("audit event is created once only", () => {
-  assert.match(migration, /where event\.idempotency_key = v_idempotency_key/i);
-  assert.match(migration, /message = 'IDEMPOTENCY_KEY_CONFLICT'/i);
-  assert.match(migration, /insert into public\.inquiry_payment_events/i);
-});
-
-test("stale or already reviewed receipt actions remain blocked", () => {
-  const correction = buildUpdates("confirm_payment", { confirmedAmount: 525 }, inquiry({
-    quoted_amount: 1050,
-    payment_status: "correction_required",
-    payment_type: "down_payment",
-    payment_selected_amount: 525,
-  }), NOW, ADMIN);
-  const paid = buildUpdates("confirm_payment", { confirmedAmount: 1050 }, inquiry({
-    quoted_amount: 1050,
+test("same idempotency key after full payment remains a durable no-op replay", () => {
+  const result = confirmPayment(order({
     payment_status: "paid",
-    payment_type: "full",
-    payment_selected_amount: 1050,
-  }), NOW, ADMIN);
-  assert.equal(correction, null);
-  assert.equal(paid, null);
+    payment_confirmed_amount: 1050,
+    payment_verified_amount: 1050,
+    payment_confirmed_at: "2026-08-01T04:00:00.000Z",
+    payment_confirmed_by: ADMIN.user_id,
+    amount_due: 0,
+    payment_history: [{
+      id: "paid-replay",
+      type: "payment_confirmed",
+      amount: 1050,
+      source: "gcash",
+      referenceNumber: "P-001",
+      confirmedBy: ADMIN.user_id,
+      confirmedAt: "2026-08-01T04:00:00.000Z",
+      balanceAfter: 0,
+      status: "paid",
+    }],
+  }), { amountReceived: 1050, paymentSource: "gcash", referenceNumber: "P-001", idempotencyKey: "paid-replay" });
+  assert.equal(result.ok, true);
+  assert.equal(result.idempotent, true);
+  assert.deepEqual(result.updates, {});
 });
 
-function confirmOnline(row, amount) {
-  return buildUpdates("confirm_payment", { confirmedAmount: amount }, row, NOW, ADMIN);
+test("same idempotency key with different replay payload never applies a second payment", () => {
+  const result = confirmPayment(order({
+    payment_status: "paid",
+    payment_confirmed_amount: 1050,
+    payment_verified_amount: 1050,
+    amount_due: 0,
+    payment_history: [{ id: "paid-replay-different", amount: 1050, referenceNumber: "P-001" }],
+  }), { amountReceived: 999, paymentSource: "cash", referenceNumber: "DIFFERENT", idempotencyKey: "paid-replay-different" });
+  assert.equal(result.ok, true);
+  assert.equal(result.idempotent, true);
+  assert.deepEqual(result.updates, {});
+});
+
+test("new idempotency key after full payment remains rejected", () => {
+  const result = confirmPayment(order({
+    payment_status: "paid",
+    payment_confirmed_amount: 1050,
+    payment_verified_amount: 1050,
+    amount_due: 0,
+    payment_history: [{ id: "original-paid-key" }],
+  }), { amountReceived: 1050, paymentSource: "gcash", idempotencyKey: "new-paid-key" });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "payment is already fully confirmed");
+});
+
+test("failed payment attempt does not mint a successful replay key", () => {
+  const failed = confirmPayment(order(), { amountReceived: 1200, paymentSource: "gcash", idempotencyKey: "failed-key" });
+  assert.equal(failed.ok, false);
+  const replay = confirmPayment(order({ payment_history: [] }), { amountReceived: 1050, paymentSource: "gcash", idempotencyKey: "failed-key" });
+  assert.equal(replay.ok, true);
+  assert.equal(replay.idempotent, false);
+  assert.equal(replay.updates.payment_history.length, 1);
+});
+
+test("payment confirmation route keeps owner/admin write authorization", () => {
+  const source = readFileSync("api/inquiries/[id]/payment-confirmations.js", "utf8");
+  assert.ok(source.includes('new Set(["owner", "admin"])'), "payment confirmation remains owner/admin only");
+  assert.ok(source.includes("owner or admin access required"), "staff denial remains encoded");
+});
+
+test("amount above remaining balance is rejected", () => {
+  const result = confirmPayment(order({ payment_confirmed_amount: 500, payment_verified_amount: 500, amount_due: 550 }), { amountReceived: 600, paymentSource: "cash" });
+  assert.equal(result.ok, false);
+  assert.equal(result.error, "amount received cannot exceed remaining balance");
+});
+
+test("full payment but missing due date remains blocked", () => {
+  const result = advanceProduction(paidOrder({ due_date: null }));
+  assert.equal(result.ok, false);
+  assert.match(result.error, /due date/);
+});
+
+test("full payment but artwork pending remains blocked", () => {
+  const result = advanceProduction(paidOrder({ artwork_status: "under_review" }));
+  assert.equal(result.ok, false);
+  assert.match(result.error, /artwork approval/);
+});
+
+test("full payment but staff unassigned remains blocked", () => {
+  const result = advanceProduction(paidOrder({ assigned_staff: "" }));
+  assert.equal(result.ok, false);
+  assert.match(result.error, /assigned staff/);
+});
+
+test("every requirement complete is ready with native Order authority and without Odoo SO", () => {
+  const result = advanceProduction(paidOrder({ status: "approved", odoo_so: "" }));
+  assert.equal(result.ok, true);
+  assert.equal(result.updates.production_stage, "queued");
+});
+
+function confirmPayment(inquiry, body) {
+  return buildPaymentConfirmationUpdate({ inquiry, body, adminUser: ADMIN, now: NOW });
 }
 
-function inquiry(overrides = {}) {
+function advanceProduction(inquiry) {
+  return buildOpsWorkflowUpdates("release_production", {}, inquiry, NOW);
+}
+
+function paidOrder(overrides = {}) {
+  return order({
+    payment_status: "paid",
+    payment_confirmed_amount: 1050,
+    payment_verified_amount: 1050,
+    amount_due: 0,
+    ...overrides,
+  });
+}
+
+function order(overrides = {}) {
   return {
     id: "TRRY-TEST",
+    status: "approved",
+    nativeOrderAuthority: true,
+    nativeOrderId: "96000000-0000-4000-8000-000000000777",
     quote_status: "approved",
-    artwork_status: "approved",
-    production_stage: "queued",
     quoted_amount: 1050,
     amount_due: 1050,
-    payment_status: "proof_submitted",
+    product: "DTF Printing",
+    product_desc: "DTF Printing",
+    quantity: "10 pcs",
+    due_date: "2026-08-10",
+    artwork_status: "approved",
+    assigned_staff: "Clark - Admin",
+    blocked_reason: "",
+    production_stage: "queued",
+    payment_status: "required",
     payment_method: "online",
-    payment_type: "full",
-    payment_selected_amount: 1050,
-    payment_proof_path: "TRRY-TEST/payments/receipt.png",
+    payment_confirmed_amount: null,
+    payment_verified_amount: null,
+    payment_history: [],
+    odoo_so: "",
     ...overrides,
   };
 }

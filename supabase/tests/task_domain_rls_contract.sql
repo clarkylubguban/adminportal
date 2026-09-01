@@ -1,6 +1,8 @@
 -- Disposable local Supabase/PostgreSQL only. Exercises authenticated RLS and
 -- role behavior with synthetic identities. All changes are rolled back.
 begin;
+create extension if not exists pgtap;
+select plan(1);
 
 do $$
 declare
@@ -9,9 +11,10 @@ declare
   v_staff_a uuid := '94000000-0000-4000-8000-000000000003';
   v_staff_b uuid := '94000000-0000-4000-8000-000000000004';
   v_disabled uuid := '94000000-0000-4000-8000-000000000005';
+  v_staff_c uuid := '94000000-0000-4000-8000-000000000006';
 begin
   insert into auth.users (
-    instance_id, id, aud, role, email, encrypted_password, confirmed_at,
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
   )
   select
@@ -23,7 +26,8 @@ begin
     (v_admin, 'rls-admin@invalid.example'),
     (v_staff_a, 'rls-staff-a@invalid.example'),
     (v_staff_b, 'rls-staff-b@invalid.example'),
-    (v_disabled, 'rls-disabled@invalid.example')
+    (v_disabled, 'rls-disabled@invalid.example'),
+    (v_staff_c, 'rls-staff-c@invalid.example')
   ) fixture(id, email);
 
   insert into public.admin_users (
@@ -33,7 +37,8 @@ begin
     (v_admin, 'rls-admin@invalid.example', 'admin', 'Synthetic Admin', true, false),
     (v_staff_a, 'rls-staff-a@invalid.example', 'staff', 'Synthetic Staff A', true, false),
     (v_staff_b, 'rls-staff-b@invalid.example', 'staff', 'Synthetic Staff B', true, true),
-    (v_disabled, 'rls-disabled@invalid.example', 'staff', 'Synthetic Disabled', false, false);
+    (v_disabled, 'rls-disabled@invalid.example', 'staff', 'Synthetic Disabled', false, false),
+    (v_staff_c, 'rls-staff-c@invalid.example', 'staff', 'Synthetic Staff C', true, false);
 end;
 $$;
 
@@ -47,6 +52,7 @@ declare
   v_owner uuid := '94000000-0000-4000-8000-000000000001';
   v_staff_a uuid := '94000000-0000-4000-8000-000000000003';
   v_staff_b uuid := '94000000-0000-4000-8000-000000000004';
+  v_staff_c uuid := '94000000-0000-4000-8000-000000000006';
   v_a jsonb;
   v_b jsonb;
   v_task_a uuid;
@@ -61,17 +67,17 @@ begin
   v_version := (v_a ->> 'version')::bigint;
   v_a := public.task_update_draft(
     v_task_a, v_version, 'Synthetic RLS task A updated', 'Disposable updated.',
-    'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a'
+    'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a', 'EXPECTED', null, null
   );
   v_version := (v_a ->> 'version')::bigint;
   perform public.task_update_draft(
     v_task_a, v_version - 1, 'Synthetic RLS task A updated', 'Disposable updated.',
-    'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a'
+    'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a', 'EXPECTED', null, null
   );
   begin
     perform public.task_update_draft(
       v_task_a, v_version - 1, 'Conflicting draft title', 'Disposable updated.',
-      'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a'
+      'URGENT', null, v_owner, false, null, null, null, null, 'rls-update-a', 'EXPECTED', null, null
     );
     raise exception 'conflicting draft update replay was accepted';
   exception when unique_violation then null;
@@ -86,10 +92,17 @@ begin
   end;
   v_a := public.task_approve_draft(v_task_a, v_version, 'rls-approve-a');
 
-  -- Active is_test=true remains assignment eligible.
+  begin
+    perform public.task_create(
+      'Synthetic RLS task B', 'Disposable.', 'MANUAL', null, null, 'MEDIUM',
+      v_staff_b, v_owner, false, null, null, null, null, null, null, 'rls-create-b'
+    );
+    raise exception 'active is_test account was assignment eligible';
+  exception when invalid_parameter_value then null;
+  end;
   v_b := public.task_create(
     'Synthetic RLS task B', 'Disposable.', 'MANUAL', null, null, 'MEDIUM',
-    v_staff_b, v_owner, false, null, null, null, null, null, null, 'rls-create-b'
+    v_staff_c, v_owner, false, null, null, null, null, null, null, 'rls-create-b-valid'
   );
   v_task_b := (v_b ->> 'id')::uuid;
   v_b := public.task_approve_draft(
@@ -100,8 +113,8 @@ begin
     raise exception 'owner cannot read all tasks';
   end if;
   if not exists (
-    select 1 from public.tasks where id = v_task_b and assigned_user_id = v_staff_b
-  ) then raise exception 'active is_test account was excluded from assignment'; end if;
+    select 1 from public.tasks where id = v_task_b and assigned_user_id = v_staff_c
+  ) then raise exception 'eligible staff account was excluded from assignment'; end if;
 
   perform set_config('request.jwt.claim.sub', v_staff_a::text, true);
   if (select count(id) from public.tasks) <> 1 then
@@ -213,4 +226,6 @@ end;
 $$;
 
 reset role;
+select pass('task domain RLS contract');
+select * from finish();
 rollback;

@@ -9,9 +9,13 @@ alter table public.ops_inquiries
   add column if not exists payment_receipt_filename text,
   add column if not exists payment_receipt_content_type text,
   add column if not exists payment_receipt_size bigint,
+  add column if not exists payment_selected_at timestamptz,
   add column if not exists payment_verified_amount numeric,
   add column if not exists payment_verified_at timestamptz,
-  add column if not exists payment_verified_by uuid references public.admin_users(user_id) on delete set null;
+  add column if not exists payment_verified_by uuid references public.admin_users(user_id) on delete set null,
+  add column if not exists payment_confirmed_by uuid references public.admin_users(user_id) on delete set null,
+  add column if not exists payment_internal_note text,
+  add column if not exists payment_history jsonb not null default '[]'::jsonb;
 
 alter table public.ops_inquiries
   drop constraint if exists ops_inquiries_payment_status_check,
@@ -68,9 +72,6 @@ as $$
       when coalesce(quote_total, 0) <= 0 then false
       when lower(coalesce(payment_status, '')) in ('paid', 'full_payment_confirmed', 'confirmed')
         and coalesce(verified_amount, 0) >= quote_total then true
-      when quote_total >= 1000
-        and lower(coalesce(payment_status, '')) in ('partially_paid', 'down_payment_confirmed')
-        and coalesce(verified_amount, 0) >= round((quote_total * 0.5)::numeric, 2) then true
       else false
     end
 $$;
@@ -102,9 +103,8 @@ begin
   if new_status = 'won' and old_status is distinct from 'won' then
     if old_status in ('lost', 'cancelled', 'canceled')
       or lower(coalesce(new.quote_status, '')) <> 'approved'
-      or coalesce(new.quoted_amount, 0) <= 0
-      or nullif(btrim(coalesce(new.odoo_so, '')), '') is null then
-      raise exception using errcode = '23514', message = 'Order conversion requires quote approval, a positive quote, and a confirmed Odoo SO.';
+      or coalesce(new.quoted_amount, 0) <= 0 then
+      raise exception using errcode = '23514', message = 'Order conversion requires quote approval and a positive quote.';
     end if;
   end if;
 
@@ -112,8 +112,8 @@ begin
     if new_status in ('lost', 'cancelled', 'canceled')
       or new_status <> 'won'
       or lower(coalesce(new.quote_status, '')) <> 'approved'
-      or nullif(btrim(coalesce(new.odoo_so, '')), '') is null then
-      raise exception using errcode = '23514', message = 'Production requires a confirmed, non-cancelled order with an Odoo SO.';
+      then
+      raise exception using errcode = '23514', message = 'Production requires a confirmed, non-cancelled TRRY order.';
     end if;
 
     if not (
@@ -147,10 +147,9 @@ begin
   if lower(coalesce(new.payment_status, '')) in ('down_payment_confirmed', 'partially_paid', 'full_payment_confirmed', 'paid', 'confirmed')
     and lower(coalesce(old.payment_status, '')) not in ('down_payment_confirmed', 'partially_paid', 'full_payment_confirmed', 'paid', 'confirmed') then
     if lower(coalesce(new.quote_status, '')) <> 'approved'
-      or lower(coalesce(new.artwork_status, '')) <> 'approved'
       or coalesce(new.payment_confirmed_amount, new.payment_verified_amount, 0) <= 0
       or coalesce(new.payment_confirmed_at, new.payment_verified_at) is null then
-      raise exception using errcode = '23514', message = 'Payment confirmation requires an approved quote, approved artwork, amount, and confirmation timestamp.';
+      raise exception using errcode = '23514', message = 'Payment confirmation requires an approved quote, amount, and confirmation timestamp.';
     end if;
   end if;
 
@@ -163,7 +162,42 @@ create trigger ops_inquiries_mvp_workflow_guard
 before update on public.ops_inquiries
 for each row execute function public.enforce_ops_inquiry_mvp_workflow();
 
+create or replace function public.enforce_shop_payment_confirmation_actor()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+declare
+  actor_id uuid := coalesce(new.payment_confirmed_by, new.payment_verified_by);
+begin
+  if old.payment_status in ('pay_at_shop', 'payment_pending_at_shop')
+    and new.payment_status in ('partially_paid', 'down_payment_confirmed', 'full_payment_confirmed', 'paid', 'confirmed')
+    and new.payment_type = 'shop'
+    and not exists (
+      select 1
+      from public.admin_users
+      where user_id = actor_id
+        and is_active = true
+        and role in ('owner', 'admin')
+    ) then
+    raise exception using
+      errcode = '42501',
+      message = 'SHOP_PAYMENT_FORBIDDEN';
+  end if;
+
+  return new;
+end;
+$$;
+
+drop trigger if exists ops_inquiries_shop_payment_actor_guard on public.ops_inquiries;
+create trigger ops_inquiries_shop_payment_actor_guard
+before update on public.ops_inquiries
+for each row execute function public.enforce_shop_payment_confirmation_actor();
+
 comment on column public.ops_inquiries.payment_method is 'Customer selected payment method: online, cash, gcash, bank_transfer, card, or other.';
 comment on column public.ops_inquiries.payment_type is 'Customer selected payment type: full, down_payment, or shop.';
 comment on column public.ops_inquiries.payment_selected_amount is 'Customer selected payment amount validated against the approved quote total.';
 comment on column public.ops_inquiries.payment_verified_by is 'Admin auth user id that verified the payment.';
+comment on column public.ops_inquiries.payment_confirmed_by is 'Admin auth user id that confirmed received payment.';
+comment on column public.ops_inquiries.payment_internal_note is 'Internal staff-only payment confirmation note.';
+comment on column public.ops_inquiries.payment_history is 'Append-only payment confirmation audit entries.';

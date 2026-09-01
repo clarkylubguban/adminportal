@@ -1,7 +1,4 @@
-import {
-  createServerSupabaseClient,
-  createServerUserSupabaseClient,
-} from "../../_lib/supabaseServer.js";
+import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
 const ARTWORK_BUCKET = "inquiry-artworks";
 const SIGNED_URL_EXPIRES_IN_SECONDS = 300;
@@ -9,16 +6,7 @@ const MAX_PROOF_SIZE = 10 * 1024 * 1024;
 const PROOF_EXTENSIONS = new Set(["png", "jpg", "jpeg", "pdf"]);
 const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
 const READ_ROLES = new Set(["owner", "admin", "staff"]);
-const SHOP_PAYMENT_WRITE_ROLES = new Set(["owner", "admin"]);
-const SHOP_PAYMENT_ACTIONS = new Set(["confirm_shop_payment", "confirm_cash_payment"]);
-const ONLINE_PAYMENT_ACTIONS = new Set([
-  "require_payment",
-  "mark_payment_under_review",
-  "request_new_payment_proof",
-  "confirm_payment",
-]);
-const SHOP_PAYMENT_METHODS = new Set(["cash", "gcash", "bank_transfer", "card", "other"]);
-const PAYMENT_INTERNAL_NOTE_MAX_LENGTH = 500;
+const ARTWORK_APPROVAL_ROLES = new Set(["owner", "admin"]);
 const CUSTOMER_ACTION_SELECT = [
   "id",
   "contact",
@@ -34,6 +22,7 @@ const CUSTOMER_ACTION_SELECT = [
   "quote_breakdown",
   "quote_notes",
   "quote_valid_until",
+  "due_date",
   "quote_sent_at",
   "next_action",
   "updated_at",
@@ -59,36 +48,10 @@ const CUSTOMER_ACTION_SELECT = [
   "payment_proof_submitted_at",
   "payment_confirmed_at",
   "payment_confirmed_amount",
-  "payment_selected_at",
-  "payment_internal_note",
   "payment_review_note",
   "payment_rejected_at",
 ].join(",");
-const ONLINE_PAYMENT_FIELDS = [
-  "payment_selected_amount",
-  "payment_reference",
-  "payment_customer_note",
-  "payment_receipt_filename",
-  "payment_receipt_content_type",
-  "payment_receipt_size",
-];
-const SHOP_PAYMENT_FIELDS = [
-  "payment_method",
-  "payment_type",
-  "payment_verified_amount",
-  "payment_verified_at",
-  "payment_verified_by",
-  "payment_selected_at",
-  "payment_internal_note",
-];
-const SHOP_PAYMENT_SELECT = CUSTOMER_ACTION_SELECT
-  .split(",")
-  .filter((field) => !ONLINE_PAYMENT_FIELDS.includes(field))
-  .join(",");
-const CUSTOMER_ACTION_LEGACY_SELECT = CUSTOMER_ACTION_SELECT
-  .split(",")
-  .filter((field) => !ONLINE_PAYMENT_FIELDS.includes(field) && !SHOP_PAYMENT_FIELDS.includes(field))
-  .join(",");
+
 export default async function handler(request, response) {
   const inquiryReference = getInquiryReference(request);
 
@@ -116,12 +79,7 @@ export default async function handler(request, response) {
     }
 
     if (request.method === "GET") {
-      const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
-      if (url.searchParams.get("view") === "payment-history") {
-        await handlePaymentHistoryRequest(response, supabase, inquiryReference);
-      } else {
-        await handleAssetRequest(request, response, supabase, inquiryReference);
-      }
+      await handleAssetRequest(request, response, supabase, inquiryReference);
       return;
     }
 
@@ -137,49 +95,15 @@ export default async function handler(request, response) {
 
     const body = await readJsonBody(request);
     const action = cleanText(body.action, 80);
-    if (ONLINE_PAYMENT_ACTIONS.has(action) && process.env.ENABLE_CUSTOMER_PAYMENT_WORKFLOW !== "true") {
-      sendJson(response, 404, { ok: false, error: "online payment workflow is not available" });
-      return;
-    }
-    if (SHOP_PAYMENT_ACTIONS.has(action) && process.env.ENABLE_ADMIN_PAY_AT_SHOP_WORKFLOW !== "true") {
-      sendJson(response, 404, { ok: false, error: "Pay at Shop confirmation is not available" });
-      return;
-    }
-    if (SHOP_PAYMENT_ACTIONS.has(action) && !SHOP_PAYMENT_WRITE_ROLES.has(adminUser.role)) {
-      sendJson(response, 403, { ok: false, error: "Owner or Admin confirmation required" });
-      return;
-    }
-
-    const {
-      inquiry,
-      selectFields,
-      paymentWorkflowReady,
-      shopPaymentWorkflowReady,
-      error: lookupError,
-    } = await readCustomerActionInquiry(supabase, inquiryReference);
+    const { data: inquiry, error: lookupError } = await supabase
+      .from("ops_inquiries")
+      .select(CUSTOMER_ACTION_SELECT)
+      .eq("id", inquiryReference)
+      .maybeSingle();
 
     if (lookupError) throw lookupError;
     if (!inquiry) {
       sendJson(response, 404, { ok: false, error: "inquiry not found" });
-      return;
-    }
-    if (SHOP_PAYMENT_ACTIONS.has(action) && !shopPaymentWorkflowReady) {
-      sendJson(response, 503, { ok: false, error: "payment fields are not ready" });
-      return;
-    }
-    if (ONLINE_PAYMENT_ACTIONS.has(action) && !paymentWorkflowReady) {
-      sendJson(response, 503, { ok: false, error: "payment fields are not ready" });
-      return;
-    }
-    if (SHOP_PAYMENT_ACTIONS.has(action)) {
-      await handleShopPaymentConfirmation({
-        response,
-        supabase,
-        token,
-        inquiryReference,
-        body,
-        adminUser,
-      });
       return;
     }
 
@@ -232,7 +156,7 @@ export default async function handler(request, response) {
       .from("ops_inquiries")
       .update({ ...updates, updated_at: now })
       .eq("id", inquiryReference)
-      .select(selectFields)
+      .select(CUSTOMER_ACTION_SELECT)
       .single();
 
     if (updateError) throw updateError;
@@ -242,19 +166,13 @@ export default async function handler(request, response) {
       inquiry: getSafeInquiry(updated),
     });
   } catch (error) {
-    const expectedError = getExpectedPaymentError(error);
-    if (expectedError) {
-      sendJson(response, expectedError.status, { ok: false, error: expectedError.message });
-      return;
-    }
-
     console.error("Admin customer action failed.", {
       message: error?.message,
       code: error?.code,
       status: error?.status || error?.statusCode,
     });
 
-    const schemaMissing = /quoted_amount|quote_status|quote_published_at|artwork_status|payment_status|payment_review_note|payment_rejected_at|payment_selected_amount|payment_selected_at|payment_internal_note|payment_type|payment_method|payment_verified_by|inquiry_payment_events|confirm_inquiry_shop_payment|schema cache|could not find/i.test(String(error?.message || ""));
+    const schemaMissing = /quoted_amount|quote_status|quote_published_at|artwork_status|payment_status|payment_review_note|payment_rejected_at|payment_selected_amount|payment_type|payment_method|payment_verified_by|schema cache|could not find/i.test(String(error?.message || ""));
     sendJson(response, schemaMissing ? 503 : 500, {
       ok: false,
       error: schemaMissing
@@ -279,7 +197,7 @@ async function readAdminUser(supabase, userId) {
     .eq("user_id", userId)
     .maybeSingle();
 
-  const { data, error } = await query("id,user_id,display_name,role,is_active");
+  const { data, error } = await query("id,user_id,role,is_active");
   if (!error) return data;
   if (!isMissingAdminProfileColumn(error)) throw error;
 
@@ -298,171 +216,6 @@ function isMissingAdminProfileColumn(error) {
   return /is_active|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
 }
 
-async function handleShopPaymentConfirmation({
-  response,
-  supabase,
-  token,
-  inquiryReference,
-  body,
-  adminUser,
-}) {
-  const action = cleanText(body.action, 80);
-  const amount = getMoney(body.receivedAmount ?? body.confirmedAmount);
-  const method = cleanPaymentMethod(body.paymentMethod)
-    || (action === "confirm_cash_payment" ? "cash" : "");
-  const rawNote = typeof body.internalNote === "string" ? body.internalNote.trim() : "";
-  const rawIdempotencyKey = typeof body.idempotencyKey === "string"
-    ? body.idempotencyKey.trim()
-    : "";
-  const idempotencyKey = rawIdempotencyKey
-    || (action === "confirm_cash_payment" ? `legacy:${crypto.randomUUID()}` : "");
-
-  if (!Number.isFinite(amount) || amount <= 0 || roundMoney(amount) !== amount) {
-    sendJson(response, 400, { ok: false, error: "received amount must be a positive amount with at most two decimal places" });
-    return;
-  }
-  if (!SHOP_PAYMENT_METHODS.has(method)) {
-    sendJson(response, 400, { ok: false, error: "select a valid payment method" });
-    return;
-  }
-  if (rawNote.length > PAYMENT_INTERNAL_NOTE_MAX_LENGTH) {
-    sendJson(response, 400, { ok: false, error: `internal note must be ${PAYMENT_INTERNAL_NOTE_MAX_LENGTH} characters or fewer` });
-    return;
-  }
-  if (
-    idempotencyKey.length < 8
-    || idempotencyKey.length > 120
-    || !/^[A-Za-z0-9._:-]+$/.test(idempotencyKey)
-  ) {
-    sendJson(response, 400, { ok: false, error: "valid idempotency key required" });
-    return;
-  }
-
-  const callerSupabase = createServerUserSupabaseClient(token);
-  const { error: confirmationError } = await callerSupabase.rpc(
-    "confirm_inquiry_shop_payment",
-    {
-      p_inquiry_id: inquiryReference,
-      p_amount: amount,
-      p_payment_method: method,
-      p_internal_note: rawNote || null,
-      p_idempotency_key: idempotencyKey,
-    }
-  );
-
-  if (confirmationError) throw confirmationError;
-
-  const {
-    inquiry: updated,
-    error: updatedError,
-  } = await readCustomerActionInquiry(supabase, inquiryReference);
-  if (updatedError) throw updatedError;
-  if (!updated) throw Object.assign(new Error("INQUIRY_NOT_FOUND"), { code: "P0002" });
-
-  const paymentEvents = await readPaymentEvents(supabase, inquiryReference);
-  sendJson(response, 200, {
-    ok: true,
-    inquiry: getSafeInquiry(updated),
-    confirmedBy: {
-      displayName: cleanText(adminUser.display_name, 120) || "TRRY Admin",
-      role: adminUser.role,
-    },
-    paymentEvents,
-  });
-}
-
-async function handlePaymentHistoryRequest(response, supabase, inquiryReference) {
-  const { data: inquiry, error } = await supabase
-    .from("ops_inquiries")
-    .select("id")
-    .eq("id", inquiryReference)
-    .maybeSingle();
-
-  if (error) throw error;
-  if (!inquiry) {
-    sendJson(response, 404, { ok: false, error: "inquiry not found" });
-    return;
-  }
-
-  const paymentEvents = await readPaymentEvents(supabase, inquiryReference);
-  sendJson(response, 200, { ok: true, paymentEvents });
-}
-
-async function readPaymentEvents(supabase, inquiryReference) {
-  const { data: events, error } = await supabase
-    .from("inquiry_payment_events")
-    .select("event_type,previous_status,next_status,payment_method,amount,internal_note,actor_user_id,actor_role,source,created_at")
-    .eq("inquiry_id", inquiryReference)
-    .order("created_at", { ascending: true });
-
-  if (error) throw error;
-
-  const actorIds = [...new Set((events || []).map((event) => event.actor_user_id).filter(Boolean))];
-  let actorById = new Map();
-  if (actorIds.length) {
-    const { data: actors, error: actorError } = await supabase
-      .from("admin_users")
-      .select("user_id,display_name,role")
-      .in("user_id", actorIds);
-
-    if (actorError) throw actorError;
-    actorById = new Map((actors || []).map((actor) => [actor.user_id, actor]));
-  }
-
-  return (events || []).map((event) => {
-    const actor = actorById.get(event.actor_user_id);
-    return {
-      eventType: cleanText(event.event_type, 80),
-      previousStatus: cleanText(event.previous_status, 80),
-      nextStatus: cleanText(event.next_status, 80),
-      paymentMethod: cleanText(event.payment_method, 80),
-      amount: numberOrNull(event.amount),
-      internalNote: cleanText(event.internal_note, PAYMENT_INTERNAL_NOTE_MAX_LENGTH),
-      actorDisplayName: cleanText(actor?.display_name, 120),
-      actorRole: cleanText(actor?.role || event.actor_role, 80),
-      source: cleanText(event.source, 80),
-      createdAt: cleanText(event.created_at, 80),
-    };
-  });
-}
-
-function getExpectedPaymentError(error) {
-  const code = String(error?.code || "");
-  const message = String(error?.message || "");
-
-  if (code === "42501" || /SHOP_PAYMENT_FORBIDDEN/.test(message)) {
-    return { status: 403, message: "Owner or Admin confirmation required" };
-  }
-  if (code === "P0002" || /INQUIRY_NOT_FOUND/.test(message)) {
-    return { status: 404, message: "inquiry not found" };
-  }
-  if (code === "23505" || /ALREADY_CONFIRMED|IDEMPOTENCY_KEY_CONFLICT/.test(message)) {
-    return { status: 409, message: /IDEMPOTENCY_KEY_CONFLICT/.test(message) ? "idempotency key conflict" : "shop payment is already confirmed" };
-  }
-  if (code === "22023" || /INVALID_|_REQUIRED|NOTE_TOO_LONG/.test(message)) {
-    const friendlyMessage = {
-      INVALID_PAYMENT_METHOD: "select a valid payment method",
-      INVALID_PAYMENT_AMOUNT: "received amount must be positive and use at most two decimal places",
-      PAYMENT_NOTE_TOO_LONG: `internal note must be ${PAYMENT_INTERNAL_NOTE_MAX_LENGTH} characters or fewer`,
-      INVALID_IDEMPOTENCY_KEY: "valid idempotency key required",
-      PAY_AT_SHOP_STATUS_REQUIRED: "inquiry is not pending Pay at Shop",
-      PRODUCTION_ACTIVE_PAYMENT_LOCKED: "payment details are locked after production starts",
-      APPROVED_QUOTE_REQUIRED: "approved quote required",
-      APPROVED_ARTWORK_REQUIRED: "approved artwork required",
-      POSITIVE_QUOTE_REQUIRED: "valid quote total required",
-      FULL_QUOTE_AMOUNT_REQUIRED: "received amount must match the full quoted amount",
-    };
-    const key = Object.keys(friendlyMessage).find((candidate) => message.includes(candidate));
-    return { status: 400, message: friendlyMessage[key] || "shop payment confirmation is invalid" };
-  }
-
-  return null;
-}
-
-function cleanPaymentMethod(value) {
-  return cleanText(value, 80).toLowerCase().replace(/[\s-]+/g, "_");
-}
-
 export function buildUpdates(action, body, inquiry, now, adminUser = null) {
   if (isProductionActive(inquiry.production_stage)) return null;
 
@@ -470,6 +223,7 @@ export function buildUpdates(action, body, inquiry, now, adminUser = null) {
   const proofPath = cleanText(body.proofPath, 500);
   const confirmedAmount = getMoney(body.confirmedAmount);
   const paymentReviewNote = cleanText(body.paymentReviewNote, 1000);
+  const dueDate = cleanDate(body.dueDate);
 
   if (action === "mark_artwork_under_review") {
     if (!["submitted", "under_review", "revision_requested"].includes(String(inquiry.artwork_status || ""))) return null;
@@ -493,6 +247,23 @@ export function buildUpdates(action, body, inquiry, now, adminUser = null) {
   if (action === "publish_artwork") {
     if (inquiry.quote_status !== "approved" || !isValidProofPath(String(inquiry.artwork_url || ""), inquiry.id)) return null;
     return { artwork_status: "approval_required", artwork_revision_request: null };
+  }
+
+  if (action === "approve_artwork") {
+    if (!ARTWORK_APPROVAL_ROLES.has(String(adminUser?.role || "").trim().toLowerCase())) {
+      return { error: "owner or admin access required" };
+    }
+    if (inquiry.quote_status !== "approved" || String(inquiry.artwork_status || "") === "revision_requested") return null;
+    return {
+      artwork_status: "approved",
+      artwork_approved_at: inquiry.artwork_approved_at || now,
+      artwork_revision_request: null,
+    };
+  }
+
+  if (action === "set_due_date") {
+    if (!dueDate) return { error: "enter an agreed due date" };
+    return { due_date: dueDate };
   }
 
   if (["save_quote_draft", "revise_quote", "mark_quote_pending", "publish_quote"].includes(action)) {
@@ -564,47 +335,32 @@ export function buildUpdates(action, body, inquiry, now, adminUser = null) {
     };
   }
 
+  if (action === "confirm_cash_payment") {
+    if (
+      inquiry.quote_status !== "approved"
+      || inquiry.artwork_status !== "approved"
+      || !["pay_at_shop", "payment_pending_at_shop"].includes(String(inquiry.payment_status || ""))
+    ) return null;
+    const cashAmount = Number.isFinite(confirmedAmount) && confirmedAmount > 0 ? confirmedAmount : Number(inquiry.quoted_amount);
+    const confirmation = getConfirmedPaymentState(inquiry, cashAmount);
+    if (!confirmation.ok) return { error: confirmation.error };
+    return {
+      payment_method: inquiry.payment_method || "cash",
+      payment_type: confirmation.paymentType,
+      payment_status: confirmation.status,
+      payment_selected_amount: cashAmount,
+      payment_confirmed_amount: cashAmount,
+      payment_confirmed_at: now,
+      payment_verified_amount: cashAmount,
+      payment_verified_at: now,
+      payment_verified_by: adminUser?.user_id || null,
+      amount_due: confirmation.remainingBalance,
+      payment_review_note: null,
+      payment_rejected_at: null,
+    };
+  }
+
   return null;
-}
-
-async function readCustomerActionInquiry(supabase, inquiryReference) {
-  const read = (selectFields) => supabase
-    .from("ops_inquiries")
-    .select(selectFields)
-    .eq("id", inquiryReference)
-    .maybeSingle();
-  const full = await read(CUSTOMER_ACTION_SELECT);
-  if (!isMissingParkedPaymentColumn(full.error)) {
-    return {
-      inquiry: full.data,
-      selectFields: CUSTOMER_ACTION_SELECT,
-      paymentWorkflowReady: true,
-      shopPaymentWorkflowReady: true,
-      error: full.error,
-    };
-  }
-  const shop = await read(SHOP_PAYMENT_SELECT);
-  if (!isMissingParkedPaymentColumn(shop.error)) {
-    return {
-      inquiry: shop.data,
-      selectFields: SHOP_PAYMENT_SELECT,
-      paymentWorkflowReady: false,
-      shopPaymentWorkflowReady: true,
-      error: shop.error,
-    };
-  }
-  const legacy = await read(CUSTOMER_ACTION_LEGACY_SELECT);
-  return {
-    inquiry: legacy.data,
-    selectFields: CUSTOMER_ACTION_LEGACY_SELECT,
-    paymentWorkflowReady: false,
-    shopPaymentWorkflowReady: false,
-    error: legacy.error,
-  };
-}
-
-function isMissingParkedPaymentColumn(error) {
-  return /payment_selected_amount|payment_type|payment_method|payment_reference|payment_customer_note|payment_receipt|payment_verified|payment_verified_by|42703|schema cache|could not find/i.test(String(error?.message || error || ""));
 }
 
 function isProductionActive(value) {
@@ -759,6 +515,7 @@ function getSafeInquiry(row) {
     quoteBreakdown: cleanText(row.quote_breakdown, 5000),
     quoteNotes: cleanText(row.quote_notes, 2000),
     quoteValidUntil: cleanText(row.quote_valid_until, 40),
+    dueDate: cleanText(row.due_date, 40),
     quoteSentAt: cleanText(row.quote_sent_at, 80),
     status: cleanText(row.status, 80),
     next: cleanText(row.next_action, 500),
@@ -783,8 +540,6 @@ function getSafeInquiry(row) {
     paymentProofSubmittedAt: cleanText(row.payment_proof_submitted_at, 80),
     paymentConfirmedAt: cleanText(row.payment_confirmed_at, 80),
     paymentConfirmedAmount: numberOrNull(row.payment_confirmed_amount),
-    paymentSelectedAt: cleanText(row.payment_selected_at, 80),
-    paymentInternalNote: cleanText(row.payment_internal_note, PAYMENT_INTERNAL_NOTE_MAX_LENGTH),
     paymentReviewNote: cleanText(row.payment_review_note, 1000),
     paymentRejectedAt: cleanText(row.payment_rejected_at, 80),
   };

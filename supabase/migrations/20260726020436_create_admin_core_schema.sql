@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260726020436
+-- Original filename: 20260726020436_create_admin_core_schema.sql
+-- Original fetched SHA-256: 2E75E0BAF8274FEE17EA21A4B039BF4DEF760DB81D19C738D454E511D607822D
+-- Classification: DUPLICATE OF TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202607110001_create_catalog_products.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260726020436_create_admin_core_schema.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

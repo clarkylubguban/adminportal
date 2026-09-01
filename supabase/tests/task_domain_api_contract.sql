@@ -1,16 +1,24 @@
 -- API-specific replay contract. Disposable local Supabase database only.
 begin;
+create extension if not exists pgtap;
+select plan(1);
 
 do $$
 declare
   v_owner uuid := '96000000-0000-4000-8000-000000000001';
   v_staff uuid := '96000000-0000-4000-8000-000000000002';
+  v_admin uuid := '96000000-0000-4000-8000-000000000003';
   v_first jsonb;
   v_replay jsonb;
   v_second jsonb;
+  v_production jsonb;
+  v_daily jsonb;
+  v_approved jsonb;
+  v_planning uuid;
+  v_ingested jsonb;
 begin
   insert into auth.users (
-    instance_id, id, aud, role, email, encrypted_password, confirmed_at,
+    instance_id, id, aud, role, email, encrypted_password, email_confirmed_at,
     raw_app_meta_data, raw_user_meta_data, created_at, updated_at
   )
   values
@@ -23,14 +31,20 @@ begin
       '00000000-0000-0000-0000-000000000000', v_staff,
       'authenticated', 'authenticated', 'api-staff@invalid.example', '',
       clock_timestamp(), '{}'::jsonb, '{}'::jsonb, clock_timestamp(), clock_timestamp()
+    ),
+    (
+      '00000000-0000-0000-0000-000000000000', v_admin,
+      'authenticated', 'authenticated', 'api-admin@invalid.example', '',
+      clock_timestamp(), '{}'::jsonb, '{}'::jsonb, clock_timestamp(), clock_timestamp()
     );
 
   insert into public.admin_users (
     user_id, email, role, display_name, is_active, is_test
   )
   values
-    (v_owner, 'api-owner@invalid.example', 'owner', 'Synthetic API Owner', true, true),
-    (v_staff, 'api-staff@invalid.example', 'staff', 'Synthetic API Staff', true, true);
+    (v_owner, 'api-owner@invalid.example', 'owner', 'Synthetic API Owner', true, false),
+    (v_staff, 'api-staff@invalid.example', 'staff', 'Synthetic API Staff', true, false),
+    (v_admin, 'api-admin@invalid.example', 'admin', 'Synthetic API Admin', true, false);
 
   update public.task_feature_flags set enabled = true where feature = 'TASK_DOMAIN';
   perform set_config('request.jwt.claim.role', 'authenticated', true);
@@ -103,7 +117,117 @@ begin
   if (select count(*) from public.tasks) <> 2 then
     raise exception 'idempotency conflicts changed canonical task count';
   end if;
+
+  v_production := public.task_create(
+    'Synthetic API production draft', 'Disposable API contract task.', 'PRODUCTION',
+    null, null, 'MEDIUM', null, null, false,
+    null, null, null, null, null, null, 'api-create-production'
+  );
+
+  perform set_config('request.jwt.claim.sub', v_admin::text, true);
+  v_approved := public.task_approve_and_assign(
+    (v_production ->> 'id')::uuid,
+    (v_production ->> 'version')::bigint,
+    v_staff,
+    v_admin,
+    null,
+    clock_timestamp() + interval '1 day',
+    null,
+    'api-approve-assign-production'
+  );
+  if v_approved ->> 'status' <> 'TO_DO'
+     or v_approved ->> 'assignedUserId' <> v_staff::text
+     or v_approved ->> 'reviewerUserId' <> v_admin::text then
+    raise exception 'approve-and-assign did not atomically activate and assign';
+  end if;
+  if (
+    select count(*)
+    from public.task_events
+    where task_id = (v_production ->> 'id')::uuid
+      and event_type = 'DRAFT_APPROVED'
+  ) <> 1 then
+    raise exception 'approve-and-assign did not write exactly one approval event';
+  end if;
+
+  perform set_config('request.jwt.claim.sub', v_owner::text, true);
+  insert into public.planning_requests (
+    request_code, requested_by_user_id, quick_direction, maximum_tasks, status, planning_context
+  )
+  values (
+    'PLN-APICONTRACT', v_owner, 'Disposable API contract planning request.', 3, 'REQUESTED', '{}'::jsonb
+  )
+  returning id into v_planning;
+
+  v_ingested := public.task_ingest_n8n_drafts(
+    'n8n-local',
+    'TRRY STAGING - AUTO PLAN TODAY VERIFIER',
+    'api-contract-exec',
+    v_planning,
+    'api-contract-ingest',
+    repeat('c', 64),
+    jsonb_build_array(jsonb_build_object(
+      'externalTaskId', 'api-contract-daily',
+      'sourceType', 'DAILY_CONTENT',
+      'title', 'Synthetic API daily draft',
+      'brief', 'Disposable API contract task.',
+      'priority', 'MEDIUM'
+    ))
+  );
+  select public.task_command_result(
+    ((v_ingested -> 'taskIds') ->> 0)::uuid,
+    v_owner,
+    'owner'
+  ) into v_daily;
+
+  perform set_config('request.jwt.claim.sub', v_admin::text, true);
+  begin
+    perform public.task_approve_and_assign(
+      (v_daily ->> 'id')::uuid,
+      (v_daily ->> 'version')::bigint,
+      v_staff,
+      v_admin,
+      null,
+      null,
+      null,
+      'api-approve-assign-daily-admin'
+    );
+    raise exception 'admin activated a daily content draft';
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('request.jwt.claim.sub', v_staff::text, true);
+  begin
+    perform public.task_approve_and_assign(
+      (v_daily ->> 'id')::uuid,
+      (v_daily ->> 'version')::bigint,
+      v_staff,
+      v_admin,
+      null,
+      null,
+      null,
+      'api-approve-assign-daily-staff'
+    );
+    raise exception 'staff activated a draft';
+  exception when insufficient_privilege then null;
+  end;
+
+  perform set_config('request.jwt.claim.sub', v_owner::text, true);
+  v_approved := public.task_approve_and_assign(
+    (v_daily ->> 'id')::uuid,
+    (v_daily ->> 'version')::bigint,
+    v_staff,
+    v_owner,
+    null,
+    clock_timestamp() + interval '1 day',
+    null,
+    'api-approve-assign-daily-owner'
+  );
+  if v_approved ->> 'status' <> 'TO_DO' then
+    raise exception 'owner did not activate daily content draft';
+  end if;
 end;
 $$;
 
+select pass('task domain API idempotency contract');
+select * from finish();
 rollback;

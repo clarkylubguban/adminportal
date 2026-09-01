@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260808123508
+-- Original filename: 20260808123508_phase9_qc_persistence.sql
+-- Original fetched SHA-256: 79B3A841B57B732551598E9180393E391A990664070D35DEFA77537FD8CC56CC
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202608080003_phase9_qc_persistence.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260808123508_phase9_qc_persistence.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

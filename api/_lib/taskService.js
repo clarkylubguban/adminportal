@@ -1,4 +1,7 @@
 import {
+  buildTaskCalendar,
+} from "./taskCalendarProjection.js";
+import {
   calculateClosedDurationSeconds,
   projectEvent,
   projectSubmission,
@@ -11,7 +14,8 @@ const TASK_SELECT = [
   "source_record_id", "status", "priority", "time_tracking_mode", "assigned_user_id", "reviewer_user_id",
   "draft_approval_required", "scheduled_date", "start_deadline",
   "submission_deadline", "approval_deadline", "version", "completed_at",
-  "cancelled_at", "archived_at", "created_at", "updated_at",
+  "cancelled_at", "archived_at", "planning_request_id", "automation_receipt_id",
+  "external_task_id", "automation_metadata", "created_at", "updated_at",
 ].join(",");
 const TIME_SELECT = [
   "id", "task_id", "user_id", "cycle_number", "started_at", "ended_at",
@@ -82,6 +86,17 @@ export function createTaskService(client, actor, options = {}) {
         pageSize: pagination.pageSize,
         total: count || 0,
       };
+    },
+
+    async listCalendarEvents(filters) {
+      const pageSize = actor.role === "staff" ? 500 : 1000;
+      const listed = await this.listTasks({
+        status: filters.status,
+        sourceType: filters.sourceType,
+        assignedUserId: filters.assignedUserId,
+        archived: false,
+      }, { page: 1, pageSize, from: 0, to: pageSize - 1 }, { assignedToCaller: actor.role === "staff" });
+      return buildTaskCalendar(listed.tasks, filters);
     },
 
     async getTask(taskId) {

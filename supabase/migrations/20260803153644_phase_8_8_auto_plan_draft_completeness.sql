@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260803153644
+-- Original filename: 20260803153644_phase_8_8_auto_plan_draft_completeness.sql
+-- Original fetched SHA-256: 254F1763868B9323D0F756B3FC0784BEF25044E03F75A9D08C10522739A24EC3
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 20260803033302_phase_8_8_auto_plan_draft_completeness.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260803153644_phase_8_8_auto_plan_draft_completeness.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

@@ -35,14 +35,32 @@ export function projectTask(row, actor, context = {}) {
     createdByUserId: context.createdByUserId || null,
     hasTimeEntries: Boolean(context.hasTimeEntries),
   };
+  const manager = MANAGER_ROLES.has(actor.role);
 
   return {
     ...task,
+    ...(manager ? {
+      automationTrace: {
+        planningRequestId: nullable(field(row, "planning_request_id", "planningRequestId")),
+        automationReceiptId: nullable(field(row, "automation_receipt_id", "automationReceiptId")),
+        externalTaskId: nullable(field(row, "external_task_id", "externalTaskId")),
+        suggestedAssignee: sanitizeSuggestedAssignee(field(row, "automation_metadata", "automationMetadata")?.suggestedAssignee),
+      },
+    } : {}),
     assignedUser: projectUser(context.assignedUser),
     reviewerUser: projectUser(context.reviewerUser),
     allowedActions: calculateAllowedActions(internal, actor, openTimeEntry),
     openTimeEntry,
     totalClosedDurationSeconds,
+  };
+}
+
+function sanitizeSuggestedAssignee(value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  return {
+    label: nullable(value.label),
+    externalUserId: nullable(value.externalUserId),
+    reason: nullable(value.reason),
   };
 }
 
@@ -138,23 +156,28 @@ export function calculateAllowedActions(task, actor, openTimeEntry = null) {
   const actions = [];
 
   if (task.status === "DRAFT" && (owner || (admin && task.sourceType === "MANUAL"))) actions.push("EDIT_DRAFT");
-  if (manager && ["DRAFT", "TO_DO", "NEEDS_REVISION"].includes(task.status) && !openTimeEntry) actions.push("ASSIGN");
+  if (manager && ["TO_DO", "NEEDS_REVISION"].includes(task.status) && !openTimeEntry) actions.push("ASSIGN");
   if (
     task.status === "DRAFT"
     && task.assignedUserId
     && task.reviewerUserId
     && (owner || (admin && task.sourceType === "MANUAL" && !task.draftApprovalRequired))
   ) actions.push("APPROVE_DRAFT");
+  if (
+    task.status === "DRAFT"
+    && (owner || (admin && ["MANUAL", "PRODUCTION", "SHOP_TASK"].includes(task.sourceType) && !task.draftApprovalRequired))
+  ) actions.push("APPROVE_AND_ASSIGN");
   if (task.status === "TO_DO" && assignee && task.timeTrackingMode === "EXPECTED") {
     actions.push("START_WORK", "SUBMIT_WITHOUT_RECORDED_TIME");
   }
-  if (task.status === "TO_DO" && assignee && task.timeTrackingMode === "NONE") actions.push("SUBMIT_FOR_REVIEW");
+  if (task.status === "TO_DO" && assignee && task.timeTrackingMode === "NONE") actions.push("START_WORK", "SUBMIT_FOR_REVIEW");
   if (task.status === "IN_PROGRESS" && assignee && task.timeTrackingMode === "EXPECTED" && openTimeEntry?.userId === actor.userId) actions.push("SUBMIT_FOR_REVIEW");
+  if (task.status === "IN_PROGRESS" && assignee && task.timeTrackingMode === "NONE" && !openTimeEntry) actions.push("SUBMIT_FOR_REVIEW");
   if (task.status === "FOR_REVIEW" && (owner || (admin && reviewer))) actions.push("REQUEST_REVISION", "APPROVE_WORK");
   if (task.status === "NEEDS_REVISION" && assignee && task.timeTrackingMode === "EXPECTED") {
     actions.push("START_REVISION", "SUBMIT_WITHOUT_RECORDED_TIME");
   }
-  if (task.status === "NEEDS_REVISION" && assignee && task.timeTrackingMode === "NONE") actions.push("SUBMIT_FOR_REVIEW");
+  if (task.status === "NEEDS_REVISION" && assignee && task.timeTrackingMode === "NONE") actions.push("START_REVISION", "SUBMIT_FOR_REVIEW");
   if (["DRAFT", "TO_DO", "IN_PROGRESS", "NEEDS_REVISION"].includes(task.status) && (owner || adminOwnManual)) actions.push("CANCEL");
   if (owner && TERMINAL_STATUSES.has(task.status)) actions.push("REOPEN");
   if (TERMINAL_STATUSES.has(task.status) && !task.archivedAt && !openTimeEntry && (owner || adminOwnManual)) actions.push("ARCHIVE");

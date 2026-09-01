@@ -1,6 +1,7 @@
 import { runTaskApi, TaskApiError } from "./taskApi.js";
 import {
   parseApproveBody,
+  parseApproveAndAssignBody,
   parseAssignBody,
   parseCreateTask,
   parseDraftUpdate,
@@ -9,6 +10,7 @@ import {
   parseReasonBody,
   parseSubmitBody,
   parseSubmitWithoutTimeBody,
+  parseTaskCalendarQuery,
   parseTaskListQuery,
   parseTimeCorrectionBody,
   requireIdempotencyKey,
@@ -64,6 +66,13 @@ export function handleMyTasks(request, response, dependencies = {}) {
   }, dependencies);
 }
 
+export function handleTaskCalendar(request, response, dependencies = {}) {
+  return runTaskApi(request, response, {
+    methods: ["GET"],
+    handler: async ({ service }) => service.listCalendarEvents(parseTaskCalendarQuery(request)),
+  }, dependencies);
+}
+
 export function handleTaskDetail(request, response, dependencies = {}) {
   return runTaskApi(request, response, {
     methods: ["GET"],
@@ -108,21 +117,44 @@ export function handleUpdateDraft(request, response, dependencies = {}) {
       p_approval_deadline: body.approvalDeadline,
       p_idempotency_key: requireIdempotencyKey(request),
       p_time_tracking_mode: body.timeTrackingMode,
+      p_source_record_type: body.sourceRecordType,
+      p_source_record_id: body.sourceRecordId,
     }, taskId);
   }, "PATCH"), dependencies);
 }
 
 export function handleAssign(request, response, dependencies = {}) {
-  return command(request, response, dependencies, "task_assign", parseAssignBody, (taskId, body, key) => ({
-    p_task_id: taskId,
-    p_expected_version: body.expectedVersion,
-    p_assigned_user_id: body.assignedUserId,
-    p_idempotency_key: key,
-  }));
+  return runTaskApi(request, response, mutationConfig(async ({ service, readBody }) => {
+    const taskId = taskIdFromRequest(request);
+    const body = parseAssignBody(await readBody(request));
+    const current = await service.getTask(taskId);
+    if (current.task.status === "DRAFT") {
+      throw new TaskApiError("INVALID_TRANSITION", 409, "Draft tasks must be approved and assigned in one action.");
+    }
+    return service.execute("task_assign", {
+      p_task_id: taskId,
+      p_expected_version: body.expectedVersion,
+      p_assigned_user_id: body.assignedUserId,
+      p_idempotency_key: requireIdempotencyKey(request),
+    }, taskId);
+  }), dependencies);
 }
 
 export function handleApproveDraft(request, response, dependencies = {}) {
   return versionOnlyCommand(request, response, dependencies, "task_approve_draft");
+}
+
+export function handleApproveAndAssign(request, response, dependencies = {}) {
+  return command(request, response, dependencies, "task_approve_and_assign", parseApproveAndAssignBody, (taskId, body, key) => ({
+    p_task_id: taskId,
+    p_expected_version: body.expectedVersion,
+    p_assigned_user_id: body.assignedUserId,
+    p_reviewer_user_id: body.reviewerUserId,
+    p_start_deadline: body.startDeadline,
+    p_submission_deadline: body.submissionDeadline,
+    p_approval_deadline: body.approvalDeadline,
+    p_idempotency_key: key,
+  }));
 }
 
 export function handleStartWork(request, response, dependencies = {}) {

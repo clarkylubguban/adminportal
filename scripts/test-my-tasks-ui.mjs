@@ -10,6 +10,7 @@ const build = await readFile("scripts/build.mjs", "utf8");
 for (const required of [
   "function isTaskFeatureUiEnabled",
   "VITE_ENABLE_TASK_DOMAIN",
+  "VITE_ENABLE_MY_TASKS",
   "canViewMyTasksRoute() ? [{ label: \"My Tasks\"",
   "currentRoute === \"My Tasks\"",
   "getMyTasks(adminAuthSession",
@@ -17,9 +18,11 @@ for (const required of [
   "NO WORK TIME RECORDED",
   "SUBMIT WITHOUT RECORDED TIME",
   "START WORK NOW",
+  "START REVISION",
   "TIME NOT RECORDED",
   "TIME NOT REQUIRED",
   "task.timeTrackingMode === \"NONE\"",
+  "VITE_ENABLE_WORKBOARD",
   "validateTaskSubmit(\"submit-no-time\")",
   "createIdempotencyKey",
   "expectedVersion",
@@ -44,9 +47,12 @@ assert.ok(service.includes("submit-without-time"));
 assert.ok(service.includes("Idempotency-Key"));
 assert.ok(localDev.includes("handleTaskApiRoute"));
 assert.ok(localDev.includes("/api/my-tasks"));
-assert.ok(localDev.includes("../api/my-tasks.js"));
+assert.ok(localDev.includes("../api/task-views.js"));
 assert.ok(localDev.includes("../api/tasks/[id].js"));
 assert.ok(localDev.includes("VITE_ENABLE_TASK_DOMAIN"));
+assert.ok(localDev.includes("VITE_ENABLE_MY_TASKS"));
 assert.ok(build.includes("VITE_ENABLE_TASK_DOMAIN"));
+assert.ok(build.includes("VITE_ENABLE_MY_TASKS"));
+assert.ok(build.includes("VITE_ENABLE_WORKBOARD"));
 
 process.stdout.write("PASS My Tasks frontend gate, route, action, fallback, and local router contracts\n");

@@ -80,6 +80,10 @@ assert.equal(staffDetail.submissions[0].timeRecordingStatus, "NOT_RECORDED");
 assert.equal(staffDetail.submissions[0].noTimeReason, "Synthetic forgot-to-start reason.");
 assert.equal(staffDetail.submissions[0].recordedDurationSeconds, null);
 
+const staffCalendar = await staffService.listCalendarEvents({ from: "2026-07-01", to: "2026-07-31", assignedUserId: OTHER_TASK_ID });
+assert.equal(staffCalendar.events.length, 0);
+assert.equal(staffClient.queries.some((query) => query.table === "tasks" && hasFilter(query, "eq", "assigned_user_id", STAFF.userId)), true);
+
 const ownerClient = new FakeSupabase(rows);
 ownerClient.rpcResults.set("task_assign", {
   data: { id: TASK_ID, replayed: true, serverTime: "2026-07-25T10:00:00.000Z" },
@@ -214,8 +218,8 @@ function taskRow(overrides = {}) {
     draft_approval_required: false,
     scheduled_date: null,
     start_deadline: null,
-    submission_deadline: null,
-    approval_deadline: null,
+    submission_deadline: "2026-07-26T15:00:00.000Z",
+    approval_deadline: "2026-07-27T15:00:00.000Z",
     version: 1,
     completed_at: null,
     cancelled_at: null,

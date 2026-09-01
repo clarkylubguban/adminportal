@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260728134416
+-- Original filename: 20260728134416_remove_odoo_dependency_and_park_payment_gate.sql
+-- Original fetched SHA-256: 6CFABAA55AF9E811E27D9CA2B36D3D2BEF72AA4A5AB00DDF0FB92D8B30FF77B4
+-- Classification: SUPERSEDED BY TRACKED CANONICAL
+-- Canonical replacement or metadata status: 202608080005_phase13r1_native_order_guard.sql, 202608080006_phase13r2_native_order_authority.sql, 202608080007_phase13r5_native_order_payment_guard.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260728134416_remove_odoo_dependency_and_park_payment_gate.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

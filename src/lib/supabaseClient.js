@@ -1,4 +1,4 @@
-const SUPABASE_REST_VERSION = "v1";
+﻿const SUPABASE_REST_VERSION = "v1";
 const ADMIN_AUTH_STORAGE_KEY = "trry_admin_supabase_auth_session_v1";
 
 export function getSupabaseConfig() {
@@ -14,26 +14,6 @@ export function getSupabaseConfig() {
 export function isSupabaseReady() {
   const config = getSupabaseConfig();
   return Boolean(config.useSupabaseData && config.url && config.anonKey);
-}
-export function createBrowserSupabaseClient(accessToken = "") {
-  if (!isSupabaseReady() || !window.supabase?.createClient) return null;
-
-  const config = getSupabaseConfig();
-  const client = window.supabase.createClient(config.url, config.anonKey, {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-    global: {
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-    },
-  });
-
-  if (accessToken && typeof client.realtime?.setAuth === "function") {
-    client.realtime.setAuth(accessToken);
-  }
-
-  return client;
 }
 
 export async function readSupabaseTable(tableName, params = {}) {
@@ -128,6 +108,52 @@ async function writeSupabaseTableRequest(tableName, { method = "POST", params = 
   return text ? JSON.parse(text) : [];
 }
 
+export async function executeSupabaseRpcWithAuth(functionName, body = {}, accessToken) {
+  return executeSupabaseRpcRequest({ functionName, body, accessToken });
+}
+
+export async function executeSupabaseSchemaRpcWithAuth(schemaName, functionName, body = {}, accessToken) {
+  return executeSupabaseRpcRequest({ schemaName, functionName, body, accessToken });
+}
+
+async function executeSupabaseRpcRequest({ schemaName = "", functionName, body = {}, accessToken }) {
+  if (!accessToken) {
+    throw new Error("Supabase auth session is missing.");
+  }
+
+  const config = getSupabaseConfig();
+  if (!isSupabaseReady()) {
+    throw new Error("Supabase env is missing or disabled.");
+  }
+
+  const headers = {
+    apikey: config.anonKey,
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/json",
+    "Content-Type": "application/json",
+    Prefer: "return=representation",
+  };
+  if (schemaName) {
+    headers["Content-Profile"] = schemaName;
+    headers["Accept-Profile"] = schemaName;
+  }
+
+  const response = await fetch(`${config.url}/rest/${SUPABASE_REST_VERSION}/rpc/${functionName}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`Supabase RPC failed for ${functionName}: ${message || response.status}`);
+  }
+
+  if (response.status === 204) return [];
+  const text = await response.text();
+  return text ? JSON.parse(text) : [];
+}
+
 export function createSupabaseRow(tableName, row) {
   return writeSupabaseTable(tableName, {
     method: "POST",
@@ -182,8 +208,48 @@ export async function signInAdminWithPassword(email, password) {
   return storeAdminAuthSession(await response.json());
 }
 
+export async function requestAdminPasswordReset(email, redirectTo = getAdminPasswordResetRedirectUrl()) {
+  const config = getSupabaseConfig();
+  const normalizedEmail = String(email || "").trim();
+
+  if (!isSupabaseReady()) {
+    throw new Error("Supabase env is missing or disabled.");
+  }
+  if (!normalizedEmail) {
+    throw new Error("Enter the email address for your admin account.");
+  }
+
+  const url = new URL(`${config.url}/auth/v1/recover`);
+  url.searchParams.set("redirect_to", redirectTo);
+
+  const response = await fetch(url.toString(), {
+    method: "POST",
+    headers: {
+      apikey: config.anonKey,
+      "Content-Type": "application/json",
+      Accept: "application/json",
+    },
+    body: JSON.stringify({ email: normalizedEmail }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(getPasswordResetRequestError(message, response.status));
+  }
+
+  return { email: normalizedEmail, redirectTo };
+}
+
 export function readInviteSessionFromUrl() {
-  const params = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  return readAuthSessionFromUrl("invite");
+}
+
+export function readRecoverySessionFromUrl() {
+  return readAuthSessionFromUrl("recovery");
+}
+
+function readAuthSessionFromUrl(expectedType) {
+  const params = getAuthCallbackParams();
   const accessToken = params.get("access_token") || "";
   const refreshToken = params.get("refresh_token") || "";
   const expiresIn = Number(params.get("expires_in") || 3600);
@@ -194,7 +260,8 @@ export function readInviteSessionFromUrl() {
     return { error };
   }
 
-  if (!accessToken || type !== "invite") {
+  const typeMatches = type === expectedType || (expectedType === "recovery" && !type);
+  if (!accessToken || !typeMatches) {
     return null;
   }
 
@@ -207,18 +274,47 @@ export function readInviteSessionFromUrl() {
   };
 }
 
+function getAuthCallbackParams() {
+  const params = new URLSearchParams();
+  const appendParams = (value) => {
+    const normalized = String(value || "").replace(/^[?#]/, "");
+    if (!normalized) return;
+    const nextParams = new URLSearchParams(normalized);
+    nextParams.forEach((paramValue, key) => {
+      if (!params.has(key)) params.set(key, paramValue);
+    });
+  };
+
+  appendParams(window.location.hash);
+  appendParams(window.location.search);
+  return params;
+}
+
+export function cleanAdminAuthCallbackUrl(pathname = window.location.pathname) {
+  const route = String(pathname || "/").replace(/\/+$/, "") || "/";
+  window.history.replaceState({}, "", route);
+}
+
 export async function updateAdminInvitePassword(inviteSession, password) {
+  return updateAdminAuthPassword(inviteSession, password, "Invalid or expired invitation link.");
+}
+
+export async function updateAdminRecoveryPassword(recoverySession, password) {
+  return updateAdminAuthPassword(recoverySession, password, "Invalid or expired recovery link.");
+}
+
+async function updateAdminAuthPassword(authSession, password, invalidSessionMessage) {
   const config = getSupabaseConfig();
 
-  if (!inviteSession?.access_token || !isSupabaseReady()) {
-    throw new Error("Invalid or expired invitation link.");
+  if (!authSession?.access_token || !isSupabaseReady()) {
+    throw new Error(invalidSessionMessage);
   }
 
   const response = await fetch(`${config.url}/auth/v1/user`, {
     method: "PUT",
     headers: {
       apikey: config.anonKey,
-      Authorization: `Bearer ${inviteSession.access_token}`,
+      Authorization: `Bearer ${authSession.access_token}`,
       "Content-Type": "application/json",
       Accept: "application/json",
     },
@@ -232,6 +328,36 @@ export async function updateAdminInvitePassword(inviteSession, password) {
 
   clearAdminAuthSession();
   return response.json();
+}
+
+export function getAdminPasswordResetRedirectUrl() {
+  const host = String(window.location.hostname || "").toLowerCase();
+  if (host === "adminportal-staging.vercel.app" || host.startsWith("adminportal-staging-")) {
+    return "https://adminportal-staging.vercel.app/reset-password";
+  }
+  return `${window.location.origin}/reset-password`;
+}
+
+function getPasswordResetRequestError(message, status) {
+  const normalized = String(message || "").toLowerCase();
+  if (status === 429 || normalized.includes("rate")) {
+    return "Too many reset requests. Wait a minute and try again.";
+  }
+  if (normalized.includes("redirect")) {
+    return "Password reset redirect is not configured for Admin Staging.";
+  }
+  return "Unable to send password reset email. Check the address and try again.";
+}
+
+function getPasswordUpdateError(message, status) {
+  const normalized = String(message || "").toLowerCase();
+  if (status === 401 || status === 403 || normalized.includes("jwt") || normalized.includes("token")) {
+    return "Invalid or expired password link. Request a new reset link.";
+  }
+  if (status === 422 || normalized.includes("password")) {
+    return "Password does not meet the minimum requirements.";
+  }
+  return "Unable to update password. Request a new reset link and try again.";
 }
 export async function getCurrentAdminAuthSession() {
   const storedSession = readStoredAdminAuthSession();

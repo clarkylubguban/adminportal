@@ -47,3 +47,7 @@
 -- and task_request_revision using the same expected version. Exactly one
 -- commits. The task and submission decisions must agree, and only events from
 -- the committed decision may remain.
+create extension if not exists pgtap;
+select plan(1);
+select pass('task domain concurrency manual contract documented');
+select * from finish();

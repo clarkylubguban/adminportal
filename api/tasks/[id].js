@@ -1,6 +1,7 @@
 import { sendJson } from "../_lib/adminAccess.js";
 import {
   handleApproveDraft,
+  handleApproveAndAssign,
   handleApproveWork,
   handleArchive,
   handleAssign,
@@ -25,6 +26,7 @@ const ROUTES = [
   { pattern: /^\/api\/tasks\/[^/]+\/draft\/?$/, action: "draft", handler: handleUpdateDraft },
   { pattern: /^\/api\/tasks\/[^/]+\/assign\/?$/, action: "assign", handler: handleAssign },
   { pattern: /^\/api\/tasks\/[^/]+\/approve-draft\/?$/, action: "approve-draft", handler: handleApproveDraft },
+  { pattern: /^\/api\/tasks\/[^/]+\/approve-and-assign\/?$/, action: "approve-and-assign", handler: handleApproveAndAssign },
   { pattern: /^\/api\/tasks\/[^/]+\/start\/?$/, action: "start", handler: handleStartWork },
   { pattern: /^\/api\/tasks\/[^/]+\/submit\/?$/, action: "submit", handler: handleSubmit },
   { pattern: /^\/api\/tasks\/[^/]+\/submit-without-time\/?$/, action: "submit-without-time", handler: handleSubmitWithoutTime },

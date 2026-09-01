@@ -3,6 +3,7 @@ import { authenticateTaskRequest, mapTaskError } from "../api/_lib/taskApi.js";
 import { calculateAllowedActions, projectEvent, projectTask } from "../api/_lib/taskProjection.js";
 import {
   handleApproveDraft,
+  handleApproveAndAssign,
   handleApproveWork,
   handleArchive,
   handleAssign,
@@ -149,6 +150,22 @@ test("strict validation rejects unknown fields, malformed values, and missing co
     body: { expectedVersion: 1, startedAt: "2026-07-25T12:00:00Z", endedAt: "2026-07-25T11:00:00Z", reason: "Synthetic correction." },
   });
   assert.equal(badTime.status, 400);
+
+  const draft = domain.seedTask({ sourceType: "MANUAL", assignedUserId: null, reviewerUserId: null });
+  const sourceEdit = await invoke(handleUpdateDraft, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "PATCH",
+    url: `/api/tasks/${draft.id}/draft`,
+    query: { id: draft.id },
+    headers: { "idempotency-key": "validation-source-record-edit" },
+    body: {
+      expectedVersion: draft.version,
+      sourceRecordType: "campaign",
+      sourceRecordId: "manual-brief-1",
+    },
+  });
+  assertOk(sourceEdit);
+  assert.equal(sourceEdit.body.task.sourceRecordType, "campaign");
+  assert.equal(sourceEdit.body.task.sourceRecordId, "manual-brief-1");
 });
 
 test("full create-to-archive lifecycle executes through route handlers", async () => {
@@ -166,10 +183,11 @@ test("full create-to-archive lifecycle executes through route handlers", async (
   version = resultVersion(await action(handleUpdateDraft, ACTORS.owner, domain, taskId, "draft", version, {
     title: "Synthetic revised task",
   }, "PATCH"));
-  version = resultVersion(await action(handleAssign, ACTORS.owner, domain, taskId, "assign", version, {
+  version = resultVersion(await action(handleApproveAndAssign, ACTORS.owner, domain, taskId, "approve-and-assign", version, {
     assignedUserId: IDS.staff,
+    reviewerUserId: IDS.admin,
+    submissionDeadline: "2026-07-26T08:00:00Z",
   }));
-  version = resultVersion(await action(handleApproveDraft, ACTORS.owner, domain, taskId, "approve-draft", version));
   version = resultVersion(await action(handleStartWork, ACTORS.staff, domain, taskId, "start", version));
   version = resultVersion(await action(handleSubmit, ACTORS.staff, domain, taskId, "submit", version, {
     submissionNote: "Synthetic cycle one.",
@@ -234,6 +252,134 @@ test("admin and staff mutation boundaries remain separated", async () => {
   });
   const adminApproved = await action(handleApproveDraft, ACTORS.admin, domain, manual.id, "approve-draft", manual.version);
   assertOk(adminApproved);
+});
+
+test("approve-and-assign atomically activates permitted drafts", async () => {
+  const domain = new MemoryDomain();
+  const manual = domain.seedTask({
+    sourceType: "PRODUCTION",
+    assignedUserId: null,
+    reviewerUserId: null,
+    draftApprovalRequired: false,
+  });
+  const initialVersion = manual.version;
+  const approved = await invoke(handleApproveAndAssign, ACTORS.admin, domain.service(ACTORS.admin), {
+    method: "POST",
+    url: `/api/tasks/${manual.id}/approve-and-assign`,
+    query: { id: manual.id },
+    headers: { "idempotency-key": "approve-assign-production" },
+    body: {
+      expectedVersion: initialVersion,
+      assignedUserId: IDS.staff,
+      reviewerUserId: IDS.admin,
+      submissionDeadline: "2026-07-26T08:00:00Z",
+    },
+  });
+  assertOk(approved);
+  assert.equal(approved.body.task.status, "TO_DO");
+  assert.equal(approved.body.task.assignedUserId, IDS.staff);
+  assert.equal(approved.body.task.reviewerUserId, IDS.admin);
+  assert.equal(domain.events.filter((event) => event.eventType === "DRAFT_APPROVED").length, 1);
+  assert.equal(domain.events.filter((event) => event.eventType === "ASSIGNED").length, 0);
+
+  const replay = await invoke(handleApproveAndAssign, ACTORS.admin, domain.service(ACTORS.admin), {
+    method: "POST",
+    url: `/api/tasks/${manual.id}/approve-and-assign`,
+    query: { id: manual.id },
+    headers: { "idempotency-key": "approve-assign-production" },
+    body: {
+      expectedVersion: initialVersion,
+      assignedUserId: IDS.staff,
+      reviewerUserId: IDS.admin,
+      submissionDeadline: "2026-07-26T08:00:00Z",
+    },
+  });
+  assertOk(replay);
+  assert.equal(replay.body.replayed, true);
+  assert.equal(domain.events.filter((event) => event.eventType === "DRAFT_APPROVED").length, 1);
+});
+
+test("approve-and-assign denies staff, stale versions, missing reviewer, and AI activation by admin", async () => {
+  const domain = new MemoryDomain();
+  const aiDraft = domain.seedTask({
+    sourceType: "DAILY_CONTENT",
+    assignedUserId: null,
+    reviewerUserId: null,
+    draftApprovalRequired: true,
+    submissionDeadline: null,
+  });
+  const adminDenied = await invoke(handleApproveAndAssign, ACTORS.admin, domain.service(ACTORS.admin), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-ai-admin" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.admin, submissionDeadline: "2026-07-26T08:00:00Z" },
+  });
+  assert.equal(adminDenied.status, 403);
+
+  const staleAssign = await invoke(handleAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "assign-ai-draft-stale-client" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff },
+  });
+  assert.equal(staleAssign.status, 409);
+  assert.equal(staleAssign.body.error.code, "INVALID_TRANSITION");
+  assert.equal(aiDraft.status, "DRAFT");
+
+  const staffDenied = await invoke(handleApproveAndAssign, ACTORS.staff, domain.service(ACTORS.staff), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-ai-staff" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.admin, submissionDeadline: "2026-07-26T08:00:00Z" },
+  });
+  assert.equal(staffDenied.status, 403);
+
+  const missingReviewer = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-missing-reviewer" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff },
+  });
+  assert.equal(missingReviewer.status, 400);
+
+  const stale = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-stale" },
+    body: { expectedVersion: aiDraft.version + 1, assignedUserId: IDS.staff, reviewerUserId: IDS.owner, submissionDeadline: "2026-07-26T08:00:00Z" },
+  });
+  assert.equal(stale.body.error.code, "VERSION_CONFLICT");
+
+  const missingDeadline = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-ai-missing-deadline" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.owner },
+  });
+  assert.equal(missingDeadline.status, 400);
+  assert.equal(missingDeadline.body.error.code, "VALIDATION_ERROR");
+  assert.match(missingDeadline.body.error.message, /submission deadline/);
+  assert.deepEqual(missingDeadline.body.error.details.missingFields, ["submission deadline"]);
+  assert.equal(aiDraft.status, "DRAFT");
+  assert.equal(aiDraft.assignedUserId, null);
+  assert.equal(aiDraft.reviewerUserId, null);
+  assert.equal(domain.events.filter((event) => event.eventType === "DRAFT_APPROVED").length, 0);
+
+  const ownerApproved = await invoke(handleApproveAndAssign, ACTORS.owner, domain.service(ACTORS.owner), {
+    method: "POST",
+    url: `/api/tasks/${aiDraft.id}/approve-and-assign`,
+    query: { id: aiDraft.id },
+    headers: { "idempotency-key": "approve-assign-ai-owner" },
+    body: { expectedVersion: aiDraft.version, assignedUserId: IDS.staff, reviewerUserId: IDS.owner, submissionDeadline: "2026-07-26T08:00:00Z" },
+  });
+  assertOk(ownerApproved);
+  assert.equal(ownerApproved.body.task.status, "TO_DO");
 });
 
 test("time correction is owner-only and preserves open/closed shape", async () => {
@@ -357,12 +503,16 @@ test("allowed actions reflect status, assignment, reviewer, and manager scope", 
   };
   assert.deepEqual(
     calculateAllowedActions(base, ACTORS.owner),
-    ["EDIT_DRAFT", "ASSIGN", "APPROVE_DRAFT", "CANCEL"],
+    ["EDIT_DRAFT", "APPROVE_DRAFT", "APPROVE_AND_ASSIGN", "CANCEL"],
   );
-  assert.deepEqual(calculateAllowedActions(base, ACTORS.admin), ["ASSIGN"]);
+  assert.deepEqual(calculateAllowedActions(base, ACTORS.admin), []);
   assert.deepEqual(
     calculateAllowedActions({ ...base, status: "TO_DO", sourceType: "MANUAL" }, ACTORS.staff),
     ["START_WORK", "SUBMIT_WITHOUT_RECORDED_TIME"],
+  );
+  assert.deepEqual(
+    calculateAllowedActions({ ...base, status: "TO_DO", sourceType: "MANUAL", timeTrackingMode: "NONE" }, ACTORS.staff),
+    ["START_WORK", "SUBMIT_FOR_REVIEW"],
   );
   assert.deepEqual(
     calculateAllowedActions({ ...base, status: "FOR_REVIEW" }, ACTORS.admin),
@@ -421,12 +571,22 @@ test("forgot-to-start API rejects non-assignees and unknown fields", async () =>
   assert.equal(unknown.status, 400);
 });
 
-test("NONE mode submits directly without timer actions or fabricated duration", async () => {
+test("NONE mode starts without timer and submits without fabricated duration", async () => {
   const domain = new MemoryDomain();
   const todo = domain.seedTask({ status: "TO_DO", assignedUserId: IDS.staff, timeTrackingMode: "NONE" });
-  const startDenied = await action(handleStartWork, ACTORS.staff, domain, todo.id, "start", todo.version);
-  assert.notEqual(startDenied.status, 200);
-  const submitted = await action(handleSubmit, ACTORS.staff, domain, todo.id, "submit", todo.version, {
+  const initialVersion = todo.version;
+  const started = await action(handleStartWork, ACTORS.staff, domain, todo.id, "start", initialVersion, undefined, "none-start");
+  assertOk(started);
+  assert.equal(started.body.task.status, "IN_PROGRESS");
+  assert.equal(domain.timeEntries.filter((entry) => entry.taskId === todo.id).length, 0);
+  assert.equal(domain.events.filter((event) => event.taskId === todo.id && event.eventType === "STARTED").length, 1);
+
+  const replay = await action(handleStartWork, ACTORS.staff, domain, todo.id, "start", initialVersion, undefined, "none-start");
+  assertOk(replay);
+  assert.equal(replay.body.replayed, true);
+  assert.equal(domain.events.filter((event) => event.taskId === todo.id && event.eventType === "STARTED").length, 1);
+
+  const submitted = await action(handleSubmit, ACTORS.staff, domain, todo.id, "submit", started.body.task.version, {
     submissionNote: "Synthetic checklist complete.",
   }, "none-submit");
   assertOk(submitted);
@@ -435,7 +595,11 @@ test("NONE mode submits directly without timer actions or fabricated duration", 
   assert.equal(domain.timeEntries.filter((entry) => entry.taskId === todo.id).length, 0);
 
   const revision = domain.seedTask({ status: "NEEDS_REVISION", assignedUserId: IDS.staff, timeTrackingMode: "NONE" });
-  const revisionSubmitted = await action(handleSubmit, ACTORS.staff, domain, revision.id, "submit", revision.version, {
+  const revisionStarted = await action(handleStartRevision, ACTORS.staff, domain, revision.id, "start-revision", revision.version, undefined, "none-revision-start");
+  assertOk(revisionStarted);
+  assert.equal(revisionStarted.body.task.status, "IN_PROGRESS");
+  assert.equal(domain.timeEntries.filter((entry) => entry.taskId === revision.id).length, 0);
+  const revisionSubmitted = await action(handleSubmit, ACTORS.staff, domain, revision.id, "submit", revisionStarted.body.task.version, {
     submissionNote: "Synthetic revision complete.",
   }, "none-revision-submit");
   assertOk(revisionSubmitted);
@@ -737,6 +901,8 @@ class MemoryDomain {
         brief: args.p_brief,
         priority: args.p_priority,
         timeTrackingMode: args.p_time_tracking_mode || "EXPECTED",
+        sourceRecordType: args.p_source_record_type,
+        sourceRecordId: args.p_source_record_id,
         assignedUserId: args.p_assigned_user_id,
         reviewerUserId: args.p_reviewer_user_id,
         draftApprovalRequired: args.p_draft_approval_required,
@@ -758,17 +924,45 @@ class MemoryDomain {
       task.status = "TO_DO";
       return this.record(task, "DRAFT_APPROVED", actor);
     }
+    if (command === "task_approve_and_assign") {
+      const adminAllowed = actor.role === "admin"
+        && ["MANUAL", "PRODUCTION", "SHOP_TASK"].includes(task.sourceType)
+        && !task.draftApprovalRequired;
+      if (task.status !== "DRAFT" || !(actor.role === "owner" || adminAllowed)) throw dbError("42501", "approval forbidden");
+      const finalSubmissionDeadline = args.p_submission_deadline || task.submissionDeadline;
+      const missing = [];
+      if (!String(task.title || "").trim()) missing.push("title");
+      if (!String(task.brief || "").trim()) missing.push("brief/instructions");
+      if (!["LOW", "MEDIUM", "HIGH", "URGENT"].includes(task.priority)) missing.push("priority");
+      if (!["EXPECTED", "NONE"].includes(task.timeTrackingMode)) missing.push("time tracking mode");
+      if (!args.p_assigned_user_id) missing.push("assignee");
+      if (!args.p_reviewer_user_id) missing.push("reviewer");
+      if (!finalSubmissionDeadline) missing.push("submission deadline");
+      if (missing.length) throw dbError("22023", `draft activation missing required fields: ${missing.join(", ")}`);
+      if (!this.isEligibleAssignee(args.p_assigned_user_id)) throw dbError("42501", "target user cannot be assigned");
+      if (!this.isEligibleReviewer(args.p_reviewer_user_id)) throw dbError("42501", "reviewer cannot approve");
+      task.assignedUserId = args.p_assigned_user_id;
+      task.reviewerUserId = args.p_reviewer_user_id;
+      task.startDeadline = args.p_start_deadline || task.startDeadline;
+      task.submissionDeadline = finalSubmissionDeadline;
+      task.approvalDeadline = args.p_approval_deadline || task.approvalDeadline;
+      task.status = "TO_DO";
+      return this.record(task, "DRAFT_APPROVED", actor);
+    }
     if (command === "task_start_work") {
-      if (task.status !== "TO_DO" || task.timeTrackingMode !== "EXPECTED" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may start expected-time task");
+      if (task.status !== "TO_DO" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may start task");
+      if (!["EXPECTED", "NONE"].includes(task.timeTrackingMode)) throw dbError("55000", "invalid time tracking mode");
       task.status = "IN_PROGRESS";
-      this.timeEntries.push({
-        id: IDS.entry,
-        taskId: task.id,
-        userId: actor.userId,
-        cycleNumber: this.submissions.filter((row) => row.taskId === task.id).length + 1,
-        startedAt: new Date().toISOString(),
-        endedAt: null,
-      });
+      if (task.timeTrackingMode === "EXPECTED") {
+        this.timeEntries.push({
+          id: IDS.entry,
+          taskId: task.id,
+          userId: actor.userId,
+          cycleNumber: this.submissions.filter((row) => row.taskId === task.id).length + 1,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+        });
+      }
       return this.record(task, "STARTED", actor);
     }
     if (command === "task_submit_for_review") {
@@ -782,7 +976,7 @@ class MemoryDomain {
         cycleNumber = entry.cycleNumber;
         timeRecordingStatus = "RECORDED";
       } else {
-        if (!["TO_DO", "NEEDS_REVISION"].includes(task.status) || entry) throw dbError("55000", "invalid no-time task state");
+        if (!["TO_DO", "IN_PROGRESS", "NEEDS_REVISION"].includes(task.status) || entry) throw dbError("55000", "invalid no-time task state");
         cycleNumber = nextCycle(this, task.id);
         timeRecordingStatus = "NOT_REQUIRED";
       }
@@ -825,16 +1019,19 @@ class MemoryDomain {
       return this.record(task, "REVISION_REQUESTED", actor);
     }
     if (command === "task_start_revision") {
-      if (task.status !== "NEEDS_REVISION" || task.timeTrackingMode !== "EXPECTED" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may revise expected-time task");
+      if (task.status !== "NEEDS_REVISION" || task.assignedUserId !== actor.userId) throw dbError("42501", "only assignee may revise task");
+      if (!["EXPECTED", "NONE"].includes(task.timeTrackingMode)) throw dbError("55000", "invalid time tracking mode");
       task.status = "IN_PROGRESS";
-      this.timeEntries.push({
-        id: `20000000-0000-4000-8000-${String(this.timeEntries.length + 1).padStart(12, "0")}`,
-        taskId: task.id,
-        userId: actor.userId,
-        cycleNumber: this.submissions.filter((row) => row.taskId === task.id).length + 1,
-        startedAt: new Date().toISOString(),
-        endedAt: null,
-      });
+      if (task.timeTrackingMode === "EXPECTED") {
+        this.timeEntries.push({
+          id: `20000000-0000-4000-8000-${String(this.timeEntries.length + 1).padStart(12, "0")}`,
+          taskId: task.id,
+          userId: actor.userId,
+          cycleNumber: this.submissions.filter((row) => row.taskId === task.id).length + 1,
+          startedAt: new Date().toISOString(),
+          endedAt: null,
+        });
+      }
       return this.record(task, "REVISION_STARTED", actor);
     }
     if (command === "task_approve_work") {
@@ -901,6 +1098,14 @@ class MemoryDomain {
       error.currentVersion = task.version;
       throw error;
     }
+  }
+
+  isEligibleAssignee(userId) {
+    return [IDS.staff, IDS.admin, IDS.owner].includes(userId);
+  }
+
+  isEligibleReviewer(userId) {
+    return [IDS.admin, IDS.owner].includes(userId);
   }
 
   record(task, eventType, actor) {

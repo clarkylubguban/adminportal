@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260803124755
+-- Original filename: 20260803124755_phase_8_8_allow_ai_task_activation.sql
+-- Original fetched SHA-256: 68696CB07B9A6441C142EF0CECB004BE1A1BD4F0338C55CC169A5FAF3BB9E038
+-- Classification: DUPLICATE OF TRACKED CANONICAL
+-- Canonical replacement or metadata status: 20260803033201_phase_8_8_allow_ai_task_activation.sql
+-- Evidence file: supabase/migration-history/staging-recovered/20260803124755_phase_8_8_allow_ai_task_activation.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

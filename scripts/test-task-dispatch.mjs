@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import collectionHandler from "../api/tasks/index.js";
 import taskHandler from "../api/tasks/[id].js";
-import myTasksHandler from "../api/my-tasks.js";
+import taskViewsHandler from "../api/task-views.js";
+import taskAutomationHandler from "../api/task-automation.js";
 
 const TASK_ID = "10000000-0000-4000-8000-000000000001";
 const ENTRY_ID = "20000000-0000-4000-8000-000000000001";
@@ -18,6 +19,7 @@ const catchAllRoutes = [
   ["PATCH", `/api/tasks/${TASK_ID}/draft`],
   ["POST", `/api/tasks/${TASK_ID}/assign`],
   ["POST", `/api/tasks/${TASK_ID}/approve-draft`],
+  ["POST", `/api/tasks/${TASK_ID}/approve-and-assign`],
   ["POST", `/api/tasks/${TASK_ID}/start`],
   ["POST", `/api/tasks/${TASK_ID}/submit`],
   ["POST", `/api/tasks/${TASK_ID}/submit-without-time`],
@@ -48,6 +50,7 @@ for (const [method, url] of catchAllRoutes) {
 const rewriteRoutes = [
   ["GET", `/api/tasks/${TASK_ID}?_taskAction=history`],
   ["POST", `/api/tasks/${TASK_ID}?_taskAction=start`],
+  ["POST", `/api/tasks/${TASK_ID}?_taskAction=approve-and-assign`],
   ["POST", `/api/tasks/${TASK_ID}?_taskAction=time-entry-correct&entryId=${ENTRY_ID}`],
 ];
 
@@ -61,9 +64,21 @@ for (const [method, url] of rewriteRoutes) {
 const unknownRewriteAction = await invoke(taskHandler, "POST", `/api/tasks/${TASK_ID}?_taskAction=unsupported`);
 assert.equal(unknownRewriteAction.status, 404);
 assert.equal(unknownRewriteAction.body.error.code, "NOT_FOUND");
-const myTasks = await invoke(myTasksHandler, "GET", "/api/my-tasks");
+const myTasks = await invoke(taskViewsHandler, "GET", "/api/my-tasks");
 assert.equal(myTasks.status, 401);
 assert.equal(myTasks.body.error.code, "AUTH_REQUIRED");
+
+const calendar = await invoke(taskViewsHandler, "GET", "/api/task-calendar?from=2026-08-01&to=2026-08-31");
+assert.equal(calendar.status, 401);
+assert.equal(calendar.body.error.code, "AUTH_REQUIRED");
+
+const calendarMutation = await invoke(taskViewsHandler, "POST", "/api/task-calendar");
+assert.equal(calendarMutation.status, 405);
+assert.equal(calendarMutation.headers.allow, "GET");
+
+const n8nDrafts = await invoke(taskAutomationHandler, "POST", "/api/integrations/n8n/task-drafts");
+assert.equal(n8nDrafts.status, 401);
+assert.equal(n8nDrafts.body.error.code, "SIGNATURE_INVALID");
 
 const collectionWrongMethod = await invoke(collectionHandler, "PATCH", "/api/tasks");
 assert.equal(collectionWrongMethod.status, 405);
@@ -91,7 +106,7 @@ for (const url of [
   assert.equal(result.body.error.code, "NOT_FOUND");
 }
 
-process.stdout.write(`PASS task route dispatch preserved ${collectionRoutes.length + catchAllRoutes.length} task URLs with safe 404/405 responses\n`);
+process.stdout.write(`PASS task route dispatch preserved ${collectionRoutes.length + catchAllRoutes.length} task URLs plus Calendar and n8n auth gates with safe 404/405 responses\n`);
 
 async function invoke(handler, method, url) {
   const request = { method, url, query: {} };

@@ -1,0 +1,9 @@
+﻿-- TRRY OS remote migration history anchor.
+-- Remote version: 20260726020616
+-- Original filename: 20260726020616_add_inquiry_action_audit_fields.sql
+-- Original fetched SHA-256: C175BCDBAD89F8AFB45B7C85D8D95250519DD19541FBF843F21454F4F7D7B76F
+-- Classification: HISTORY/METADATA ONLY
+-- Canonical replacement or metadata status: metadata-only: columns already present in tracked base
+-- Evidence file: supabase/migration-history/staging-recovered/20260726020616_add_inquiry_action_audit_fields.sql
+-- This is a history anchor only and executes no schema change.
+-- The authentic recovered SQL is preserved unchanged in the evidence path above.

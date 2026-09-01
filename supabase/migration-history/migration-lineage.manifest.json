@@ -1,0 +1,502 @@
+﻿[
+    {
+        "remote_version":  "20260726020436",
+        "original_filename":  "20260726020436_create_admin_core_schema.sql",
+        "sha256":  "2E75E0BAF8274FEE17EA21A4B039BF4DEF760DB81D19C738D454E511D607822D",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "202607110001_create_catalog_products.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020436_create_admin_core_schema.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726020515",
+        "original_filename":  "20260726020515_create_catalog_images_bucket.sql",
+        "sha256":  "EC6BC2AD9B3DDC7E3A7BFE64A4366CF766A49DC47D302951362E63FAE7638945",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "202607120001_create_catalog_images_bucket.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020515_create_catalog_images_bucket.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726020523",
+        "original_filename":  "20260726020523_add_order_dashboard_fields.sql",
+        "sha256":  "6CE3CF5DF41C23F55B7EA5AF24F9597E4CB3AC55296BA650991DC929C08E3820",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "202607120002_add_order_dashboard_fields.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020523_add_order_dashboard_fields.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726020551",
+        "original_filename":  "20260726020551_add_inquiry_tracking_substatuses.sql",
+        "sha256":  "86A5C9821C66E820A4DF982334902359F224185D6B6D697386DB83EDDCD588EB",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020551_add_inquiry_tracking_substatuses.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260726020607",
+        "original_filename":  "20260726020607_add_inquiry_customer_actions.sql",
+        "sha256":  "626852770144E88366862C5EBB565C6E273D9A8369F0BEF3E0F7CBF2E364832E",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020607_add_inquiry_customer_actions.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260726020616",
+        "original_filename":  "20260726020616_add_inquiry_action_audit_fields.sql",
+        "sha256":  "C175BCDBAD89F8AFB45B7C85D8D95250519DD19541FBF843F21454F4F7D7B76F",
+        "classification":  "HISTORY/METADATA ONLY",
+        "canonical_replacement":  "metadata-only: columns already present in tracked base",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020616_add_inquiry_action_audit_fields.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726020642",
+        "original_filename":  "20260726020642_align_admin_mvp_workflow_fields.sql",
+        "sha256":  "A8D3C2E61DC5A8BC6BB208840677DF1CC2134FBD42B51BE0BEFE79E142D0C280",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "20260717043119_align_admin_mvp_workflow_fields.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020642_align_admin_mvp_workflow_fields.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726020706",
+        "original_filename":  "20260726020706_harden_admin_auth_profiles.sql",
+        "sha256":  "1403CAB006D51C5812EF6BBCD39E6A49609B09C1FB454833AE62249B65FA6787",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "202607220001_harden_admin_auth_profiles.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020706_harden_admin_auth_profiles.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726020726",
+        "original_filename":  "20260726020726_cleanup_admin_auth_hardening_policy_grants.sql",
+        "sha256":  "C5206D3FDABB3405888E1EC802FB7695A2CD8DAAFA8A83FB64D477B4ADBF18B6",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607220001_harden_admin_auth_profiles.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020726_cleanup_admin_auth_hardening_policy_grants.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726020747",
+        "original_filename":  "20260726020747_fix_admin_assignment_sources.sql",
+        "sha256":  "4456EA0CE1E99F69D800EEFA530FD1CCB48446B31E268A7A11F5B19D6E3D9A41",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "202607230001_fix_admin_assignment_sources.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726020747_fix_admin_assignment_sources.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726021255",
+        "original_filename":  "20260726021255_create_task_domain_schema_tables.sql",
+        "sha256":  "DFAD9923CD38A9430A4D1E85C306AF12A241E742494A8EBBB744D6C5F70ED302",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250001_create_task_domain_schema.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726021255_create_task_domain_schema_tables.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726021325",
+        "original_filename":  "20260726021325_create_task_domain_schema_security.sql",
+        "sha256":  "F190744F347E017E0C9662F3DA2B50BA4625A8B73E1D9B4902E00241118751A2",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250001_create_task_domain_schema.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726021325_create_task_domain_schema_security.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726021956",
+        "original_filename":  "20260726021956_task_domain_helpers.sql",
+        "sha256":  "A06DCA2D7BF19846BC7BE8AA6DDC2BBDB010839BBBD32FC69BEE0235E0556E49",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250002_create_task_domain_functions.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726021956_task_domain_helpers.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726022021",
+        "original_filename":  "20260726022021_task_domain_command_result.sql",
+        "sha256":  "3937551D9FCEF8F56BCB16E9A163C7CD7F2985CC628E8C1E78A313EC3C81396B",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250002_create_task_domain_functions.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726022021_task_domain_command_result.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726022107",
+        "original_filename":  "20260726022107_task_domain_create_update.sql",
+        "sha256":  "0FB225E0E3E455AABB32CB8846F79B67156C1EF0CA3CD6949ADCD5C5B24A7E34",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250002_create_task_domain_functions.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726022107_task_domain_create_update.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726022220",
+        "original_filename":  "20260726022220_task_domain_assign_start_submit.sql",
+        "sha256":  "538EA8161DDAC17E530A1AE9FF75769AE6AE2C5D9C5731C394252290E71B053E",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250002_create_task_domain_functions.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726022220_task_domain_assign_start_submit.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726022310",
+        "original_filename":  "20260726022310_task_domain_review_cycle.sql",
+        "sha256":  "97E5AC33A2FBD3FB758FF1CD1DD52A7955BD093F1FD12728AFBF2C3797587EC0",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250002_create_task_domain_functions.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726022310_task_domain_review_cycle.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726022406",
+        "original_filename":  "20260726022406_task_domain_terminal_commands.sql",
+        "sha256":  "F6BABCB01F61499D5073129BDA525D59AD2E3A30C87D81BAD66C69C72EDE8AAA",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250002_create_task_domain_functions.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726022406_task_domain_terminal_commands.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726022437",
+        "original_filename":  "20260726022437_task_domain_function_permissions.sql",
+        "sha256":  "9EC863FEBDB98E3D43C5B3685A7F0BE072A404378160B4D74A7C4E6BD873B841",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202607250002_create_task_domain_functions.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726022437_task_domain_function_permissions.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726022516",
+        "original_filename":  "20260726022516_enable_task_domain_staging.sql",
+        "sha256":  "3F6F981292E3BFC3DE7486E5FF115CFB536D9E6B79FAF2F3A36BBA40CCB1E42B",
+        "classification":  "HISTORY/METADATA ONLY",
+        "canonical_replacement":  "metadata-only: temporary staging enablement superseded by 202608010001 disabled flag",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726022516_enable_task_domain_staging.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260726133055",
+        "original_filename":  "20260726133055_inquiry_follow_up_events.sql",
+        "sha256":  "F40F343C2CDC8801347FF8B50392FA9890778F7D81EFC73D673B7243DC55FBEF",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260726133055_inquiry_follow_up_events.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260727062344",
+        "original_filename":  "20260727062344_work_chat_mvp.sql",
+        "sha256":  "E893EC41098B3A525772FDF3B5C90362588DE0403B5632E26CDA8D1F6264CCCD",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260727062344_work_chat_mvp.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260727062437",
+        "original_filename":  "20260727062437_work_chat_allowed_attachment_types.sql",
+        "sha256":  "6E30DACBB53DDC680B232CDA12CC9A996023FA2B2B681E2067EDC769FD545BF7",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260727062437_work_chat_allowed_attachment_types.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260727062723",
+        "original_filename":  "20260727062723_work_chat_active_user_invoker.sql",
+        "sha256":  "69AB7688201EBDC3619E5E8A23C72C1C79C6860DAFFB01A9C4E0D13700450648",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260727062723_work_chat_active_user_invoker.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260728134416",
+        "original_filename":  "20260728134416_remove_odoo_dependency_and_park_payment_gate.sql",
+        "sha256":  "6CFABAA55AF9E811E27D9CA2B36D3D2BEF72AA4A5AB00DDF0FB92D8B30FF77B4",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608080005_phase13r1_native_order_guard.sql, 202608080006_phase13r2_native_order_authority.sql, 202608080007_phase13r5_native_order_payment_guard.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260728134416_remove_odoo_dependency_and_park_payment_gate.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260729050754",
+        "original_filename":  "20260729050754_pay_at_shop_admin_workflow.sql",
+        "sha256":  "9B46C68E34B5962C39568DC08494335A7A5F35E515E327F7D2411A5AD91EAB79",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260729050754_pay_at_shop_admin_workflow.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260730105920",
+        "original_filename":  "20260730105920_online_payment_review.sql",
+        "sha256":  "F86FD5198E82929576FE8F2ACF0AAC96130E00C1551CFEDA8A0E1A66D5521DC5",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260730105920_online_payment_review.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260730120556",
+        "original_filename":  "20260730120556_online_payment_review_stale_version_fix.sql",
+        "sha256":  "EAB579F4A88CBC5EB0CD9B67CC9964DB1BEB32FF8C17084F612838C994FBBB9B",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "20260731030830_allow_admin_down_payment_confirmations.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260730120556_online_payment_review_stale_version_fix.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260731030830",
+        "original_filename":  "20260731030830_allow_admin_down_payment_confirmations.sql",
+        "sha256":  "EB16C50F9F5D4871A97452FA1DA8B1210A80793D80D4A2A6DEF947011844FC9C",
+        "classification":  "UNIQUE AND REQUIRED",
+        "canonical_replacement":  null,
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260731030830_allow_admin_down_payment_confirmations.sql",
+        "active_status":  "active executable",
+        "reason":  "Recovered SQL provides schema/RPC/security behavior not present in the 32 tracked canonical migrations."
+    },
+    {
+        "remote_version":  "20260803092716",
+        "original_filename":  "20260803092716_phase_8_2_add_task_approve_and_assign.sql",
+        "sha256":  "6A655F02BC5E2458C761F3D78C246C98215921855830559C8664EA7F958BB13C",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608030001_add_task_approve_and_assign.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260803092716_phase_8_2_add_task_approve_and_assign.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260803092815",
+        "original_filename":  "20260803092815_phase_8_5_enable_none_task_start.sql",
+        "sha256":  "3CCD528FFA3CAB52409B81A018BA6D5167E7C3A436B4005A1DC0DDA8870DDB72",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608030002_enable_none_task_start.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260803092815_phase_8_5_enable_none_task_start.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260803092928",
+        "original_filename":  "20260803092928_phase_8_1_align_task_foundation.sql",
+        "sha256":  "0FDA205AD1700370C7C065212CC2B49F8569B0E5F020BFE36200C31F0E86F00C",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608010001_align_task_foundation_phase_8_1.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260803092928_phase_8_1_align_task_foundation.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260803093118",
+        "original_filename":  "20260803093118_phase_8_3_n8n_foundation.sql",
+        "sha256":  "D766D22803E38481927F1882A3B9377CEA6ED4AC561529E62BD5E93D04893819",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "20260803033131_phase_8_3_n8n_foundation.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260803093118_phase_8_3_n8n_foundation.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260803093130",
+        "original_filename":  "20260803093130_phase_8_7_auto_plan_today.sql",
+        "sha256":  "DD2BD910519A02BB003503742AB078A8A17EB6169284A9D1A2CF2254AFBB9E87",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "20260803033132_phase_8_7_auto_plan_today.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260803093130_phase_8_7_auto_plan_today.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260803124755",
+        "original_filename":  "20260803124755_phase_8_8_allow_ai_task_activation.sql",
+        "sha256":  "68696CB07B9A6441C142EF0CECB004BE1A1BD4F0338C55CC169A5FAF3BB9E038",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "20260803033201_phase_8_8_allow_ai_task_activation.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260803124755_phase_8_8_allow_ai_task_activation.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260803153644",
+        "original_filename":  "20260803153644_phase_8_8_auto_plan_draft_completeness.sql",
+        "sha256":  "254F1763868B9323D0F756B3FC0784BEF25044E03F75A9D08C10522739A24EC3",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "20260803033302_phase_8_8_auto_plan_draft_completeness.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260803153644_phase_8_8_auto_plan_draft_completeness.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260803153845",
+        "original_filename":  "20260803153845_phase_8_8_drop_legacy_task_update_draft.sql",
+        "sha256":  "4D332173ADAC782E8BDA0B94134DD72C294FA4815DBEBD84716CD58C4117B593",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "20260803033303_phase_8_8_drop_legacy_task_update_draft.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260803153845_phase_8_8_drop_legacy_task_update_draft.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260808123308",
+        "original_filename":  "20260808123308_phase3d_native_orders.sql",
+        "sha256":  "34DC0893A46CD0FCF56EB02E09F0730F57C28ACE855EDDEC972DE2BFCA3C47D8",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608080001_phase3d_native_orders.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260808123308_phase3d_native_orders.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260808123406",
+        "original_filename":  "20260808123406_phase8_production_start_persistence.sql",
+        "sha256":  "1943B137DD6F9856AD686ADED36DDE81AA5CA7626F082F47D5BA9B42D793020C",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608080002_phase8_production_start_persistence.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260808123406_phase8_production_start_persistence.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260808123508",
+        "original_filename":  "20260808123508_phase9_qc_persistence.sql",
+        "sha256":  "79B3A841B57B732551598E9180393E391A990664070D35DEFA77537FD8CC56CC",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608080003_phase9_qc_persistence.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260808123508_phase9_qc_persistence.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260808123616",
+        "original_filename":  "20260808123616_phase10_production_completion.sql",
+        "sha256":  "7D85F5CBFC8697328AAABE5E7F71582E73621D251C53C6D984A7080FEB808CC9",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608080004_phase10_production_completion.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260808123616_phase10_production_completion.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260808123730",
+        "original_filename":  "20260808123730_phase13r1_native_order_guard.sql",
+        "sha256":  "7F63EDBD26DC09A38994FCD01FBC407F27534BDDA46E33AE88E78982E08A3C78",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608080005_phase13r1_native_order_guard.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260808123730_phase13r1_native_order_guard.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260808123832",
+        "original_filename":  "20260808123832_phase13r2_native_order_authority.sql",
+        "sha256":  "2F5792CAAC5E34FC6218F440477B5204C78951D18488B5D8211D3DB24998D426",
+        "classification":  "SUPERSEDED BY TRACKED CANONICAL",
+        "canonical_replacement":  "202608080006_phase13r2_native_order_authority.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260808123832_phase13r2_native_order_authority.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260808145511",
+        "original_filename":  "20260808145511_phase13r5_native_order_payment_guard.sql",
+        "sha256":  "DA353F8EA4BCD378C121344C03F98DAF74B1BEC6BA3BE1A7C0056C26738664F5",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "202608080007_phase13r5_native_order_payment_guard.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260808145511_phase13r5_native_order_payment_guard.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "20260809012142",
+        "original_filename":  "20260809012142_native_order_status_authority.sql",
+        "sha256":  "EA1D3C41E483CA4367754CD3AC69A3B0AE1DEEBADDF87C5292E60C3D3A4317AD",
+        "classification":  "DUPLICATE OF TRACKED CANONICAL",
+        "canonical_replacement":  "202608080008_native_order_status_authority.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/20260809012142_native_order_status_authority.sql",
+        "active_status":  "archived duplicate/history anchor",
+        "reason":  "Active file is replaced with a comment-only anchor; authentic SQL is preserved as evidence."
+    },
+    {
+        "remote_version":  "202608110001",
+        "original_filename":  "202608110001_add_master_catalog_m0_foundation.sql",
+        "sha256":  "FC98137649CB1F41F155D2B435E4DE6BF6084B867B764800C3AFE8E577134988",
+        "classification":  "MATCHED-VERSION CONFLICT",
+        "canonical_replacement":  "202608110001_add_master_catalog_m0_foundation.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/202608110001_add_master_catalog_m0_foundation.sql",
+        "active_status":  "matched-version conflict evidence only",
+        "reason":  "Same timestamp exists as a tracked canonical migration; committed canonical file remains authoritative."
+    },
+    {
+        "remote_version":  "202608110002",
+        "original_filename":  "202608110002_add_master_catalog_m1_governance.sql",
+        "sha256":  "CEC09F6D91A23316A2C2A72F091CB40AC03D4EC84CE07F079A05CC7BBE5C96AC",
+        "classification":  "MATCHED-VERSION CONFLICT",
+        "canonical_replacement":  "202608110002_add_master_catalog_m1_governance.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/202608110002_add_master_catalog_m1_governance.sql",
+        "active_status":  "matched-version conflict evidence only",
+        "reason":  "Same timestamp exists as a tracked canonical migration; committed canonical file remains authoritative."
+    },
+    {
+        "remote_version":  "202608110003",
+        "original_filename":  "202608110003_fix_master_catalog_m1_sku_override_privileges.sql",
+        "sha256":  "4E1D47B13BDCC5A5A9D04C78835436DFAE486918E594949B403F4EB514DD851C",
+        "classification":  "MATCHED-VERSION CONFLICT",
+        "canonical_replacement":  "202608110003_fix_master_catalog_m1_sku_override_privileges.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/202608110003_fix_master_catalog_m1_sku_override_privileges.sql",
+        "active_status":  "matched-version conflict evidence only",
+        "reason":  "Same timestamp exists as a tracked canonical migration; committed canonical file remains authoritative."
+    },
+    {
+        "remote_version":  "202608110004",
+        "original_filename":  "202608110004_enforce_active_category_product_assignment.sql",
+        "sha256":  "52BE8D35477BEBC41027E4616DA731118E281D4C6E39FD5ED9C79D1D4E94EE8C",
+        "classification":  "MATCHED-VERSION CONFLICT",
+        "canonical_replacement":  "202608110004_enforce_active_category_product_assignment.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/202608110004_enforce_active_category_product_assignment.sql",
+        "active_status":  "matched-version conflict evidence only",
+        "reason":  "Same timestamp exists as a tracked canonical migration; committed canonical file remains authoritative."
+    },
+    {
+        "remote_version":  "202608130001",
+        "original_filename":  "202608130001_add_master_catalog_t31_category_product_type_binding.sql",
+        "sha256":  "3966CCCFBD71FBD284D3DFDBC3D60EDD6C9C8FC1C7F59D7B8C00AFE80F049652",
+        "classification":  "MATCHED-VERSION CONFLICT",
+        "canonical_replacement":  "202608130001_add_master_catalog_t31_category_product_type_binding.sql",
+        "evidence_path":  "supabase/migration-history/staging-recovered/202608130001_add_master_catalog_t31_category_product_type_binding.sql",
+        "active_status":  "matched-version conflict evidence only",
+        "reason":  "Same timestamp exists as a tracked canonical migration; committed canonical file remains authoritative."
+    }
+]

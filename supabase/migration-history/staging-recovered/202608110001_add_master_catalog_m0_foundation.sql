@@ -1,0 +1,1 @@
+-- Metadata repair: physical M0 schema equivalence verified against local migration supabase/migrations/202608110001_add_master_catalog_m0_foundation.sql. SQL was not rerun.;

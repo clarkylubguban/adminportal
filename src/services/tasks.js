@@ -16,6 +16,18 @@ export async function getWorkboardTasks(session, filters = {}) {
   return taskRequest(`/api/tasks?${params.toString()}`, { session });
 }
 
+export async function getTaskCalendar(session, filters = {}) {
+  const params = new URLSearchParams();
+  for (const key of ["from", "to", "assignedUserId", "sourceType", "status"]) {
+    if (filters[key] !== undefined && filters[key] !== null && filters[key] !== "") params.set(key, String(filters[key]));
+  }
+  return taskRequest(`/api/task-calendar?${params.toString()}`, { session });
+}
+
+export async function requestAutoPlanToday(body, session, idempotencyKey = createIdempotencyKey("auto-plan")) {
+  return taskRequest("/api/planning/auto-plan-today", { method: "POST", body, session, idempotencyKey });
+}
+
 export async function createTaskDraft(body, session, idempotencyKey = createIdempotencyKey("create")) {
   return taskRequest("/api/tasks", { method: "POST", body, session, idempotencyKey });
 }
@@ -30,6 +42,10 @@ export async function assignTask(taskId, body, session, idempotencyKey = createI
 
 export async function approveTaskDraft(taskId, expectedVersion, session, idempotencyKey = createIdempotencyKey("approve-draft")) {
   return taskCommand(taskId, "approve-draft", { expectedVersion }, session, idempotencyKey);
+}
+
+export async function approveAndAssignTask(taskId, body, session, idempotencyKey = createIdempotencyKey("approve-and-assign")) {
+  return taskCommand(taskId, "approve-and-assign", body, session, idempotencyKey);
 }
 
 export async function requestTaskRevision(taskId, body, session, idempotencyKey = createIdempotencyKey("revision-request")) {

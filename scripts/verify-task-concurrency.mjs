@@ -86,7 +86,7 @@ const adminRows = [
   `('${admin}','race-admin@invalid.example','admin','Synthetic Race Admin',true,false)`,
   ...staff.map(
     (id, index) =>
-      `('${id}','race-staff-${index}@invalid.example','staff','Synthetic Race Staff ${index}',true,${index === 0 ? "true" : "false"})`,
+      `('${id}','race-staff-${index}@invalid.example','staff','Synthetic Race Staff ${index}',true,false)`,
   ),
 ].join(",");
 const taskRows = [
@@ -174,7 +174,7 @@ await runRace(
 
 await runRace(
   "stale-version draft mutation",
-  actorSql(owner, `public.task_update_draft('${task[8]}',1,'Race updated','Disposable updated.','HIGH','${staff[7]}','${owner}',false,null,null,null,null,'race-8-update')`),
+  actorSql(owner, `public.task_update_draft('${task[8]}',1,'Race updated','Disposable updated.','HIGH','${staff[7]}','${owner}',false,null,null,null,null,'race-8-update','EXPECTED',null,null)`),
   actorSql(owner, `public.task_assign('${task[8]}',1,'${staff[8]}','race-8-assign')`),
   `select case when (select status='DRAFT' and version=2 from public.tasks where id='${task[8]}') and (select count(*)=1 from public.task_events where task_id='${task[8]}' and event_type in ('DRAFT_UPDATED','REASSIGNED')) then 'PASS' else 'FAIL' end;`,
 );
