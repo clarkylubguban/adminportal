@@ -7968,12 +7968,18 @@ function renderCatalogEditorVariants(draft, disabled = false) {
   const variants = getCatalogDraftVariantRows(draft);
   const canWrite = canWriteCatalogProducts();
   const generatorDisabled = disabled || !canWrite;
+  const selectedSizes = splitCatalogList(draft.availableSizesText);
+  const selectedColors = splitCatalogList(draft.availableColorsText);
+  const canGenerate = selectedSizes.length > 0 && selectedColors.length > 0;
 
   return `
     <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
       <header class="catalog-variants-header">
-        <div><h2>Variants</h2><p>Select sizes, type or choose a remembered color, review the count, then click GENERATE VARIANTS.</p></div>
-        <button class="note-button" type="button" data-catalog-variants-done>Done</button>
+        <div><h2>Variants</h2><p>Select sizes and colors, then generate the combinations.</p></div>
+        <div class="catalog-variant-header-actions">
+          <button class="note-button" type="button" data-catalog-variants-done>Done</button>
+          <button class="primary-button" type="button" data-catalog-generate-variants ${generatorDisabled || !canGenerate ? "disabled" : ""}>Generate Variants</button>
+        </div>
       </header>
       ${renderCatalogVariantGenerator(draft, variants, generatorDisabled)}
       ${variants.length
@@ -8015,11 +8021,6 @@ function renderCatalogVariantGenerator(draft, variants, disabled = false) {
           </label>
           <datalist id="catalog-remembered-colors">${rememberedColors.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
         </div>
-      </div>
-      <div class="catalog-variant-selection-summary">${sizes.length} sizes + ${colors.length} colors selected • ${generatedCount} combinations ready to generate.</div>
-      <div class="catalog-variant-generate-row">
-        <span><strong>${generatedCount} combinations ready</strong></span>
-        <button class="secondary-button" type="button" data-catalog-generate-variants ${disabled || !generatedCount ? "disabled" : ""}>Generate Variants</button>
       </div>
     </div>
   `;
