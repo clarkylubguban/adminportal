@@ -134,6 +134,8 @@ assert.ok(barcodeUi.includes("if (state.loading) return state.loading"), "M4 dup
 assert.ok(barcodeUi.includes("feedback.textContent !== nextFeedback"), "M4 Inventory feedback must avoid identical text rewrites");
 
 assert.ok(barcodeUi.includes("Barcode & Labels"), "Master Catalog action missing");
+assert.ok(barcodeUi.includes("<th>Product / Variant</th>"), "Barcode Manager must preserve the variant-list UI");
+assert.ok(barcodeUi.includes('.label strong { font-size: 8px;'), "30x20 print label product name must use the enlarged 8px size");
 assert.ok(barcodeUi.includes("Generate Missing"), "Generate Missing action missing");
 assert.ok(barcodeUi.includes("Print Selected"), "Print Selected action missing");
 assert.ok(barcodeUi.includes("XPrinter XP-236B"), "XP-236B printer profile missing");
