@@ -8010,18 +8010,13 @@ function renderCatalogVariantGenerator(draft, variants, disabled = false) {
         <span class="catalog-variant-option-values">Values</span>
         <div class="catalog-variant-option-list">
           ${colors.map((color) => renderCatalogVariantOption("color", color, true, disabled)).join("")}
-          <span class="catalog-variant-option-prompt">Type / saved…</span>
+          <label class="catalog-variant-custom-option">
+            <input type="text" data-catalog-custom-color placeholder="Select colors…" list="catalog-remembered-colors" ${disabled ? "disabled" : ""} aria-label="Add custom color">
+          </label>
+          <datalist id="catalog-remembered-colors">${rememberedColors.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
         </div>
       </div>
       <div class="catalog-variant-selection-summary">${sizes.length} sizes + ${colors.length} colors selected • ${generatedCount} combinations ready to generate.</div>
-      <div class="catalog-variant-color-adder">
-        <span>Color</span>
-        <input type="text" data-catalog-custom-color placeholder="Type or choose saved color…" list="catalog-remembered-colors" ${disabled ? "disabled" : ""}>
-        <datalist id="catalog-remembered-colors">${rememberedColors.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
-        <span>Saved</span>
-        <div class="catalog-chip-list">${rememberedColors.slice(0, 3).map((color) => `<button type="button" class="catalog-attribute-chip" data-catalog-remembered-color="${escapeHtml(color)}" ${disabled ? "disabled" : ""}>${escapeHtml(color)}</button>`).join("")}</div>
-        <button class="secondary-button" type="button" data-catalog-add-color ${disabled ? "disabled" : ""}>Add Color</button>
-      </div>
       <div class="catalog-variant-generate-row">
         <span><strong>${generatedCount} combinations ready</strong></span>
         <button class="secondary-button" type="button" data-catalog-generate-variants ${disabled || !generatedCount ? "disabled" : ""}>Generate Variants</button>
