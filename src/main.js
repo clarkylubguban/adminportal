@@ -9984,7 +9984,7 @@ function renderSidebar(currentRoute) {
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
-    ...(canViewSettingsRoute() ? [{ label: "Settings", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
+    ...(canViewSettingsRoute() ? [{ label: "Employee Access", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
   ];
 
   const renderNavItem = (item) => {
@@ -12884,4 +12884,3 @@ function escapeHtml(value) {
 }
 
 initializeAdminAuth();
-
