@@ -13,7 +13,7 @@ function assert(condition, message) {
 assert(main.includes('"/settings": "Settings"'), "Missing /settings route.");
 assert(main.includes('"/settings/people-access": "Settings"'), "Missing /settings/people-access route.");
 assert(main.includes('currentRoute === "Settings"') && main.includes("renderPeopleAccessEmployeesPage()"), "Settings render branch missing.");
-assert(main.includes('label: "Settings", path: "/settings/people-access", icon: "settings"'), "Settings sidebar nav must use settings icon.");
+assert(main.includes('label: "Employee Access", path: "/settings/people-access", icon: "settings"'), "Employee Access sidebar nav must use settings icon.");
 assert(main.includes("function renderPeopleAccessEmployeesPage()"), "Employee page renderer missing.");
 
 for (const header of ["EMPLOYEE", "ROLE", "STATUS", "LAST LOGIN", "ACCESS", "ACTION"]) {
