@@ -5824,7 +5824,9 @@ function renderCatalogPage() {
           <h1>Master Catalog</h1>
           <p class="subtitle">Manage products, variants, cost, and selling price from one source of truth.</p>
         </div>
-        ${canWriteCatalog ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ New Product</button>` : ""}
+        <div class="catalog-heading-actions">
+          ${canWriteCatalog ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ New Product</button>` : ""}
+        </div>
       </div>
 
       <section class="catalog-summary-grid" aria-label="Product catalog summary">
