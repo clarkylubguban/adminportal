@@ -6,7 +6,7 @@ import { extname, join } from "node:path";
 import { spawn } from "node:child_process";
 
 const root = process.cwd();
-const appPort = 6180 + Math.floor(Math.random() * 400);
+const appPort = 6180 + Math.floor(Math.random() * 500);
 const chromePort = 9580 + Math.floor(Math.random() * 500);
 const chromePath = process.env.CHROME_PATH || "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
 const userDataDir = await mkdtemp(join(tmpdir(), "trry-employee-e1-chrome-"));
@@ -79,7 +79,7 @@ try {
       mobile: viewport.width <= 760,
     });
     await navigate(cdp, `http://127.0.0.1:${appPort}/settings/people-access`);
-    await waitForEmployeeRows(cdp, 3, `${viewport.label}: active employee rows`);
+    await waitForEval(cdp, `document.querySelectorAll(".employee-row").length === 3`);
     const value = await evaluate(cdp, `(() => {
       const text = document.body.innerText;
       const root = document.documentElement;
@@ -93,8 +93,9 @@ try {
         controlsUsable: controls.every((item) => item && item.getBoundingClientRect().width > 40),
         rows: document.querySelectorAll(".employee-row").length,
         activeCopy: text.includes("Showing 3 active employees"),
-        noTempAccess: !text.includes("TEMP ·") && !text.includes("REVOKE NOW") && !text.includes("TEMPORARY ACCESS ACTIVE") && !text.includes("Authorize for Today"),
+        noFakeTempAccess: !text.includes("TEMP ·") && !text.includes("REVOKE NOW") && !text.includes("TEMPORARY ACCESS ACTIVE"),
         editButton: Boolean(document.querySelector("[data-staff-edit]")),
+        deactivateButton: Boolean(document.querySelector("[data-staff-disable]")),
         inviteButton: Boolean(document.querySelector("[data-staff-new]")),
       };
     })()`);
@@ -105,22 +106,23 @@ try {
     assert.equal(value.controlsUsable, true, `${viewport.label}: filters unusable`);
     assert.equal(value.rows, 3, `${viewport.label}: active employee rows did not load`);
     assert.equal(value.activeCopy, true, `${viewport.label}: active count copy mismatch`);
-    assert.equal(value.noTempAccess, true, `${viewport.label}: temporary access UI present`);
+    assert.equal(value.noFakeTempAccess, true, `${viewport.label}: fake temporary access state present`);
     assert.equal(value.editButton, true, `${viewport.label}: edit action missing`);
+    assert.equal(value.deactivateButton, true, `${viewport.label}: deactivate action missing`);
     assert.equal(value.inviteButton, true, `${viewport.label}: invite action missing`);
   }
 
   await navigate(cdp, `http://127.0.0.1:${appPort}/settings/people-access`);
-  await waitForEmployeeRows(cdp, 3, "Owner employee rows before filters");
+  await waitForEval(cdp, `document.querySelectorAll(".employee-row").length === 3`);
   await cdp.send("Runtime.evaluate", { expression: `document.querySelector("#employee-search").value = "admin"; document.querySelector("#employee-search").dispatchEvent(new Event("input", { bubbles: true }));` });
-  await waitForEmployeeRows(cdp, 1, "Search filter");
+  assert.equal((await evaluate(cdp, `document.querySelectorAll(".employee-row").length`)), 1, "Search filter failed.");
   await cdp.send("Runtime.evaluate", { expression: `document.querySelector("#employee-role-filter").value = "staff"; document.querySelector("#employee-role-filter").dispatchEvent(new Event("change", { bubbles: true }));` });
-  await waitForEmployeeRows(cdp, 0, "Role filter with active search");
+  assert.equal((await evaluate(cdp, `document.querySelectorAll(".employee-row").length`)), 0, "Role filter failed with active search.");
   await cdp.send("Runtime.evaluate", { expression: `document.querySelector("[data-employee-reset]").click();` });
-  await waitForEmployeeRows(cdp, 3, "Reset");
+  assert.equal((await evaluate(cdp, `document.querySelectorAll(".employee-row").length`)), 3, "Reset failed.");
   await cdp.send("Runtime.evaluate", { expression: `document.querySelector("[data-employee-view-deactivated]").click();` });
-  await waitForEmployeeRows(cdp, 1, "View Deactivated");
-  assert.equal((await evaluate(cdp, `document.body.innerText.includes("Showing 1 deactivated employees")`)), true, "View Deactivated failed.");
+  assert.equal((await evaluate(cdp, `document.body.innerText.includes("Showing 1 deactivated employees") && document.querySelectorAll(".employee-row").length === 1`)), true, "View Deactivated failed.");
+  assert.equal((await evaluate(cdp, `Boolean(document.querySelector("[data-staff-activate]"))`)), true, "Activate action missing for deactivated employee.");
   await cdp.send("Runtime.evaluate", { expression: `document.querySelector("[data-staff-edit]").click();` });
   assert.equal((await evaluate(cdp, `Boolean(document.querySelector(".staff-drawer"))`)), true, "Edit drawer did not open.");
   await cdp.send("Runtime.evaluate", { expression: `document.querySelector("[data-staff-close]").click(); document.querySelector("[data-staff-new]").click();` });
@@ -128,7 +130,7 @@ try {
 
   currentRole = "admin";
   await navigate(cdp, `http://127.0.0.1:${appPort}/settings/people-access`);
-  await waitForEmployeeRows(cdp, 1, "Admin employee rows");
+  await waitForEval(cdp, `document.querySelectorAll(".employee-row").length === 1`);
   assert.equal((await evaluate(cdp, `document.body.innerText.includes("People & Access") && document.querySelectorAll(".employee-row").length === 1`)), true, "Admin view did not use authorized API rows.");
 
   currentRole = "staff";
@@ -177,39 +179,21 @@ async function createPage(debugPort) {
 
 async function navigate(cdp, url) {
   await cdp.send("Page.navigate", { url });
-  const deadline = Date.now() + 15_000;
-  let last = null;
-  while (Date.now() < deadline) {
-    last = await evaluate(cdp, `(() => ({
-      ready: document.readyState,
-      rootLength: document.querySelector("#root")?.innerHTML.length || 0,
-      text: document.body.innerText.slice(0, 200),
-      url: location.href
-    }))()`);
-    if (last.ready === "complete" && last.rootLength > 500) return;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`Timed out waiting for ${url}; last=${JSON.stringify(last)}`);
-}
-
-async function waitForEmployeeRows(cdp, expected, label) {
-  const deadline = Date.now() + 15_000;
-  let last = null;
-  while (Date.now() < deadline) {
-    last = await evaluate(cdp, `(() => ({
-      rows: document.querySelectorAll(".employee-row").length,
-      loading: document.body.innerText.includes("Loading employees"),
-      text: document.body.innerText.slice(0, 200)
-    }))()`);
-    if (last.rows === expected && !last.loading) return;
-    await new Promise((resolve) => setTimeout(resolve, 100));
-  }
-  throw new Error(`Timed out waiting for ${label}; last=${JSON.stringify(last)}`);
+  await new Promise((resolve) => setTimeout(resolve, 600));
 }
 
 async function evaluate(cdp, expression) {
   const result = await cdp.send("Runtime.evaluate", { expression, returnByValue: true });
   return result.result.result.value;
+}
+
+async function waitForEval(cdp, expression, timeout = 5000) {
+  const deadline = Date.now() + timeout;
+  while (Date.now() < deadline) {
+    if (await evaluate(cdp, expression)) return;
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+  throw new Error(`Timed out waiting for browser expression: ${expression}`);
 }
 
 function connectWebSocket(url) {

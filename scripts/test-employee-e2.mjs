@@ -2,7 +2,7 @@ import fs from "node:fs";
 
 const main = fs.readFileSync("src/main.js", "utf8");
 const apiIndex = fs.readFileSync("api/admin-users/index.js", "utf8");
-const apiId = fs.readFileSync("api/admin-users/[id].js", "utf8");
+const apiId = fs.readFileSync("api/_lib/adminUsersIdRoute.js", "utf8");
 const packageJson = fs.readFileSync("package.json", "utf8");
 
 function assert(condition, message) {

@@ -1,5 +1,6 @@
 import { assignmentLabel, normalizeUuid, validateAssignmentUser } from "../../_lib/adminAssignments.js";
 import { getAuthorizedAdmin, getBearerToken, readJsonBody, sendJson } from "../../_lib/adminAccess.js";
+import { requireEffectiveModuleAccess } from "../../_lib/effectiveAccess.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
 const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
@@ -17,6 +18,7 @@ export default async function handler(request, response) {
     const supabase = createServerSupabaseClient();
     const caller = await getAuthorizedAdmin(supabase, token);
     if (!caller) return sendJson(response, 401, { ok: false, error: "admin session required" });
+    await requireEffectiveModuleAccess(supabase, caller, "inquiries");
     if (!WRITE_ROLES.has(caller.role)) return sendJson(response, 403, { ok: false, error: "assignment update is restricted" });
 
     const body = await readJsonBody(request);
@@ -48,6 +50,7 @@ export default async function handler(request, response) {
     if (error) throw error;
     return sendJson(response, 200, { ok: true, inquiry: toClientInquiry(data) });
   } catch (error) {
+    if (error?.status) return sendJson(response, error.status, { ok: false, error: { code: error.code || "FORBIDDEN", message: error.message } });
     console.error("Assignment update failed.", { message: error?.message, code: error?.code });
     return sendJson(response, 500, { ok: false, error: "assignment update failed" });
   }

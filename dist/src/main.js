@@ -38,7 +38,14 @@ import {
   findNativeOrderBySourceInquiryId,
   hasNativeOrderAuthority,
 } from "./services/nativeOrderAuthority.js";
+import { getCalendarEffectiveAccess, getDesignArtworkEffectiveAccess, getInquiriesEffectiveAccess, getInventoryEffectiveAccess, getMasterCatalogEffectiveAccess, getOrdersEffectiveAccess, getProductionEffectiveAccess, getPurchasingSuppliersEffectiveAccess, getWorkboardEffectiveAccess } from "./services/adminEffectiveAccess.js";
 import { getApprovedAdminUser } from "./services/adminUsers.js";
+import {
+  employeeTemporaryAccessModules,
+  getEmployeeTemporaryAccess,
+  grantEmployeeTemporaryAccess,
+  revokeEmployeeTemporaryAccess,
+} from "./services/adminEmployeeTemporaryAccess.js";
 import {
   getAdminAssignmentUsers,
   updateInquiryAssignment,
@@ -578,6 +585,13 @@ let staffDraft = createEmptyStaffDraft();
 let staffSaveState = "idle";
 let staffSaveError = "";
 let staffActionId = "";
+let employeeTemporaryAccess = [];
+let employeeTempAccessLoadState = "idle";
+let employeeTempAccessError = "";
+let employeeTempAccessModalOpen = false;
+let employeeTempAccessDraft = createEmptyEmployeeTempAccessDraft();
+let employeeTempAccessSaveState = "idle";
+let employeeTempAccessSaveError = "";
 let employeeQuery = "";
 let employeeRoleFilter = "all";
 let employeeStatusFilter = "active";
@@ -606,6 +620,30 @@ let myTasksLastFullTickRender = 0;
 let workboardTasks = [];
 let workboardLoadState = "idle";
 let workboardLoadError = "";
+let workboardEffectiveAccess = { module: "workboard", allowed: false, source: "none", expiresAt: null };
+let workboardEffectiveAccessLoadState = "idle";
+let workboardEffectiveAccessError = "";
+let masterCatalogEffectiveAccess = { module: "master_catalog", allowed: false, source: "none", expiresAt: null };
+let masterCatalogEffectiveAccessLoadState = "idle";
+let masterCatalogEffectiveAccessError = "";
+let inquiriesEffectiveAccess = { module: "inquiries", allowed: false, source: "none", expiresAt: null };
+let inquiriesEffectiveAccessLoadState = "idle";
+let inquiriesEffectiveAccessError = "";
+let ordersEffectiveAccess = { module: "orders", allowed: false, source: "none", expiresAt: null };
+let ordersEffectiveAccessLoadState = "idle";
+let ordersEffectiveAccessError = "";
+let productionEffectiveAccess = { module: "production", allowed: false, source: "none", expiresAt: null };
+let productionEffectiveAccessLoadState = "idle";
+let productionEffectiveAccessError = "";
+let designArtworkEffectiveAccess = { module: "design_artwork", allowed: false, source: "none", expiresAt: null };
+let designArtworkEffectiveAccessLoadState = "idle";
+let designArtworkEffectiveAccessError = "";
+let inventoryEffectiveAccess = { module: "inventory", allowed: false, source: "none", expiresAt: null };
+let inventoryEffectiveAccessLoadState = "idle";
+let inventoryEffectiveAccessError = "";
+let purchasingSuppliersEffectiveAccess = { module: "purchasing_suppliers", allowed: false, source: "none", expiresAt: null };
+let purchasingSuppliersEffectiveAccessLoadState = "idle";
+let purchasingSuppliersEffectiveAccessError = "";
 let workboardFilterStatus = "active";
 let workboardFilterPriority = "";
 let workboardFilterSource = "";
@@ -626,6 +664,9 @@ let autoPlanIdempotencyKey = "";
 let calendarEvents = [];
 let calendarLoadState = "idle";
 let calendarLoadError = "";
+let calendarEffectiveAccess = { module: "calendar", allowed: false, source: "none", expiresAt: null };
+let calendarEffectiveAccessLoadState = "idle";
+let calendarEffectiveAccessError = "";
 let calendarSelectedDate = getManilaTodayKey();
 let calendarVisibleMonth = getMonthKey(calendarSelectedDate);
 let calendarAssigneeFilter = "";
@@ -645,6 +686,8 @@ const routes = {
   "/my-tasks": "My Tasks",
   "/calendar": "Calendar",
   "/workboard": "Workboard",
+  "/settings": "Settings",
+  "/settings/people-access": "Settings",
   "/overview": "Overview",
   "/catalog": "Catalog",
   "/catalog/brands": "Catalog",
@@ -727,10 +770,21 @@ function render() {
   const selectedOrder = orders.find((order) => order.id === selectedId);
   const selectedProduct = products.find((product) => product.code === selectedProductCode) ?? null;
   const filteredOrders = getFilteredOrders();
-  const isAdminSaasRoute = currentRoute === "Catalog";
+  const isAdminSaasRoute = currentRoute === "Catalog" || currentRoute === "Settings";
   if (currentRoute === "My Tasks" && myTasksLoadState === "idle") window.setTimeout(loadMyTasks, 0);
+  if (isTaskFeatureUiEnabled() && workboardEffectiveAccessLoadState === "idle") window.setTimeout(loadWorkboardEffectiveAccess, 0);
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
+  if (isTaskFeatureUiEnabled() && calendarEffectiveAccessLoadState === "idle") window.setTimeout(loadCalendarEffectiveAccess, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
+  if (masterCatalogEffectiveAccessLoadState === "idle") window.setTimeout(loadMasterCatalogEffectiveAccess, 0);
+  if (inquiriesEffectiveAccessLoadState === "idle") window.setTimeout(loadInquiriesEffectiveAccess, 0);
+  if (ordersEffectiveAccessLoadState === "idle") window.setTimeout(loadOrdersEffectiveAccess, 0);
+  if (productionEffectiveAccessLoadState === "idle") window.setTimeout(loadProductionEffectiveAccess, 0);
+  if (designArtworkEffectiveAccessLoadState === "idle") window.setTimeout(loadDesignArtworkEffectiveAccess, 0);
+  if (inventoryEffectiveAccessLoadState === "idle") window.setTimeout(loadInventoryEffectiveAccess, 0);
+  if (purchasingSuppliersEffectiveAccessLoadState === "idle") window.setTimeout(loadPurchasingSuppliersEffectiveAccess, 0);
+  if (currentRoute === "Settings" && staffLoadState === "idle") window.setTimeout(loadStaffUsers, 0);
+  if (currentRoute === "Settings" && employeeTempAccessLoadState === "idle") window.setTimeout(loadEmployeeTemporaryAccess, 0);
   if (getRoutePath() === "/catalog/inventory" && inventoryLoadState === "idle") window.setTimeout(loadInventory, 0);
   if (getRoutePath() === "/catalog/purchasing" && purchasingLoadState === "idle") window.setTimeout(loadPurchaseOrders, 0);
   if (getRoutePath() === "/catalog/suppliers" && supplierLoadState === "idle") window.setTimeout(loadSuppliers, 0);
@@ -1060,6 +1114,15 @@ async function submitPasswordSetup() {
     passwordSetupSuccess = "Password updated successfully.";
     adminAuthSession = null;
     adminUser = null;
+    resetWorkboardEffectiveAccess();
+    resetCalendarEffectiveAccess();
+    resetMasterCatalogEffectiveAccess();
+    resetInquiriesEffectiveAccess();
+    resetOrdersEffectiveAccess();
+    resetProductionEffectiveAccess();
+    resetDesignArtworkEffectiveAccess();
+    resetInventoryEffectiveAccess();
+    resetPurchasingSuppliersEffectiveAccess();
     adminAuthStatus = "login";
     adminLoginNotice = passwordSetupMode === "recovery"
       ? "Password updated successfully."
@@ -1181,6 +1244,15 @@ async function approveAdminSession(session) {
     }
 
     adminUser = approvedUser;
+    resetWorkboardEffectiveAccess();
+    resetCalendarEffectiveAccess();
+    resetMasterCatalogEffectiveAccess();
+    resetInquiriesEffectiveAccess();
+    resetOrdersEffectiveAccess();
+    resetProductionEffectiveAccess();
+    resetDesignArtworkEffectiveAccess();
+    resetInventoryEffectiveAccess();
+    resetPurchasingSuppliersEffectiveAccess();
     adminAuthStatus = "approved";
     adminAuthMessage = "";
     startAdminDataLoading();
@@ -1188,6 +1260,15 @@ async function approveAdminSession(session) {
   } catch (error) {
     console.error("Admin role check failed.", error);
     adminUser = null;
+    resetWorkboardEffectiveAccess();
+    resetCalendarEffectiveAccess();
+    resetMasterCatalogEffectiveAccess();
+    resetInquiriesEffectiveAccess();
+    resetOrdersEffectiveAccess();
+    resetProductionEffectiveAccess();
+    resetDesignArtworkEffectiveAccess();
+    resetInventoryEffectiveAccess();
+    resetPurchasingSuppliersEffectiveAccess();
     adminAuthStatus = "blocked";
     adminAuthMessage = error.message || "Unable to verify TRRY Admin access.";
     render();
@@ -1231,6 +1312,15 @@ async function initializeAdminAuth() {
     if (isLocalTaskQaMode()) {
       adminAuthSession = createLocalTaskQaSession();
       adminUser = createLocalTaskQaUser();
+      resetWorkboardEffectiveAccess();
+      resetCalendarEffectiveAccess();
+      resetMasterCatalogEffectiveAccess();
+      resetInquiriesEffectiveAccess();
+      resetOrdersEffectiveAccess();
+      resetProductionEffectiveAccess();
+      resetDesignArtworkEffectiveAccess();
+      resetInventoryEffectiveAccess();
+      resetPurchasingSuppliersEffectiveAccess();
       adminAuthStatus = "approved";
       adminAuthMessage = "";
       startAdminDataLoading();
@@ -1251,6 +1341,15 @@ async function initializeAdminAuth() {
   if (!session) {
     adminAuthSession = null;
     adminUser = null;
+    resetWorkboardEffectiveAccess();
+    resetCalendarEffectiveAccess();
+    resetMasterCatalogEffectiveAccess();
+    resetInquiriesEffectiveAccess();
+    resetOrdersEffectiveAccess();
+    resetProductionEffectiveAccess();
+    resetDesignArtworkEffectiveAccess();
+    resetInventoryEffectiveAccess();
+    resetPurchasingSuppliersEffectiveAccess();
     adminAuthStatus = "login";
     render();
     return;
@@ -1268,6 +1367,15 @@ async function logoutAdminUser() {
     await signOutAdmin();
     adminAuthSession = null;
     adminUser = null;
+    resetWorkboardEffectiveAccess();
+    resetCalendarEffectiveAccess();
+    resetMasterCatalogEffectiveAccess();
+    resetInquiriesEffectiveAccess();
+    resetOrdersEffectiveAccess();
+    resetProductionEffectiveAccess();
+    resetDesignArtworkEffectiveAccess();
+    resetInventoryEffectiveAccess();
+    resetPurchasingSuppliersEffectiveAccess();
     adminLoginPassword = "";
     adminLoginPasswordVisible = false;
     adminAuthMessage = "";
@@ -1404,6 +1512,15 @@ function startAdminDataLoading() {
   loadInventory();
   loadSuppliers();
   loadPurchaseOrders();
+  loadWorkboardEffectiveAccess();
+  loadCalendarEffectiveAccess();
+  loadMasterCatalogEffectiveAccess();
+  loadInquiriesEffectiveAccess();
+  loadOrdersEffectiveAccess();
+  loadProductionEffectiveAccess();
+  loadDesignArtworkEffectiveAccess();
+  loadInventoryEffectiveAccess();
+  loadPurchasingSuppliersEffectiveAccess();
   if (isTaskFeatureUiEnabled()) loadMyTasks();
 }
 
@@ -1810,15 +1927,448 @@ function isEditableElement(element) {
 }
 
 function canViewWorkboardRoute() {
-  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_WORKBOARD", "VITE_WORKBOARD_ENABLED") && ["owner", "admin"].includes(adminUser?.role);
+  if (!isTaskFeatureUiEnabled() || !isFeatureFlagEnabled("VITE_ENABLE_WORKBOARD", "VITE_WORKBOARD_ENABLED")) return false;
+  if (["owner", "admin"].includes(adminUser?.role)) return true;
+  return adminUser?.role === "staff" && workboardEffectiveAccess.allowed === true && workboardEffectiveAccess.module === "workboard";
 }
 
 function canUseAutoPlanTodayUi() {
   return canViewWorkboardRoute() && isFeatureFlagEnabled("VITE_ENABLE_AUTO_PLAN_TODAY", "VITE_AUTO_PLAN_TODAY_ENABLED") && adminUser?.role === "owner";
 }
 
+async function loadWorkboardEffectiveAccess({ silent = false } = {}) {
+  if (!isTaskFeatureUiEnabled() || !isFeatureFlagEnabled("VITE_ENABLE_WORKBOARD", "VITE_WORKBOARD_ENABLED")) return;
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    workboardEffectiveAccess = { module: "workboard", allowed: true, source: "permanent", expiresAt: null };
+    workboardEffectiveAccessLoadState = "ready";
+    workboardEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetWorkboardEffectiveAccess();
+    workboardEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetWorkboardEffectiveAccess();
+    workboardEffectiveAccessLoadState = "auth-required";
+    workboardEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    workboardEffectiveAccessLoadState = "loading";
+    workboardEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    workboardEffectiveAccess = await getWorkboardEffectiveAccess(adminAuthSession);
+    workboardEffectiveAccessLoadState = "ready";
+    workboardEffectiveAccessError = "";
+  } catch (error) {
+    workboardEffectiveAccess = { module: "workboard", allowed: false, source: "none", expiresAt: null };
+    workboardEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    workboardEffectiveAccessError = error.message || "Unable to verify Workboard access.";
+  }
+  render();
+}
+
+function resetWorkboardEffectiveAccess() {
+  workboardEffectiveAccess = { module: "workboard", allowed: false, source: "none", expiresAt: null };
+  workboardEffectiveAccessLoadState = "idle";
+  workboardEffectiveAccessError = "";
+}
+
+function canViewMasterCatalogRoute() {
+  if (["owner", "admin"].includes(adminUser?.role)) return true;
+  return adminUser?.role === "staff" && masterCatalogEffectiveAccess.allowed === true && masterCatalogEffectiveAccess.module === "master_catalog";
+}
+
+async function loadMasterCatalogEffectiveAccess({ silent = false } = {}) {
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    masterCatalogEffectiveAccess = { module: "master_catalog", allowed: true, source: "permanent", expiresAt: null };
+    masterCatalogEffectiveAccessLoadState = "ready";
+    masterCatalogEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetMasterCatalogEffectiveAccess();
+    masterCatalogEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetMasterCatalogEffectiveAccess();
+    masterCatalogEffectiveAccessLoadState = "auth-required";
+    masterCatalogEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    masterCatalogEffectiveAccessLoadState = "loading";
+    masterCatalogEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    masterCatalogEffectiveAccess = await getMasterCatalogEffectiveAccess(adminAuthSession);
+    masterCatalogEffectiveAccessLoadState = "ready";
+    masterCatalogEffectiveAccessError = "";
+  } catch (error) {
+    masterCatalogEffectiveAccess = { module: "master_catalog", allowed: false, source: "none", expiresAt: null };
+    masterCatalogEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    masterCatalogEffectiveAccessError = error.message || "Unable to verify Master Catalog access.";
+  }
+  render();
+}
+
+function resetMasterCatalogEffectiveAccess() {
+  masterCatalogEffectiveAccess = { module: "master_catalog", allowed: false, source: "none", expiresAt: null };
+  masterCatalogEffectiveAccessLoadState = "idle";
+  masterCatalogEffectiveAccessError = "";
+}
+
+function canViewInquiriesRoute() {
+  if (["owner", "admin"].includes(adminUser?.role)) return true;
+  return adminUser?.role === "staff" && (
+    (inquiriesEffectiveAccess.allowed === true && inquiriesEffectiveAccess.module === "inquiries")
+    || (designArtworkEffectiveAccess.allowed === true && designArtworkEffectiveAccess.module === "design_artwork")
+  );
+}
+
+function canViewOrdersRoute() {
+  if (["owner", "admin"].includes(adminUser?.role)) return true;
+  return adminUser?.role === "staff" && ordersEffectiveAccess.allowed === true && ordersEffectiveAccess.module === "orders";
+}
+
+function canViewProductionRoute() {
+  if (["owner", "admin"].includes(adminUser?.role)) return true;
+  return adminUser?.role === "staff" && productionEffectiveAccess.allowed === true && productionEffectiveAccess.module === "production";
+}
+
+function canViewInventoryRoute() {
+  if (["owner", "admin"].includes(adminUser?.role)) return true;
+  return adminUser?.role === "staff" && inventoryEffectiveAccess.allowed === true && inventoryEffectiveAccess.module === "inventory";
+}
+
+function canViewPurchasingSuppliersRoute() {
+  if (["owner", "admin"].includes(adminUser?.role)) return true;
+  return adminUser?.role === "staff" && purchasingSuppliersEffectiveAccess.allowed === true && purchasingSuppliersEffectiveAccess.module === "purchasing_suppliers";
+}
+
+async function loadInquiriesEffectiveAccess({ silent = false } = {}) {
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    inquiriesEffectiveAccess = { module: "inquiries", allowed: true, source: "permanent", expiresAt: null };
+    inquiriesEffectiveAccessLoadState = "ready";
+    inquiriesEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetInquiriesEffectiveAccess();
+    inquiriesEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetInquiriesEffectiveAccess();
+    inquiriesEffectiveAccessLoadState = "auth-required";
+    inquiriesEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    inquiriesEffectiveAccessLoadState = "loading";
+    inquiriesEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    inquiriesEffectiveAccess = await getInquiriesEffectiveAccess(adminAuthSession);
+    inquiriesEffectiveAccessLoadState = "ready";
+    inquiriesEffectiveAccessError = "";
+  } catch (error) {
+    inquiriesEffectiveAccess = { module: "inquiries", allowed: false, source: "none", expiresAt: null };
+    inquiriesEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    inquiriesEffectiveAccessError = error.message || "Unable to verify Inquiries access.";
+  }
+  render();
+}
+
+function resetInquiriesEffectiveAccess() {
+  inquiriesEffectiveAccess = { module: "inquiries", allowed: false, source: "none", expiresAt: null };
+  inquiriesEffectiveAccessLoadState = "idle";
+  inquiriesEffectiveAccessError = "";
+}
+
+async function loadOrdersEffectiveAccess({ silent = false } = {}) {
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    ordersEffectiveAccess = { module: "orders", allowed: true, source: "permanent", expiresAt: null };
+    ordersEffectiveAccessLoadState = "ready";
+    ordersEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetOrdersEffectiveAccess();
+    ordersEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetOrdersEffectiveAccess();
+    ordersEffectiveAccessLoadState = "auth-required";
+    ordersEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    ordersEffectiveAccessLoadState = "loading";
+    ordersEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    ordersEffectiveAccess = await getOrdersEffectiveAccess(adminAuthSession);
+    ordersEffectiveAccessLoadState = "ready";
+    ordersEffectiveAccessError = "";
+  } catch (error) {
+    ordersEffectiveAccess = { module: "orders", allowed: false, source: "none", expiresAt: null };
+    ordersEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    ordersEffectiveAccessError = error.message || "Unable to verify Orders access.";
+  }
+  render();
+}
+
+function resetOrdersEffectiveAccess() {
+  ordersEffectiveAccess = { module: "orders", allowed: false, source: "none", expiresAt: null };
+  ordersEffectiveAccessLoadState = "idle";
+  ordersEffectiveAccessError = "";
+}
+
+async function loadProductionEffectiveAccess({ silent = false } = {}) {
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    productionEffectiveAccess = { module: "production", allowed: true, source: "permanent", expiresAt: null };
+    productionEffectiveAccessLoadState = "ready";
+    productionEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetProductionEffectiveAccess();
+    productionEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetProductionEffectiveAccess();
+    productionEffectiveAccessLoadState = "auth-required";
+    productionEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    productionEffectiveAccessLoadState = "loading";
+    productionEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    productionEffectiveAccess = await getProductionEffectiveAccess(adminAuthSession);
+    productionEffectiveAccessLoadState = "ready";
+    productionEffectiveAccessError = "";
+  } catch (error) {
+    productionEffectiveAccess = { module: "production", allowed: false, source: "none", expiresAt: null };
+    productionEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    productionEffectiveAccessError = error.message || "Unable to verify Production access.";
+  }
+  render();
+}
+
+function resetProductionEffectiveAccess() {
+  productionEffectiveAccess = { module: "production", allowed: false, source: "none", expiresAt: null };
+  productionEffectiveAccessLoadState = "idle";
+  productionEffectiveAccessError = "";
+}
+
+async function loadDesignArtworkEffectiveAccess({ silent = false } = {}) {
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    designArtworkEffectiveAccess = { module: "design_artwork", allowed: true, source: "permanent", expiresAt: null };
+    designArtworkEffectiveAccessLoadState = "ready";
+    designArtworkEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetDesignArtworkEffectiveAccess();
+    designArtworkEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetDesignArtworkEffectiveAccess();
+    designArtworkEffectiveAccessLoadState = "auth-required";
+    designArtworkEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    designArtworkEffectiveAccessLoadState = "loading";
+    designArtworkEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    designArtworkEffectiveAccess = await getDesignArtworkEffectiveAccess(adminAuthSession);
+    designArtworkEffectiveAccessLoadState = "ready";
+    designArtworkEffectiveAccessError = "";
+  } catch (error) {
+    designArtworkEffectiveAccess = { module: "design_artwork", allowed: false, source: "none", expiresAt: null };
+    designArtworkEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    designArtworkEffectiveAccessError = error.message || "Unable to verify Design & Artwork access.";
+  }
+  render();
+}
+
+function resetDesignArtworkEffectiveAccess() {
+  designArtworkEffectiveAccess = { module: "design_artwork", allowed: false, source: "none", expiresAt: null };
+  designArtworkEffectiveAccessLoadState = "idle";
+  designArtworkEffectiveAccessError = "";
+}
+
+async function loadInventoryEffectiveAccess({ silent = false } = {}) {
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    inventoryEffectiveAccess = { module: "inventory", allowed: true, source: "permanent", expiresAt: null };
+    inventoryEffectiveAccessLoadState = "ready";
+    inventoryEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetInventoryEffectiveAccess();
+    inventoryEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetInventoryEffectiveAccess();
+    inventoryEffectiveAccessLoadState = "auth-required";
+    inventoryEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    inventoryEffectiveAccessLoadState = "loading";
+    inventoryEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    inventoryEffectiveAccess = await getInventoryEffectiveAccess(adminAuthSession);
+    inventoryEffectiveAccessLoadState = "ready";
+    inventoryEffectiveAccessError = "";
+  } catch (error) {
+    inventoryEffectiveAccess = { module: "inventory", allowed: false, source: "none", expiresAt: null };
+    inventoryEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    inventoryEffectiveAccessError = error.message || "Unable to verify Inventory access.";
+  }
+  render();
+}
+
+function resetInventoryEffectiveAccess() {
+  inventoryEffectiveAccess = { module: "inventory", allowed: false, source: "none", expiresAt: null };
+  inventoryEffectiveAccessLoadState = "idle";
+  inventoryEffectiveAccessError = "";
+}
+
+async function loadPurchasingSuppliersEffectiveAccess({ silent = false } = {}) {
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    purchasingSuppliersEffectiveAccess = { module: "purchasing_suppliers", allowed: true, source: "permanent", expiresAt: null };
+    purchasingSuppliersEffectiveAccessLoadState = "ready";
+    purchasingSuppliersEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetPurchasingSuppliersEffectiveAccess();
+    purchasingSuppliersEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetPurchasingSuppliersEffectiveAccess();
+    purchasingSuppliersEffectiveAccessLoadState = "auth-required";
+    purchasingSuppliersEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    purchasingSuppliersEffectiveAccessLoadState = "loading";
+    purchasingSuppliersEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    purchasingSuppliersEffectiveAccess = await getPurchasingSuppliersEffectiveAccess(adminAuthSession);
+    purchasingSuppliersEffectiveAccessLoadState = "ready";
+    purchasingSuppliersEffectiveAccessError = "";
+  } catch (error) {
+    purchasingSuppliersEffectiveAccess = { module: "purchasing_suppliers", allowed: false, source: "none", expiresAt: null };
+    purchasingSuppliersEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    purchasingSuppliersEffectiveAccessError = error.message || "Unable to verify Purchasing & Suppliers access.";
+  }
+  render();
+}
+
+function resetPurchasingSuppliersEffectiveAccess() {
+  purchasingSuppliersEffectiveAccess = { module: "purchasing_suppliers", allowed: false, source: "none", expiresAt: null };
+  purchasingSuppliersEffectiveAccessLoadState = "idle";
+  purchasingSuppliersEffectiveAccessError = "";
+}
+
 function canViewCalendarRoute() {
-  return isTaskFeatureUiEnabled() && isFeatureFlagEnabled("VITE_ENABLE_CALENDAR", "VITE_CALENDAR_ENABLED") && ["owner", "admin", "staff"].includes(adminUser?.role);
+  if (!isTaskFeatureUiEnabled() || !isFeatureFlagEnabled("VITE_ENABLE_CALENDAR", "VITE_CALENDAR_ENABLED")) return false;
+  if (["owner", "admin"].includes(adminUser?.role)) return true;
+  if (isLocalTaskQaMode() && adminUser?.role === "staff") return true;
+  return adminUser?.role === "staff" && calendarEffectiveAccess.allowed === true && calendarEffectiveAccess.module === "calendar";
+}
+
+async function loadCalendarEffectiveAccess({ silent = false } = {}) {
+  if (!isTaskFeatureUiEnabled() || !isFeatureFlagEnabled("VITE_ENABLE_CALENDAR", "VITE_CALENDAR_ENABLED")) return;
+  if (["owner", "admin"].includes(adminUser?.role)) {
+    calendarEffectiveAccess = { module: "calendar", allowed: true, source: "permanent", expiresAt: null };
+    calendarEffectiveAccessLoadState = "ready";
+    calendarEffectiveAccessError = "";
+    return;
+  }
+  if (isLocalTaskQaMode() && adminUser?.role === "staff") {
+    calendarEffectiveAccess = { module: "calendar", allowed: true, source: "temporary", expiresAt: null };
+    calendarEffectiveAccessLoadState = "ready";
+    calendarEffectiveAccessError = "";
+    return;
+  }
+  if (adminUser?.role !== "staff") {
+    resetCalendarEffectiveAccess();
+    calendarEffectiveAccessLoadState = "ready";
+    return;
+  }
+  if (!adminAuthSession?.access_token) {
+    resetCalendarEffectiveAccess();
+    calendarEffectiveAccessLoadState = "auth-required";
+    calendarEffectiveAccessError = "Authentication required.";
+    return;
+  }
+
+  if (!silent) {
+    calendarEffectiveAccessLoadState = "loading";
+    calendarEffectiveAccessError = "";
+    render();
+  }
+
+  try {
+    calendarEffectiveAccess = await getCalendarEffectiveAccess(adminAuthSession);
+    calendarEffectiveAccessLoadState = "ready";
+    calendarEffectiveAccessError = "";
+  } catch (error) {
+    calendarEffectiveAccess = { module: "calendar", allowed: false, source: "none", expiresAt: null };
+    calendarEffectiveAccessLoadState = error.status === 401 ? "auth-required" : "error";
+    calendarEffectiveAccessError = error.message || "Unable to verify Calendar access.";
+  }
+  render();
+}
+
+function resetCalendarEffectiveAccess() {
+  calendarEffectiveAccess = { module: "calendar", allowed: false, source: "none", expiresAt: null };
+  calendarEffectiveAccessLoadState = "idle";
+  calendarEffectiveAccessError = "";
 }
 
 async function loadTaskCalendar({ silent = false } = {}) {
@@ -1984,7 +2534,7 @@ function renderWorkboardPage() {
   return `<section class="mvp-page workboard-page">
     <div class="mvp-page-title">
       <div><span>HOME / WORKBOARD</span><h1>Workboard</h1><p>Plan, assign, review, and monitor canonical task records.</p></div>
-      <button class="ops-gold-button" data-workboard-create type="button">CREATE TASK</button>
+      ${canManageWorkboardTasks() ? `<button class="ops-gold-button" data-workboard-create type="button">CREATE TASK</button>` : ""}
     </div>
     ${renderWorkboardStateNotice()}
     ${renderAutoPlanTodayPanel()}
@@ -2270,8 +2820,8 @@ function renderWorkboardActionArea(task) {
   const showAssignAction = actions.includes("ASSIGN") && !(task.status === "DRAFT" && actions.includes("APPROVE_AND_ASSIGN"));
   const approveMissing = actions.includes("APPROVE_AND_ASSIGN") ? getDraftPlanningBlockingFields(task) : [];
   const approveBlocked = approveMissing.length > 0;
-  if (!actions.length) return `<section class="my-task-action-area"><strong>No available manager action</strong><span>This task is waiting on another step.</span></section>`;
-  return `<section class="my-task-action-area workboard-actions"><strong>Allowed manager actions</strong>
+  if (!actions.length) return `<section class="my-task-action-area"><strong>No available task action</strong><span>This task is waiting on another step.</span></section>`;
+  return `<section class="my-task-action-area workboard-actions"><strong>Allowed task actions</strong>
     ${approveBlocked ? `<p class="my-task-form-error" role="status">Complete required planning fields before activation: ${escapeHtml(approveMissing.join(", "))}.</p>` : ""}
     ${actions.includes("REQUEST_REVISION") || actions.includes("APPROVE_WORK") ? `<label><span>Review note</span><textarea id="workboard-review-note" rows="3" ${busy ? "disabled" : ""}>${escapeHtml(workboardReviewNote)}</textarea></label>` : ""}
     ${actions.includes("ASSIGN") || actions.includes("APPROVE_AND_ASSIGN") ? `<label><span>Assignee</span>${renderWorkboardDraftUserSelect("workboard-assign-user", task.assignedUserId || "", "Unassigned")}</label>` : ""}
@@ -2404,6 +2954,7 @@ async function openWorkboardTask(taskId) {
 }
 
 function openWorkboardCreate() {
+  if (!canManageWorkboardTasks()) return;
   selectedTaskId = null;
   selectedTaskDetail = null;
   workboardDrawerMode = "create";
@@ -2413,6 +2964,7 @@ function openWorkboardCreate() {
 }
 
 function openWorkboardEditDraft(taskId) {
+  if (!canManageWorkboardTasks()) return;
   const task = selectedTaskDetail?.task?.id === taskId ? selectedTaskDetail.task : workboardTasks.find((item) => item.id === taskId);
   if (!task) return;
   selectedTaskId = taskId;
@@ -2420,6 +2972,10 @@ function openWorkboardEditDraft(taskId) {
   workboardDraftForm = createEmptyWorkboardDraft(task);
   workboardCommandError = "";
   render();
+}
+
+function canManageWorkboardTasks() {
+  return ["owner", "admin"].includes(adminUser?.role);
 }
 
 function closeWorkboardDrawer() {
@@ -3843,8 +4399,10 @@ function renderMvpPaymentConfirmation(item) {
   const balance = Math.max(Math.round((total - paid) * 100) / 100, 0);
   const isLoading = request.status === "loading";
   const isPaid = ["paid", "confirmed", "full_payment_confirmed"].includes(status) && balance <= 0;
-  const isShop = ["pay_at_shop", "payment_pending_at_shop"].includes(status) || String(item.paymentType || "").toLowerCase() === "shop";
-  const isOnline = ["proof_submitted", "under_review", "required", "correction_required"].includes(status) || String(item.paymentMethod || "").toLowerCase() === "online";
+  const paymentType = String(item.paymentType || "").trim().toLowerCase();
+  const paymentMethod = String(item.paymentMethod || "").trim().toLowerCase();
+  const isShop = ["pay_at_shop", "payment_pending_at_shop"].includes(status) || paymentType === "shop";
+  const isOnline = ["proof_submitted", "under_review", "correction_required"].includes(status) || paymentMethod === "online";
 
   if (isPaid) {
     return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">PAYMENT CONFIRMED. ${escapeHtml(formatOpsValue(paid))} recorded${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}.</p></section>`;
@@ -3866,7 +4424,7 @@ function renderMvpPaymentConfirmation(item) {
       ? `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation saved.")}</p>`
       : `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(warning)}</p>`;
 
-  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number</span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label></div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
+  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number <small>(optional for Cash)</small></span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label></div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
 }
 
 function renderOpsProductionStage(item) {
@@ -7991,72 +8549,60 @@ function renderCatalogEditorProduction(draft, disabled = false) {
 
 function renderCatalogEditorVariants(draft, disabled = false) {
   const variants = getCatalogDraftVariantRows(draft);
-  const sizes = uniqueList(variants.map((variant) => variant.size).filter(Boolean));
-  const colors = uniqueList(variants.map((variant) => variant.color).filter(Boolean));
   const canWrite = canWriteCatalogProducts();
-  const canAddVariant = canWrite && !disabled && Boolean(draft.id);
-  const addVariantMessage = !canWrite
-    ? "Catalog variants are read-only for this role."
-    : disabled
-      ? "Wait for the current Product save to finish before adding variants."
-      : !draft.id
-        ? "Save this Product before adding variants."
-        : "Use Add Variant to add the next size or color option, then save.";
+  const generatorDisabled = disabled || !canWrite;
+  const selectedSizes = splitCatalogList(draft.availableSizesText);
+  const selectedColors = splitCatalogList(draft.availableColorsText);
+  const canGenerate = selectedSizes.length > 0 && selectedColors.length > 0;
 
   return `
     <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
       <header class="catalog-variants-header">
-        <div><h2>Variants</h2><p>Size and color combinations for this catalog product.</p></div>
-        <button class="note-button catalog-add-variant-button" type="button" data-catalog-add-variant ${canAddVariant ? "" : "disabled"} title="${escapeHtml(addVariantMessage)}">${variants.length ? "Add Variant" : "Add First Variant"}</button>
+        <div><h2>Variants</h2><p>Select sizes and colors, then generate the combinations.</p></div>
+        <div class="catalog-variant-header-actions">
+          <button class="note-button" type="button" data-catalog-variants-done>Done</button>
+          <button class="primary-button" type="button" data-catalog-generate-variants ${generatorDisabled || !canGenerate ? "disabled" : ""}>Generate Variants</button>
+        </div>
       </header>
-      ${canAddVariant ? "" : `<p class="catalog-editor-helper">${escapeHtml(addVariantMessage)}</p>`}
-      ${renderCatalogVariantGenerator(draft, variants, disabled || !canWrite)}
-      <div class="catalog-variant-attributes">
-        <div>
-          <span>Available Sizes</span>
-          <div class="catalog-chip-list">${sizes.length ? sizes.map((size) => `<span class="catalog-attribute-chip">${escapeHtml(size)}</span>`).join("") : `<span class="catalog-muted-chip">No sizes yet</span>`}</div>
-        </div>
-        <div>
-          <span>Available Colors</span>
-          <div class="catalog-chip-list">${colors.length ? colors.map((color) => `<span class="catalog-attribute-chip color-chip"><i></i>${escapeHtml(color)}</span>`).join("") : `<span class="catalog-muted-chip">No colors yet</span>`}</div>
-        </div>
-      </div>
-      ${(catalogVariantPanel.mode || variants.length)
+      ${renderCatalogVariantGenerator(draft, variants, generatorDisabled)}
+      ${variants.length
         ? `<div class="catalog-variant-row-stack">
             <div class="catalog-variant-row-labels" aria-hidden="true"><span>Color</span><span>Size</span><span>SKU</span><span>Price</span><span>Action</span></div>
             ${variants.map((variant, index) => renderCatalogVariantRow(draft, variant, index, disabled)).join("")}
-            ${catalogVariantPanel.mode ? renderCatalogVariantPanel(draft, variants, disabled) : ""}
           </div>`
-        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Add size and color combinations for this product.</span></div>`}
+        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Select at least one size and color, then generate variants.</span></div>`}
     </article>
   `;
 }
 
 function renderCatalogVariantGenerator(draft, variants, disabled = false) {
-  const selectedSizes = new Set(uniqueList([...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(draft.availableSizesText)]).map(normalizeVariantToken));
-  const selectedColors = new Set(uniqueList([...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(draft.availableColorsText)]).map(normalizeVariantToken));
-  const sizeOptions = uniqueList([...catalogVariantSizeOptions, ...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(draft.availableSizesText)]);
-  const colorOptions = uniqueList([...catalogVariantColorOptions, ...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(draft.availableColorsText)]);
-  const generatedCount = selectedSizes.size * selectedColors.size;
+  const sizes = splitCatalogList(draft.availableSizesText);
+  const colors = splitCatalogList(draft.availableColorsText);
+  const sizeOptions = uniqueList([...catalogVariantSizeOptions.filter((size) => size !== "XXL"), ...sizes]);
+  const rememberedColors = uniqueList(["White", "Navy", "Cream", ...colors]);
+  const generatedCount = sizes.length * colors.length;
 
   return `
-    <div class="catalog-variant-generator" aria-label="Variant generator">
-      <div class="catalog-variant-generator-copy">
-        <span>Size x Color Generator</span>
-        <strong>${generatedCount ? `${generatedCount} combinations selected` : "Select sizes and colors"}</strong>
-      </div>
-      <div class="catalog-variant-generator-options">
-        <div>
-          <span>Sizes</span>
-          <div class="catalog-variant-option-list">
-            ${sizeOptions.map((size) => renderCatalogVariantOption("size", size, selectedSizes.has(normalizeVariantToken(size)), disabled)).join("")}
-          </div>
+    <div class="catalog-variant-generator catalog-variant-generator-v4" aria-label="Variant generator">
+      <div class="catalog-variant-option-row">
+        <span class="catalog-variant-option-name">Option<br><strong>Size</strong></span>
+        <span class="catalog-variant-option-values">Values</span>
+        <div class="catalog-variant-option-list">
+          ${sizeOptions.map((size) => renderCatalogVariantOption("size", size, sizes.some((item) => normalizeVariantToken(item) === normalizeVariantToken(size)), disabled)).join("")}
+          <label class="catalog-variant-custom-option">
+            <input type="text" data-catalog-custom-size placeholder="Select sizes…" ${disabled ? "disabled" : ""} aria-label="Add custom size, for example XXS or 3XL">
+          </label>
         </div>
-        <div>
-          <span>Colors</span>
-          <div class="catalog-variant-option-list">
-            ${colorOptions.map((color) => renderCatalogVariantOption("color", color, selectedColors.has(normalizeVariantToken(color)), disabled)).join("")}
-          </div>
+      </div>
+      <div class="catalog-variant-option-row">
+        <span class="catalog-variant-option-name">Option<br><strong>Color</strong></span>
+        <span class="catalog-variant-option-values">Values</span>
+        <div class="catalog-variant-option-list">
+          ${colors.map((color) => renderCatalogVariantOption("color", color, true, disabled)).join("")}
+          <label class="catalog-variant-custom-option">
+            <input type="text" data-catalog-custom-color placeholder="Select colors…" list="catalog-remembered-colors" ${disabled ? "disabled" : ""} aria-label="Add custom color">
+          </label>
+          <datalist id="catalog-remembered-colors">${rememberedColors.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
         </div>
       </div>
     </div>
@@ -8070,6 +8616,33 @@ function renderCatalogVariantOption(type, value, selected, disabled = false) {
       <span>${escapeHtml(value)}</span>
     </label>
   `;
+}
+
+function addCatalogCustomVariantValue(type, rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value || !catalogDraft || !canWriteCatalogProducts()) return;
+  updateCatalogVariantGeneratorSelection(type, value, true);
+}
+
+function generateCatalogVariantDrafts() {
+  if (!catalogDraft || !canWriteCatalogProducts()) return;
+  const sizes = splitCatalogList(catalogDraft.availableSizesText);
+  const colors = splitCatalogList(catalogDraft.availableColorsText);
+  if (!sizes.length || !colors.length) {
+    catalogSaveError = "Select at least one size and one color before generating variants.";
+    render();
+    return;
+  }
+  const variants = getCatalogDraftVariantRows(catalogDraft);
+  catalogDraft = {
+    ...catalogDraft,
+    variants: buildCatalogVariantMatrixDraft(catalogDraft, variants, sizes, colors),
+  };
+  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
+  catalogSaveError = "Variants generated in draft. Review them, then use Save Changes.";
+  catalogValidationError = "";
+  render();
+  focusCatalogEditorSection("catalog-section-variants");
 }
 
 function addCatalogVariantDraft() {
@@ -8137,7 +8710,6 @@ function renderCatalogVariantRow(draft, variant, index, disabled = false) {
         </label>
       </div>
       <div class="catalog-variant-row-actions">
-        <button class="primary-button" type="button" data-catalog-save-existing-variant="${index}" ${disabled ? "disabled" : ""}>Save</button>
         <button class="icon-button danger" type="button" data-catalog-delete-variant="${index}" ${disabled ? "disabled" : ""} aria-label="Delete Variant">${renderIcon("trash-2")}</button>
       </div>
     </div>
@@ -8299,22 +8871,16 @@ function deleteCatalogVariantDraft(index) {
 
 function updateCatalogVariantGeneratorSelection(type, value, checked) {
   if (!catalogDraft || !canWriteCatalogProducts()) return;
-  const variants = getCatalogDraftVariantRows(catalogDraft);
-  const currentSizes = uniqueList([...variants.map((variant) => variant.size).filter(Boolean), ...splitCatalogList(catalogDraft.availableSizesText)]);
-  const currentColors = uniqueList([...variants.map((variant) => variant.color).filter(Boolean), ...splitCatalogList(catalogDraft.availableColorsText)]);
-  const nextSizes = updateCatalogVariantOptionList(currentSizes, value, checked);
-  const nextColors = updateCatalogVariantOptionList(currentColors, value, checked);
-  const selectedSizes = type === "size" ? nextSizes : currentSizes;
-  const selectedColors = type === "color" ? nextColors : currentColors;
-  const nextVariants = buildCatalogVariantMatrixDraft(catalogDraft, variants, selectedSizes, selectedColors);
+  const currentSizes = splitCatalogList(catalogDraft.availableSizesText);
+  const currentColors = splitCatalogList(catalogDraft.availableColorsText);
+  const selectedSizes = type === "size" ? updateCatalogVariantOptionList(currentSizes, value, checked) : currentSizes;
+  const selectedColors = type === "color" ? updateCatalogVariantOptionList(currentColors, value, checked) : currentColors;
 
   catalogDraft = {
     ...catalogDraft,
-    variants: nextVariants,
     availableSizesText: selectedSizes.join(", "),
     availableColorsText: selectedColors.join(", "),
   };
-  catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
   catalogSaveError = "";
   catalogValidationError = "";
   render();
@@ -8920,8 +9486,8 @@ function createCatalogDraft(product = null) {
     availableSizes: [],
     availableColors: [],
     printMethods: [],
-    availableSizesText: "",
-    availableColorsText: "",
+    availableSizesText: "S, M, L, XL",
+    availableColorsText: "Black, White",
     printMethodsText: "",
     sortOrder: 0,
     isFeatured: false,
@@ -8949,6 +9515,10 @@ function inferCatalogProductType(product) {
 
 function createEmptyStaffDraft() {
   return { displayName: "", email: "", role: "staff" };
+}
+
+function createEmptyEmployeeTempAccessDraft() {
+  return { employeeId: "", moduleCodes: [], reason: "" };
 }
 
 function getVisibleEmployeeUsers() {
@@ -8996,11 +9566,16 @@ function renderPeopleAccessEmployeesPage() {
     staffLoadState = "loading";
     window.setTimeout(loadStaffUsers, 0);
   }
+  if (employeeTempAccessLoadState === "idle") {
+    employeeTempAccessLoadState = "loading";
+    window.setTimeout(loadEmployeeTemporaryAccess, 0);
+  }
 
   const visibleEmployees = getVisibleEmployeeUsers();
   const kpis = getEmployeeKpis();
-  const loading = staffLoadState === "loading";
+  const loading = staffLoadState === "idle" || staffLoadState === "loading";
   const activeCount = staffUsers.filter((user) => user.isActive !== false).length;
+  const tempBanner = renderEmployeeTempAccessBanner();
 
   return `<main class="people-access-page admin-saas-page">
     <section class="people-access-hero">
@@ -9009,11 +9584,16 @@ function renderPeopleAccessEmployeesPage() {
         <h1>People &amp; Access</h1>
         <p>Manage employees and assign their access role.</p>
       </div>
-      <button class="people-access-primary" type="button" data-staff-new ${loading ? "disabled" : ""}>+ INVITE EMPLOYEE</button>
+      <div class="people-access-actions">
+        <button class="people-access-secondary" type="button" data-temp-access-open ${loading ? "disabled" : ""}>AUTHORIZE FOR TODAY</button>
+        <button class="people-access-primary" type="button" data-staff-new ${loading ? "disabled" : ""}>+ INVITE EMPLOYEE</button>
+      </div>
     </section>
 
     ${staffFeedback ? `<p class="staff-feedback" role="status">${escapeHtml(staffFeedback)}</p>` : ""}
-    ${staffLoadError ? `<p class="staff-feedback error" role="alert">${escapeHtml(staffLoadError)}</p>` : ""}
+    ${staffLoadError && staffLoadState !== "error" ? `<p class="staff-feedback error" role="alert">${escapeHtml(staffLoadError)}</p>` : ""}
+    ${employeeTempAccessError ? `<p class="staff-feedback error" role="alert">${escapeHtml(employeeTempAccessError)}</p>` : ""}
+    ${tempBanner}
 
     <section class="people-access-tabs" aria-label="People and Access sections">
       <button class="active" type="button" aria-current="page">Employees</button>
@@ -9059,6 +9639,7 @@ function renderPeopleAccessEmployeesPage() {
       </footer>
     </section>
     ${staffDrawerMode ? renderStaffDrawer() : ""}
+    ${employeeTempAccessModalOpen ? renderEmployeeTempAccessModal() : ""}
   </main>`;
 }
 
@@ -9079,8 +9660,83 @@ function renderEmployeeTableBody(visibleEmployees, loading) {
   return visibleEmployees.map(renderEmployeeRow).join("");
 }
 
+function getActiveEmployeeTempAccessSummary(employeeId) {
+  const grants = employeeTemporaryAccess.filter((grant) => grant.employeeId === employeeId && !grant.revokedAt);
+  const moduleCodes = [...new Set(grants.map((grant) => grant.moduleCode).filter(Boolean))];
+  const expiresAt = grants.map((grant) => grant.expiresAt).filter(Boolean).sort()[0] || "";
+  return { grants, moduleCodes, moduleCount: moduleCodes.length, expiresAt };
+}
+
+function renderEmployeeTempAccessBanner() {
+  const employeeIds = new Set(employeeTemporaryAccess.filter((grant) => !grant.revokedAt).map((grant) => grant.employeeId));
+  if (!employeeIds.size) return "";
+  return `<section class="employee-temp-banner" aria-label="Temporary access summary">
+    <div><strong>Temporary access active</strong><span>${employeeIds.size} ${employeeIds.size === 1 ? "employee has" : "employees have"} temporary access today</span></div>
+    <button type="button" data-temp-access-open>REVIEW TEMP ACCESS</button>
+  </section>`;
+}
+
+function renderEmployeeTempAccessModal() {
+  const saving = employeeTempAccessSaveState === "saving";
+  const availableModuleCodes = new Set(employeeTemporaryAccessModules.filter((item) => !item.unavailableReason).map((item) => item.code));
+  const selectedModuleCodes = employeeTempAccessDraft.moduleCodes.filter((code) => availableModuleCodes.has(code));
+  const selectedCount = selectedModuleCodes.length;
+  const eligibleEmployees = staffUsers.filter(isEmployeeTempAccessEligible);
+  const selectedEmployee = staffUsers.find((user) => user.id === employeeTempAccessDraft.employeeId) || null;
+  const employeeEligible = selectedEmployee ? isEmployeeTempAccessEligible(selectedEmployee) : false;
+  const canSubmit = employeeEligible && selectedCount > 0 && !saving;
+
+  return `<div class="employee-temp-modal-backdrop" data-temp-access-close></div>
+    <aside class="employee-temp-modal" aria-label="Authorize for Today">
+      <header>
+        <div><span>SAFE TEMP ACCESS</span><h2>Authorize for Today</h2></div>
+        <button type="button" data-temp-access-close aria-label="Close temporary access modal">X</button>
+      </header>
+      <form id="employee-temp-access-form" class="employee-temp-form">
+        <label><span>Employee</span>
+          <select id="employee-temp-access-employee" ${saving ? "disabled" : ""} required>
+            <option value="">Select active staff employee</option>
+            ${eligibleEmployees.map((user) => `<option value="${escapeHtml(user.id)}" ${employeeTempAccessDraft.employeeId === user.id ? "selected" : ""}>${escapeHtml(user.displayName || user.email || "Unnamed staff")}</option>`).join("")}
+          </select>
+        </label>
+        <section class="employee-temp-module-picker" aria-label="Temporary module access">
+          <div><strong>Module selector</strong><span>${selectedCount} SELECTED</span></div>
+          ${employeeTemporaryAccessModules.map((item) => renderEmployeeTempModuleOption(item, saving)).join("")}
+        </section>
+        <label><span>Reason</span><textarea id="employee-temp-access-reason" ${saving ? "disabled" : ""} maxlength="500" placeholder="Optional audit note">${escapeHtml(employeeTempAccessDraft.reason)}</textarea></label>
+        <section class="employee-temp-expiry">
+          <strong>Expires today · 11:59 PM</strong>
+          <span>Permanent role stays unchanged</span>
+        </section>
+        <section class="employee-temp-audit">
+          <strong>Audit information</strong>
+          <span>Grant time, expiry, authorizer, revoker, and reason are recorded by the server.</span>
+        </section>
+        ${employeeTempAccessSaveError ? `<p class="staff-form-error" role="alert">${escapeHtml(employeeTempAccessSaveError)}</p>` : ""}
+        <footer>
+          <button type="button" data-temp-access-close ${saving ? "disabled" : ""}>CANCEL</button>
+          <button class="staff-primary-action" type="submit" ${canSubmit ? "" : "disabled"}>${saving ? "AUTHORIZING..." : `AUTHORIZE SELECTED${selectedCount ? ` · ${selectedCount}` : ""}`}</button>
+        </footer>
+      </form>
+    </aside>`;
+}
+
+function renderEmployeeTempModuleOption(item, saving) {
+  const unavailable = Boolean(item.unavailableReason);
+  const checked = !unavailable && employeeTempAccessDraft.moduleCodes.includes(item.code);
+  const disabled = saving || unavailable;
+  return `<label class="employee-temp-module-option ${unavailable ? "is-unavailable" : ""}">
+    <input type="checkbox" value="${escapeHtml(item.code)}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""} />
+    <span>${escapeHtml(item.label)}${unavailable ? `<small>${escapeHtml(item.unavailableReason)}</small>` : ""}</span>
+    ${item.protected ? `<b>PROTECTED</b>` : ""}
+  </label>`;
+}
+
 function renderEmployeeRow(user) {
   const active = user.isActive !== false;
+  const busy = staffActionId === user.id;
+  const tempSummary = getActiveEmployeeTempAccessSummary(user.id);
+  const tempBusy = staffActionId === `temp:${user.id}`;
   return `<div class="employee-row" role="row">
     <div class="employee-profile-cell">
       <span class="employee-avatar ${escapeHtml(getEmployeeAvatarTone(user))}"><b>${escapeHtml(getEmployeeInitial(user))}</b></span>
@@ -9089,8 +9745,15 @@ function renderEmployeeRow(user) {
     <span class="employee-role-cell">${escapeHtml(getEmployeeRoleLabel(user))}</span>
     <span>${renderEmployeeStatusChip(active)}</span>
     <span class="employee-last-login">${escapeHtml(formatEmployeeLastLogin(user.lastSignInAt))}</span>
-    <span>${renderEmployeeAccessChip(user)}</span>
-    <span class="employee-row-actions">${renderStaffActions(user)}</span>
+    <span>${renderEmployeeAccessChip(user, tempSummary)}</span>
+    <span class="employee-row-actions">
+      <button type="button" data-staff-edit="${escapeHtml(user.id)}" ${busy ? "disabled" : ""}>EDIT</button>
+      ${isEmployeeTempAccessEligible(user) ? `<button type="button" data-temp-access-open="${escapeHtml(user.id)}" ${tempBusy ? "disabled" : ""}>AUTHORIZE</button>` : ""}
+      ${tempSummary.moduleCount ? `<button type="button" data-temp-access-revoke="${escapeHtml(user.id)}" ${tempBusy ? "disabled" : ""}>${tempBusy ? "REVOKING..." : "REVOKE NOW"}</button>` : ""}
+      ${active
+        ? `<button type="button" data-staff-disable="${escapeHtml(user.id)}" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : "DEACTIVATE"}</button>`
+        : `<button type="button" data-staff-activate="${escapeHtml(user.id)}" ${busy ? "disabled" : ""}>${busy ? "SAVING..." : "ACTIVATE"}</button>`}
+    </span>
   </div>`;
 }
 
@@ -9098,18 +9761,32 @@ function renderEmployeeStatusChip(active) {
   return `<b class="employee-chip ${active ? "active" : "deactivated"}">${active ? "ACTIVE" : "DEACTIVATED"}</b>`;
 }
 
-function renderEmployeeAccessChip(user) {
+function renderEmployeeAccessChip(user, tempSummary = { moduleCount: 0 }) {
+  if (tempSummary.moduleCount) {
+    return `<span class="employee-temp-access-stack"><b class="employee-chip temporary">TEMP · ${tempSummary.moduleCount} ${tempSummary.moduleCount === 1 ? "MODULE" : "MODULES"}</b><small>${escapeHtml(formatEmployeeTempExpiry(tempSummary.expiresAt))}</small></span>`;
+  }
   const role = String(user.role || "").toLowerCase();
   const label = role === "owner" ? "FULL ACCESS" : role === "admin" ? "MANAGEMENT" : "MY WORK";
   const tone = role === "owner" ? "full" : "summary";
   return `<b class="employee-chip ${tone}">${label}</b>`;
 }
 
+function isEmployeeTempAccessEligible(user) {
+  return user?.isActive !== false && String(user?.role || "").toLowerCase() === "staff";
+}
+
+function formatEmployeeTempExpiry(value) {
+  if (!value) return "11:59 PM";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "11:59 PM";
+  return new Intl.DateTimeFormat("en-US", { timeZone: "Asia/Manila", hour: "numeric", minute: "2-digit" }).format(new Date(date.getTime() - 60_000));
+}
+
 function getEmployeeRoleLabel(user) {
   const role = String(user?.role || "").toLowerCase();
-  if (role === "owner") return "Owner / Admin";
-  if (role === "admin") return "Admin / Operations";
-  if (role === "staff") return "Production Staff";
+  if (role === "owner") return "Owner";
+  if (role === "admin") return "Admin";
+  if (role === "staff") return "Staff";
   return formatAdminRole(role || "staff");
 }
 
@@ -9274,7 +9951,11 @@ function openEditStaffDrawer(id) {
 }
 
 function closeStaffDrawer() {
-  resetStaffDrawerState();
+  staffDrawerMode = "";
+  staffEditingId = null;
+  staffDraft = createEmptyStaffDraft();
+  staffSaveState = "idle";
+  staffSaveError = "";
   render();
 }
 
@@ -9291,6 +9972,98 @@ async function loadStaffUsers() {
     staffLoadState = "error";
     staffLoadError = error.message || "Unable to load staff accounts.";
   }
+  render();
+}
+
+async function loadEmployeeTemporaryAccess() {
+  if (!canManageStaffAccounts() || !adminAuthSession?.access_token) return;
+  employeeTempAccessLoadState = "loading";
+  employeeTempAccessError = "";
+  try {
+    const payload = await getEmployeeTemporaryAccess(adminAuthSession);
+    employeeTemporaryAccess = Array.isArray(payload.grants) ? payload.grants : [];
+    employeeTempAccessLoadState = "ready";
+  } catch (error) {
+    console.error("Unable to load employee temporary access.", error);
+    employeeTempAccessLoadState = "error";
+    employeeTempAccessError = error.message || "Unable to load temporary access.";
+  }
+  render();
+}
+
+function openEmployeeTempAccessModal(employeeId = "") {
+  const selected = staffUsers.find((user) => user.id === employeeId && isEmployeeTempAccessEligible(user));
+  employeeTempAccessModalOpen = true;
+  employeeTempAccessDraft = { ...createEmptyEmployeeTempAccessDraft(), employeeId: selected?.id || "" };
+  employeeTempAccessSaveState = "idle";
+  employeeTempAccessSaveError = "";
+  render();
+}
+
+function closeEmployeeTempAccessModal() {
+  employeeTempAccessModalOpen = false;
+  employeeTempAccessDraft = createEmptyEmployeeTempAccessDraft();
+  employeeTempAccessSaveState = "idle";
+  employeeTempAccessSaveError = "";
+  render();
+}
+
+async function submitEmployeeTempAccessForm() {
+  const target = staffUsers.find((user) => user.id === employeeTempAccessDraft.employeeId);
+  const availableModuleCodes = new Set(employeeTemporaryAccessModules.filter((item) => !item.unavailableReason).map((item) => item.code));
+  const moduleCodes = employeeTempAccessDraft.moduleCodes.filter((code) => availableModuleCodes.has(code));
+  if (!target || !isEmployeeTempAccessEligible(target)) {
+    employeeTempAccessSaveError = "Select an active staff employee.";
+    render();
+    return;
+  }
+  if (!moduleCodes.length) {
+    employeeTempAccessSaveError = "Select at least one module.";
+    render();
+    return;
+  }
+
+  employeeTempAccessSaveState = "saving";
+  employeeTempAccessSaveError = "";
+  render();
+  try {
+    await grantEmployeeTemporaryAccess(adminAuthSession, {
+      employeeId: employeeTempAccessDraft.employeeId,
+      moduleCodes,
+      reason: employeeTempAccessDraft.reason,
+    });
+    staffFeedback = "Temporary access recorded for today.";
+    employeeTempAccessModalOpen = false;
+    employeeTempAccessDraft = createEmptyEmployeeTempAccessDraft();
+    employeeTempAccessSaveState = "idle";
+    await loadStaffUsers();
+    await loadEmployeeTemporaryAccess();
+  } catch (error) {
+    employeeTempAccessSaveState = "idle";
+    employeeTempAccessSaveError = error.message || "Temporary access could not be recorded.";
+    render();
+  }
+}
+
+async function revokeEmployeeTempAccess(employeeId) {
+  const target = staffUsers.find((user) => user.id === employeeId);
+  if (!target) return;
+  const label = target.displayName || target.email || "this employee";
+  if (!window.confirm(`Revoke temporary access for ${label}? The historical grant records will be preserved.`)) return;
+
+  staffActionId = `temp:${employeeId}`;
+  staffFeedback = "";
+  employeeTempAccessError = "";
+  render();
+  try {
+    await revokeEmployeeTemporaryAccess(adminAuthSession, { employeeId });
+    staffFeedback = "Temporary access revoked.";
+    await loadStaffUsers();
+    await loadEmployeeTemporaryAccess();
+  } catch (error) {
+    employeeTempAccessError = error.message || "Temporary access could not be revoked.";
+  }
+  staffActionId = "";
   render();
 }
 
@@ -9333,6 +10106,7 @@ async function submitStaffForm() {
     }
     resetStaffDrawerState();
     await loadStaffUsers();
+    await loadEmployeeTemporaryAccess();
   } catch (error) {
     staffSaveState = "idle";
     staffSaveError = error.message || "Employee account save failed.";
@@ -9359,6 +10133,7 @@ async function updateStaffStatus(id, action) {
     });
     staffFeedback = action === "disable" ? "Employee account deactivated." : "Employee account activated.";
     await loadStaffUsers();
+    await loadEmployeeTemporaryAccess();
   } catch (error) {
     staffLoadError = error.message || "Employee account update failed.";
   }
@@ -9953,28 +10728,32 @@ function renderSidebar(currentRoute) {
 
   const topNavItems = [
     { label: "Overview", path: "/overview" },
-    { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
-    { label: "Orders", path: "/orders", icon: "package" },
-    { label: "Production", path: "/production", icon: "factory" },
+    ...(canViewInquiriesRoute() ? [{ label: "Inquiries", path: "/inquiries", icon: "clipboard-list" }] : []),
+    ...(canViewOrdersRoute() ? [{ label: "Orders", path: "/orders", icon: "package" }] : []),
+    ...(canViewProductionRoute() ? [{ label: "Production", path: "/production", icon: "factory" }] : []),
   ];
 
   const masterCatalogItems = [
-    { label: "Products", path: "/catalog", icon: "package", activePaths: ["/catalog"] },
-    { label: "Brands", path: "/catalog/brands", icon: "tag", activePaths: ["/catalog/brands"] },
-    { label: "Categories", path: "/catalog/categories", icon: "layers", activePaths: ["/catalog/categories"] },
+    ...(canViewMasterCatalogRoute() ? [
+      { label: "Products", path: "/catalog", icon: "package", activePaths: ["/catalog"] },
+      { label: "Brands", path: "/catalog/brands", icon: "tag", activePaths: ["/catalog/brands"] },
+      { label: "Categories", path: "/catalog/categories", icon: "layers", activePaths: ["/catalog/categories"] },
+    ] : []),
   ];
 
   const supplyInventoryItems = [
-    { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"] },
-    { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", activePaths: ["/catalog/purchasing"] },
-    { label: "Inventory", path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"] },
+    ...(canViewPurchasingSuppliersRoute() ? [
+      { label: "Suppliers", path: "/catalog/suppliers", icon: "truck", activePaths: ["/catalog/suppliers"] },
+      { label: "Purchasing", path: "/catalog/purchasing", icon: "shopping-cart", activePaths: ["/catalog/purchasing"] },
+    ] : []),
+    ...(canViewInventoryRoute() ? [{ label: "Inventory", path: "/catalog/inventory", icon: "boxes", activePaths: ["/catalog/inventory"] }] : []),
   ];
 
   const workflowNavItems = [
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
-    ...(canViewSettingsRoute() ? [{ label: "Employee Access", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
+    ...(canViewSettingsRoute() ? [{ label: "Settings", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
   ];
 
   const renderNavItem = (item) => {
@@ -10116,15 +10895,20 @@ function renderMobileTopBar() {
 function renderMobileBottomNav(currentRoute) {
   const navItems = [
     { label: "Overview", path: "/overview" },
-    { label: "Inquiries", path: "/inquiries", icon: "clipboard-list" },
-    { label: "Orders", path: "/orders", icon: "package" },
-    { label: "Production", path: "/production", icon: "factory" },
-    { label: "Catalog", path: "/catalog", icon: "package" },
+    ...(canViewInquiriesRoute() ? [{ label: "Inquiries", path: "/inquiries", icon: "clipboard-list" }] : []),
+    ...(canViewOrdersRoute() ? [{ label: "Orders", path: "/orders", icon: "package" }] : []),
+    ...(canViewProductionRoute() ? [{ label: "Production", path: "/production", icon: "factory" }] : []),
+    ...(canViewMasterCatalogRoute() ? [{ label: "Catalog", path: "/catalog", icon: "package" }] : []),
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
     ...(canViewCalendarRoute() ? [{ label: "Calendar", path: "/calendar", icon: "calendar-check" }] : []),
     ...(canViewMyTasksRoute() ? [{ label: "My Tasks", path: "/my-tasks", icon: "clipboard-list" }] : []),
+    ...(canViewSettingsRoute() ? [{ label: "Settings", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }] : []),
   ];
-  return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => `<a class="${item.label === currentRoute ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`).join("")}</nav>`;
+  const routePath = getRoutePath();
+  return `<nav class="mobile-bottom-nav" aria-label="Mobile navigation">${navItems.map((item) => {
+    const isActive = item.activePaths ? item.activePaths.includes(routePath) : item.label === currentRoute;
+    return `<a class="${isActive ? "active" : ""}" href="${item.path}" data-route-link>${renderIcon(item.icon || getNavIcon(item.label), "nav-icon")}<small>${item.label}</small></a>`;
+  }).join("")}</nav>`;
 }
 function renderGlobalSearchHint() {
   const normalized = globalSearchQuery.trim().toLowerCase();
@@ -11157,6 +11941,9 @@ function bindEvents() {
     employeeStatusFilter = "deactivated";
     render();
   });
+  document.querySelectorAll("[data-temp-access-open]").forEach((button) => button.addEventListener("click", () => openEmployeeTempAccessModal(button.dataset.tempAccessOpen || "")));
+  document.querySelectorAll("[data-temp-access-revoke]").forEach((button) => button.addEventListener("click", () => revokeEmployeeTempAccess(button.dataset.tempAccessRevoke)));
+  document.querySelectorAll("[data-temp-access-close]").forEach((button) => button.addEventListener("click", closeEmployeeTempAccessModal));
 
   const staffForm = document.getElementById("staff-form");
   if (staffForm) {
@@ -11176,6 +11963,55 @@ function bindEvents() {
       await submitStaffForm();
     });
   }
+
+  const tempAccessForm = document.getElementById("employee-temp-access-form");
+  if (tempAccessForm) {
+    document.getElementById("employee-temp-access-employee")?.addEventListener("change", (event) => {
+      employeeTempAccessDraft.employeeId = event.target.value;
+      employeeTempAccessSaveError = "";
+      render();
+    });
+    document.querySelectorAll(".employee-temp-module-option input").forEach((input) => {
+      input.addEventListener("change", () => {
+        employeeTempAccessDraft.moduleCodes = [...document.querySelectorAll(".employee-temp-module-option input:checked")].map((item) => item.value);
+        employeeTempAccessSaveError = "";
+        render();
+      });
+    });
+    document.getElementById("employee-temp-access-reason")?.addEventListener("input", (event) => {
+      employeeTempAccessDraft.reason = event.target.value;
+      employeeTempAccessSaveError = "";
+    });
+    tempAccessForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (employeeTempAccessSaveState === "saving") return;
+      employeeTempAccessDraft.reason = document.getElementById("employee-temp-access-reason")?.value || employeeTempAccessDraft.reason;
+      await submitEmployeeTempAccessForm();
+    });
+  }
+
+  document.getElementById("employee-search")?.addEventListener("input", (event) => {
+    employeeQuery = event.target.value;
+    render();
+  });
+  document.getElementById("employee-role-filter")?.addEventListener("change", (event) => {
+    employeeRoleFilter = event.target.value;
+    render();
+  });
+  document.getElementById("employee-status-filter")?.addEventListener("change", (event) => {
+    employeeStatusFilter = event.target.value;
+    render();
+  });
+  document.querySelector("[data-employee-reset]")?.addEventListener("click", () => {
+    employeeQuery = "";
+    employeeRoleFilter = "all";
+    employeeStatusFilter = "active";
+    render();
+  });
+  document.querySelector("[data-employee-view-deactivated]")?.addEventListener("click", () => {
+    employeeStatusFilter = "deactivated";
+    render();
+  });
 
   document.querySelectorAll(".menu-button, .mobile-menu-button").forEach((button) => {
     button.addEventListener("click", () => {
@@ -11867,6 +12703,37 @@ function bindEvents() {
     field.addEventListener("change", () => {
       updateCatalogVariantGeneratorSelection(field.dataset.catalogVariantGenerator, field.value, field.checked);
     });
+  });
+
+  document.querySelector("[data-catalog-custom-size]")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addCatalogCustomVariantValue("size", event.currentTarget.value);
+  });
+
+  document.querySelector("[data-catalog-add-color]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    addCatalogCustomVariantValue("color", document.querySelector("[data-catalog-custom-color]")?.value);
+  });
+
+  document.querySelector("[data-catalog-custom-color]")?.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    addCatalogCustomVariantValue("color", event.currentTarget.value);
+  });
+
+  document.querySelectorAll("[data-catalog-remembered-color]").forEach((button) => {
+    button.addEventListener("click", () => addCatalogCustomVariantValue("color", button.dataset.catalogRememberedColor));
+  });
+
+  document.querySelector("[data-catalog-generate-variants]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    generateCatalogVariantDrafts();
+  });
+
+  document.querySelector("[data-catalog-variants-done]")?.addEventListener("click", (event) => {
+    event.preventDefault();
+    document.querySelector("[data-catalog-editor-save]")?.focus();
   });
 
   document.querySelectorAll("[data-catalog-variant-field]").forEach((field) => {
@@ -12794,7 +13661,13 @@ function getCurrentRoute() {
 function getRoutePath() {
   const path = window.location.pathname.replace(/\/+$/, "") || "/";
   if (path === legacyOrderDashboardPath) return activeOrdersPath;
+  if (path === "/orders" && !canViewOrdersRoute()) return defaultRoutePath;
+  if (path === "/inquiries" && !canViewInquiriesRoute()) return defaultRoutePath;
+  if (path === "/production" && !canViewProductionRoute()) return defaultRoutePath;
   if (path === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
+  if (path === "/catalog" && !canViewMasterCatalogRoute()) return defaultRoutePath;
+  if (path === "/catalog/inventory" && !canViewInventoryRoute()) return defaultRoutePath;
+  if ((path === "/catalog/purchasing" || path === "/catalog/suppliers") && !canViewPurchasingSuppliersRoute()) return defaultRoutePath;
   if (path === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (path === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
   if ((path === "/settings" || path === "/settings/people-access") && !canViewSettingsRoute()) return defaultRoutePath;
@@ -12813,7 +13686,13 @@ function normalizeRoutePath(path) {
   if (["/forgot-password", "/reset-password", "/set-password", "/login"].includes(routePath)) {
     return `${routePath}${url.search}${url.hash}`;
   }
+  if (routePath === "/orders" && !canViewOrdersRoute()) return defaultRoutePath;
+  if (routePath === "/inquiries" && !canViewInquiriesRoute()) return defaultRoutePath;
+  if (routePath === "/production" && !canViewProductionRoute()) return defaultRoutePath;
   if (routePath === "/my-tasks" && !canViewMyTasksRoute()) return defaultRoutePath;
+  if (routePath === "/catalog" && !canViewMasterCatalogRoute()) return defaultRoutePath;
+  if (routePath === "/catalog/inventory" && !canViewInventoryRoute()) return defaultRoutePath;
+  if ((routePath === "/catalog/purchasing" || routePath === "/catalog/suppliers") && !canViewPurchasingSuppliersRoute()) return defaultRoutePath;
   if (routePath === "/workboard" && !canViewWorkboardRoute()) return defaultRoutePath;
   if (routePath === "/calendar" && !canViewCalendarRoute()) return defaultRoutePath;
   if ((routePath === "/settings" || routePath === "/settings/people-access") && !canViewSettingsRoute()) return defaultRoutePath;

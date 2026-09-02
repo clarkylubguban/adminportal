@@ -14,6 +14,13 @@
   margin-bottom: 22px;
 }
 
+.people-access-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
 .people-access-title span,
 .people-access-denied span {
   display: block;
@@ -38,6 +45,7 @@
 }
 
 .people-access-primary,
+.people-access-secondary,
 .employee-controls button,
 .employees-panel-footer button,
 .employee-row button {
@@ -56,6 +64,12 @@
   border-color: #0b0d10;
   background: #0b0d10;
   color: #ffffff;
+}
+
+.people-access-secondary {
+  min-width: 176px;
+  border-color: #d8d3c6;
+  background: #fffdf7;
 }
 
 .people-access-tabs,
@@ -193,9 +207,9 @@
 .employees-table-header,
 .employee-row {
   display: grid;
-  grid-template-columns: minmax(260px, 2fr) minmax(150px, 1fr) minmax(110px, .65fr) minmax(130px, .85fr) minmax(115px, .75fr) 96px;
+  grid-template-columns: minmax(260px, 1.6fr) minmax(110px, .65fr) minmax(105px, .55fr) minmax(120px, .7fr) minmax(130px, .75fr) minmax(330px, 1.4fr);
   align-items: center;
-  min-width: 900px;
+  min-width: 1120px;
 }
 
 .employees-table-header {
@@ -313,8 +327,234 @@
   color: #647084;
 }
 
+.employee-chip.temporary {
+  background: #fff6d8;
+  color: #8a5c00;
+}
+
+.employee-temp-access-stack {
+  display: grid;
+  gap: 5px;
+  justify-items: start;
+}
+
+.employee-temp-access-stack small {
+  color: #8a5c00;
+  font-size: 9px;
+  font-weight: 700;
+}
+
+.employee-row-actions {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .employee-row button {
-  width: 90px;
+  min-width: 82px;
+  padding: 0 10px;
+}
+
+.employee-row button[data-staff-disable] {
+  border-color: #f4b4ad;
+  color: #b42318;
+}
+
+.employee-row button:disabled,
+.people-access-primary:disabled {
+  cursor: wait;
+  opacity: .62;
+}
+
+.employee-temp-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border: 1px solid #eadca9;
+  border-radius: 8px;
+  background: #fff9e7;
+  margin-bottom: 12px;
+  padding: 12px 14px;
+}
+
+.employee-temp-banner strong,
+.employee-temp-banner span {
+  display: block;
+}
+
+.employee-temp-banner strong {
+  font-size: 12px;
+}
+
+.employee-temp-banner span {
+  color: #8a5c00;
+  font-size: 10px;
+  margin-top: 4px;
+}
+
+.employee-temp-banner button,
+.employee-temp-form footer button {
+  height: 34px;
+  border: 1px solid #d8d3c6;
+  border-radius: 7px;
+  background: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.employee-temp-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  background: rgba(14, 17, 22, .38);
+}
+
+.employee-temp-modal {
+  position: fixed;
+  z-index: 81;
+  top: 50%;
+  left: 50%;
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(740px, calc(100vh - 28px));
+  overflow-y: auto;
+  transform: translate(-50%, -50%);
+  border: 1px solid #e5e3da;
+  border-radius: 10px;
+  background: #ffffff;
+  box-shadow: 0 24px 70px rgba(14, 17, 22, .24);
+  padding: 18px;
+}
+
+.employee-temp-modal header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.employee-temp-modal header span,
+.employee-temp-form label span,
+.employee-temp-module-picker > div span,
+.employee-temp-audit strong {
+  color: #98a0af;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.employee-temp-modal header h2 {
+  margin: 5px 0 0;
+  font-size: 22px;
+}
+
+.employee-temp-modal header button {
+  width: 34px;
+  height: 34px;
+  border: 1px solid #e5e3da;
+  border-radius: 7px;
+  background: #ffffff;
+}
+
+.employee-temp-form,
+.employee-temp-form label,
+.employee-temp-expiry,
+.employee-temp-audit {
+  display: grid;
+  gap: 8px;
+}
+
+.employee-temp-form select,
+.employee-temp-form textarea {
+  width: 100%;
+  border: 1px solid #e5e3da;
+  border-radius: 7px;
+  background: #ffffff;
+  color: #0e1116;
+  font-size: 11px;
+}
+
+.employee-temp-form select {
+  height: 40px;
+  padding: 0 11px;
+}
+
+.employee-temp-form textarea {
+  min-height: 74px;
+  resize: vertical;
+  padding: 10px 11px;
+}
+
+.employee-temp-module-picker {
+  display: grid;
+  gap: 8px;
+  border: 1px solid #e5e3da;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.employee-temp-module-picker > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.employee-temp-module-option {
+  display: grid;
+  grid-template-columns: 18px 1fr auto;
+  align-items: center;
+  gap: 9px;
+  min-height: 34px;
+}
+
+.employee-temp-module-option small {
+  display: block;
+  color: #7c7465;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.employee-temp-module-option.is-unavailable {
+  color: #7c7465;
+}
+
+.employee-temp-module-option.is-unavailable input {
+  cursor: not-allowed;
+}
+
+.employee-temp-module-option b {
+  border-radius: 6px;
+  background: #f4eee1;
+  color: #8a5c00;
+  padding: 5px 7px;
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.employee-temp-expiry,
+.employee-temp-audit {
+  border-radius: 8px;
+  background: #f7f6f1;
+  padding: 11px;
+}
+
+.employee-temp-expiry strong {
+  font-size: 12px;
+}
+
+.employee-temp-expiry span,
+.employee-temp-audit span {
+  color: #647084;
+  font-size: 10px;
+}
+
+.employee-temp-form footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
 }
 
 .employee-empty-state {

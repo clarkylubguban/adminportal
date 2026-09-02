@@ -1,10 +1,13 @@
 import { assignmentLabel, validateAssignmentUser } from "../../_lib/adminAssignments.js";
+import { getEffectiveModuleAccess, requireEffectiveModuleAccess } from "../../_lib/effectiveAccess.js";
 import { convertInquiryToNativeOrder, NativeOrderError, readNativeOrderBySourceInquiryId } from "../../_lib/nativeOrders.js";
 import { reconcileNativeOrderStatusForInquiry, transitionNativeOrderStatus } from "../../_lib/nativeOrderStatus.js";
 import { buildOpsWorkflowUpdates } from "../../_lib/opsWorkflow.js";
 import { createServerSupabaseClient } from "../../_lib/supabaseServer.js";
 
 const WRITE_ROLES = new Set(["owner", "admin", "staff"]);
+const PRODUCTION_WORKFLOW_ACTIONS = new Set(["save_production", "start_production", "advance_production", "save_qc_note"]);
+const STAFF_PRODUCTION_ACTIONS = new Set(["save_production", "start_production"]);
 const WORKFLOW_SELECT = [
   "id", "status", "next_action", "odoo_so", "product", "product_desc", "quantity", "due_date",
   "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status",
@@ -37,14 +40,21 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
     if (!WRITE_ROLES.has(adminUser.role)) return sendJson(response, 403, { ok: false, error: "write access required" });
 
     if (nativeOrderRequest) {
+      if (!dependencies.adminUser) await requireEffectiveModuleAccess(supabase, adminUser, "inquiries");
       const result = await convertInquiryToNativeOrder(supabase, inquiryReference);
       return sendJson(response, result.created ? 201 : 200, { ok: true, created: result.created, order: result.order });
     }
 
     const body = await readJsonBody(request);
+    const action = String(body.action || "");
+    const access = dependencies.adminUser
+      ? { module: "inquiries", allowed: true, source: "dependency", expiresAt: null }
+      : await resolveWorkflowAccess(supabase, adminUser, action);
     const { data: inquiry, error: lookupError } = await supabase.from("ops_inquiries").select(WORKFLOW_SELECT).eq("id", inquiryReference).maybeSingle();
     if (lookupError) throw lookupError;
     if (!inquiry) return sendJson(response, 404, { ok: false, error: "inquiry not found" });
+    const productionBoundary = enforceTemporaryProductionBoundary(access, adminUser, action, body, inquiry);
+    if (!productionBoundary.ok) return sendJson(response, productionBoundary.status, { ok: false, error: productionBoundary.error });
     const nativeOrder = await readNativeOrderBySourceInquiryId(supabase, inquiryReference);
     const workflowInquiry = nativeOrder
       ? { ...inquiry, nativeOrderAuthority: true, nativeOrderId: nativeOrder.id, nativeOrderReference: nativeOrder.orderReference, nativeOrderStatus: nativeOrder.status }
@@ -55,7 +65,6 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
     if (!assignmentPatch.ok) return sendJson(response, 400, { ok: false, error: assignmentPatch.error });
 
     const workflowBody = { ...body, assignedStaff: assignmentPatch.assignedStaff, actorUserId: adminUser.userId, productionStartedBy: adminUser.userId };
-    const action = String(body.action || "");
     const result = buildOpsWorkflowUpdates(action, workflowBody, workflowInquiry, now);
     if (!result.ok) return sendJson(response, 400, { ok: false, error: result.error });
     if (assignmentPatch.hasAssignment) Object.assign(result.updates, assignmentPatch.updates);
@@ -71,11 +80,54 @@ export async function handleWorkflowRequest(request, response, dependencies = {}
     if (error instanceof NativeOrderError) {
       return sendJson(response, error.status, { ok: false, error: error.message, code: error.code });
     }
+    if (error?.status) {
+      return sendJson(response, error.status, { ok: false, error: { code: error.code || "FORBIDDEN", message: error.message } });
+    }
     console.error("Admin workflow update failed.", { message: error?.message, code: error?.code });
     const schemaMissing = /orders|production_stage|production_started_at|production_started_by|production_completed_at|production_completed_by|qc_started_at|qc_completed_at|qc_note|assigned_staff|assigned_user_id|blocked_reason|schema cache|could not find/i.test(String(error?.message || ""));
     const missingMessage = nativeOrderRequest ? "native orders table is not ready" : "workflow fields are not ready";
     sendJson(response, schemaMissing ? 503 : 500, { ok: false, error: schemaMissing ? missingMessage : "workflow update failed" });
   }
+}
+
+async function resolveWorkflowAccess(supabase, adminUser, action) {
+  if (action === "release_production") {
+    return requireEffectiveModuleAccess(supabase, adminUser, "inquiries");
+  }
+
+  const inquiriesAccess = await getEffectiveModuleAccess(supabase, adminUser, "inquiries");
+  if (inquiriesAccess.allowed) return inquiriesAccess;
+
+  if (PRODUCTION_WORKFLOW_ACTIONS.has(action)) {
+    const productionAccess = await getEffectiveModuleAccess(supabase, adminUser, "production");
+    if (productionAccess.allowed) return productionAccess;
+  }
+
+  return requireEffectiveModuleAccess(supabase, adminUser, PRODUCTION_WORKFLOW_ACTIONS.has(action) ? "production" : "inquiries");
+}
+
+function enforceTemporaryProductionBoundary(access, adminUser, action, body, inquiry) {
+  if (access?.module !== "production" || access?.source !== "temporary" || adminUser?.role !== "staff") {
+    return { ok: true };
+  }
+
+  if (!STAFF_PRODUCTION_ACTIONS.has(action)) {
+    return { ok: false, status: 403, error: "Production manager action is restricted." };
+  }
+
+  if (String(inquiry.assigned_user_id || "").toLowerCase() !== String(adminUser.userId || "").toLowerCase()) {
+    return { ok: false, status: 404, error: "inquiry not found" };
+  }
+
+  if (action === "save_production") {
+    for (const field of ["assignedUserId", "assignedStaff", "blockedReason", "dueDate"]) {
+      if (Object.prototype.hasOwnProperty.call(body, field)) {
+        return { ok: false, status: 403, error: "Production manager action is restricted." };
+      }
+    }
+  }
+
+  return { ok: true };
 }
 
 async function getAuthorizedAdmin(supabase, token) {
