@@ -7,10 +7,35 @@ declare
   v_reference text;
   v_normalized text;
   v_first_seen_at timestamptz;
+  v_owner_user_id uuid := '00000000-0000-0000-0000-0000000000a1'::uuid;
+  v_staff_user_id uuid := '00000000-0000-0000-0000-0000000000b2'::uuid;
+  v_inactive_user_id uuid := '00000000-0000-0000-0000-0000000000c3'::uuid;
+  v_other_user_id uuid := '00000000-0000-0000-0000-0000000000d4'::uuid;
+  v_spoof_customer_id uuid;
   v_columns text[];
   v_forbidden_columns text[];
   v_policy_names text[];
 begin
+  insert into auth.users (id, email)
+  values
+    (v_owner_user_id, 'owner-c1@example.test'),
+    (v_staff_user_id, 'staff-c1@example.test'),
+    (v_inactive_user_id, 'inactive-c1@example.test'),
+    (v_other_user_id, 'other-c1@example.test')
+  on conflict (id) do nothing;
+
+  insert into public.admin_users (user_id, email, role, display_name, is_active)
+  values
+    (v_owner_user_id, 'owner-c1@example.test', 'owner', 'C1 Owner', true),
+    (v_staff_user_id, 'staff-c1@example.test', 'staff', 'C1 Staff', true),
+    (v_inactive_user_id, 'inactive-c1@example.test', 'staff', 'Inactive Staff', false),
+    (v_other_user_id, 'other-c1@example.test', 'staff', 'Other Staff', true)
+  on conflict (user_id) do update
+  set email = excluded.email,
+      role = excluded.role,
+      display_name = excluded.display_name,
+      is_active = excluded.is_active;
+
   select array_agg(column_name::text order by ordinal_position)
   into v_columns
   from information_schema.columns
@@ -139,6 +164,84 @@ begin
   if (select full_name from public.customers where id = v_customer_id) <> 'Juan Dela Cruz Updated' then
     raise exception 'ordinary customer profile update failed';
   end if;
+
+  perform set_config('request.jwt.claim.sub', v_staff_user_id::text, true);
+  set local role authenticated;
+
+  insert into public.customers (
+    full_name,
+    mobile_raw,
+    first_source,
+    created_by_user_id,
+    updated_by_user_id
+  )
+  values (
+    'Spoof Attempt',
+    '09191234567',
+    'ADMIN_MANUAL',
+    v_other_user_id,
+    v_other_user_id
+  )
+  returning id into v_spoof_customer_id;
+
+  reset role;
+
+  if (
+    select created_by_user_id <> v_staff_user_id
+      or updated_by_user_id <> v_staff_user_id
+    from public.customers
+    where id = v_spoof_customer_id
+  ) then
+    raise exception 'authenticated caller spoofed customer audit users';
+  end if;
+
+  perform set_config('request.jwt.claim.sub', v_staff_user_id::text, true);
+  set local role authenticated;
+
+  update public.customers
+  set full_name = 'Staff Unauthorized Update'
+  where id = v_spoof_customer_id;
+
+  reset role;
+
+  if (
+    select full_name = 'Staff Unauthorized Update'
+    from public.customers
+    where id = v_spoof_customer_id
+  ) then
+    raise exception 'staff customer profile update was accepted';
+  end if;
+
+  perform set_config('request.jwt.claim.sub', v_owner_user_id::text, true);
+  set local role authenticated;
+
+  update public.customers
+  set full_name = 'Owner Authorized Update',
+      updated_by_user_id = v_other_user_id
+  where id = v_spoof_customer_id;
+
+  reset role;
+
+  if (
+    select full_name <> 'Owner Authorized Update'
+      or updated_by_user_id <> v_owner_user_id
+    from public.customers
+    where id = v_spoof_customer_id
+  ) then
+    raise exception 'owner update failed or update audit user was spoofed';
+  end if;
+
+  perform set_config('request.jwt.claim.sub', v_inactive_user_id::text, true);
+  set local role authenticated;
+
+  begin
+    insert into public.customers (full_name, mobile_raw, first_source)
+    values ('Inactive Capture', '09201234567', 'ADMIN_MANUAL');
+    raise exception 'inactive user customer capture was accepted';
+  exception when insufficient_privilege or check_violation then null;
+  end;
+
+  reset role;
 
   if not (select relrowsecurity from pg_class where oid = 'public.customers'::regclass) then
     raise exception 'customers RLS is not enabled';

@@ -17,6 +17,8 @@ assert.equal(validateCustomerIdentityDraft({ fullName: "Juan", mobile: "09171234
 for (const contract of ["/customers", "renderCustomersPage", "No customer records yet", "EXISTING CUSTOMER FOUND", "Customer created", "Customer identity record"]) {
   assert.ok(main.includes(contract), `missing Customers UI contract: ${contract}`);
 }
+assert.ok(main.includes("validationMessage ?"), "validation messages must render while Save is disabled");
+assert.ok(main.includes('customerDraft.firstSource === "POS_WALK_IN" ? "selected" : ""'), "first source selection must persist across rerenders");
 for (const forbidden of ["lifetime spend", "loyalty points", "ADD BENEFIT"]) {
   assert.ok(!main.toLowerCase().includes(forbidden.toLowerCase()), `C1 UI leaked later-phase copy: ${forbidden}`);
 }

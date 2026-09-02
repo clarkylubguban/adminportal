@@ -35,7 +35,7 @@ returns uuid
 language sql
 stable
 as $$
-  select null::uuid;
+  select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid;
 $$;
 
 create table if not exists public.admin_users (
