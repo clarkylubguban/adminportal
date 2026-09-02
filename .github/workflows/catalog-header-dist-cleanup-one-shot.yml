@@ -1,0 +1,63 @@
+name: Catalog header dist cleanup one-shot
+
+on:
+  push:
+    branches:
+      - codex/catalog-header-actions-align
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup-dist-css:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/catalog-header-actions-align
+          fetch-depth: 1
+
+      - name: Restore baseline dist CSS
+        run: |
+          git fetch origin main --depth=1
+          git checkout origin/main -- dist/src/styles.css
+
+      - name: Apply only Catalog header CSS to dist
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('dist/src/styles.css')
+          text = path.read_text(encoding='utf-8')
+          marker = '/* Catalog header action alignment */'
+          if marker in text:
+              raise SystemExit('Baseline dist CSS unexpectedly already contains the Catalog header alignment block.')
+          block = (
+              '\n\n/* Catalog header action alignment */\n'
+              '.app-shell.admin-saas-shell .catalog-heading-actions {\n'
+              '  align-items: center;\n'
+              '  display: flex;\n'
+              '  flex: 0 0 auto;\n'
+              '  gap: 12px;\n'
+              '  justify-content: flex-end;\n'
+              '  margin-left: auto;\n'
+              '}\n\n'
+              '.app-shell.admin-saas-shell .catalog-heading-actions .m4-barcode-open-button {\n'
+              '  margin-left: 0;\n'
+              '}\n'
+          )
+          path.write_text(text.rstrip() + block, encoding='utf-8')
+          PY
+          git diff --check
+
+      - name: Commit scoped dist cleanup
+        run: |
+          rm -f .github/workflows/catalog-header-dist-cleanup-one-shot.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/workflows/catalog-header-dist-cleanup-one-shot.yml
+          git add -f dist/src/styles.css
+          git commit -m "Keep Catalog header dist CSS patch scoped"
+          git push origin HEAD:codex/catalog-header-actions-align
