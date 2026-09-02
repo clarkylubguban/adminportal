@@ -1140,7 +1140,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderDrawerOverview(item) {
     return `<section class="mvp-order-panel"><h3>ORDER SUMMARY</h3><div class="mvp-order-detail-list">
       ${detailLine("Product", itemDisplay(item))}
-      ${detailLine("Quantity", item.sizeBreakdown || item.qty || "Not set")}
+      ${detailLine("Quantity", quantityDisplay(item))}
       ${detailLine("Sizes", item.sizeBreakdown || "Not set")}
       ${detailLine("Color", item.color || item.garmentColor || messageValue(item.message, ["Color", "Garment Color"]) || "Not set")}
       ${detailLine("Due Date", dueShortLabel(due(item), item))}
@@ -1446,7 +1446,15 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function quantityDisplay(item) {
-    return item.sizeBreakdown || item.qty || "-";
+    const quantity = String(item.qty || "").trim();
+    const sizes = String(item.sizeBreakdown || "").trim();
+    if (!quantity) return "-";
+    if (!sizes) return quantity;
+    const trailingBreakdown = quantity.match(/\(([^)]+)\)\s*$/);
+    if (!trailingBreakdown) return quantity;
+    const normalize = (value) => String(value || "").replace(/\s+/g, "").toLowerCase();
+    if (normalize(trailingBreakdown[1]) !== normalize(sizes)) return quantity;
+    return quantity.slice(0, trailingBreakdown.index).trim() || quantity;
   }
 
   function productionBlocker(item) {
@@ -2518,6 +2526,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       const id = button.dataset.mvpFulfillmentAction;
       const trackingSubstatus = button.dataset.mvpFulfillmentStatus;
       if (!id || !trackingSubstatus) return;
+      if (trackingSubstatus === "completed" && !window.confirm("Confirm the customer has received the order. This will mark the order Completed.")) return;
       state.orderFulfillmentId = id;
       state.orderFulfillmentError = "";
       button.disabled = true;

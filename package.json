@@ -71,7 +71,9 @@
     "test:admin-barcode-m4": "node scripts/test-admin-barcode-m4.mjs",
     "test:phase13-final-e2e": "node scripts/test-phase13-final-e2e.mjs",
     "preview": "node scripts/local-dev.mjs",
-    "test:grouped-sidebar": "node scripts/test-grouped-sidebar-nav.mjs"
+    "test:grouped-sidebar": "node scripts/test-grouped-sidebar-nav.mjs",
+    "validate:customer-identity-c1": "node scripts/validate-customer-identity-c1.mjs",
+    "test:customer-identity-c1-ui": "node scripts/test-customer-identity-c1-ui.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.108.2",
