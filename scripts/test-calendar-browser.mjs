@@ -48,9 +48,10 @@ const browser = spawn(edgePath, [
   "about:blank",
 ], { stdio: "ignore" });
 
+let cdp;
 try {
   const cdpUrl = await waitForCdp(remotePort);
-  const cdp = await createCdp(cdpUrl);
+  cdp = await createCdp(cdpUrl);
   const desktop = await createPage(cdp, { width: 1366, height: 900, isMobile: false, deviceScaleFactor: 1 });
   await navigate(cdp, desktop, `http://127.0.0.1:${port}/calendar?qaRole=owner`);
   await waitForText(cdp, desktop, "Calendar");
@@ -130,7 +131,8 @@ try {
   assert.equal(received.some((item) => item.method !== "GET" && item.path === "/api/task-calendar"), false, "Calendar did not mutate through its endpoint");
   process.stdout.write(`PASS browser desktop/tablet/mobile Calendar QA with screenshots in ${screenshotDir}\n`);
 } finally {
-  browser.kill("SIGTERM");
+  cdp?.close?.();
+  await stopBrowser(browser);
   server.close();
 }
 
@@ -183,6 +185,11 @@ async function handleApi(request, response, path, url) {
   } catch {}
   received.push({ path, method: request.method, auth: request.headers.authorization || "" });
   if (path === "/api/assignment-users") return sendJson(response, 200, { users: Object.entries(users).map(([userId, user]) => ({ userId, ...user })) });
+  if (path === "/api/admin-users/effective-access") {
+    if (activeQaRole === "expired") return sendJson(response, 401, { ok: false, error: "admin session required" });
+    const source = activeQaRole === "staff" ? "temporary" : "permanent";
+    return sendJson(response, 200, { ok: true, access: { module: "calendar", allowed: true, source, expiresAt: null } });
+  }
   if (path !== "/api/task-calendar") return sendJson(response, 404, { ok: false, error: { code: "NOT_FOUND", message: "Not found." } });
   if (request.method !== "GET") return sendJson(response, 405, { ok: false, error: { code: "VALIDATION_ERROR", message: "Method not allowed." } });
   if (activeQaRole === "expired") return sendJson(response, 401, { ok: false, error: { code: "AUTH_REQUIRED", message: "Authentication required." } });
@@ -243,12 +250,28 @@ async function createCdp(url) {
     }
   });
   return {
+    close() {
+      socket.close();
+    },
     send(method, params = {}, sessionId = null) {
       const callId = ++id;
       socket.send(JSON.stringify({ id: callId, method, params, ...(sessionId ? { sessionId } : {}) }));
       return new Promise((resolve, reject) => pending.set(callId, { resolve, reject }));
     },
   };
+}
+
+async function stopBrowser(child) {
+  if (child.exitCode !== null) return;
+  child.kill("SIGTERM");
+  await new Promise((resolve) => {
+    const timeout = setTimeout(resolve, 3000);
+    child.once("exit", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+  });
+  if (child.exitCode === null) child.kill("SIGKILL");
 }
 
 async function createPage(cdp, viewport) {

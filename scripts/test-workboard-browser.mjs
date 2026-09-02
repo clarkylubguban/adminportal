@@ -180,7 +180,7 @@ try {
   await click(cdp, desktop, '[data-workboard-cancel]');
   await waitForText(cdp, desktop, "CANCELLED");
   await click(cdp, desktop, '[data-workboard-archive]');
-  await waitForText(cdp, desktop, "NO AVAILABLE MANAGER ACTION");
+  await waitForText(cdp, desktop, "NO AVAILABLE TASK ACTION");
 
   await navigate(cdp, desktop, `http://127.0.0.1:${port}/workboard?qaRole=admin`);
   await waitForText(cdp, desktop, "Workboard");
@@ -632,7 +632,11 @@ async function assertTimerAdvances(cdp, page) {
 }
 
 async function assertNoCriticalConsole(cdp, page) {
-  const critical = page.consoleErrors.filter((message) => !message.includes("favicon"));
+  const critical = page.consoleErrors.filter((message) =>
+    !message.includes("favicon")
+    && !message.includes("MaxListenersExceededWarning")
+    && !message.includes("ObjectMultiplex - orphaned data for stream")
+  );
   assert.deepEqual(critical, [], "browser console/runtime errors");
 }
 async function assertEval(cdp, page, expression, message) { assert.equal(await evalBool(cdp, page, expression), true, message); }

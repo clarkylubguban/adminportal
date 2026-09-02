@@ -50,8 +50,20 @@ async function handleRequest(request, response) {
       return;
     }
 
+    if (/^\/api\/admin-users\/temporary-access\/?$/.test(routePath)) {
+      const { default: handleTemporaryAccessRequest } = await import("../api/admin-users/[...path].js");
+      await handleTemporaryAccessRequest(request, response);
+      return;
+    }
+
+    if (/^\/api\/admin-users\/effective-access\/?$/.test(routePath)) {
+      const { default: handleEffectiveAccessRequest } = await import("../api/admin-users/[...path].js");
+      await handleEffectiveAccessRequest(request, response);
+      return;
+    }
+
     if (/^\/api\/admin-users\/[^/]+\/?$/.test(routePath)) {
-      const { default: handleAdminUserRequest } = await import("../api/admin-users/[id].js");
+      const { default: handleAdminUserRequest } = await import("../api/admin-users/[...path].js");
       await handleAdminUserRequest(request, response);
       return;
     }
@@ -59,6 +71,18 @@ async function handleRequest(request, response) {
     if (/^\/api\/inquiries\/[^/]+\/customer-actions\/?$/.test(routePath)) {
       const { default: handleCustomerActionsRequest } = await import("../api/inquiries/[id]/customer-actions.js");
       await handleCustomerActionsRequest(request, response);
+      return;
+    }
+
+    if (/^\/api\/inquiries\/[^/]+\/assignment\/?$/.test(routePath)) {
+      const { default: handleAssignmentRequest } = await import("../api/inquiries/[id]/assignment.js");
+      await handleAssignmentRequest(request, response);
+      return;
+    }
+
+    if (/^\/api\/inquiries\/[^/]+\/payment-confirmations\/?$/.test(routePath)) {
+      const { default: handlePaymentConfirmationRequest } = await import("../api/inquiries/[id]/payment-confirmations.js");
+      await handlePaymentConfirmationRequest(request, response);
       return;
     }
 
@@ -205,6 +229,8 @@ async function createEnvScript() {
     VITE_ENABLE_CALENDAR: process.env.VITE_ENABLE_CALENDAR ?? env.VITE_ENABLE_CALENDAR ?? "false",
     VITE_ENABLE_AUTO_PLAN_TODAY: process.env.VITE_ENABLE_AUTO_PLAN_TODAY ?? env.VITE_ENABLE_AUTO_PLAN_TODAY ?? "false",
     VITE_LOCAL_TASK_QA_MODE: process.env.VITE_LOCAL_TASK_QA_MODE ?? env.VITE_LOCAL_TASK_QA_MODE ?? "false",
+    VITE_LOCAL_TASK_QA_ROLE: process.env.VITE_LOCAL_TASK_QA_ROLE ?? env.VITE_LOCAL_TASK_QA_ROLE ?? "staff",
+    VITE_LOCAL_TASK_QA_USER_ID: process.env.VITE_LOCAL_TASK_QA_USER_ID ?? env.VITE_LOCAL_TASK_QA_USER_ID ?? "",
     VITE_ADMIN_ACCESS_CODE: process.env.VITE_ADMIN_ACCESS_CODE ?? env.VITE_ADMIN_ACCESS_CODE ?? "",
   };
 

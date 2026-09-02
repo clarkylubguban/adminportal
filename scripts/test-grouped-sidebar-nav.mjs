@@ -33,7 +33,7 @@ const checks = [
   ["No parent chevron", !sidebar.includes("chevron-down") && !sidebar.includes("chevron-right") && !sidebar.includes("catalog-nav-chevron")],
   ["Master Catalog children ordered", masterOrder.every((index) => index >= 0) && masterOrder.every((index, i) => i === 0 || index > masterOrder[i - 1])],
   ["Supply children ordered", supplyOrder.every((index) => index >= 0) && supplyOrder.every((index, i) => i === 0 || index > supplyOrder[i - 1])],
-  ["Employee Access appears after workflows", sidebar.includes('{ label: "Employee Access", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }')],
+  ["Settings appears after workflows", sidebar.includes('{ label: "Settings", path: "/settings/people-access", icon: "settings", activePaths: ["/settings", "/settings/people-access"] }')],
   ["Legacy Catalog & Supply heading removed", !sidebar.includes("CATALOG &amp; SUPPLY") && !sidebar.includes("sidebar-section-label")],
   ["Group toggle binding exists", bindEvents.includes('data-sidebar-group-toggle') && bindEvents.includes('master-catalog') && bindEvents.includes('supply-inventory')],
   ["Parent rows open their landing routes", bindEvents.includes('group === "master-catalog" ? "/catalog" : "/catalog/suppliers"') && bindEvents.includes("navigateTo(targetPath)")],
