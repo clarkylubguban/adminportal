@@ -519,7 +519,7 @@ let inventoryLocationFilter = "all";
 let inventoryStockStateFilter = "all";
 let inventoryMovementTypeFilter = "all";
 let inventoryMovementSourceFilter = "all";
-let inventoryReceiveDrawer = { open: false, rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
+let inventoryReceiveDrawer = { open: false, mode: "", rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
 let suppliers = [];
 let supplierLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
 let supplierLoadError = "";
@@ -6731,6 +6731,7 @@ function renderInventoryMovementRow(row) {
 }
 
 function renderInventoryReceiveDrawer(row, canReceive) {
+  const isGlobalReceive = inventoryReceiveDrawer.mode === "global";
   const disabled = inventoryReceiveDrawer.status === "saving" || !canReceive || !row;
   const quantity = escapeHtml(inventoryReceiveDrawer.quantity);
   return `
@@ -6748,6 +6749,18 @@ function renderInventoryReceiveDrawer(row, canReceive) {
       <form class="catalog-form" id="inventory-receive-form">
         ${inventoryReceiveDrawer.error ? `<p class="catalog-form-error">${escapeHtml(inventoryReceiveDrawer.error)}</p>` : ""}
         ${!canReceive ? `<p class="catalog-form-error">Only Owner and Admin can receive stock.</p>` : ""}
+        ${isGlobalReceive ? `
+          <section class="catalog-drawer-section">
+            <h3>Select Item</h3>
+            <label class="catalog-field">
+              <span>Product / Variant / SKU</span>
+              <select data-inventory-receive-field="rowId" ${inventoryReceiveDrawer.status === "saving" || !canReceive ? "disabled" : ""} required>
+                <option value="">Select product, variant, or SKU...</option>
+                ${inventoryRows.map((item) => `<option value="${escapeHtml(item.id)}" ${item.id === inventoryReceiveDrawer.rowId ? "selected" : ""}>${escapeHtml([item.productName, item.variantLabel, item.sku, item.locationName].filter(Boolean).join(" · "))}</option>`).join("")}
+              </select>
+            </label>
+          </section>
+        ` : ""}
         ${row ? `
           <section class="catalog-drawer-section">
             <h3>Product / Variant / SKU</h3>
@@ -6769,7 +6782,7 @@ function renderInventoryReceiveDrawer(row, canReceive) {
             <label class="catalog-field"><span>Source Reference</span><input data-inventory-receive-field="sourceReference" value="${escapeHtml(inventoryReceiveDrawer.sourceReference)}" ${disabled ? "disabled" : ""} placeholder="Receipt, invoice, or manual reference"></label>
             <label class="catalog-field"><span>Reason / Note</span><textarea data-inventory-receive-field="reason" rows="3" ${disabled ? "disabled" : ""} placeholder="Operational note">${escapeHtml(inventoryReceiveDrawer.reason)}</textarea></label>
           </section>
-        ` : `<section class="catalog-drawer-section"><p>No stock row selected.</p></section>`}
+        ` : `<section class="catalog-drawer-section"><p>Select a product variant before entering the received quantity.</p></section>`}
         <footer class="catalog-drawer-footer">
           <span>${inventoryReceiveDrawer.idempotencyKey ? `Idempotency: ${escapeHtml(inventoryReceiveDrawer.idempotencyKey)}` : "Idempotency key is created on submit."}</span>
           <div>
@@ -6886,16 +6899,18 @@ function formatInventoryLocation(location) {
 }
 
 function createClosedInventoryReceiveDrawer() {
-  return { open: false, rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
+  return { open: false, mode: "", rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
 }
 
 function openInventoryReceiveDrawer(rowId = "") {
   if (!canReceiveInventoryForRole(adminUser?.role)) return;
-  const row = inventoryRows.find((item) => item.id === rowId) ?? getVisibleInventoryRows()[0];
-  if (!row) return;
+  const row = rowId ? inventoryRows.find((item) => item.id === rowId) : null;
+  if (rowId && !row) return;
+  if (!rowId && !inventoryRows.length) return;
   inventoryReceiveDrawer = {
     open: true,
-    rowId: row.id,
+    mode: row ? "row" : "global",
+    rowId: row?.id || "",
     quantity: "",
     sourceReference: "",
     reason: "",
@@ -6907,6 +6922,18 @@ function openInventoryReceiveDrawer(rowId = "") {
 }
 
 function updateInventoryReceiveField(field, value) {
+  if (field === "rowId") {
+    inventoryReceiveDrawer = {
+      ...inventoryReceiveDrawer,
+      rowId: inventoryRows.some((row) => row.id === value) ? value : "",
+      quantity: "",
+      sourceReference: "",
+      reason: "",
+      error: "",
+    };
+    render();
+    return;
+  }
   if (field === "locationId") {
     const currentRow = inventoryRows.find((row) => row.id === inventoryReceiveDrawer.rowId);
     const nextRow = inventoryRows.find((row) => row.variantId === currentRow?.variantId && row.locationId === value);
