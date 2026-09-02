@@ -98,6 +98,11 @@ assert.notEqual(keyA, keyB, "Inventory idempotency key must be unique per operat
 assert.ok(main.includes('inventoryReceiveDrawer.status === "saving"'), "Receive submit must have saving state");
 assert.ok(main.includes('if (inventoryReceiveDrawer.status === "saving") return;'), "Double-submit guard missing");
 assert.ok(main.includes("Quantity must be a positive whole number."), "Positive integer validation missing");
+assert.equal(main.includes("?? getVisibleInventoryRows()[0]"), false, "Global Receive Stock must not default to the first visible inventory row");
+assert.ok(main.includes('mode: row ? "row" : "global"'), "Receive Stock must distinguish global and row-level entry routes");
+assert.ok(main.includes('data-inventory-receive-field="rowId"'), "Global Receive Stock product/variant/SKU selector missing");
+assert.ok(main.includes("Select product, variant, or SKU..."), "Global Receive Stock selector placeholder missing");
+assert.ok(main.includes("Select a product variant before entering the received quantity."), "Global Receive Stock empty-selection guidance missing");
 
 assert.equal(/createSupabaseRowWithAuth\(\s*INVENTORY_BALANCES_TABLE/.test(service), false, "Must not insert inventory_balances");
 assert.equal(/updateSupabaseRowsWithAuth\(\s*INVENTORY_BALANCES_TABLE/.test(service), false, "Must not update inventory_balances");
