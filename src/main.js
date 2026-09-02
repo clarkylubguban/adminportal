@@ -22,6 +22,7 @@ import {
   updateTaskDraft,
 } from "./services/tasks.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
+import { createAdminCustomer, getAdminCustomers, validateCustomerIdentityDraft } from "./services/adminCustomers.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
   createOpsBoardInquiry,
@@ -673,12 +674,24 @@ let calendarAssigneeFilter = "";
 let calendarSourceFilter = "";
 let calendarStatusFilter = "";
 let calendarSelectedTask = null;
+let customers = [];
+let customerLoadState = "idle";
+let customerLoadError = "";
+let customerSearch = "";
+let customerDrawerMode = "";
+let customerDraft = { fullName: "", mobile: "", firstSource: "ADMIN_MANUAL" };
+let customerSaveState = "idle";
+let customerSaveError = "";
+let customerDuplicate = null;
+let selectedCustomer = null;
+let customerSuccess = "";
 
 const routes = {
   "/": "Overview",
   "/inquiries": "Inquiries",
   "/orders": "Orders",
   "/production": "Production",
+  "/customers": "Customers",
   "/catalog": "Catalog",
   "/catalog/inventory": "Catalog",
   "/catalog/purchasing": "Catalog",
@@ -776,6 +789,7 @@ function render() {
   if (currentRoute === "Workboard" && workboardLoadState === "idle") window.setTimeout(loadWorkboardTasks, 0);
   if (isTaskFeatureUiEnabled() && calendarEffectiveAccessLoadState === "idle") window.setTimeout(loadCalendarEffectiveAccess, 0);
   if (currentRoute === "Calendar" && calendarLoadState === "idle") window.setTimeout(loadTaskCalendar, 0);
+  if (currentRoute === "Customers" && customerLoadState === "idle") window.setTimeout(loadCustomers, 0);
   if (masterCatalogEffectiveAccessLoadState === "idle") window.setTimeout(loadMasterCatalogEffectiveAccess, 0);
   if (inquiriesEffectiveAccessLoadState === "idle") window.setTimeout(loadInquiriesEffectiveAccess, 0);
   if (ordersEffectiveAccessLoadState === "idle") window.setTimeout(loadOrdersEffectiveAccess, 0);
@@ -803,6 +817,8 @@ function render() {
                 ? renderMvpInquiriesPage()
                 : currentRoute === "Production"
                   ? renderMvpProductionPage()
+                  : currentRoute === "Customers"
+                    ? renderCustomersPage()
                   : currentRoute === "My Tasks"
                     ? renderMyTasksPage()
                     : currentRoute === "Calendar"
@@ -10719,6 +10735,54 @@ function renderProductImageManager(product) {
   `;
 }
 
+async function loadCustomers() {
+  customerLoadState = "loading";
+  customerLoadError = "";
+  render();
+  try {
+    customers = await getAdminCustomers(adminAuthSession);
+    customerLoadState = "success";
+  } catch (error) {
+    customerLoadState = "error";
+    customerLoadError = error?.message || "Unable to load customers.";
+  }
+  render();
+}
+
+function formatCustomerSource(value) {
+  return ({ POS_WALK_IN: "POS / Walk-in", STLO_WEB: "STLO Web", TRRY_WEB: "TRRY Web", ADMIN_MANUAL: "Admin Manual" })[value] || value || "-";
+}
+
+function renderCustomersPage() {
+  const query = customerSearch.trim().toLowerCase();
+  const rows = customers.filter((customer) => !query || [customer.full_name, customer.mobile_raw, customer.mobile_normalized, customer.customer_reference].some((value) => String(value || "").toLowerCase().includes(query)));
+  return `<main class="customers-page">
+    <header class="customers-header"><div><span>HOME / CUSTOMERS</span><h1>Customers</h1><p>One mobile-first identity across TRRY channels.</p></div><button class="customer-primary-button" data-customer-add type="button">ADD CUSTOMER</button></header>
+    ${customerSuccess ? `<div class="customer-success" role="status">${escapeHtml(customerSuccess)}</div>` : ""}
+    <section class="customer-toolbar"><label><span>SEARCH CUSTOMER</span><input id="customer-search" type="search" placeholder="Search name, mobile, or CUS reference" value="${escapeHtml(customerSearch)}"></label><strong>${customers.length} CUSTOMER${customers.length === 1 ? "" : "S"}</strong></section>
+    ${customerLoadState === "loading" ? `<section class="customer-empty"><h2>Loading customers...</h2></section>` : customerLoadError ? `<section class="customer-empty error"><h2>Customers unavailable</h2><p>${escapeHtml(customerLoadError)}</p><button data-customer-retry type="button">TRY AGAIN</button></section>` : rows.length ? `<section class="customer-table-wrap"><table class="customer-table"><thead><tr><th>CUSTOMER</th><th>MOBILE</th><th>FIRST SOURCE</th><th>STATUS</th><th>CREATED</th><th>ACTION</th></tr></thead><tbody>${rows.map((customer) => `<tr><td><strong>${escapeHtml(customer.full_name)}</strong><small>${escapeHtml(customer.customer_reference)}</small></td><td>${escapeHtml(customer.mobile_normalized || customer.mobile_raw)}</td><td>${escapeHtml(formatCustomerSource(customer.first_source))}</td><td><span class="customer-status ${customer.active === false ? "inactive" : ""}">${customer.active === false ? "INACTIVE" : "ACTIVE"}</span></td><td>${escapeHtml(new Date(customer.created_at || customer.first_seen_at).toLocaleDateString("en-PH"))}</td><td><button data-customer-view="${escapeHtml(customer.id)}" type="button">VIEW</button></td></tr>`).join("")}</tbody></table></section>` : `<section class="customer-empty"><span>CUSTOMER IDENTITY</span><h2>${query ? "No matching customer" : "No customer records yet"}</h2><p>${query ? "Try another name, mobile number, or customer reference." : "Add the first identified customer. Anonymous walk-ins remain anonymous."}</p>${query ? "" : `<button class="customer-primary-button" data-customer-add type="button">ADD CUSTOMER</button>`}</section>`}
+    ${renderCustomerDrawer()}
+  </main>`;
+}
+
+function renderCustomerDrawer() {
+  if (!customerDrawerMode) return "";
+  if (customerDrawerMode === "view" && selectedCustomer) return `<div class="customer-drawer-backdrop" data-customer-close></div><aside class="customer-drawer" aria-label="Customer identity record"><header><span>CUSTOMER IDENTITY</span><h2>${escapeHtml(selectedCustomer.full_name)}</h2><p>${escapeHtml(selectedCustomer.mobile_normalized || selectedCustomer.mobile_raw)} • ${escapeHtml(selectedCustomer.customer_reference)}</p></header><section class="customer-identity-grid"><div><span>IDENTITY STATUS</span><strong>${selectedCustomer.active === false ? "INACTIVE" : "ACTIVE"}</strong></div><div><span>FIRST SOURCE</span><strong>${escapeHtml(formatCustomerSource(selectedCustomer.first_source))}</strong></div><div><span>CREATED</span><strong>${escapeHtml(new Date(selectedCustomer.created_at || selectedCustomer.first_seen_at).toLocaleDateString("en-PH"))}</strong></div><div><span>LAST UPDATED</span><strong>${escapeHtml(new Date(selectedCustomer.updated_at || selectedCustomer.created_at).toLocaleDateString("en-PH"))}</strong></div></section><footer><button data-customer-close type="button">CLOSE</button></footer></aside>`;
+  const validation = customerSaveError || validateCustomerIdentityDraft(customerDraft);
+  return `<div class="customer-drawer-backdrop" data-customer-close></div><aside class="customer-drawer" aria-label="Add customer"><header><span>NEW CUSTOMER</span><h2>Add customer details</h2><p>Mobile number is the unique customer identity across TRRY channels.</p></header>${customerDuplicate ? `<section class="customer-duplicate"><span>EXISTING CUSTOMER FOUND</span><h3>${escapeHtml(customerDuplicate.full_name)}</h3><p>${escapeHtml(customerDuplicate.mobile_normalized)} • ${escapeHtml(customerDuplicate.customer_reference)}</p><button data-customer-use-existing type="button">USE EXISTING CUSTOMER</button></section>` : `<form id="customer-form"><label><span>FULL NAME</span><input id="customer-full-name" value="${escapeHtml(customerDraft.fullName)}" autocomplete="name"></label><label><span>MOBILE NUMBER</span><input id="customer-mobile" value="${escapeHtml(customerDraft.mobile)}" inputmode="tel" placeholder="09XX XXX XXXX"></label><label><span>FIRST SOURCE</span><select id="customer-source"><option value="ADMIN_MANUAL">Admin Manual</option><option value="POS_WALK_IN">POS / Walk-in</option><option value="STLO_WEB">STLO Web</option><option value="TRRY_WEB">TRRY Web</option></select></label>${customerSaveError ? `<p class="customer-form-error" role="alert">${escapeHtml(customerSaveError)}</p>` : ""}<footer><button data-customer-close type="button">CANCEL</button><button class="customer-primary-button" type="submit" ${validation || customerSaveState === "saving" ? "disabled" : ""}>${customerSaveState === "saving" ? "SAVING..." : "SAVE CUSTOMER"}</button></footer></form>`}</aside>`;
+}
+
+async function saveCustomerIdentity() {
+  const error = validateCustomerIdentityDraft(customerDraft);
+  if (error || customerSaveState === "saving") { customerSaveError = error; render(); return; }
+  customerSaveState = "saving"; customerSaveError = ""; render();
+  try {
+    const result = await createAdminCustomer(customerDraft, adminAuthSession);
+    if (result.duplicate) { customerDuplicate = result.customer; customerSaveState = "idle"; render(); return; }
+    customers = [result.customer, ...customers]; selectedCustomer = result.customer; customerDrawerMode = "view"; customerSaveState = "idle"; customerSuccess = `Customer created • ${result.customer.customer_reference}`; render();
+  } catch (error) { customerSaveState = "idle"; customerSaveError = error?.message || "Unable to save customer."; render(); }
+}
+
 function renderSidebar(currentRoute) {
   const routePath = getRoutePath();
   const isMasterCatalogRoute = MASTER_CATALOG_PATHS.includes(routePath);
@@ -10730,6 +10794,7 @@ function renderSidebar(currentRoute) {
     { label: "Overview", path: "/overview" },
     ...(canViewInquiriesRoute() ? [{ label: "Inquiries", path: "/inquiries", icon: "clipboard-list" }] : []),
     ...(canViewOrdersRoute() ? [{ label: "Orders", path: "/orders", icon: "package" }] : []),
+    { label: "Customers", path: "/customers", icon: "users" },
     ...(canViewProductionRoute() ? [{ label: "Production", path: "/production", icon: "factory" }] : []),
   ];
 
@@ -10897,6 +10962,7 @@ function renderMobileBottomNav(currentRoute) {
     { label: "Overview", path: "/overview" },
     ...(canViewInquiriesRoute() ? [{ label: "Inquiries", path: "/inquiries", icon: "clipboard-list" }] : []),
     ...(canViewOrdersRoute() ? [{ label: "Orders", path: "/orders", icon: "package" }] : []),
+    { label: "Customers", path: "/customers", icon: "users" },
     ...(canViewProductionRoute() ? [{ label: "Production", path: "/production", icon: "factory" }] : []),
     ...(canViewMasterCatalogRoute() ? [{ label: "Catalog", path: "/catalog", icon: "package" }] : []),
     ...(canViewWorkboardRoute() ? [{ label: "Workboard", path: "/workboard", icon: "clipboard-list" }] : []),
@@ -11893,6 +11959,18 @@ function bindCalendarEvents() {
   });
 }
 function bindEvents() {
+  document.querySelectorAll("[data-customer-add]").forEach((button) => button.addEventListener("click", () => {
+    customerDrawerMode = "add"; customerDraft = { fullName: "", mobile: "", firstSource: "ADMIN_MANUAL" }; customerSaveError = ""; customerDuplicate = null; customerSuccess = ""; render();
+  }));
+  document.querySelectorAll("[data-customer-close]").forEach((button) => button.addEventListener("click", () => { customerDrawerMode = ""; customerDuplicate = null; render(); }));
+  document.querySelectorAll("[data-customer-view]").forEach((button) => button.addEventListener("click", () => { selectedCustomer = customers.find((item) => item.id === button.dataset.customerView) || null; customerDrawerMode = selectedCustomer ? "view" : ""; render(); }));
+  document.querySelector("[data-customer-use-existing]")?.addEventListener("click", () => { selectedCustomer = customerDuplicate; customerDuplicate = null; customerDrawerMode = "view"; render(); });
+  document.querySelector("[data-customer-retry]")?.addEventListener("click", loadCustomers);
+  document.getElementById("customer-search")?.addEventListener("input", (event) => { customerSearch = event.target.value; render(); focusFieldAtEnd("customer-search"); });
+  document.getElementById("customer-full-name")?.addEventListener("input", (event) => { customerDraft.fullName = event.target.value; customerSaveError = ""; render(); focusFieldAtEnd("customer-full-name"); });
+  document.getElementById("customer-mobile")?.addEventListener("input", (event) => { customerDraft.mobile = event.target.value; customerSaveError = ""; render(); focusFieldAtEnd("customer-mobile"); });
+  document.getElementById("customer-source")?.addEventListener("change", (event) => { customerDraft.firstSource = event.target.value; customerSaveError = ""; render(); });
+  document.getElementById("customer-form")?.addEventListener("submit", (event) => { event.preventDefault(); saveCustomerIdentity(); });
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
     button.addEventListener("click", async () => {
       isAccountMenuOpen = false;
