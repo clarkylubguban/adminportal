@@ -28,6 +28,8 @@ const state = {
   enhancing: false,
   enhanceScheduled: false,
   pendingForce: false,
+  search: "",
+  filter: "all",
 };
 
 const root = document.querySelector("#root");
@@ -149,6 +151,8 @@ async function openBarcodeManager() {
   closeBarcodeManager();
   const canManage = canManageBarcodesForRole(state.user?.role);
   const canPrint = canPrintBarcodesForRole(state.user?.role);
+  const missingCount = state.rows.filter((row) => String(row.status || "").toUpperCase() === "MISSING").length;
+  const readyCount = state.rows.filter((row) => String(row.status || "").toUpperCase() === "READY").length;
   const overlay = document.createElement("div");
   overlay.className = "m4-barcode-overlay";
   overlay.innerHTML = `
@@ -164,11 +168,24 @@ async function openBarcodeManager() {
       </header>
       ${state.feedback ? `<div class="catalog-notice ${state.feedback.includes("failed") || state.feedback.includes("BLOCK") ? "error" : "success"}">${escapeHtml(state.feedback)}</div>` : ""}
       ${state.loadState === "missing" ? `<div class="catalog-notice error">Barcode schema is not applied yet. Remote migration applied: NO.</div>` : ""}
+      <div class="m4-barcode-findbar">
+        <label class="m4-barcode-search">
+          <span>Find item</span>
+          <input data-m4-search type="search" value="${escapeHtml(state.search)}" placeholder="Search product, variant, SKU, or barcode..." autocomplete="off">
+        </label>
+        <div class="m4-barcode-filter-group" role="group" aria-label="Barcode status filter">
+          <button class="m4-barcode-filter-button ${state.filter === "all" ? "active" : ""}" data-m4-filter="all" type="button" aria-pressed="${state.filter === "all"}">All <small>${state.rows.length}</small></button>
+          <button class="m4-barcode-filter-button ${state.filter === "missing" ? "active" : ""}" data-m4-filter="missing" type="button" aria-pressed="${state.filter === "missing"}">Missing <small>${missingCount}</small></button>
+          <button class="m4-barcode-filter-button ${state.filter === "ready" ? "active" : ""}" data-m4-filter="ready" type="button" aria-pressed="${state.filter === "ready"}">Ready <small>${readyCount}</small></button>
+        </div>
+        <strong class="m4-barcode-visible-count" data-m4-visible-count>${state.rows.length} shown</strong>
+      </div>
       <div class="m4-barcode-toolbar">
         <label><span>Copies</span><select data-m4-label-qty>${["1", "2", "3", "6", "12"].map((qty) => `<option value="${qty}" ${state.labelQty === qty ? "selected" : ""}>${qty}</option>`).join("")}<option value="custom" ${!["1", "2", "3", "6", "12"].includes(state.labelQty) ? "selected" : ""}>Custom</option></select></label>
         <input data-m4-custom-qty type="number" min="1" step="1" value="${escapeHtml(state.labelQty)}" ${["1", "2", "3", "6", "12"].includes(state.labelQty) ? "hidden" : ""}>
         <button class="note-button" data-m4-generate-missing type="button" ${canManage ? "" : "disabled"}>Generate Missing</button>
         <button class="primary-button" data-m4-print-selected type="button" ${canPrint ? "" : "disabled"}>Print Selected</button>
+        <span class="m4-selected-summary"><strong data-m4-selected-count>${state.selected.size}</strong> selected</span>
       </div>
       <div class="m4-barcode-rule"><strong>STOCK RULE</strong><span>Generate, scan, print, and reprint never change inventory.</span></div>
       <div class="m4-barcode-table-wrap">
@@ -176,11 +193,14 @@ async function openBarcodeManager() {
           <thead><tr><th></th><th>Product / Variant</th><th>SKU</th><th>Barcode</th><th>Status</th><th>Action</th></tr></thead>
           <tbody>${state.rows.map((row) => renderBarcodeRow(row, canManage, canPrint)).join("")}</tbody>
         </table>
+        <div class="m4-barcode-no-results" data-m4-no-results hidden>No matching product, SKU, or barcode.</div>
       </div>
     </section>
   `;
   document.body.appendChild(overlay);
   bindBarcodeManager(overlay);
+  applyBarcodeFilters(overlay);
+  updateBarcodeSelectionSummary(overlay);
 }
 
 function renderBarcodeRow(row, canManage, canPrint) {
@@ -204,6 +224,22 @@ function renderBarcodeRow(row, canManage, canPrint) {
 
 function bindBarcodeManager(overlay) {
   overlay.querySelectorAll("[data-m4-close]").forEach((button) => button.addEventListener("click", closeBarcodeManager));
+  overlay.querySelector("[data-m4-search]")?.addEventListener("input", (event) => {
+    state.search = event.target.value;
+    applyBarcodeFilters(overlay);
+  });
+  overlay.querySelector("[data-m4-search]")?.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && state.search) {
+      state.search = "";
+      event.target.value = "";
+      applyBarcodeFilters(overlay);
+      event.stopPropagation();
+    }
+  });
+  overlay.querySelectorAll("[data-m4-filter]").forEach((button) => button.addEventListener("click", () => {
+    state.filter = button.dataset.m4Filter || "all";
+    applyBarcodeFilters(overlay);
+  }));
   overlay.querySelector("[data-m4-label-qty]")?.addEventListener("change", (event) => {
     state.labelQty = event.target.value === "custom" ? "1" : event.target.value;
     openBarcodeManager();
@@ -214,11 +250,53 @@ function bindBarcodeManager(overlay) {
   overlay.querySelectorAll("[data-m4-select]").forEach((input) => input.addEventListener("change", () => {
     if (input.checked) state.selected.add(input.dataset.m4Select);
     else state.selected.delete(input.dataset.m4Select);
+    updateBarcodeSelectionSummary(overlay);
   }));
   overlay.querySelectorAll("[data-m4-generate]").forEach((button) => button.addEventListener("click", () => withBarcodeSave(button.dataset.m4Generate, () => generateVariantBarcode(button.dataset.m4Generate, state.session))));
   overlay.querySelector("[data-m4-generate-missing]")?.addEventListener("click", generateMissingBarcodes);
   overlay.querySelectorAll("[data-m4-reprint]").forEach((button) => button.addEventListener("click", () => printRows([button.dataset.m4Reprint])));
   overlay.querySelector("[data-m4-print-selected]")?.addEventListener("click", () => printRows([...state.selected]));
+}
+
+function barcodeSearchText(row) {
+  return [
+    row.productName,
+    row.variantLabel,
+    row.sku,
+    row.barcode?.code,
+    row.status,
+  ].map((value) => String(value || "").trim().toLowerCase()).join(" ");
+}
+
+function applyBarcodeFilters(overlay) {
+  const query = state.search.trim().toLowerCase();
+  let visibleCount = 0;
+  overlay.querySelectorAll("[data-m4-variant]").forEach((tableRow) => {
+    const row = state.rows.find((item) => item.variantId === tableRow.dataset.m4Variant);
+    const status = String(row?.status || "").trim().toUpperCase();
+    const matchesStatus = state.filter === "all"
+      || (state.filter === "missing" && status === "MISSING")
+      || (state.filter === "ready" && status === "READY");
+    const matchesSearch = !query || barcodeSearchText(row).includes(query);
+    const visible = Boolean(row && matchesStatus && matchesSearch);
+    tableRow.hidden = !visible;
+    if (visible) visibleCount += 1;
+  });
+  overlay.querySelectorAll("[data-m4-filter]").forEach((button) => {
+    const active = button.dataset.m4Filter === state.filter;
+    button.classList.toggle("active", active);
+    button.setAttribute("aria-pressed", String(active));
+  });
+  const count = overlay.querySelector("[data-m4-visible-count]");
+  if (count) count.textContent = `${visibleCount} shown`;
+  const noResults = overlay.querySelector("[data-m4-no-results]");
+  if (noResults) noResults.hidden = visibleCount !== 0;
+}
+
+function updateBarcodeSelectionSummary(overlay) {
+  const validSelected = [...state.selected].filter((variantId) => state.rows.some((row) => row.variantId === variantId && row.barcode?.code));
+  const count = overlay.querySelector("[data-m4-selected-count]");
+  if (count) count.textContent = String(validSelected.length);
 }
 
 async function withBarcodeSave(variantId, action) {
