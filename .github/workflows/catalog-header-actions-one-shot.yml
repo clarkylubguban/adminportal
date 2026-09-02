@@ -1,0 +1,106 @@
+name: Catalog header actions one-shot
+
+on:
+  push:
+    branches:
+      - codex/catalog-header-actions-align
+
+permissions:
+  contents: write
+
+jobs:
+  patch-and-validate:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout branch
+        uses: actions/checkout@v4
+        with:
+          ref: codex/catalog-header-actions-align
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Group Catalog header actions
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/main.js')
+          text = path.read_text(encoding='utf-8')
+          old = '        ${canWriteCatalog ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ New Product</button>` : ""}\n'
+          new = '        <div class="catalog-heading-actions">\n          ${canWriteCatalog ? `<button class="catalog-add-button" data-catalog-add-product type="button">+ New Product</button>` : ""}\n        </div>\n'
+          count = text.count(old)
+          if count != 1:
+              raise SystemExit(f'Expected exactly one Catalog New Product header action, found {count}.')
+          path.write_text(text.replace(old, new, 1), encoding='utf-8')
+          PY
+
+      - name: Add Catalog action-group layout
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('src/styles.css')
+          text = path.read_text(encoding='utf-8')
+          marker = '/* Catalog header action alignment */'
+          if marker in text:
+              raise SystemExit('Catalog header action alignment CSS already exists.')
+          block = '''
+
+/* Catalog header action alignment */
+.app-shell.admin-saas-shell .catalog-heading-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.app-shell.admin-saas-shell .catalog-heading-actions .m4-barcode-open-button {
+  margin-left: 0;
+}
+'''
+          path.write_text(text.rstrip() + block + '\n', encoding='utf-8')
+          PY
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build tracked dist mirror
+        run: npm run build
+
+      - name: Verify source and dist
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          for filename in ('src/main.js', 'dist/src/main.js'):
+              text = Path(filename).read_text(encoding='utf-8')
+              if text.count('class="catalog-heading-actions"') != 1:
+                  raise SystemExit(f'{filename}: expected one catalog-heading-actions wrapper.')
+              if '<div class="page-heading catalog-heading">' not in text:
+                  raise SystemExit(f'{filename}: Catalog heading missing.')
+
+          for filename in ('src/styles.css', 'dist/src/styles.css'):
+              text = Path(filename).read_text(encoding='utf-8')
+              if text.count('/* Catalog header action alignment */') != 1:
+                  raise SystemExit(f'{filename}: expected one Catalog header alignment CSS block.')
+              if '.catalog-heading-actions .m4-barcode-open-button' not in text:
+                  raise SystemExit(f'{filename}: barcode spacing reset missing.')
+          PY
+          git diff --check
+
+      - name: Remove one-shot workflow and commit fix
+        run: |
+          rm -f .github/workflows/catalog-header-actions-one-shot.yml
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add src/main.js src/styles.css .github/workflows/catalog-header-actions-one-shot.yml
+          git add -f dist/src/main.js dist/src/styles.css
+          git commit -m "Align Master Catalog header actions"
+          git push origin HEAD:codex/catalog-header-actions-align
