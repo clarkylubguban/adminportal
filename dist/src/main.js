@@ -8270,7 +8270,7 @@ function renderCatalogProductQuickControl(item) {
 
   return `
     <tr class="catalog-product-quick-row">
-      <td colspan="11">
+      <td colspan="8">
         <section class="catalog-product-quick-control" aria-label="${escapeHtml(item.name)} quick control">
           ${catalogQuickSaveError ? `<p class="catalog-form-error">${escapeHtml(catalogQuickSaveError)}</p>` : ""}
           <div class="catalog-quick-summary">
