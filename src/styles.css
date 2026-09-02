@@ -30936,3 +30936,17 @@ pre,
     flex: 1 1 0;
   }
 }
+
+/* Catalog header action alignment */
+.app-shell.admin-saas-shell .catalog-heading-actions {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  gap: 12px;
+  justify-content: flex-end;
+  margin-left: auto;
+}
+
+.app-shell.admin-saas-shell .catalog-heading-actions .m4-barcode-open-button {
+  margin-left: 0;
+}
