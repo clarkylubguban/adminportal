@@ -49,22 +49,20 @@ jobs:
           marker = '/* Catalog header action alignment */'
           if marker in text:
               raise SystemExit('Catalog header action alignment CSS already exists.')
-          block = '''
-
-/* Catalog header action alignment */
-.app-shell.admin-saas-shell .catalog-heading-actions {
-  align-items: center;
-  display: flex;
-  flex: 0 0 auto;
-  gap: 12px;
-  justify-content: flex-end;
-  margin-left: auto;
-}
-
-.app-shell.admin-saas-shell .catalog-heading-actions .m4-barcode-open-button {
-  margin-left: 0;
-}
-'''
+          block = (
+              '\n\n/* Catalog header action alignment */\n'
+              '.app-shell.admin-saas-shell .catalog-heading-actions {\n'
+              '  align-items: center;\n'
+              '  display: flex;\n'
+              '  flex: 0 0 auto;\n'
+              '  gap: 12px;\n'
+              '  justify-content: flex-end;\n'
+              '  margin-left: auto;\n'
+              '}\n\n'
+              '.app-shell.admin-saas-shell .catalog-heading-actions .m4-barcode-open-button {\n'
+              '  margin-left: 0;\n'
+              '}\n'
+          )
           path.write_text(text.rstrip() + block + '\n', encoding='utf-8')
           PY
 
