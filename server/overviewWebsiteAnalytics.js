@@ -16,7 +16,7 @@ export async function handleOverviewWebsiteAnalytics(request, response) {
     const caller = await getAuthorizedAdmin(supabase, adminToken);
     if (!caller) return sendJson(response, 401, { ok: false, connected: false, error: "admin session required" });
 
-    const vercelToken = process.env.TRRY_VERCEL_API_TOKEN || process.env.VERCEL_API_TOKEN || process.env.VERCEL_OIDC_TOKEN || "";
+    const vercelToken = process.env.TRRY_VERCEL_API_TOKEN || process.env.VERCEL_API_TOKEN || "";
     if (!vercelToken) {
       return sendJson(response, 503, {
         ok: false,
