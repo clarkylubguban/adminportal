@@ -20,6 +20,7 @@ const appRoutes = new Set([
   "/orders",
   "/order-dashboard",
   "/production",
+  "/customers",
   "/my-tasks",
   "/calendar",
   "/workboard",

@@ -22,7 +22,7 @@ import {
   updateTaskDraft,
 } from "./services/tasks.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
-import { createAdminCustomer, getAdminCustomers, validateCustomerIdentityDraft } from "./services/adminCustomers.js";
+import { createAdminCustomer, getAdminCustomers, normalizePhilippineMobile, validateCustomerIdentityDraft } from "./services/adminCustomers.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
   createOpsBoardInquiry,
@@ -679,7 +679,7 @@ let customerLoadState = "idle";
 let customerLoadError = "";
 let customerSearch = "";
 let customerDrawerMode = "";
-let customerDraft = { fullName: "", mobile: "", firstSource: "ADMIN_MANUAL" };
+let customerDraft = { fullName: "", mobile: "", firstSource: "ADMIN_MANUAL", email: "", birthday: "" };
 let customerSaveState = "idle";
 let customerSaveError = "";
 let customerDuplicate = null;
@@ -10755,24 +10755,58 @@ function formatCustomerSource(value) {
   return ({ POS_WALK_IN: "POS / Walk-in", STLO_WEB: "STLO Web", TRRY_WEB: "TRRY Web", ADMIN_MANUAL: "Admin Manual" })[value] || value || "-";
 }
 
+function formatCustomerDate(value) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "-";
+  return date.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" });
+}
+
+function getCustomerStats() {
+  const countBySource = (source) => customers.filter((customer) => customer.first_source === source).length;
+  return {
+    total: customers.length,
+    active: customers.filter((customer) => customer.active !== false).length,
+    pos: countBySource("POS_WALK_IN"),
+    stlo: countBySource("STLO_WEB"),
+    trry: countBySource("TRRY_WEB"),
+  };
+}
+
+function renderCustomerMetric(label, value, helper, icon) {
+  return `<article class="customer-metric-card"><div class="customer-metric-icon">${renderIcon(icon, "customer-card-icon")}</div><div><span>${label}</span><strong>${value}</strong><small>${helper}</small></div></article>`;
+}
+
 function renderCustomersPage() {
   const query = customerSearch.trim().toLowerCase();
   const rows = customers.filter((customer) => !query || [customer.full_name, customer.mobile_raw, customer.mobile_normalized, customer.customer_reference].some((value) => String(value || "").toLowerCase().includes(query)));
+  const stats = getCustomerStats();
+  const hasCustomers = customerLoadState === "success" && customers.length > 0;
+  const showFilterTools = hasCustomers || Boolean(query);
+  const summaryLabel = `${customers.length} Customer${customers.length === 1 ? "" : "s"}`;
   return `<main class="customers-page">
-    <header class="customers-header"><div><span>HOME / CUSTOMERS</span><h1>Customers</h1><p>One mobile-first identity across TRRY channels.</p></div><button class="customer-primary-button" data-customer-add type="button">ADD CUSTOMER</button></header>
+    <header class="customers-header"><div><nav>Home <span>/</span> Customers</nav><h1>Customers</h1><p>One customer record across POS, STLO Web, TRRY Web, and Orders.</p></div><aside><strong>${summaryLabel}</strong><small>Mobile-first identity</small></aside></header>
     ${customerSuccess ? `<div class="customer-success" role="status">${escapeHtml(customerSuccess)}</div>` : ""}
-    <section class="customer-toolbar"><label><span>SEARCH CUSTOMER</span><input id="customer-search" type="search" placeholder="Search name, mobile, or CUS reference" value="${escapeHtml(customerSearch)}"></label><strong>${customers.length} CUSTOMER${customers.length === 1 ? "" : "S"}</strong></section>
-    ${customerLoadState === "loading" ? `<section class="customer-empty"><h2>Loading customers...</h2></section>` : customerLoadError ? `<section class="customer-empty error"><h2>Customers unavailable</h2><p>${escapeHtml(customerLoadError)}</p><button data-customer-retry type="button">TRY AGAIN</button></section>` : rows.length ? `<section class="customer-table-wrap"><table class="customer-table"><thead><tr><th>CUSTOMER</th><th>MOBILE</th><th>FIRST SOURCE</th><th>STATUS</th><th>CREATED</th><th>ACTION</th></tr></thead><tbody>${rows.map((customer) => `<tr><td><strong>${escapeHtml(customer.full_name)}</strong><small>${escapeHtml(customer.customer_reference)}</small></td><td>${escapeHtml(customer.mobile_normalized || customer.mobile_raw)}</td><td>${escapeHtml(formatCustomerSource(customer.first_source))}</td><td><span class="customer-status ${customer.active === false ? "inactive" : ""}">${customer.active === false ? "INACTIVE" : "ACTIVE"}</span></td><td>${escapeHtml(new Date(customer.created_at || customer.first_seen_at).toLocaleDateString("en-PH"))}</td><td><button data-customer-view="${escapeHtml(customer.id)}" type="button">VIEW</button></td></tr>`).join("")}</tbody></table></section>` : `<section class="customer-empty"><span>CUSTOMER IDENTITY</span><h2>${query ? "No matching customer" : "No customer records yet"}</h2><p>${query ? "Try another name, mobile number, or customer reference." : "Add the first identified customer. Anonymous walk-ins remain anonymous."}</p>${query ? "" : `<button class="customer-primary-button" data-customer-add type="button">ADD CUSTOMER</button>`}</section>`}
+    <section class="customer-metrics">
+      ${renderCustomerMetric("TOTAL CUSTOMERS", stats.total, "All identified", "file-text")}
+      ${renderCustomerMetric("REPEAT BUYERS", 0, "2+ completed", "circle-check")}
+      ${renderCustomerMetric("STLO MEMBERS", stats.stlo, "Journey active", "package")}
+      ${renderCustomerMetric("ACTIVE RECORDS", stats.active, "Across channels", "settings")}
+      ${renderCustomerMetric("NEW THIS MONTH", 0, "POS + web", "alert-circle")}
+    </section>
+    <section class="customer-segments" aria-label="Customer segments"><button class="active" type="button">ALL CUSTOMERS <span>${stats.total}</span></button><button type="button">POS WALK-IN <span>${stats.pos}</span></button><button type="button">STLO WEB <span>${stats.stlo}</span></button><button type="button">TRRY WEB <span>${stats.trry}</span></button><button type="button">ACTIVE <span>${stats.active}</span></button></section>
+    ${showFilterTools ? `<section class="customer-toolbar"><label><span>SEARCH CUSTOMER</span><input id="customer-search" type="search" placeholder="Search customer or mobile..." value="${escapeHtml(customerSearch)}"></label><button type="button" disabled>${renderIcon("file-text", "customer-filter-icon")} All Channels</button><button type="button" disabled>${renderIcon("user", "customer-filter-icon")} All Statuses</button><button type="button" disabled>${renderIcon("calendar-check", "customer-filter-icon")} Last Purchase</button><button class="customer-secondary-button" data-customer-add type="button">${renderIcon("user-plus", "customer-filter-icon")} Add Customer</button></section>` : ""}
+    ${customerLoadState === "loading" ? `<section class="customer-empty"><h2>Loading customers...</h2></section>` : customerLoadError ? `<section class="customer-empty error"><h2>Customers unavailable</h2><p>${escapeHtml(customerLoadError)}</p><button data-customer-retry type="button">TRY AGAIN</button></section>` : rows.length ? `<section class="customer-table-wrap"><table class="customer-table"><thead><tr><th>CUSTOMER</th><th>MOBILE</th><th>FIRST SOURCE</th><th>ORDERS</th><th>LIFETIME</th><th>JOURNEY</th><th>STATUS</th><th>CHANNELS</th><th>LAST PURCHASE</th><th>ACTION</th></tr></thead><tbody>${rows.map((customer) => `<tr><td><strong>${escapeHtml(customer.full_name)}</strong><small>${escapeHtml(customer.customer_reference)}</small></td><td>${escapeHtml(customer.mobile_normalized || customer.mobile_raw)}<small>PRIMARY MOBILE</small></td><td><strong>${escapeHtml(formatCustomerSource(customer.first_source))}</strong><small>First seen ${escapeHtml(formatCustomerDate(customer.first_seen_at || customer.created_at))}</small></td><td>0</td><td>-</td><td><span class="customer-journey-pill">-</span></td><td><span class="customer-status ${customer.active === false ? "inactive" : ""}">${customer.active === false ? "INACTIVE" : "ACTIVE"}</span></td><td>1</td><td>-</td><td><button data-customer-view="${escapeHtml(customer.id)}" type="button">VIEW</button></td></tr>`).join("")}</tbody></table><footer>Showing ${rows.length ? 1 : 0} to ${rows.length} of ${customers.length} customers</footer></section>` : `<section class="customer-empty"><div><span>CUSTOMER IDENTITY</span><h2>${query ? "No matching customer" : "No customer records yet"}</h2><p>${query ? "Try another name, mobile number, or customer reference." : "Add the first identified customer. Anonymous walk-ins remain anonymous until they provide a mobile number."}</p>${query ? "" : `<button class="customer-primary-button" data-customer-add type="button">ADD CUSTOMER</button>`}</div></section>`}
     ${renderCustomerDrawer()}
   </main>`;
 }
 
 function renderCustomerDrawer() {
   if (!customerDrawerMode) return "";
-  if (customerDrawerMode === "view" && selectedCustomer) return `<div class="customer-drawer-backdrop" data-customer-close></div><aside class="customer-drawer" aria-label="Customer identity record"><header><span>CUSTOMER IDENTITY</span><h2>${escapeHtml(selectedCustomer.full_name)}</h2><p>${escapeHtml(selectedCustomer.mobile_normalized || selectedCustomer.mobile_raw)} • ${escapeHtml(selectedCustomer.customer_reference)}</p></header><section class="customer-identity-grid"><div><span>IDENTITY STATUS</span><strong>${selectedCustomer.active === false ? "INACTIVE" : "ACTIVE"}</strong></div><div><span>FIRST SOURCE</span><strong>${escapeHtml(formatCustomerSource(selectedCustomer.first_source))}</strong></div><div><span>CREATED</span><strong>${escapeHtml(new Date(selectedCustomer.created_at || selectedCustomer.first_seen_at).toLocaleDateString("en-PH"))}</strong></div><div><span>LAST UPDATED</span><strong>${escapeHtml(new Date(selectedCustomer.updated_at || selectedCustomer.created_at).toLocaleDateString("en-PH"))}</strong></div></section><footer><button data-customer-close type="button">CLOSE</button></footer></aside>`;
+  if (customerDrawerMode === "view" && selectedCustomer) return `<div class="customer-drawer-backdrop" data-customer-close></div><aside class="customer-drawer customer-record-drawer" aria-label="Customer identity record"><header><span>CUSTOMER IDENTITY</span><h2>${escapeHtml(selectedCustomer.full_name)}</h2><p>${escapeHtml(selectedCustomer.mobile_normalized || selectedCustomer.mobile_raw)} • ${escapeHtml(selectedCustomer.customer_reference)}</p></header><section class="customer-identity-status"><span>IDENTITY STATUS</span><div><strong>${selectedCustomer.active === false ? "INACTIVE" : "ACTIVE"}</strong><em>PRIMARY MOBILE VERIFIED</em></div></section><section class="customer-identity-grid"><div><span>First source</span><strong>${escapeHtml(formatCustomerSource(selectedCustomer.first_source))}</strong></div><div><span>Created</span><strong>${escapeHtml(formatCustomerDate(selectedCustomer.created_at || selectedCustomer.first_seen_at))}</strong></div><div><span>Consent</span><strong>Order updates allowed</strong></div></section><section class="customer-record-details"><h3>Contact and record details</h3><dl><div><dt>EMAIL</dt><dd>${escapeHtml(selectedCustomer.email || "Optional")}</dd></div><div><dt>ORIGIN</dt><dd>${escapeHtml(formatCustomerSource(selectedCustomer.first_source))}<span>Locked</span></dd></div><div><dt>LAST UPDATED</dt><dd>${escapeHtml(formatCustomerDate(selectedCustomer.updated_at || selectedCustomer.created_at))}<span>${escapeHtml(getAdminDisplayName())}</span></dd></div></dl></section><footer><button data-customer-close type="button">EDIT CUSTOMER</button></footer></aside>`;
   const validation = validateCustomerIdentityDraft(customerDraft);
   const validationMessage = customerSaveError || validation;
-  return `<div class="customer-drawer-backdrop" data-customer-close></div><aside class="customer-drawer" aria-label="Add customer"><header><span>NEW CUSTOMER</span><h2>Add customer details</h2><p>Mobile number is the unique customer identity across TRRY channels.</p></header>${customerDuplicate ? `<section class="customer-duplicate"><span>EXISTING CUSTOMER FOUND</span><h3>${escapeHtml(customerDuplicate.full_name)}</h3><p>${escapeHtml(customerDuplicate.mobile_normalized)} • ${escapeHtml(customerDuplicate.customer_reference)}</p><button data-customer-use-existing type="button">USE EXISTING CUSTOMER</button></section>` : `<form id="customer-form"><label><span>FULL NAME</span><input id="customer-full-name" value="${escapeHtml(customerDraft.fullName)}" autocomplete="name"></label><label><span>MOBILE NUMBER</span><input id="customer-mobile" value="${escapeHtml(customerDraft.mobile)}" inputmode="tel" placeholder="09XX XXX XXXX"></label><label><span>FIRST SOURCE</span><select id="customer-source"><option value="ADMIN_MANUAL" ${customerDraft.firstSource === "ADMIN_MANUAL" ? "selected" : ""}>Admin Manual</option><option value="POS_WALK_IN" ${customerDraft.firstSource === "POS_WALK_IN" ? "selected" : ""}>POS / Walk-in</option><option value="STLO_WEB" ${customerDraft.firstSource === "STLO_WEB" ? "selected" : ""}>STLO Web</option><option value="TRRY_WEB" ${customerDraft.firstSource === "TRRY_WEB" ? "selected" : ""}>TRRY Web</option></select></label>${validationMessage ? `<p class="customer-form-error" role="alert">${escapeHtml(validationMessage)}</p>` : ""}<footer><button data-customer-close type="button">CANCEL</button><button class="customer-primary-button" type="submit" ${validation || customerSaveState === "saving" ? "disabled" : ""}>${customerSaveState === "saving" ? "SAVING..." : "SAVE CUSTOMER"}</button></footer></form>`}</aside>`;
+  return `<div class="customer-drawer-backdrop" data-customer-close></div><aside class="customer-drawer" aria-label="Add customer"><header><span>NEW CUSTOMER</span><h2>Add customer details</h2><p>${customerDuplicate ? "Mobile number already belongs to an existing customer record." : validationMessage ? "Check the highlighted fields. No customer record has been created." : "Mobile number must be unique and will identify the customer across TRRY channels."}</p></header><form id="customer-form"><label><span>FULL NAME</span><input id="customer-full-name" class="${validationMessage && !customerDraft.fullName.trim() ? "invalid" : ""}" value="${escapeHtml(customerDraft.fullName)}" autocomplete="name" placeholder="${validationMessage && !customerDraft.fullName.trim() ? "Full name is required" : ""}"></label><label><span>MOBILE NUMBER</span><input id="customer-mobile" class="${(validationMessage && !normalizePhilippineMobile(customerDraft.mobile)) || customerDuplicate ? "invalid" : ""}" value="${escapeHtml(customerDraft.mobile)}" inputmode="tel" placeholder="${validationMessage && !normalizePhilippineMobile(customerDraft.mobile) ? "Enter a valid PH mobile number" : "09XX XXX XXXX"}"></label><label><span>EMAIL (OPTIONAL)</span><input id="customer-email" type="email" value="${escapeHtml(customerDraft.email || "")}" placeholder="juan@email.com"></label><label><span>BIRTHDAY (OPTIONAL)</span><input id="customer-birthday" value="${escapeHtml(customerDraft.birthday || "")}" placeholder="Month / Day"></label>${customerDuplicate ? `<section class="customer-duplicate"><div><strong>Mobile number already exists</strong><p>${escapeHtml(customerDuplicate.full_name)} • ${escapeHtml(customerDuplicate.mobile_normalized || customerDuplicate.mobile_raw)}. Use the existing customer instead.</p></div><button data-customer-use-existing type="button">Use Existing</button></section>` : `<section class="customer-consent">${renderIcon("circle-check", "customer-consent-icon")}<span>Customer agrees to receive order and status updates.</span></section>`}<footer><button data-customer-close type="button">Back</button><button class="customer-primary-button" type="submit" ${validation || customerSaveState === "saving" ? "disabled" : ""}>${customerSaveState === "saving" ? "Saving..." : "Save Customer"}</button></footer></form></aside>`;
 }
 
 async function saveCustomerIdentity() {
@@ -11963,7 +11997,7 @@ function bindCalendarEvents() {
 }
 function bindEvents() {
   document.querySelectorAll("[data-customer-add]").forEach((button) => button.addEventListener("click", () => {
-    customerDrawerMode = "add"; customerDraft = { fullName: "", mobile: "", firstSource: "ADMIN_MANUAL" }; customerSaveError = ""; customerDuplicate = null; customerSuccess = ""; render();
+    customerDrawerMode = "add"; customerDraft = { fullName: "", mobile: "", firstSource: "ADMIN_MANUAL", email: "", birthday: "" }; customerSaveError = ""; customerDuplicate = null; customerSuccess = ""; render();
   }));
   document.querySelectorAll("[data-customer-close]").forEach((button) => button.addEventListener("click", () => { customerDrawerMode = ""; customerDuplicate = null; render(); }));
   document.querySelectorAll("[data-customer-view]").forEach((button) => button.addEventListener("click", () => { selectedCustomer = customers.find((item) => item.id === button.dataset.customerView) || null; customerDrawerMode = selectedCustomer ? "view" : ""; render(); }));
@@ -11972,6 +12006,8 @@ function bindEvents() {
   document.getElementById("customer-search")?.addEventListener("input", (event) => { customerSearch = event.target.value; render(); focusFieldAtEnd("customer-search"); });
   document.getElementById("customer-full-name")?.addEventListener("input", (event) => { customerDraft.fullName = event.target.value; customerSaveError = ""; render(); focusFieldAtEnd("customer-full-name"); });
   document.getElementById("customer-mobile")?.addEventListener("input", (event) => { customerDraft.mobile = event.target.value; customerSaveError = ""; render(); focusFieldAtEnd("customer-mobile"); });
+  document.getElementById("customer-email")?.addEventListener("input", (event) => { customerDraft.email = event.target.value; render(); focusFieldAtEnd("customer-email"); });
+  document.getElementById("customer-birthday")?.addEventListener("input", (event) => { customerDraft.birthday = event.target.value; render(); focusFieldAtEnd("customer-birthday"); });
   document.getElementById("customer-source")?.addEventListener("change", (event) => { customerDraft.firstSource = event.target.value; customerSaveError = ""; render(); });
   document.getElementById("customer-form")?.addEventListener("submit", (event) => { event.preventDefault(); saveCustomerIdentity(); });
   document.querySelectorAll("[data-admin-logout]").forEach((button) => {
