@@ -73,6 +73,7 @@
     "preview": "node scripts/local-dev.mjs",
     "test:grouped-sidebar": "node scripts/test-grouped-sidebar-nav.mjs",
     "validate:customer-identity-c1": "node scripts/validate-customer-identity-c1.mjs",
+    "validate:customer-identity-c2-1": "node scripts/validate-customer-identity-c2-1.mjs",
     "test:customer-identity-c1-ui": "node scripts/test-customer-identity-c1-ui.mjs"
   },
   "dependencies": {
