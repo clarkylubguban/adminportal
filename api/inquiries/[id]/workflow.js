@@ -10,6 +10,7 @@ const PRODUCTION_WORKFLOW_ACTIONS = new Set(["save_production", "start_productio
 const STAFF_PRODUCTION_ACTIONS = new Set(["save_production", "start_production"]);
 const WORKFLOW_SELECT = [
   "id", "status", "next_action", "odoo_so", "product", "product_desc", "quantity", "due_date",
+  "customer_id",
   "quote_status", "quoted_amount", "amount_due", "artwork_status", "payment_status",
   "payment_confirmed_amount", "payment_verified_amount",
   "assigned_staff", "assigned_user_id", "production_stage", "production_note", "production_updated_at",
@@ -209,6 +210,7 @@ function isMissingAdminProfileColumn(error) {
 function toClientInquiry(row) {
   return {
     id: row.id,
+    customerId: row.customer_id || "",
     status: row.status,
     next: row.next_action,
     odooSO: row.odoo_so,

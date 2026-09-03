@@ -15,6 +15,7 @@ export const ORDER_SELECT = [
   "quote_note",
   "quote_valid_until",
   "quote_approved_at",
+  "customer_id",
   "customer_name",
   "customer_contact",
   "product",
@@ -28,6 +29,7 @@ export const ORDER_SELECT = [
 
 export const ORDER_SOURCE_INQUIRY_SELECT = [
   "id",
+  "customer_id",
   "customer_name",
   "contact",
   "product",
@@ -130,6 +132,7 @@ export function buildOrderSnapshot(inquiry) {
     quote_note: cleanText(inquiry.quote_notes, 2000) || null,
     quote_valid_until: dateOrNull(inquiry.quote_valid_until),
     quote_approved_at: timestampOrNull(inquiry.quote_approved_at),
+    customer_id: uuidOrNull(inquiry.customer_id),
     customer_name: cleanText(inquiry.customer_name, 240) || null,
     customer_contact: cleanText(inquiry.contact, 240) || null,
     product: cleanText(inquiry.product, 500) || null,
@@ -153,6 +156,7 @@ export function normalizeOrder(row) {
     quoteNote: cleanText(row.quote_note, 2000),
     quoteValidUntil: cleanText(row.quote_valid_until, 80),
     quoteApprovedAt: cleanText(row.quote_approved_at, 80),
+    customerId: uuidOrNull(row.customer_id) || "",
     customerName: cleanText(row.customer_name, 240),
     customerContact: cleanText(row.customer_contact, 240),
     product: cleanText(row.product, 500),
@@ -238,4 +242,9 @@ function dateOrNull(value) {
 function timestampOrNull(value) {
   const text = cleanText(value, 80);
   return text && !Number.isNaN(Date.parse(text)) ? text : null;
+}
+
+function uuidOrNull(value) {
+  const text = cleanText(value, 80).toLowerCase();
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(text) ? text : null;
 }

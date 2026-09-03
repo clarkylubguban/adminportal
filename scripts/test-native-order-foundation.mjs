@@ -13,6 +13,7 @@ import {
 
 const APPROVED_INQUIRY = {
   id: "TRY-ORDER-001",
+  customer_id: "96000000-0000-4000-8000-0000000000c1",
   customer_name: "Approved Customer",
   contact: "0917-000-0000",
   product: "DTF Print",
@@ -46,6 +47,7 @@ assert.deepEqual(snapshot, {
   quote_note: "Approved quote note",
   quote_valid_until: "2026-08-31",
   quote_approved_at: "2026-08-08T03:00:00.000Z",
+  customer_id: "96000000-0000-4000-8000-0000000000c1",
   customer_name: "Approved Customer",
   customer_contact: "0917-000-0000",
   product: "DTF Print",
@@ -65,6 +67,7 @@ assert.equal(first.order.orderReference, "TRRY-ORD-ABCDEFGH");
 assert.equal(first.order.sourceInquiryId, APPROVED_INQUIRY.id);
 assert.equal(first.order.status, ORDER_STATUS_AWAITING_PAYMENT);
 assert.ok(first.order.id, "native order id is required");
+assert.equal(first.order.customerId, "96000000-0000-4000-8000-0000000000c1");
 assert.equal(first.order.customerName, "Approved Customer");
 assert.equal(first.order.quoteNote, "Approved quote note");
 assert.equal(calls.filter((call) => call.table === "orders" && call.action === "insert").length, 1);
