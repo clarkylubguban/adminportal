@@ -107,7 +107,7 @@ async function hydrateWebsiteAnalytics(card) {
   }
 
   try {
-    const response = await fetch("/api/overview-website-analytics", {
+    const response = await fetch("/api/task-views?view=website-analytics", {
       headers: {
         Authorization: `Bearer ${session.access_token}`,
         Accept: "application/json",
