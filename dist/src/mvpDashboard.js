@@ -573,6 +573,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const quote = quotationSummary(item, stage);
     return `<div class="mvp-inquiry-core-content">
       <section class="mvp-inquiry-request-summary"><span>Request</span><strong>${html(item.customer || "Unnamed customer")}</strong><p>${html(serviceDisplay(item))}</p></section>
+      ${customerIdentityCapture(item)}
       <section class="mvp-inquiry-figma-cards" aria-label="Inquiry summary cards">
         <article><span>Quantity</span><strong>${html(item.sizeBreakdown || item.qty || "Not set")}</strong><small>${html(fulfillment(item))}</small></article>
         <article><span>Quote</span><strong>${html(quote.title)}</strong><small>${html(quote.sub)}</small></article>
@@ -580,6 +581,56 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       <h3>DETAILS</h3>
       <div class="mvp-inquiry-detail-list">${inquiryDetailLine("Assignee", owner(item))}${inquiryDetailLine("Priority", priorityLabel(item))}${inquiryDetailLine("Internal Note", item.internalNote || "Not set", true)}${inquiryDetailLine("Last Update", lastUpdateLabel(item))}</div>
     </div>`;
+  }
+
+  function customerIdentityCapture(item) {
+    const stateInfo = customerIdentityState(item);
+    const request = item.customerIdentityRequest || {};
+    const statusMessage = request.message || stateInfo.message;
+    const actionLabel = request.status === "loading"
+      ? "Resolving..."
+      : stateInfo.actionLabel;
+    const disabled = request.status === "loading" || stateInfo.actionDisabled;
+    const linked = Boolean(item.customerId);
+    const match = item.customerIdentityMatch;
+    const matchCard = !linked && match
+      ? `<article class="mvp-c2-match-card"><span>USE EXISTING IDENTITY</span><strong>${html(match.full_name || "Existing customer")}</strong><small>${html(match.customer_reference || match.id || "Customer record")} / ${html(match.mobile_normalized || match.mobile_raw || "")}</small><p>Exact normalized mobile match. Use Existing links this inquiry to the current customer record.</p></article>`
+      : "";
+    const linkedCard = linked
+      ? `<article class="mvp-c2-linked-card"><span>LINKED CUSTOMER IDENTITY</span><strong>${html(item.customer || "Linked customer")}</strong><small>${html(item.customerReference || item.customerId)} / ${html(item.contact || "No mobile snapshot")}</small><p>Inquiry keeps this customer_id for Order conversion. Name and mobile remain transaction snapshots.</p></article>`
+      : "";
+
+    return `<section class="mvp-c2-identity-panel ${html(stateInfo.tone)}" aria-label="Customer identity capture">
+      <div class="mvp-c2-identity-heading"><span>CUSTOMER IDENTITY</span><strong>${html(stateInfo.title)}</strong></div>
+      <div class="mvp-c2-identity-fields">
+        <label><span>Customer Name</span><input data-c2-customer-name="${html(item.id)}" value="${html(item.customer || "")}" ${linked ? "disabled" : ""} /></label>
+        <label><span>PH Mobile</span><input data-c2-customer-mobile="${html(item.id)}" inputmode="tel" value="${html(item.contact || "")}" placeholder="09XX XXX XXXX" ${linked ? "disabled" : ""} /></label>
+      </div>
+      ${matchCard}${linkedCard}
+      <p class="mvp-c2-identity-message">${html(statusMessage)}</p>
+      ${linked ? "" : `<button class="mvp-action-primary mvp-c2-identity-action" type="button" data-c2-link-customer="${html(item.id)}" ${disabled ? "disabled" : ""}><span>${html(actionLabel)}</span></button>`}
+    </section>`;
+  }
+
+  function orderCustomerIdentitySummary(item) {
+    const linked = Boolean(item.customerId);
+    return `<section class="mvp-c2-identity-panel linked order-linked" aria-label="Order linked customer identity">
+      <div class="mvp-c2-identity-heading"><span>ORDER CUSTOMER IDENTITY</span><strong>${html(linked ? "Preserved from Inquiry" : "Anonymous Order")}</strong></div>
+      <article class="mvp-c2-linked-card"><span>${html(linked ? "LINKED CUSTOMER IDENTITY" : "NO CUSTOMER_ID")}</span><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(linked ? item.customerId : "Anonymous/unlinked")} / ${html(item.contact || "No mobile snapshot")}</small><p>Order customer_id and customer name/mobile snapshots are immutable after creation.</p></article>
+    </section>`;
+  }
+
+  function customerIdentityState(item) {
+    const linked = Boolean(item.customerId);
+    const mobile = String(item.contact || "").trim();
+    const normalized = normalizePhilippineMobile(mobile);
+    const requestStatus = item.customerIdentityRequest?.status || "";
+    if (linked) return { tone: "linked", title: "Linked customer identity", message: "Customer identity is already linked.", actionLabel: "", actionDisabled: true };
+    if (requestStatus === "error") return { tone: "invalid", title: "Invalid PH mobile", message: item.customerIdentityRequest.message, actionLabel: "Resolve Identity", actionDisabled: false };
+    if (!mobile) return { tone: "anonymous", title: "Anonymous inquiry", message: "Missing mobile keeps this inquiry anonymous/unlinked. No customer record will be created.", actionLabel: "Keep Anonymous", actionDisabled: false };
+    if (!normalized) return { tone: "invalid", title: "Invalid PH mobile", message: "Enter a valid Philippine mobile number before linking customer identity.", actionLabel: "Resolve Identity", actionDisabled: false };
+    if (item.customerIdentityMatch) return { tone: "existing", title: "Existing customer match", message: "Exact normalized mobile match found.", actionLabel: "Use Existing", actionDisabled: false };
+    return { tone: "ready", title: "New customer ready", message: "Valid mobile. Save will create and link a new customer identity.", actionLabel: "Create & Link", actionDisabled: false };
   }
 
   function customerCommunication(item) {
@@ -1138,7 +1189,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function orderDrawerOverview(item) {
-    return `<section class="mvp-order-panel"><h3>ORDER SUMMARY</h3><div class="mvp-order-detail-list">
+    return `${orderCustomerIdentitySummary(item)}<section class="mvp-order-panel"><h3>ORDER SUMMARY</h3><div class="mvp-order-detail-list">
       ${detailLine("Product", itemDisplay(item))}
       ${detailLine("Quantity", quantityDisplay(item))}
       ${detailLine("Sizes", item.sizeBreakdown || "Not set")}
@@ -2242,7 +2293,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return missing;
   }
 
-  function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, approveOrderArtwork, confirmPayment, saveFulfillment, saveInquiryFollowUp, handleInquiryFollowUpOutcome }) {
+  function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, approveOrderArtwork, confirmPayment, saveFulfillment, saveInquiryFollowUp, handleInquiryFollowUpOutcome, linkCustomerIdentity }) {
     bindInquiryMoreDismiss(root);
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { closeInquiryMoreMenus(root); navigate(button.dataset.mvpRoute); rerender(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
@@ -2318,6 +2369,13 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       state.inquiryActionId = null;
       button.disabled = true;
       await createOrder?.(button.dataset.mvpCreateOrder);
+      rerender();
+    }));
+    root.querySelectorAll("[data-c2-link-customer]").forEach((button) => button.addEventListener("click", async (event) => {
+      event.stopPropagation();
+      if (button.disabled) return;
+      button.disabled = true;
+      await linkCustomerIdentity?.(button.dataset.c2LinkCustomer);
       rerender();
     }));
     root.querySelectorAll("[data-mvp-inquiry-tab]").forEach((button) => button.addEventListener("click", (event) => {
@@ -2695,7 +2753,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
   function customerCell(item) {
     const phone = String(item.contact || "").trim();
-    return `<span class="mvp-customer-cell" title="${html(item.customer || "Unnamed customer")}"><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(phone || "No contact")}</small></span>`;
+    const identity = item.customerId ? "LINKED ID" : phone ? "UNLINKED" : "ANONYMOUS";
+    return `<span class="mvp-customer-cell" title="${html(item.customer || "Unnamed customer")}"><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(phone || "No contact")} / ${html(identity)}</small></span>`;
   }
   function cleanCustomerSuppliedLabel(value) {
     return String(value || "Not set").replace(/^customer-supplied\s*/i, "").trim() || "Other";
@@ -2727,6 +2786,13 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (normalized.includes("screen")) return "Screen Printing";
     if (normalized.includes("dtf")) return "DTF";
     return value;
+  }
+  function normalizePhilippineMobile(value) {
+    const digits = String(value || "").replace(/\D+/g, "");
+    if (/^09\d{9}$/.test(digits)) return `+63${digits.slice(1)}`;
+    if (/^639\d{9}$/.test(digits)) return `+${digits}`;
+    if (/^9\d{9}$/.test(digits)) return `+63${digits}`;
+    return "";
   }
   function requestCell(item) {
     const summary = `${fulfillment(item).toUpperCase()} ${String.fromCharCode(183)} ${artworkState(item)}`;

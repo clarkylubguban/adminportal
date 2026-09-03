@@ -1,4 +1,9 @@
-import { isSupabaseReady, readSupabaseTableWithAuth, writeSupabaseTableWithAuth } from "../lib/supabaseClient.js";
+import {
+  executeSupabaseRpcWithAuth,
+  isSupabaseReady,
+  readSupabaseTableWithAuth,
+  writeSupabaseTableWithAuth,
+} from "../lib/supabaseClient.js";
 
 export function normalizePhilippineMobile(value) {
   const digits = String(value || "").replace(/\D+/g, "");
@@ -54,6 +59,39 @@ export async function createAdminCustomer(draft, authSession) {
     if (raced) return { customer: raced, duplicate: true };
     throw error;
   }
+}
+
+export async function findOrCreateAdminCustomerIdentity(draft, authSession) {
+  const validationError = validateCustomerIdentityDraft(draft);
+  if (validationError) throw new Error(validationError);
+  if (!isSupabaseReady()) throw new Error("Supabase env is missing or disabled.");
+
+  const rows = await executeSupabaseRpcWithAuth(
+    "find_or_create_customer_identity_c2_1",
+    {
+      p_full_name: String(draft.fullName || "").trim(),
+      p_mobile: String(draft.mobile || "").trim(),
+      p_first_source: draft.firstSource || "ADMIN_MANUAL",
+    },
+    getAccessToken(authSession)
+  );
+
+  const result = Array.isArray(rows) ? rows[0] : rows;
+  if (!result?.customer_id) {
+    throw new Error("Customer identity could not be resolved.");
+  }
+
+  return {
+    customer: {
+      id: result.customer_id,
+      customer_reference: result.customer_reference,
+      full_name: result.full_name,
+      mobile_normalized: result.mobile_normalized,
+      first_source: result.first_source,
+    },
+    duplicate: result.created === false,
+    created: result.created === true,
+  };
 }
 
 function getAccessToken(authSession) {

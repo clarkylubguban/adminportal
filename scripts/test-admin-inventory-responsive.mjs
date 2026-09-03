@@ -112,7 +112,7 @@ try {
     });
     const value = result.result.result.value;
     assert.ok(value.hasInventory, `${viewport.label}: Inventory content missing; ${diagnostics(value)}`);
-    assert.ok(value.hasStockRule, `${viewport.label}: Stock rule missing`);
+    assert.ok(value.hasStockRule, `${viewport.label}: Stock rule missing; ${diagnostics(value)}`);
     assert.ok(value.hasFigmaStockHeaders, `${viewport.label}: Inventory headers mismatch: ${value.headers.join(", ")}`);
     if (viewport.width >= 1200) {
       assert.ok(value.stockHeaderWidth >= 96, `${viewport.label}: Stock column too narrow (${value.stockHeaderWidth})`);
@@ -136,7 +136,12 @@ try {
 async function startLocalServer() {
   const child = spawn(process.execPath, ["scripts/local-dev.mjs"], {
     cwd: process.cwd(),
-    env: { ...process.env, VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA || "false" },
+    env: {
+      ...process.env,
+      VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA || "false",
+      VITE_LOCAL_TASK_QA_MODE: process.env.VITE_LOCAL_TASK_QA_MODE || "true",
+      VITE_LOCAL_TASK_QA_ROLE: process.env.VITE_LOCAL_TASK_QA_ROLE || "admin",
+    },
     stdio: ["ignore", "pipe", "pipe"],
   });
   const output = [];

@@ -171,6 +171,7 @@ export function mapOpsRowToInquiry(row) {
     code: getFirstValue(row, ["code"]),
     sourceInquiryId: getFirstValue(row, ["source_inquiry_id", "sourceInquiryId", "inquiry_id", "inquiryId"]),
     sourceInquiryReference: getFirstValue(row, ["source_inquiry_reference", "sourceInquiryReference", "inquiry_reference", "inquiryReference", "converted_from", "convertedFrom"]),
+    customerId: getFirstValue(row, ["customer_id", "customerId"]),
     customer: getFirstValue(row, [
       "customer_name",
       "customer",
@@ -311,6 +312,7 @@ export function mapOpsRowToInquiry(row) {
 export function mapInquiryToOpsRow(inquiry) {
   return cleanRow({
     id: inquiry.id,
+    customer_id: inquiry.customerId,
     customer_name: inquiry.customer,
     contact: inquiry.contact,
     company: inquiry.company,
@@ -361,6 +363,7 @@ export function mapInquiryToOpsRow(inquiry) {
 
 function mapInquiryUpdatesToOpsRow(updates) {
   return cleanRow({
+    customer_id: updates.customerId,
     customer_name: updates.customer,
     contact: updates.contact,
     company: updates.company,
