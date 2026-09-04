@@ -1,5 +1,8 @@
 ﻿const SUPABASE_REST_VERSION = "v1";
 const ADMIN_AUTH_STORAGE_KEY = "trry_admin_supabase_auth_session_v1";
+const ADMIN_AUTH_REFRESH_SKEW_SECONDS = 120;
+let adminAuthRefreshTimer = null;
+let liveAdminAuthSession = null;
 
 export function getSupabaseConfig() {
   const env = window.TRRY_ADMIN_ENV ?? {};
@@ -359,17 +362,26 @@ function getPasswordUpdateError(message, status) {
   }
   return "Unable to update password. Request a new reset link and try again.";
 }
+
 export async function getCurrentAdminAuthSession() {
   const storedSession = readStoredAdminAuthSession();
   if (!storedSession) return null;
 
   const expiresAt = Number(storedSession.expires_at ?? 0);
-  const shouldRefresh = expiresAt && expiresAt - Math.floor(Date.now() / 1000) < 60;
+  const shouldRefresh = expiresAt && expiresAt - Math.floor(Date.now() / 1000) < ADMIN_AUTH_REFRESH_SKEW_SECONDS;
 
-  if (!shouldRefresh) return storedSession;
+  if (!shouldRefresh) {
+    liveAdminAuthSession = storedSession;
+    scheduleAdminAuthRefresh(storedSession);
+    return storedSession;
+  }
 
   try {
-    return await refreshAdminAuthSession(storedSession.refresh_token);
+    const refreshedSession = await refreshAdminAuthSession(storedSession.refresh_token);
+    Object.assign(storedSession, refreshedSession);
+    liveAdminAuthSession = storedSession;
+    scheduleAdminAuthRefresh(storedSession);
+    return storedSession;
   } catch {
     clearAdminAuthSession();
     return null;
@@ -397,7 +409,14 @@ export async function refreshAdminAuthSession(refreshToken) {
     throw new Error("Admin session expired.");
   }
 
-  return storeAdminAuthSession(await response.json());
+  const refreshed = storeAdminAuthSession(await response.json());
+  if (liveAdminAuthSession && liveAdminAuthSession !== refreshed) {
+    Object.assign(liveAdminAuthSession, refreshed);
+    persistAdminAuthSession(liveAdminAuthSession);
+    scheduleAdminAuthRefresh(liveAdminAuthSession);
+    return liveAdminAuthSession;
+  }
+  return refreshed;
 }
 
 export async function signOutAdmin() {
@@ -423,6 +442,11 @@ export async function signOutAdmin() {
 }
 
 export function clearAdminAuthSession() {
+  if (adminAuthRefreshTimer) {
+    clearTimeout(adminAuthRefreshTimer);
+    adminAuthRefreshTimer = null;
+  }
+  liveAdminAuthSession = null;
   try {
     localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
   } catch {
@@ -438,13 +462,42 @@ function storeAdminAuthSession(payload) {
     user: payload.user,
   };
 
+  liveAdminAuthSession = session;
+  persistAdminAuthSession(session);
+  scheduleAdminAuthRefresh(session);
+  return session;
+}
+
+function persistAdminAuthSession(session) {
   try {
     localStorage.setItem(ADMIN_AUTH_STORAGE_KEY, JSON.stringify(session));
   } catch {
     // The current page can still use the returned session.
   }
+}
 
-  return session;
+function scheduleAdminAuthRefresh(session) {
+  if (adminAuthRefreshTimer) clearTimeout(adminAuthRefreshTimer);
+  adminAuthRefreshTimer = null;
+  if (!session?.refresh_token) return;
+
+  const expiresAt = Number(session.expires_at ?? 0);
+  if (!expiresAt) return;
+  const now = Math.floor(Date.now() / 1000);
+  const refreshInSeconds = Math.max(5, expiresAt - now - ADMIN_AUTH_REFRESH_SKEW_SECONDS);
+
+  adminAuthRefreshTimer = setTimeout(async () => {
+    try {
+      const refreshedSession = await refreshAdminAuthSession(session.refresh_token);
+      Object.assign(session, refreshedSession);
+      liveAdminAuthSession = session;
+      persistAdminAuthSession(session);
+      scheduleAdminAuthRefresh(session);
+    } catch (error) {
+      console.warn("Admin auth auto-refresh failed.", error);
+      clearAdminAuthSession();
+    }
+  }, refreshInSeconds * 1000);
 }
 
 function readStoredAdminAuthSession() {
