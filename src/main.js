@@ -22,7 +22,13 @@ import {
   updateTaskDraft,
 } from "./services/tasks.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
-import { createAdminCustomer, getAdminCustomers, normalizePhilippineMobile, validateCustomerIdentityDraft } from "./services/adminCustomers.js";
+import {
+  createAdminCustomer,
+  findOrCreateAdminCustomerIdentity,
+  getAdminCustomers,
+  normalizePhilippineMobile,
+  validateCustomerIdentityDraft,
+} from "./services/adminCustomers.js";
 import { getAdminReorderRequests } from "./services/adminOrders.js";
 import {
   createOpsBoardInquiry,
@@ -315,6 +321,7 @@ const opsStatusNameToKey = {
 
 const emptyOpsExtract = {
   customerName: "",
+  mobileNumber: "",
   businessName: "",
   source: "FB",
   serviceType: "",
@@ -345,6 +352,7 @@ let nativeOrderRows = [];
 let nativeOrdersLoadState = shouldLoadSupabaseOps ? "loading" : "local";
 let nativeOrdersLoadError = "";
 let nativeOrderConversionRequests = {};
+let opsCustomerIdentityRequests = {};
 
 const opsProduction = [
   { name: "DTF", jobs: 0, note: "Production tracking not connected yet." },
@@ -363,6 +371,7 @@ const opsPriorities = [
 let opsRawMessage = "";
 let opsExtractFields = null;
 let opsSavedNotice = false;
+let opsInquirySaveInFlight = false;
 let opsArtworkRequests = {};
 let opsCustomerActionRequests = {};
 let mvpPaymentConfirmationRequests = {};
@@ -3758,6 +3767,8 @@ function getMvpDashboardItems() {
     ...getNativeOrderIdentityForInquiry(item.id),
     orderCreationState: nativeOrderConversionRequests[item.id]?.status || "",
     orderCreationError: nativeOrderConversionRequests[item.id]?.message || "",
+    customerIdentityRequest: opsCustomerIdentityRequests[item.id] || {},
+    customerIdentityMatch: findCachedCustomerByMobile(item.contact),
     requiresProductionMigration: shouldLoadSupabaseOps && !item.productionFieldsReady,
   }));
 }
@@ -3797,6 +3808,7 @@ function renderMvpInquiriesPage() {
     notices: renderOpsPersistenceNotice(),
     renderQuote: renderOpsQuoteStage,
     renderArtwork: renderMvpArtworkAction,
+    renderIntake: renderOpsIntakeWorkflow,
   });
 }
 
@@ -3910,11 +3922,32 @@ function renderOpsSummaryCard(card) {
   return `<article class="ops-kpi-card ${card.gold ? "gold" : ""}"><strong>${card.value}</strong><span>${card.label}</span><small>${card.hint}</small></article>`;
 }
 
+function renderOpsIntakeWorkflow() {
+  return `<div class="ops-ai-card mvp-inquiry-intake-workflow">
+    <div class="ops-section-heading">
+      <span>CUSTOMER CAPTURE</span>
+      <h2>Inquiry Intake</h2>
+      <p>Customer identity and request details</p>
+    </div>
+    ${opsSavedNotice ? `<div class="ops-save-notice">Inquiry saved.</div>` : ""}
+    ${opsLoadState === "error" && opsLoadError ? `<div class="ops-persistence-card error"><strong>Inquiry save failed</strong><span>${escapeHtml(opsLoadError)}</span></div>` : ""}
+    <label>
+      <span>Message / Inquiry Notes</span>
+      <textarea id="ops-raw-message" rows="5" placeholder="Paste the inquiry message or type the walk-in request here.">${escapeHtml(opsRawMessage)}</textarea>
+    </label>
+    <div class="ops-action-row">
+      <button class="ops-dark-button" id="ops-extract-inquiry" type="button" ${opsRawMessage.trim() ? "" : "disabled"}>Extract Inquiry</button>
+      <button class="ops-light-button" id="ops-cancel-inquiry-intake" type="button">Cancel</button>
+    </div>
+    ${opsExtractFields ? renderOpsReviewForm() : ""}
+  </div>`;
+}
+
 function renderOpsReviewForm() {
   const fields = opsExtractFields;
-  const simpleFields = [["customerName", "Customer Name"], ["businessName", "Business Name"], ["quantity", "Quantity"], ["neededDate", "Needed Date"], ["nextAction", "Next Action"]];
+  const simpleFields = [["customerName", "Customer Name"], ["mobileNumber", "PH Mobile"], ["businessName", "Business Name"], ["quantity", "Quantity"], ["neededDate", "Needed Date"], ["nextAction", "Next Action"]];
   const textFields = [["summary", "Summary", 2], ["missingDetails", "Missing Details", 2], ["suggestedReply", "Suggested Reply", 3]];
-  return `<div class="ops-review-box"><p class="ops-review-label">Review before saving - edit anything AI got wrong</p><div class="ops-review-grid">${simpleFields.map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}<label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label><label><span>Suggested Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div><div class="ops-review-stack">${textFields.map(([key, label, rows]) => renderOpsTextarea(key, label, fields[key], rows)).join("")}</div><div class="ops-action-row"><button class="ops-gold-button" id="ops-save-inquiry" type="button">Save Inquiry</button><button class="ops-light-button" id="ops-clear-inquiry" type="button">Clear</button></div></div>`;
+  return `<div class="ops-review-box"><p class="ops-review-label">Review before saving - edit anything AI got wrong</p><div class="ops-review-grid">${simpleFields.map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}<label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label><label><span>Suggested Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div><div class="ops-review-stack">${textFields.map(([key, label, rows]) => renderOpsTextarea(key, label, fields[key], rows)).join("")}</div><div class="ops-action-row"><button class="ops-gold-button" id="ops-save-inquiry" type="button" ${opsInquirySaveInFlight ? "disabled" : ""}>${opsInquirySaveInFlight ? "Saving..." : "Save Inquiry"}</button><button class="ops-light-button" id="ops-clear-inquiry" type="button" ${opsInquirySaveInFlight ? "disabled" : ""}>Clear</button></div></div>`;
 }
 
 function renderOpsServiceTypeSelect(value) {
@@ -4986,28 +5019,31 @@ function demoExtractOpsInquiry(text) {
 }
 
 async function saveOpsInquiry() {
-  if (!opsExtractFields) return;
-  const inquiry = buildOpsInquiryFromExtract();
+  if (!opsExtractFields || opsInquirySaveInFlight) return;
+  opsInquirySaveInFlight = true;
+  let inquiry = buildOpsInquiryFromExtract();
 
-  if (shouldLoadSupabaseOps) {
-    try {
+  try {
+    if (shouldLoadSupabaseOps) {
+      inquiry = await attachCustomerIdentityToInquiry(inquiry);
       const savedInquiry = await createOpsBoardInquiry(inquiry, adminAuthSession);
       opsInquiries = [savedInquiry, ...opsInquiries];
       opsLoadState = "success";
       opsLoadError = "";
-    } catch (error) {
-      console.error("Unable to save Ops Board inquiry.", error);
-      opsLoadState = "error";
-      opsLoadError = error.message;
-      return;
+    } else {
+      opsInquiries = [inquiry, ...opsInquiries];
     }
-  } else {
-    opsInquiries = [inquiry, ...opsInquiries];
-  }
 
-  opsRawMessage = "";
-  opsExtractFields = null;
-  opsSavedNotice = true;
+    opsRawMessage = "";
+    opsExtractFields = null;
+    opsSavedNotice = true;
+  } catch (error) {
+    console.error("Unable to save Ops Board inquiry.", error);
+    opsLoadState = "error";
+    opsLoadError = error.message;
+  } finally {
+    opsInquirySaveInFlight = false;
+  }
 }
 
 function createOpsInquiryId() {
@@ -5024,11 +5060,12 @@ function createOpsInquiryId() {
 }
 function buildOpsInquiryFromExtract() {
   const status = opsStatusNameToKey[opsExtractFields.suggestedStatus] || "new";
+  const customerName = opsExtractFields.customerName || opsExtractFields.businessName || "Unnamed inquiry";
 
   return {
     id: createOpsInquiryId(),
-    customer: opsExtractFields.businessName || opsExtractFields.customerName || "Unnamed inquiry",
-    contact: opsExtractFields.customerName || "",
+    customer: customerName,
+    contact: opsExtractFields.mobileNumber || "",
     source: opsSource[opsExtractFields.source] ? opsExtractFields.source : "FB",
     message: opsRawMessage,
     service: opsExtractFields.serviceType || "-",
@@ -5042,6 +5079,122 @@ function buildOpsInquiryFromExtract() {
     odooSO: "",
   };
 }
+
+async function attachCustomerIdentityToInquiry(inquiry) {
+  const mobile = String(inquiry.contact || "").trim();
+  if (!mobile) return { ...inquiry, customerId: null };
+  if (!normalizePhilippineMobile(mobile)) {
+    throw new Error("Enter a valid Philippine mobile number or leave PH Mobile blank for an anonymous inquiry.");
+  }
+
+  const result = await findOrCreateAdminCustomerIdentity({
+    fullName: inquiry.customer,
+    mobile,
+    firstSource: mapOpsSourceToCustomerSource(inquiry.source),
+  }, adminAuthSession);
+
+  cacheResolvedCustomer(result.customer);
+  return {
+    ...inquiry,
+    customer: result.customer.full_name || inquiry.customer,
+    contact: result.customer.mobile_normalized || mobile,
+    customerId: result.customer.id,
+    customerReference: result.customer.customer_reference,
+  };
+}
+
+async function linkOpsInquiryCustomerIdentity(inquiryId) {
+  const id = String(inquiryId || "").trim();
+  const item = opsInquiries.find((inquiry) => inquiry.id === id);
+  if (!item || opsCustomerIdentityRequests[id]?.status === "loading") return;
+
+  const nameInput = document.querySelector(`[data-c2-customer-name="${CSS.escape(id)}"]`);
+  const mobileInput = document.querySelector(`[data-c2-customer-mobile="${CSS.escape(id)}"]`);
+  const fullName = nameInput?.value?.trim() || item.customer || "";
+  const mobile = mobileInput?.value?.trim() || "";
+
+  if (!mobile) {
+    opsCustomerIdentityRequests = {
+      ...opsCustomerIdentityRequests,
+      [id]: { status: "anonymous", message: "Saved as anonymous/unlinked. No customer record created." },
+    };
+    render();
+    return;
+  }
+
+  if (!normalizePhilippineMobile(mobile)) {
+    opsCustomerIdentityRequests = {
+      ...opsCustomerIdentityRequests,
+      [id]: { status: "error", message: "Enter a valid Philippine mobile number." },
+    };
+    render();
+    return;
+  }
+
+  opsCustomerIdentityRequests = {
+    ...opsCustomerIdentityRequests,
+    [id]: { status: "loading", message: "Resolving customer identity..." },
+  };
+  render();
+
+  try {
+    const result = await findOrCreateAdminCustomerIdentity({
+      fullName,
+      mobile,
+      firstSource: mapOpsSourceToCustomerSource(item.source),
+    }, adminAuthSession);
+    const savedInquiry = await updateOpsInquiryFields(id, {
+      customer: result.customer.full_name || fullName,
+      contact: result.customer.mobile_normalized || mobile,
+      customerId: result.customer.id,
+    }, adminAuthSession);
+
+    cacheResolvedCustomer(result.customer);
+    opsInquiries = opsInquiries.map((inquiry) => inquiry.id === id ? {
+      ...inquiry,
+      ...(savedInquiry || {}),
+      customer: result.customer.full_name || fullName,
+      contact: result.customer.mobile_normalized || mobile,
+      customerId: result.customer.id,
+      customerReference: result.customer.customer_reference,
+    } : inquiry);
+    opsCustomerIdentityRequests = {
+      ...opsCustomerIdentityRequests,
+      [id]: {
+        status: result.created ? "created" : "existing",
+        message: result.created ? "New customer identity linked." : "Existing customer identity linked.",
+      },
+    };
+  } catch (error) {
+    opsCustomerIdentityRequests = {
+      ...opsCustomerIdentityRequests,
+      [id]: { status: "error", message: error?.message || "Unable to link customer identity." },
+    };
+  }
+  render();
+}
+
+function mapOpsSourceToCustomerSource(source) {
+  const value = String(source || "").trim().toLowerCase();
+  if (value.includes("walk")) return "POS_WALK_IN";
+  if (value.includes("web") || value.includes("portal")) return "TRRY_WEB";
+  return "ADMIN_MANUAL";
+}
+
+function findCachedCustomerByMobile(mobile) {
+  const normalized = normalizePhilippineMobile(mobile);
+  if (!normalized) return null;
+  return customers.find((customer) => customer.mobile_normalized === normalized) || null;
+}
+
+function cacheResolvedCustomer(customer) {
+  if (!customer?.id) return;
+  customers = [
+    customer,
+    ...customers.filter((item) => String(item.id) !== String(customer.id)),
+  ];
+}
+
 function normalizeOpsDate(value) {
   if (!value) return null;
   const parsed = Date.parse(value);
@@ -12212,6 +12365,7 @@ function bindEvents() {
     saveFulfillment: saveMvpFulfillmentFields,
     saveInquiryFollowUp: saveMvpInquiryFollowUp,
     handleInquiryFollowUpOutcome: handleMvpInquiryFollowUpOutcome,
+    linkCustomerIdentity: linkOpsInquiryCustomerIdentity,
   });
   document.body.classList.toggle("mvp-drawer-open", Boolean(document.querySelector(".mvp-drawer")));
   document.body.classList.toggle("catalog-drawer-open", Boolean(document.querySelector(".catalog-drawer")));
@@ -13424,14 +13578,25 @@ function bindOpsBoardEvents() {
   });
 
   document.getElementById("ops-save-inquiry")?.addEventListener("click", async () => {
+    if (opsInquirySaveInFlight) return;
     await saveOpsInquiry();
     render();
   });
 
   document.getElementById("ops-clear-inquiry")?.addEventListener("click", () => {
+    if (opsInquirySaveInFlight) return;
     opsExtractFields = null;
     opsRawMessage = "";
     opsSavedNotice = false;
+    render();
+  });
+
+  document.getElementById("ops-cancel-inquiry-intake")?.addEventListener("click", () => {
+    if (opsInquirySaveInFlight) return;
+    opsExtractFields = null;
+    opsRawMessage = "";
+    opsSavedNotice = false;
+    mvpDashboard.state.inquiryIntakeOpen = false;
     render();
   });
 
