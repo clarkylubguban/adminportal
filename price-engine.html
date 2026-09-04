@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="TRRY standalone employee Price Engine V1" />
+    <title>TRRY Price Engine V1</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+    <link rel="stylesheet" href="/src/priceEngineV1.css" />
+  </head>
+  <body>
+    <main id="price-engine-root"></main>
+    <script type="module">
+      import { mountPriceEngineV1 } from "/src/priceEngineV1Ui.js";
+      mountPriceEngineV1(document.querySelector("#price-engine-root"), { role: "staff" });
+    </script>
+  </body>
+</html>
