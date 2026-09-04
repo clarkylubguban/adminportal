@@ -5082,7 +5082,7 @@ function buildOpsInquiryFromExtract() {
 
 async function attachCustomerIdentityToInquiry(inquiry) {
   const mobile = String(inquiry.contact || "").trim();
-  if (!mobile) return { ...inquiry, customerId: "" };
+  if (!mobile) return { ...inquiry, customerId: null };
   if (!normalizePhilippineMobile(mobile)) {
     throw new Error("Enter a valid Philippine mobile number or leave PH Mobile blank for an anonymous inquiry.");
   }

@@ -12,7 +12,7 @@ const customerServiceSource = readFileSync(new URL("../src/services/adminCustome
 
 assert.match(mainSource, /\["customerName", "Customer Name"\]/, "Inquiry capture keeps a separate Customer Name field.");
 assert.match(mainSource, /\["mobileNumber", "PH Mobile"\]/, "Inquiry capture exposes a separate PH Mobile field.");
-assert.match(mainSource, /if \(!mobile\) return \{ \.\.\.inquiry, customerId: "" \};/, "Blank mobile remains anonymous and does not create a customer.");
+assert.match(mainSource, /if \(!mobile\) return \{ \.\.\.inquiry, customerId: null \};/, "Blank mobile remains anonymous and saves a nullable customer_id.");
 assert.match(customerServiceSource, /find_or_create_customer_identity_c2_1/, "C2.2 service calls the canonical C2.1 RPC.");
 assert.match(mainSource, /renderIntake: renderOpsIntakeWorkflow/, "MVP Inquiries page mounts the existing Ops intake workflow.");
 assert.match(mainSource, /opsInquirySaveInFlight/, "Inquiry intake save path guards against double-submit.");
