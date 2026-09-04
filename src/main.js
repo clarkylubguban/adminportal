@@ -3923,6 +3923,7 @@ function renderOpsSummaryCard(card) {
 }
 
 function renderOpsIntakeWorkflow() {
+  if (!opsExtractFields) opsExtractFields = { ...emptyOpsExtract };
   return `<div class="ops-ai-card mvp-inquiry-intake-workflow">
     <div class="ops-section-heading">
       <span>CUSTOMER CAPTURE</span>

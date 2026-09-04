@@ -16,6 +16,7 @@ assert.match(mainSource, /if \(!mobile\) return \{ \.\.\.inquiry, customerId: nu
 assert.match(customerServiceSource, /find_or_create_customer_identity_c2_1/, "C2.2 service calls the canonical C2.1 RPC.");
 assert.match(mainSource, /renderIntake: renderOpsIntakeWorkflow/, "MVP Inquiries page mounts the existing Ops intake workflow.");
 assert.match(mainSource, /opsInquirySaveInFlight/, "Inquiry intake save path guards against double-submit.");
+assert.match(mainSource, /if \(!opsExtractFields\) opsExtractFields = \{ \.\.\.emptyOpsExtract \};/, "New Inquiry seeds the review form so C2.2 identity fields are visible immediately.");
 
 const linkedInquiry = mapOpsRowToInquiry({
   id: "TRY-C22-001",
@@ -71,6 +72,8 @@ const intakeHtml = dashboard.renderInquiries({
 assert.match(intakeHtml, /mvp-inquiry-intake-panel/, "New Inquiry button renders the existing intake panel when opened.");
 assert.match(intakeHtml, /id="ops-raw-message"/, "Opened intake panel contains the existing raw inquiry input.");
 assert.match(intakeHtml, /id="ops-extract-inquiry"/, "Opened intake panel contains the existing extraction control.");
+assert.match(mainSource, /opsExtractFields \? renderOpsReviewForm\(\) : ""/, "Opened intake panel renders the existing review form once seeded.");
+assert.match(mainSource, /renderOpsInput\(key, label, fields\[key\]\)/, "Opened review form reuses existing data-ops-field inputs.");
 
 dashboard.state.inquiryId = "TRY-C22-001";
 const inquiryHtml = dashboard.renderInquiries({
