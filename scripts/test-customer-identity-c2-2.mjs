@@ -14,6 +14,8 @@ assert.match(mainSource, /\["customerName", "Customer Name"\]/, "Inquiry capture
 assert.match(mainSource, /\["mobileNumber", "PH Mobile"\]/, "Inquiry capture exposes a separate PH Mobile field.");
 assert.match(mainSource, /if \(!mobile\) return \{ \.\.\.inquiry, customerId: "" \};/, "Blank mobile remains anonymous and does not create a customer.");
 assert.match(customerServiceSource, /find_or_create_customer_identity_c2_1/, "C2.2 service calls the canonical C2.1 RPC.");
+assert.match(mainSource, /renderIntake: renderOpsIntakeWorkflow/, "MVP Inquiries page mounts the existing Ops intake workflow.");
+assert.match(mainSource, /opsInquirySaveInFlight/, "Inquiry intake save path guards against double-submit.");
 
 const linkedInquiry = mapOpsRowToInquiry({
   id: "TRY-C22-001",
@@ -57,6 +59,19 @@ const [order] = buildDualReadOrders({
 assert.equal(order.customerId, "11111111-1111-4111-8111-111111111111", "Order display preserves linked customer_id.");
 
 const dashboard = createMvpDashboard();
+const closedInquiryHtml = dashboard.renderInquiries({ items: [], renderIntake: () => '<div id="ops-raw-message"></div>' });
+assert.match(closedInquiryHtml, /data-mvp-new-inquiry/, "Visible New Inquiry button is wired to the dashboard intake state.");
+assert.doesNotMatch(closedInquiryHtml, /mvp-inquiry-new-action[^>]*disabled/, "Visible New Inquiry button is enabled.");
+
+dashboard.state.inquiryIntakeOpen = true;
+const intakeHtml = dashboard.renderInquiries({
+  items: [],
+  renderIntake: () => '<textarea id="ops-raw-message"></textarea><button id="ops-extract-inquiry"></button>',
+});
+assert.match(intakeHtml, /mvp-inquiry-intake-panel/, "New Inquiry button renders the existing intake panel when opened.");
+assert.match(intakeHtml, /id="ops-raw-message"/, "Opened intake panel contains the existing raw inquiry input.");
+assert.match(intakeHtml, /id="ops-extract-inquiry"/, "Opened intake panel contains the existing extraction control.");
+
 dashboard.state.inquiryId = "TRY-C22-001";
 const inquiryHtml = dashboard.renderInquiries({
   items: [{

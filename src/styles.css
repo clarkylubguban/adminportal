@@ -23330,6 +23330,40 @@ body,
   line-height: 1;
 }
 
+.mvp-inquiry-intake-panel {
+  background: #ffffff;
+  border: 1px solid #d8dde7;
+  border-radius: 8px;
+  box-shadow: 0 10px 30px rgba(17, 19, 24, 0.08);
+  margin-top: 16px;
+  padding: 16px;
+}
+
+.mvp-inquiry-intake-workflow {
+  border: 0;
+  box-shadow: none;
+  margin: 0;
+  padding: 0;
+}
+
+.mvp-inquiry-intake-workflow .ops-section-heading {
+  margin-bottom: 14px;
+}
+
+.mvp-inquiry-intake-workflow .ops-section-heading h2 {
+  font-size: 22px;
+  line-height: 1.15;
+}
+
+.mvp-inquiry-intake-workflow .ops-section-heading p {
+  max-width: 680px;
+}
+
+.mvp-inquiry-intake-workflow #ops-raw-message {
+  min-height: 132px;
+  resize: vertical;
+}
+
 .mvp-inquiries-page .mvp-stage-cards {
   display: grid;
   gap: 14px;

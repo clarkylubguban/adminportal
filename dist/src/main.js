@@ -371,6 +371,7 @@ const opsPriorities = [
 let opsRawMessage = "";
 let opsExtractFields = null;
 let opsSavedNotice = false;
+let opsInquirySaveInFlight = false;
 let opsArtworkRequests = {};
 let opsCustomerActionRequests = {};
 let mvpPaymentConfirmationRequests = {};
@@ -3807,6 +3808,7 @@ function renderMvpInquiriesPage() {
     notices: renderOpsPersistenceNotice(),
     renderQuote: renderOpsQuoteStage,
     renderArtwork: renderMvpArtworkAction,
+    renderIntake: renderOpsIntakeWorkflow,
   });
 }
 
@@ -3920,11 +3922,32 @@ function renderOpsSummaryCard(card) {
   return `<article class="ops-kpi-card ${card.gold ? "gold" : ""}"><strong>${card.value}</strong><span>${card.label}</span><small>${card.hint}</small></article>`;
 }
 
+function renderOpsIntakeWorkflow() {
+  return `<div class="ops-ai-card mvp-inquiry-intake-workflow">
+    <div class="ops-section-heading">
+      <span>CUSTOMER CAPTURE</span>
+      <h2>Inquiry Intake</h2>
+      <p>Customer identity and request details</p>
+    </div>
+    ${opsSavedNotice ? `<div class="ops-save-notice">Inquiry saved.</div>` : ""}
+    ${opsLoadState === "error" && opsLoadError ? `<div class="ops-persistence-card error"><strong>Inquiry save failed</strong><span>${escapeHtml(opsLoadError)}</span></div>` : ""}
+    <label>
+      <span>Message / Inquiry Notes</span>
+      <textarea id="ops-raw-message" rows="5" placeholder="Paste the inquiry message or type the walk-in request here.">${escapeHtml(opsRawMessage)}</textarea>
+    </label>
+    <div class="ops-action-row">
+      <button class="ops-dark-button" id="ops-extract-inquiry" type="button" ${opsRawMessage.trim() ? "" : "disabled"}>Extract Inquiry</button>
+      <button class="ops-light-button" id="ops-cancel-inquiry-intake" type="button">Cancel</button>
+    </div>
+    ${opsExtractFields ? renderOpsReviewForm() : ""}
+  </div>`;
+}
+
 function renderOpsReviewForm() {
   const fields = opsExtractFields;
   const simpleFields = [["customerName", "Customer Name"], ["mobileNumber", "PH Mobile"], ["businessName", "Business Name"], ["quantity", "Quantity"], ["neededDate", "Needed Date"], ["nextAction", "Next Action"]];
   const textFields = [["summary", "Summary", 2], ["missingDetails", "Missing Details", 2], ["suggestedReply", "Suggested Reply", 3]];
-  return `<div class="ops-review-box"><p class="ops-review-label">Review before saving - edit anything AI got wrong</p><div class="ops-review-grid">${simpleFields.map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}<label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label><label><span>Suggested Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div><div class="ops-review-stack">${textFields.map(([key, label, rows]) => renderOpsTextarea(key, label, fields[key], rows)).join("")}</div><div class="ops-action-row"><button class="ops-gold-button" id="ops-save-inquiry" type="button">Save Inquiry</button><button class="ops-light-button" id="ops-clear-inquiry" type="button">Clear</button></div></div>`;
+  return `<div class="ops-review-box"><p class="ops-review-label">Review before saving - edit anything AI got wrong</p><div class="ops-review-grid">${simpleFields.map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}<label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label><label><span>Suggested Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div><div class="ops-review-stack">${textFields.map(([key, label, rows]) => renderOpsTextarea(key, label, fields[key], rows)).join("")}</div><div class="ops-action-row"><button class="ops-gold-button" id="ops-save-inquiry" type="button" ${opsInquirySaveInFlight ? "disabled" : ""}>${opsInquirySaveInFlight ? "Saving..." : "Save Inquiry"}</button><button class="ops-light-button" id="ops-clear-inquiry" type="button" ${opsInquirySaveInFlight ? "disabled" : ""}>Clear</button></div></div>`;
 }
 
 function renderOpsServiceTypeSelect(value) {
@@ -4996,29 +5019,31 @@ function demoExtractOpsInquiry(text) {
 }
 
 async function saveOpsInquiry() {
-  if (!opsExtractFields) return;
+  if (!opsExtractFields || opsInquirySaveInFlight) return;
+  opsInquirySaveInFlight = true;
   let inquiry = buildOpsInquiryFromExtract();
 
-  if (shouldLoadSupabaseOps) {
-    try {
+  try {
+    if (shouldLoadSupabaseOps) {
       inquiry = await attachCustomerIdentityToInquiry(inquiry);
       const savedInquiry = await createOpsBoardInquiry(inquiry, adminAuthSession);
       opsInquiries = [savedInquiry, ...opsInquiries];
       opsLoadState = "success";
       opsLoadError = "";
-    } catch (error) {
-      console.error("Unable to save Ops Board inquiry.", error);
-      opsLoadState = "error";
-      opsLoadError = error.message;
-      return;
+    } else {
+      opsInquiries = [inquiry, ...opsInquiries];
     }
-  } else {
-    opsInquiries = [inquiry, ...opsInquiries];
-  }
 
-  opsRawMessage = "";
-  opsExtractFields = null;
-  opsSavedNotice = true;
+    opsRawMessage = "";
+    opsExtractFields = null;
+    opsSavedNotice = true;
+  } catch (error) {
+    console.error("Unable to save Ops Board inquiry.", error);
+    opsLoadState = "error";
+    opsLoadError = error.message;
+  } finally {
+    opsInquirySaveInFlight = false;
+  }
 }
 
 function createOpsInquiryId() {
@@ -13553,14 +13578,25 @@ function bindOpsBoardEvents() {
   });
 
   document.getElementById("ops-save-inquiry")?.addEventListener("click", async () => {
+    if (opsInquirySaveInFlight) return;
     await saveOpsInquiry();
     render();
   });
 
   document.getElementById("ops-clear-inquiry")?.addEventListener("click", () => {
+    if (opsInquirySaveInFlight) return;
     opsExtractFields = null;
     opsRawMessage = "";
     opsSavedNotice = false;
+    render();
+  });
+
+  document.getElementById("ops-cancel-inquiry-intake")?.addEventListener("click", () => {
+    if (opsInquirySaveInFlight) return;
+    opsExtractFields = null;
+    opsRawMessage = "";
+    opsSavedNotice = false;
+    mvpDashboard.state.inquiryIntakeOpen = false;
     render();
   });
 

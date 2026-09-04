@@ -46,6 +46,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     inquiryTab: "details",
     inquiryActionId: null,
     inquiryMoreOpen: false,
+    inquiryIntakeOpen: false,
     inquiryOwnerSaving: {},
     inquiryOwnerErrors: {},
   };
@@ -355,7 +356,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<button type="button" class="mvp-module-link" data-mvp-route="${html(route)}"><span><strong>${html(label)}</strong><small>${html(detail)}</small></span><b>${count}</b></button>`;
   }
   return { state, renderOverview, renderInquiries, renderOrders, renderProduction, bind, helpers: { confirmed, productionStage, stageLabel, findOrderByIdentity, matchesOrderIdentity } };
-  function renderInquiries({ items, notices = "", renderQuote, renderOdoo, renderArtwork }) {
+  function renderInquiries({ items, notices = "", renderQuote, renderOdoo, renderArtwork, renderIntake }) {
     const inquiries = items.filter((item) => !confirmed(item));
     const stageFilter = query("stage") || state.inquiry.stage;
     const search = state.inquiry.search.toLowerCase();
@@ -377,6 +378,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const visibleRows = rows.slice((currentPage - 1) * pageSize, currentPage * pageSize);
     return `<main class="mvp-page ops-board-page mvp-inquiries-page">
       ${inquiryDashboardHeader(inquiries.length)}
+      ${renderInquiryIntakePanel(renderIntake)}
       <p class="mvp-rule mvp-rule-hidden">NO QUOTATION / NO WORK</p>
       ${inquiryKpiStrip(inquiries, stageFilter)}
       ${filterBar("inquiry", items, ["owner", "service", "due"])}
@@ -394,9 +396,18 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       </div>
       <div class="mvp-inquiry-header-actions">
         <strong>${total} Total ${total === 1 ? "Inquiry" : "Inquiries"}</strong>
-        <button class="mvp-inquiry-new-action" type="button" disabled title="New inquiry intake remains in the existing Ops intake workflow."><span aria-hidden="true">+</span> New Inquiry</button>
+        <button class="mvp-inquiry-new-action" type="button" data-mvp-new-inquiry aria-expanded="${state.inquiryIntakeOpen ? "true" : "false"}"><span aria-hidden="true">+</span> New Inquiry</button>
       </div>
     </header>`;
+  }
+
+  function renderInquiryIntakePanel(renderIntake) {
+    if (!state.inquiryIntakeOpen || typeof renderIntake !== "function") return "";
+    const intake = renderIntake();
+    if (!intake) return "";
+    return `<section class="mvp-inquiry-intake-panel" aria-label="Inquiry customer capture">
+      ${intake}
+    </section>`;
   }
 
   function inquiryKpiStrip(items, stageFilter) {
@@ -2296,6 +2307,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function bind({ root = document, rerender, navigate, copy, createOrder, saveProduction, approveOrderArtwork, confirmPayment, saveFulfillment, saveInquiryFollowUp, handleInquiryFollowUpOutcome, linkCustomerIdentity }) {
     bindInquiryMoreDismiss(root);
     root.querySelectorAll("[data-mvp-route]").forEach((button) => button.addEventListener("click", () => { closeInquiryMoreMenus(root); navigate(button.dataset.mvpRoute); rerender(); }));
+    root.querySelectorAll("[data-mvp-new-inquiry]").forEach((button) => button.addEventListener("click", () => {
+      state.inquiryIntakeOpen = !state.inquiryIntakeOpen;
+      rerender();
+      if (state.inquiryIntakeOpen) requestAnimationFrame(() => root.querySelector("#ops-raw-message")?.focus());
+    }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-filter]").forEach((field) => {
       const [scope, name] = field.dataset.mvpFilter.split(":");
