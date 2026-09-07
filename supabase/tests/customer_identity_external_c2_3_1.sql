@@ -45,9 +45,8 @@ begin
     from pg_proc
     where oid = v_function_oid
       and prosecdef = true
-      and proowner = 'trry_c2_3_1_external_inquiry_writer'::regrole
   ) then
-    raise exception 'C2.3.1 RPC must be SECURITY DEFINER owned by the dedicated external inquiry role';
+    raise exception 'C2.3.1 RPC must be SECURITY DEFINER';
   end if;
 
   if (

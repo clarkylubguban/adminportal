@@ -89,9 +89,6 @@ as $$
   );
 $$;
 
-alter function public.has_external_inquiry_link_authorization_c2_3_1(text, uuid)
-  owner to trry_c2_3_1_external_inquiry_writer;
-
 revoke all on function public.has_external_inquiry_link_authorization_c2_3_1(text, uuid) from public;
 grant execute on function public.has_external_inquiry_link_authorization_c2_3_1(text, uuid) to anon;
 grant execute on function public.has_external_inquiry_link_authorization_c2_3_1(text, uuid) to authenticated;
@@ -434,9 +431,6 @@ exception
     raise;
 end;
 $$;
-
-alter function public.create_external_inquiry_identity_c2_3_1(text, text, text, text, text, text, text, date)
-  owner to trry_c2_3_1_external_inquiry_writer;
 
 revoke all on function public.create_external_inquiry_identity_c2_3_1(text, text, text, text, text, text, text, date) from public;
 revoke all on function public.create_external_inquiry_identity_c2_3_1(text, text, text, text, text, text, text, date) from anon;
