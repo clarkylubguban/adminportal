@@ -11,7 +11,8 @@ const dockerEnv = { ...process.env };
 const bootstrap = `
 create schema if not exists auth;
 create schema if not exists storage;
-create extension if not exists pgcrypto;
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
 
 do $$
 begin
@@ -155,6 +156,8 @@ try {
   await psqlFile("/workspace/supabase/migrations/20260903010100_customer_identity_linking_c2_1.sql");
   await psqlFile("/workspace/supabase/migrations/20260904010100_external_inquiry_identity_c2_3_1.sql");
   await psqlFile("/workspace/supabase/migrations/20260904010100_external_inquiry_identity_c2_3_1.sql");
+  await psqlFile("/workspace/supabase/migrations/20260904010200_repair_external_inquiry_digest_schema_c2_3_1.sql");
+  await psqlFile("/workspace/supabase/migrations/20260904010200_repair_external_inquiry_digest_schema_c2_3_1.sql");
   await psqlFile("/workspace/supabase/tests/customer_identity_c1.sql");
   await psqlFile("/workspace/supabase/tests/customer_identity_linking_c2_1.sql");
   await psqlFile("/workspace/supabase/tests/customer_identity_external_c2_3_1.sql");
