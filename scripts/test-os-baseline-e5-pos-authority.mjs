@@ -159,6 +159,9 @@ with checks(check_name, ok) as (
       has_function_privilege('authenticated', 'public.has_active_employee_temporary_access(text)', 'execute')
       and has_function_privilege('authenticated', 'public.get_pos_sales_effective_access()', 'execute')
     ),
+    ('authenticated can execute task domain feature helper',
+      has_function_privilege('authenticated', 'public.task_domain_enabled()', 'execute')
+    ),
     ('policies do not reference E7 module access', not exists (
       select 1
       from pg_policies
