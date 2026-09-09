@@ -13,6 +13,7 @@ const admin = "95000000-0000-4000-8000-000000000002";
 const staffA = "95000000-0000-4000-8000-000000000010";
 const staffB = "95000000-0000-4000-8000-000000000011";
 const received = [];
+const browserNowIso = "2026-08-03T00:00:00.000+08:00";
 let activeQaRole = "owner";
 let activeQaUserId = owner;
 
@@ -279,6 +280,7 @@ async function createPage(cdp, viewport) {
   const { sessionId } = await cdp.send("Target.attachToTarget", { targetId, flatten: true });
   await cdp.send("Runtime.enable", {}, sessionId);
   await cdp.send("Page.enable", {}, sessionId);
+  await cdp.send("Page.addScriptToEvaluateOnNewDocument", { source: fixedDateScript(browserNowIso) }, sessionId);
   await cdp.send("Emulation.setDeviceMetricsOverride", {
     width: viewport.width,
     height: viewport.height,
@@ -319,6 +321,25 @@ async function click(cdp, page, selector) {
 
 async function setSelect(cdp, page, selector, value) {
   await evalValue(cdp, page, `(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return false; el.value = ${JSON.stringify(value)}; el.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`);
+}
+
+function fixedDateScript(isoValue) {
+  return `(() => {
+    const fixedNow = new Date(${JSON.stringify(isoValue)}).getTime();
+    const RealDate = Date;
+    class FixedDate extends RealDate {
+      constructor(...args) {
+        super(...(args.length ? args : [fixedNow]));
+      }
+      static now() {
+        return fixedNow;
+      }
+    }
+    FixedDate.UTC = RealDate.UTC;
+    FixedDate.parse = RealDate.parse;
+    Object.setPrototypeOf(FixedDate, RealDate);
+    window.Date = FixedDate;
+  })();`;
 }
 
 async function screenshot(cdp, page, name) {

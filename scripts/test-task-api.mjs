@@ -28,15 +28,19 @@ const IDS = {
   admin: "00000000-0000-4000-8000-000000000002",
   staff: "00000000-0000-4000-8000-000000000003",
   staff2: "00000000-0000-4000-8000-000000000004",
+  ownerEmployee: "00000000-0000-4000-8000-100000000001",
+  adminEmployee: "00000000-0000-4000-8000-100000000002",
+  staffEmployee: "00000000-0000-4000-8000-100000000003",
+  staff2Employee: "00000000-0000-4000-8000-100000000004",
   task: "10000000-0000-4000-8000-000000000001",
   task2: "10000000-0000-4000-8000-000000000002",
   entry: "20000000-0000-4000-8000-000000000001",
 };
 const ACTORS = {
-  owner: { userId: IDS.owner, role: "owner", isActive: true },
-  admin: { userId: IDS.admin, role: "admin", isActive: true },
-  staff: { userId: IDS.staff, role: "staff", isActive: true },
-  staff2: { userId: IDS.staff2, role: "staff", isActive: true },
+  owner: { id: IDS.ownerEmployee, userId: IDS.owner, role: "owner", isActive: true },
+  admin: { id: IDS.adminEmployee, userId: IDS.admin, role: "admin", isActive: true },
+  staff: { id: IDS.staffEmployee, userId: IDS.staff, role: "staff", isActive: true },
+  staff2: { id: IDS.staff2Employee, userId: IDS.staff2, role: "staff", isActive: true },
 };
 const tests = [];
 
@@ -74,7 +78,7 @@ test("missing, invalid, inactive, and unauthorized accounts are distinguished sa
 test("authentication derives actor identity and role server-side", async () => {
   const callerClient = {};
   const context = await authenticateTaskRequest(authRequest(), {
-    authClient: authClientFixture({ account: { user_id: IDS.admin, role: "ADMIN", is_active: true } }),
+    authClient: authClientFixture({ account: { id: IDS.adminEmployee, user_id: IDS.admin, role: "ADMIN", is_active: true } }),
     callerClient,
   });
   assert.deepEqual(context.actor, ACTORS.admin);
@@ -643,6 +647,7 @@ async function invoke(handler, actor, service, options) {
       ? {
         authenticate: async () => ({ actor }),
         createService: () => service,
+        effectiveAccessClient: effectiveAccessClientFixture(),
       }
       : undefined
   );
@@ -713,6 +718,22 @@ function authClientFixture({ authError = false, account = { user_id: IDS.owner, 
         select() { return this; },
         eq() { return this; },
         async maybeSingle() { return { data: account, error: null }; },
+      };
+    },
+  };
+}
+
+function effectiveAccessClientFixture({ grants = [] } = {}) {
+  return {
+    from() {
+      return {
+        select() { return this; },
+        eq() { return this; },
+        lte() { return this; },
+        gt() { return this; },
+        is() { return this; },
+        order() { return this; },
+        limit() { return { data: grants, error: null }; },
       };
     },
   };

@@ -159,11 +159,18 @@ try {
   await navigate(cdp, desktop, `http://127.0.0.1:${port}/overview`);
   await waitForText(cdp, desktop, "Overview");
   await assertEval(cdp, desktop, `document.body.innerText.includes('Tasks for Review') === false`, "Overview has no task count");
-  for (const route of ["inquiries", "orders", "production", "clients", "products", "catalog", "settings"]) {
-    await navigate(cdp, desktop, `http://127.0.0.1:${port}/${route}`);
-    await waitForIdle();
-    await assertEval(cdp, desktop, `document.body.innerText.length > 100`, `${route} route loaded`);
-    await assertEval(cdp, desktop, `document.scrollingElement.scrollWidth <= window.innerWidth + 2`, `${route} no horizontal overflow`);
+  const routeSmokeCases = [
+    { path: "/inquiries", text: "Inquiries" },
+    { path: "/orders", text: "Track payment" },
+    { path: "/production", text: "Production" },
+    { path: "/customers", text: "Customers" },
+    { path: "/catalog", text: "Master Catalog" },
+  ];
+  for (const route of routeSmokeCases) {
+    await navigate(cdp, desktop, `http://127.0.0.1:${port}${route.path}`);
+    await waitForText(cdp, desktop, route.text);
+    await assertEval(cdp, desktop, `document.body.innerText.length > 100`, `${route.path} route loaded`);
+    await assertEval(cdp, desktop, `document.scrollingElement.scrollWidth <= window.innerWidth + 2`, `${route.path} no horizontal overflow`);
   }
 
   const mobile = await createPage(cdp, { width: 390, height: 844, isMobile: true, deviceScaleFactor: 2 });
@@ -286,6 +293,10 @@ async function handleApi(request, response, path, url) {
         assignmentEligible: user.isActive,
       })),
     });
+  }
+  if (path === "/api/admin-users/effective-access") {
+    const moduleCode = url.searchParams.get("module") || "";
+    return sendJson(response, 200, { ok: true, access: { module: moduleCode, allowed: true, source: "temporary", expiresAt: null } });
   }
   if (path === "/api/my-tasks") {
     if (url.searchParams.has("assignedUserId")) return sendJson(response, 400, { ok: false, error: { code: "VALIDATION_ERROR", message: "Unknown query parameters." } });
@@ -434,7 +445,9 @@ async function createPage(cdp, viewport) {
       page.consoleErrors.push(`exception: ${message.params?.exceptionDetails?.text || "runtime exception"}`);
     }
     if (message.method === "Log.entryAdded" && ["error", "warning"].includes(message.params?.entry?.level)) {
-      page.consoleErrors.push(`${message.params.entry.level}: ${message.params.entry.text}`);
+      const entry = message.params.entry;
+      const sourceUrl = entry.url ? ` (${entry.url})` : "";
+      page.consoleErrors.push(`${entry.level}: ${entry.text}${sourceUrl}`);
     }
     if (message.method === "Runtime.consoleAPICalled" && ["error", "warning"].includes(message.params?.type)) {
       const text = (message.params.args || []).map((arg) => arg.value || arg.description || "").join(" ");
