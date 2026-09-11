@@ -45,6 +45,12 @@ async function handleRequest(request, response) {
     const pathname = decodeURIComponent(url.pathname);
     const routePath = normalizeRoutePath(pathname);
 
+    if (routePath === "/api/stlolab-catalog") {
+      const { default: handler } = await import("../api/stlolab-catalog.js");
+      await handler(request, response);
+      return;
+    }
+
     if (/^\/api\/admin-users\/?$/.test(routePath)) {
       const { default: handleAdminUsersRequest } = await import("../api/admin-users/index.js");
       await handleAdminUsersRequest(request, response);
