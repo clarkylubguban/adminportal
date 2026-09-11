@@ -8,6 +8,7 @@ const image = process.env.TRRY_VERIFY_POSTGRES_IMAGE || 'postgres:16-alpine';
 const ownerId = '96000000-0000-4000-8000-000000000001';
 const posUserId = '96000000-0000-4000-8000-000000000002';
 const posM3bMigration = process.env.TRRY_POS_M3B_MIGRATION || '';
+const posCompatibilityMigrations = JSON.parse(process.env.TRRY_POS_COMPAT_MIGRATIONS_JSON || '[]');
 let started = false;
 
 try {
@@ -40,6 +41,9 @@ try {
     sql(readFileSync(`supabase/migrations/${file}`, 'utf8'));
     if (file === '20260820000000_m2b_inventory_foundation.sql' && posM3bMigration) {
       sql(readFileSync(posM3bMigration, 'utf8'));
+      for (const compatibilityMigration of posCompatibilityMigrations) {
+        sql(readFileSync(compatibilityMigration, 'utf8'));
+      }
     }
   }
 
@@ -63,7 +67,9 @@ try {
   if (posM3bMigration) {
     sql(`insert into auth.users(id,email) values('${posUserId}','pos@example.test');
       insert into public.pos_staff_profiles(user_id,display_name,role,active,default_branch_id)
-      select '${posUserId}','SW3 POS Tester','CASHIER',true,id from public.branches where branch_code='SW3-TEST';`);
+      select '${posUserId}','SW3 POS Tester','CASHIER',true,id from public.branches where branch_code='SW3-TEST';
+      insert into public.pos_staff_profiles(user_id,display_name,role,active,default_branch_id)
+      select '${ownerId}','SW3 POS Owner','OWNER',true,id from public.branches where branch_code='SW3-TEST';`);
   }
 
   const variant = one(`select id from public.product_variants where sku='STLO-S'`).id;
@@ -96,6 +102,21 @@ try {
   assert.equal(one(`select count(*)::int as count from public.orders where source_type='STLOLAB_RETAIL'`).count, 1);
   assert.equal(one(`select count(*)::int as count from public.order_items`).count, 1);
   assert.equal(balance(variant).reserved_quantity, 2);
+
+  if (posCompatibilityMigrations.length) {
+    const compatibilityBefore = balance(variant);
+    sql(owner(`select private.m2b_record_sale_void_stock_movement('${location}','${variant}',1,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab','SW3-M4-VOID','SW3-M4-VOID-1')`));
+    sql(owner(`select private.m2b_record_sale_void_stock_movement('${location}','${variant}',1,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab','SW3-M4-VOID','SW3-M4-VOID-1')`));
+    assert.deepEqual(balance(variant), { quantity_on_hand: compatibilityBefore.quantity_on_hand + 1, reserved_quantity: compatibilityBefore.reserved_quantity });
+    assert.equal(one(`select count(*)::int as count from public.stock_movements where idempotency_key='SW3-M4-VOID-1'`).count, 1);
+    fails(pos(`select private.m2b_record_sale_void_stock_movement('${location}','${variant}',1,'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaac','SW3-M4-DENIED','SW3-M4-DENIED-1')`), /Owner or Admin role/);
+
+    sql(owner(`select trry_api.receive_inventory('${location}','${variant}',1,'SW3-E7-RECEIVE-1','SW3-E7-RECEIVE','authorized compatibility receiving')`));
+    sql(owner(`select trry_api.receive_inventory('${location}','${variant}',1,'SW3-E7-RECEIVE-1','SW3-E7-RECEIVE','authorized compatibility receiving')`));
+    assert.deepEqual(balance(variant), { quantity_on_hand: compatibilityBefore.quantity_on_hand + 2, reserved_quantity: compatibilityBefore.reserved_quantity });
+    assert.equal(one(`select count(*)::int as count from public.stock_movements where idempotency_key='SW3-E7-RECEIVE-1'`).count, 1);
+    fails(pos(`select trry_api.receive_inventory('${location}','${variant}',1,'SW3-E7-DENIED-1','SW3-E7-DENIED','unauthorized compatibility receiving')`), /Inventory receiving permission|Owner\/Admin identity/);
+  }
 
   await Promise.all([asyncSql(call('CONCURRENTKEY123', 79000, 1, 'e'.repeat(64))), asyncSql(call('CONCURRENTKEY123', 79000, 1, 'e'.repeat(64)))]);
   assert.equal(one(`select count(*)::int as count from public.stlolab_checkout_requests where idempotency_key='CONCURRENTKEY123'`).count, 1);
@@ -186,7 +207,7 @@ try {
   fails(staff(payment(tamperedPaymentOrder, 'PAY-TAMPERED', 'TAMPEREDPAYMENTKEY', 1)), /canonical order amount/);
   assert.equal(one(`select count(*)::int as count from public.order_payment_events where order_id='${tamperedPaymentOrder}'`).count, 0);
   fails(`update public.stlolab_checkout_config set inventory_policy='DEDUCT_ON_SUBMIT' where environment='staging'`, /inventory_policy/);
-  console.log('PASS STLOLAB SW3 reservation expiry, payment/cancellation/handover races, atomic handover deduction, delivery coverage, POS exclusion, and idempotency');
+  console.log('PASS STLOLAB SW3 reservation expiry, payment/cancellation/handover races, atomic handover deduction, delivery coverage, POS exclusion, M4/E7 compatibility, and idempotency');
 
   async function raceExpiryPayment() {
     const id = one(call('RACEEXPIRYPAY001', 79000, 1, '7'.repeat(64))).result.orderId;

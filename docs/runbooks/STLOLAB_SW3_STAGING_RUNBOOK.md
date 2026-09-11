@@ -48,6 +48,14 @@ Read-only Vercel evidence collected 2026-09-11:
 - The candidate also carries unrelated Phase 8B/8C preservation (`951b7ef`), Owner POS UI styling (`f679b89`), and Master Catalog boot/read work (`b69ff1e`, `3528e1c`). Do not merge the branch wholesale.
 - Deployed `bcbe148` separately contains operator authority, preview routing/runtime configuration, production build-host guards, and customer identity capture. Those later deployed changes must be retained in any POS reconciliation.
 
+Local reconciliation completed 2026-09-11:
+
+- Worktree `C:\tmp\trry-pos-sw3-reconcile`, branch `codex/pos-sw3-reconcile`.
+- Commit `382fc386331b59c1078581297fa0e219073a4979` is based on deployed `bcbe14837915defb101d248f939bba171bab526d`; `bcbe148` is an ancestor and candidate `b67c090` is not.
+- The commit selectively ports M1B runtime/catalog dependencies, M2B/M2C, availability projection, and M3B. It excludes candidate Phase 8B/8C and Owner UI changes.
+- It retains deployed effective POS/Sales authority, customer capture, routing, runtime allowlisting, and production build guards.
+- Active staging register verified read-only: `POS-01` / `Main Counter`, ID `0f65cfbc-e85d-4324-ad89-c0c41c8d2f7d`, branch `MAIN`.
+
 POS M3B dependencies to reconcile onto the deployed lineage:
 
 - Database: existing `auth.uid()`, `pgcrypto`, branches, brands, product categories, canonical products/variants, inventory locations/balances/movements, and M2B movement helpers. M3B creates its own POS staff/register/shift/sale/payment/receipt/cash/audit tables and `trry_api.complete_pos_sale`.
@@ -89,6 +97,21 @@ Runtime gate changes for the acceptance window only:
 - Storefront server: `STLO_ENV=staging`, the same server-only gateway secret, `STLO_CHECKOUT_ENABLED=true`, `STLO_CHECKOUT_URL=https://adminportal-staging.vercel.app/api/stlolab-checkout`, and exactly the two enabled options (`SHOP_PICKUP`, `NATIONWIDE_DELIVERY`) in `STLO_CHECKOUT_OPTIONS_JSON`.
 - Keep `VERCEL_AUTOMATION_BYPASS_SECRET` server-only on the Storefront for the protected Admin endpoint. Do not expose the Supabase service role to the Storefront.
 - Rollback gates first: set both `STLO_CHECKOUT_ENABLED=false`, redeploy the existing private staging previews, then set database config `enabled=false`.
+
+POS Preview values, in project `trry-pos` (`prj_OXFRieJe4VlBWFClY38K06QYMn1Z`) and Preview scope only:
+
+```text
+VITE_APP_ENV=staging
+VITE_DATA_MODE=supabase
+VITE_SUPABASE_ENABLED=true
+VITE_SUPABASE_URL=https://fszkypwovpdthqfobxrk.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=<active staging publishable key>
+VITE_ALLOW_REMOTE_SUPABASE_WRITES=true
+VITE_POS_REGISTER_ID=0f65cfbc-e85d-4324-ad89-c0c41c8d2f7d
+VITE_POS_INVENTORY_LOCATION_ID=9cc81235-0af3-4ad6-aa95-35af81178312
+```
+
+Apply all eight values above to Preview scope. Deploy commit `382fc386331b59c1078581297fa0e219073a4979` with a normal Preview deployment only. Do not pass `--prod`, promote the deployment, assign `trry-pos.vercel.app`, or change Production variables. The build rejects remote write mode outside Vercel Preview and rejects any host/register/location other than the staging values above. POS rollback is to set Preview write approval false or data mode `supabase_read`, then redeploy Preview; Production remains untouched.
 
 ```json
 [{"code":"SHOP_PICKUP","method":"pickup","label":"TRRY Apparel Shop","feeMinor":0,"pickupCode":"TRRY-ILIGAN-MAIN","instructions":"Torralba St., Brgy. Poblacion, Iligan City; daily 10 AM-6 PM Asia/Manila."},{"code":"NATIONWIDE_DELIVERY","method":"delivery","label":"Nationwide delivery","feeMinor":12000}]
@@ -178,7 +201,7 @@ The 72-hour deadline does not release stock by itself. Checkout subtracts `reser
 ## Acceptance blockers
 
 - Owner-approved local-delivery positive coverage or manual-review workflow.
-- Owner-approved POS lineage containing M2B/M3B, followed by a deployment and live shared-stock contention test.
+- Owner approval to push and Preview-deploy reconciled POS commit `382fc386331b59c1078581297fa0e219073a4979`, followed by live shared-stock contention testing.
 - Authorization to apply the listed migrations/configuration and nominate staging test stock.
 - Authorization to install the proposed expiry cron job.
 - Refund, return, and payment-failure policies remain undefined; their transitions stay unavailable.
