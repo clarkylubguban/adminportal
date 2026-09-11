@@ -81,7 +81,9 @@ function normalizeCheckout(body) {
   if (!fullName || !mobile || (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email))) throw bad("INVALID_CUSTOMER_DETAILS");
   const fulfillment = body.fulfillment || {};
   const method = text(fulfillment.method, 20).toLowerCase();
+  const optionCode = text(fulfillment.optionCode, 40).toUpperCase();
   if (!['pickup', 'delivery'].includes(method)) throw bad("INVALID_FULFILLMENT");
+  if (!/^[A-Z0-9_-]{2,40}$/.test(optionCode)) throw bad("INVALID_FULFILLMENT");
   const address = fulfillment.address || {};
   const lines = Array.isArray(body.lines) ? body.lines.map((line) => ({
     variantId: uuid(line.variantId),
@@ -92,9 +94,10 @@ function normalizeCheckout(body) {
   if (new Set(lines.map((line) => line.variantId)).size !== lines.length) throw bad("DUPLICATE_VARIANT_LINES");
   return { idempotencyKey, confirmationToken, checkout: {
     customer: { fullName, mobile, email },
-    fulfillment: { method, pickupCode: text(fulfillment.pickupCode, 80), address: {
+    fulfillment: { method, optionCode, pickupCode: text(fulfillment.pickupCode, 80), address: {
       line1: text(address.line1, 240), line2: text(address.line2, 240), city: text(address.city, 120),
-      province: text(address.province, 120), postalCode: text(address.postalCode, 20), notes: text(address.notes, 500),
+      barangay: text(address.barangay, 120), province: text(address.province, 120),
+      postalCode: text(address.postalCode, 20), notes: text(address.notes, 500),
     } },
     lines,
   } };

@@ -1,49 +1,59 @@
 # STLOLAB SW3 checkout checkpoint
 
-Status: source implementation and disposable-database verification complete; staging migration, fulfillment configuration, deployment, and live order acceptance are intentionally pending.
+Status: owner-approved lifecycle rules are implemented and verified against disposable PostgreSQL. All migrations, configuration, deployment, remote writes, and live ordering remain disabled pending staging acceptance.
 
-## Source boundary
+## Source identity
 
-- Admin baseline: `c4a1ed4a90d8a99396010254ba470f14b4d51755` on `codex/stlolab-sw3-checkout`.
-- Storefront baseline: `eb18c8de518efa517d6d27db344694b83a93c477` on `codex/stlolab-sw3-checkout`.
-- Direct retail orders extend canonical `public.orders`; they do not fabricate `ops_inquiries` or create a parallel order authority.
-- Customer identity remains `public.customers`, matched atomically by normalized mobile with `STLO_WEB` as the first source for a new identity.
-- Checkout RPCs are executable by `service_role` only. `anon` and `authenticated` retain no checkout/customer lookup privilege.
-- Admin authentication remains unchanged. Storefront-to-Admin checkout also requires a separate server-only gateway secret.
-- No migration or test fixture was applied to staging or production. Ordering defaults off.
+- Admin worktree: `C:\tmp\trry-admin-stlolab-sw3-checkout`; verified parent `45979d07795095ad14560340db6c62d4fa8567f4` on `codex/stlolab-sw3-checkout`.
+- Storefront worktree: `C:\tmp\stlolab-sw3-checkout`; verified parent `a9c61452097ba2b1c28e909e53744714c6e96b1a` on `codex/stlolab-sw3-checkout`.
+- The accepted V6 product/home layouts and size selector are unchanged. Storefront edits are confined to checkout option identity and the delivery barangay field.
+- No migration or fixture was applied to staging or production. No push, merge, deployment, project, or paid service was created.
 
-## Implemented
+## Accepted lifecycle
 
-- Canonical variant lines, accepted PHP unit prices, subtotal, fulfillment fee, total, customer snapshot, fulfillment snapshot, source channel, and token hash are durable.
-- Product/channel/readiness/variant/price and known stock are revalidated inside the atomic order transaction.
-- Idempotency is keyed by environment and client request key; replay requires the same payload hash.
-- Confirmation lookup requires both order UUID and a high-entropy token hash.
-- Bag state and checkout draft are session-persisted. Variant edits, quantity changes, removal, totals, pickup/delivery validation, and saved confirmation rendering are implemented.
-- Owner decision recorded: use the existing `Main Retail Stock` location, reserve atomically on order submit, and release on cancellation.
-- Active reservations are durable and idempotent, and `inventory_balances.reserved_quantity` is changed under the same balance lock as checkout, cancellation, and stock movements.
-- Catalog and Admin sellable quantities are `quantity_on_hand - reserved_quantity`. Missing balances become sold out, never available.
-- The canonical `private.m2b_apply_stock_movement` primitive rejects POS or other negative stock movements that would consume active reservations.
-- Repeated cancellation is idempotent and cannot release a reservation twice. Direct status cancellation is blocked while a reservation remains active.
+- `Main Retail Stock` remains the single configured fulfillment source.
+- Checkout reserves `quantity_on_hand` capacity without deducting it. Sellable quantity is `quantity_on_hand - reserved_quantity`.
+- The expiry instant is exactly `created_at + interval '72 hours'` in PostgreSQL `timestamptz`. It is an absolute elapsed duration, not three Philippine calendar dates. Display timezone and daylight rules do not move the deadline.
+- Expiry releases only an active reservation whose canonical order is still `UNPAID`, `PENDING` handover, and `awaiting_payment` at or after the deadline.
+- Customer pickup and courier handover atomically clear the reservation, decrement on-hand through the canonical `SALE` stock-movement authority, and mark the reservation consumed.
+- Payment and fulfillment are separate order facts. Courier handover leaves an unpaid order unpaid and does not claim COD collection.
+- Cancellation remains token-scoped and idempotent for unpaid, pending orders. It is blocked after payment, expiry, or handover. Paid cancellation/refund behavior is intentionally not defined.
+- Expiry, cancellation, payment confirmation, and handover serialize on the canonical order row. Replays cannot release or deduct twice.
 
-## Decisions required before any staging order
+## Fulfillment configuration
 
-1. Which fulfillment methods are offered: pickup, delivery, or both.
-2. Exact fee for each offered method and any delivery-zone rule. No fee has been assumed.
-3. For pickup: the customer-facing label, stable pickup code, and approved pickup instructions/location.
-4. Reservation expiry behavior, if any.
-5. Payment-failure handling, fulfillment-time stock deduction, and return movements.
+- Pickup: free, `TRRY Apparel Shop`, Torralba St., Brgy. Poblacion, Iligan City; daily 10 AM-6 PM Philippine time.
+- Local delivery: PHP 60 using `EXPLICIT_BARANGAYS`. Unknown barangays fail closed. The test allowlist contains only `Poblacion`; it is a disposable fixture, not approved live coverage.
+- Explicit local exclusions: Buru-un, Linamon, Dalipuga, Pugaan, Suarez, and Santa Elena.
+- Nationwide delivery: PHP 120 with a complete address including barangay.
+- Fulfillment options now have stable option codes so local and nationwide delivery remain distinct while both retain canonical method `delivery`.
+- No fulfillment rows are seeded by migrations. Ordering still requires the existing staging-only environment gates and owner-controlled configuration.
 
-Proposed acceptance-only configuration: create one clearly named staging fulfillment option `SW3_ACCEPTANCE` at PHP 0 and place documented test stock in the existing staging `Main Retail Stock` location. Checkout reserves on submit; cancellation releases. This is a proposal, not applied configuration.
+## Verification
 
-## Disposable fixtures and effects
+- Disposable PostgreSQL applies the complete relevant migration chain from zero.
+- Last-item concurrent checkout permits exactly one reservation; duplicate and concurrent duplicate submissions create one order.
+- Repeated expiry releases once without changing on-hand. Paid orders do not expire.
+- Repeated pickup/handover writes one stock movement and deducts on-hand once.
+- Expiry/payment, expiry/cancellation, expiry/handover, payment/handover, and cancellation/handover races preserve one valid terminal outcome and nonnegative balances.
+- Courier handover remains `UNPAID` until a separate authenticated payment confirmation occurs.
+- Ordinary cancellation after handover and cancellation after payment are rejected.
+- Local allowed, excluded, and unknown barangay fixtures plus nationwide PHP 120 and local PHP 60 totals pass server-side validation.
+- Anonymous and non-Owner/Admin lifecycle calls are denied. Expiry execution is service-role-only; customer checkout/customer lookup privileges remain unchanged.
+- Persistent order and inventory effects: none. All containers and fixtures are disposable.
 
-- Product: `PRD-260911-8DC1A1`, `Glow N Underground`; fixture variant `STLO-S`, size S, Black, PHP 790.
-- Customer: `SW3 Staging Tester`, `09171234567`, `sw3@example.test`.
-- Location: disposable `MAIN-RETAIL` / `Main Retail Stock`; on-hand quantity is unchanged by reservation/cancellation tests.
-- Fulfillment fixtures: `TEST-PICKUP` and an incomplete delivery payload used only for rejection testing.
-- Last-item races allow exactly one order; duplicate submits create one reservation; POS cannot consume reserved stock; repeated cancellation releases once.
-- Containers are removed after each run. Persistent inventory effects: none.
+## POS audit
 
-## POS audit boundary
+- Full POS checkout source is available at `C:\Users\ROG\Downloads\CODEX\trry-pos-sale-m3`, branch `codex/pos-sale-m3`, commit `b67c09098c64cad6b8e9a52424111a16c8dc30ff`.
+- That checkout locks on-hand stock and records each sale through `private.m2b_record_sale_stock_movement`, which delegates to `private.m2b_apply_stock_movement`. The later Admin reservation migration protects that shared primitive from consuming reserved units.
+- POS commit `b67c090` is not an ancestor of local POS `origin/main` at `82e9d0f735f21ed67fe71bc282d92480a1cbbc26`; the M3B checkout migration is absent from that `origin/main` tree. The deployed POS commit is not established by local source.
 
-The accepted repository intentionally excludes the full POS checkout engine. Its tracked stock authority is the shared `private.m2b_apply_stock_movement` primitive and wrappers. That primitive and `v_inventory_sellable` now enforce reservations. A separately deployed POS engine that bypasses this canonical primitive cannot be proven from this worktree and must be identified before staging acceptance.
+## Remaining staging acceptance blockers
+
+1. Apply and review the three local SW3 migrations in the existing staging database only, then verify the exact staging `Main Retail Stock` location UUID and nominate clearly labeled test variant quantities.
+2. Supply the positive local-delivery barangay allowlist or an approved manual eligibility workflow. The approximate 15 km description and exclusions are not a machine-verifiable allow rule.
+3. Choose and configure an existing free-project expiry runner and cadence to call the service-role-only expiry RPC. No cron job or external automation is installed by source.
+4. Connect the accepted canonical payment-confirmation path to the protected paid-state transition with a durable payment reference. Payment failure remains blocked and undefined.
+5. Connect authenticated Orders operations to the protected pickup/courier handover transition and run a real staging order through Orders, reservation, handover, and confirmation access checks.
+6. Identify the deployed POS commit and verify its live checkout path plus the final staging definition of `private.m2b_apply_stock_movement`; run real shared-stock contention after all migrations are ordered.
+7. Decide paid cancellation/refund and returns behavior before enabling those transitions. Neither is implemented or inferred.
