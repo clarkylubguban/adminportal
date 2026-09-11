@@ -8,6 +8,14 @@
       "destination": "/api/assignment-users?_publicRoute=stlolab-catalog"
     },
     {
+      "source": "/api/stlolab-checkout",
+      "destination": "/api/assignment-users?_publicRoute=stlolab-checkout"
+    },
+    {
+      "source": "/api/stlolab-order-confirmation",
+      "destination": "/api/assignment-users?_publicRoute=stlolab-order-confirmation"
+    },
+    {
       "source": "/api/my-tasks",
       "destination": "/api/task-views"
     },

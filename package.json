@@ -35,6 +35,8 @@
     "test:os-baseline-e5-pos-authority": "node scripts/test-os-baseline-e5-pos-authority.mjs",
     "test:native-orders": "node scripts/test-native-order-foundation.mjs",
     "test:native-orders-db": "node scripts/test-native-order-db-contract.mjs",
+    "test:stlolab-checkout-db": "node scripts/test-stlolab-checkout-db.mjs",
+    "test:stlolab-checkout-route": "node scripts/test-stlolab-checkout-route.mjs",
     "test:native-order-status-authority": "node scripts/test-native-order-status-authority.mjs",
     "test:inquiry-order-cutover": "node scripts/test-inquiry-order-cutover.mjs",
     "test:inquiry-order-cutover-browser": "node scripts/test-inquiry-order-cutover-browser.mjs",

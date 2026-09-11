@@ -11,6 +11,7 @@ test('only published STLOLAB physical products cross the public boundary',()=>{
   for(const override of [{active:false},{sellable:false},{archived_at:'2026-01-01'},{eligible_channels:['POS']},{product_type:'SERVICE'},{readiness_status:'NEEDS_SETUP'}]) assert.equal(publicProduct({...row,...override},[variant],[image]),null);
   const result=publicProduct(row,[variant],[image]);
   assert.equal(result.variants[0].priceMinor,110055);assert.equal(result.variants[0].availability,'unknown');
+  assert.equal(publicProduct(row,[variant],[image],new Map([[variant.id,'available']])).variants[0].availability,'available');
   assert.equal(JSON.stringify(result).includes('PRIVATE'),false);assert.equal('unit_cost' in result.variants[0],false);assert.equal('typed_config' in result,false);
 });
 test('archived images, bad prices and inactive variants cannot appear',()=>{

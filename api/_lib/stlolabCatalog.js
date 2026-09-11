@@ -5,11 +5,11 @@ const short = (value, max = 2000) => typeof value === "string" ? value.trim().sl
 export function eligibleProduct(row) {
   return row.product_type === "PHYSICAL" && row.active === true && row.sellable === true && row.readiness_status === "READY_FOR_SALE" && !row.archived_at && row.eligible_channels?.includes("STLOLAB");
 }
-export function publicProduct(row, variants, images) {
+export function publicProduct(row, variants, images, availabilityByVariant = new Map()) {
   if (!eligibleProduct(row)) return null;
   const cleanVariants = variants.filter(v => v.product_id === row.id && v.active === true && !v.archived_at).flatMap(v => {
     const minor = Math.round(Number(v.selling_price) * 100);
-    return Number.isSafeInteger(minor) && minor > 0 ? [{ id: v.id, size: short(v.size, 32), color: short(v.color, 80), priceMinor: minor, availability: "unknown" }] : [];
+    return Number.isSafeInteger(minor) && minor > 0 ? [{ id: v.id, size: short(v.size, 32), color: short(v.color, 80), priceMinor: minor, availability: availabilityByVariant.get(v.id) || "unknown" }] : [];
   });
   const media = images.filter(i => i.product_id === row.id && i.active === true && !i.archived_at && httpsUrl(i.public_url))
     .sort((a, b) => a.position - b.position || a.id.localeCompare(b.id))
@@ -58,7 +58,19 @@ export async function readStlolabCatalog(supabase, { slug = "", offset = 0 } = {
   ]);
   if (variants.error || images.error) throw new Error("Catalog details query failed");
   if (variants.data?.length >= 1000 || images.data?.length >= 1000) throw new Error("Catalog detail window exceeded");
-  const products = rows.map(r => publicProduct(r, variants.data || [], images.data || [])).filter(Boolean);
+  let availabilityByVariant = new Map();
+  if (process.env.STLO_CHECKOUT_ENABLED === "true" && process.env.STLO_CHECKOUT_ENV === "staging") {
+    const config = await supabase.from("stlolab_checkout_config").select("enabled,inventory_policy,inventory_location_id").eq("environment", "staging").maybeSingle();
+    if (config.error) throw new Error("Checkout availability configuration failed");
+    if (config.data?.enabled && config.data.inventory_policy === "VALIDATE_ONLY" && config.data.inventory_location_id) {
+      const variantIds = (variants.data || []).map(v => v.id);
+      const balances = await supabase.from("inventory_balances").select("variant_id,quantity_on_hand").eq("location_id", config.data.inventory_location_id).in("variant_id", variantIds);
+      if (balances.error) throw new Error("Checkout availability query failed");
+      availabilityByVariant = new Map((balances.data || []).map(item => [item.variant_id, item.quantity_on_hand > 0 ? "available" : "sold-out"]));
+      for (const id of variantIds) if (!availabilityByVariant.has(id)) availabilityByVariant.set(id, "sold-out");
+    }
+  }
+  const products = rows.map(r => publicProduct(r, variants.data || [], images.data || [], availabilityByVariant)).filter(Boolean);
   const hero = rows.map(r => publicHero(r, products.find(p => p.id === r.id))).find(Boolean) || null;
   return { products, hero, nextOffset: !slug && rows.length === 50 ? offset + 50 : null };
 }

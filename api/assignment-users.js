@@ -1,10 +1,13 @@
 import catalogHandler from "./_lib/stlolabCatalogRoute.js";
+import checkoutHandler from "./_lib/stlolabCheckoutRoute.js";
 import { getAuthorizedAdmin, getBearerToken, sendJson } from "./_lib/adminAccess.js";
 import { listAssignmentUsers } from "./_lib/adminAssignments.js";
 
 export default async function handler(request, response) {
   const route = new URL(request.url, "https://admin.invalid");
   if (route.pathname === "/api/stlolab-catalog" || route.searchParams.get("_publicRoute") === "stlolab-catalog") return catalogHandler(request, response);
+  if (route.pathname === "/api/stlolab-checkout" || route.searchParams.get("_publicRoute") === "stlolab-checkout") return checkoutHandler(request, response, "create");
+  if (route.pathname === "/api/stlolab-order-confirmation" || route.searchParams.get("_publicRoute") === "stlolab-order-confirmation") return checkoutHandler(request, response, "confirmation");
   if (request.method !== "GET") return sendJson(response, 405, { ok: false, error: "method not allowed" });
 
   const token = getBearerToken(request);
