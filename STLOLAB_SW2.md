@@ -55,3 +55,5 @@ Read-only staging check: 2 total products, **0 eligible STLOLAB products**. No p
 5. Keep production and checkout gated for later phases. Update all Admin clients before authoring new storefront fields, since older editor bundles do not know those fields.
 
 Supabase guidance consulted: https://supabase.com/docs/guides/database/postgres/row-level-security and https://supabase.com/changelog.md. The chosen boundary keeps service-role access server-side and preserves existing RLS/table grants.
+
+The public catalog URL is rewritten through the existing assignment-users function to remain within the Hobby limit of 12 functions. Catalog dispatch returns only its allowlisted response; the admin assignment route retains authentication.

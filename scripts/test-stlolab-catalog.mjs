@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { contentFromDraft, stlolabDraftFields } from '../src/shared/stlolabContent.js';
 import { publicProduct, publicHero, readStlolabCatalog, STAGING_REF } from '../api/_lib/stlolabCatalog.js';
-import { createCatalogHandler } from '../api/stlolab-catalog.js';
+import { createCatalogHandler } from '../api/_lib/stlolabCatalogRoute.js';
 
 const row={id:'product-1',product_code:'PIECE-001',name:'Test piece',description:'Public description',product_type:'PHYSICAL',active:true,sellable:true,readiness_status:'READY_FOR_SALE',archived_at:null,eligible_channels:['STLOLAB'],typed_config:{material:'Cotton',production_notes:'PRIVATE',stlolab:{care:'Cold wash'}}};
 const variant={id:'variant-1',product_id:row.id,size:'M',color:'Black',selling_price:'1100.55',unit_cost:123,active:true};
@@ -71,4 +71,13 @@ test('API validates input and never returns database errors or private rows',asy
   const invalid=await request(env,'GET','/api/stlolab-catalog?offset=-1');assert.equal(invalid.statusCode,400);assert.equal(invalid.calls,0);
   const ok=await request(env);assert.equal(ok.statusCode,200);assert.equal(ok.body.environment,'staging');assert.equal(ok.headers['Cache-Control'],'no-store');
   const bad=await request(env,'GET','/api/stlolab-catalog',client({},true));assert.equal(bad.statusCode,503);assert.equal(JSON.stringify(bad.body).includes('PRIVATE'),false);
+});
+
+test('shared function keeps assignment access authenticated and catalog staging-gated', async () => {
+  const { default: handler } = await import('../api/assignment-users.js');
+  for (const [url, expected] of [['/api/assignment-users',401],['/api/assignment-users?_publicRoute=stlolab-catalog',503],['/api/stlolab-catalog',503]]) {
+    const response = {setHeader(){},end(value){this.body=JSON.parse(value);}};
+    await handler({method:'GET',url,headers:{}},response);
+    assert.equal(response.statusCode,expected);
+  }
 });

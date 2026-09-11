@@ -1,5 +1,5 @@
-import { readStlolabCatalog, STAGING_REF } from "./_lib/stlolabCatalog.js";
-const createServerSupabaseClient = async () => (await import("./_lib/supabaseServer.js")).createServerSupabaseClient();
+import { readStlolabCatalog, STAGING_REF } from "./stlolabCatalog.js";
+const createServerSupabaseClient = async () => (await import("./supabaseServer.js")).createServerSupabaseClient();
 
 export function createCatalogHandler({ env = process.env, createClient = createServerSupabaseClient } = {}) {
   return async function handler(request, response) {

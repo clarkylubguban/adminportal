@@ -46,7 +46,7 @@ async function handleRequest(request, response) {
     const routePath = normalizeRoutePath(pathname);
 
     if (routePath === "/api/stlolab-catalog") {
-      const { default: handler } = await import("../api/stlolab-catalog.js");
+      const { default: handler } = await import("../api/_lib/stlolabCatalogRoute.js");
       await handler(request, response);
       return;
     }
