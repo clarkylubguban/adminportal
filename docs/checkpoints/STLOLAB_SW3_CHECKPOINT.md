@@ -1,12 +1,12 @@
 # STLOLAB SW3 checkout checkpoint
 
-Status: owner-approved lifecycle rules are implemented and verified against disposable PostgreSQL. All migrations, configuration, deployment, remote writes, and live ordering remain disabled pending staging acceptance.
+Status: owner-approved lifecycle rules and authenticated Admin Orders actions are implemented and verified locally. All migrations, configuration, deployment, remote writes, and live ordering remain disabled pending staging acceptance.
 
 ## Source identity
 
-- Admin worktree: `C:\tmp\trry-admin-stlolab-sw3-checkout`; verified parent `45979d07795095ad14560340db6c62d4fa8567f4` on `codex/stlolab-sw3-checkout`.
-- Storefront worktree: `C:\tmp\stlolab-sw3-checkout`; verified parent `a9c61452097ba2b1c28e909e53744714c6e96b1a` on `codex/stlolab-sw3-checkout`.
-- The accepted V6 product/home layouts and size selector are unchanged. Storefront edits are confined to checkout option identity and the delivery barangay field.
+- Admin worktree: `C:\tmp\trry-admin-stlolab-sw3-checkout`; this continuation verified clean starting HEAD `d1a0cdec387ba6f739c311f0be44763d6f7d2640` on `codex/stlolab-sw3-checkout`.
+- Storefront worktree: `C:\tmp\stlolab-sw3-checkout`; verified clean HEAD `42997da07639aceb04ca487f788c9ccd02013df3` on `codex/stlolab-sw3-checkout`.
+- The accepted V6 product/home layouts, size selector, live catalog, and disabled ordering UI are unchanged in this continuation. The Storefront worktree remains clean.
 - No migration or fixture was applied to staging or production. No push, merge, deployment, project, or paid service was created.
 
 ## Accepted lifecycle
@@ -17,6 +17,8 @@ Status: owner-approved lifecycle rules are implemented and verified against disp
 - Expiry releases only an active reservation whose canonical order is still `UNPAID`, `PENDING` handover, and `awaiting_payment` at or after the deadline.
 - Customer pickup and courier handover atomically clear the reservation, decrement on-hand through the canonical `SALE` stock-movement authority, and mark the reservation consumed.
 - Payment and fulfillment are separate order facts. Courier handover leaves an unpaid order unpaid and does not claim COD collection.
+- Direct STLOLAB payment confirmation writes an append-only canonical `order_payment_events` record and invokes the protected paid-state transition in the same database transaction. The raw paid-state RPC is no longer executable by authenticated browser clients.
+- Authenticated Owner/Admin Orders actions invoke customer pickup or courier handover through the existing protected lifecycle RPC. Staff and anonymous callers remain denied.
 - Cancellation remains token-scoped and idempotent for unpaid, pending orders. It is blocked after payment, expiry, or handover. Paid cancellation/refund behavior is intentionally not defined.
 - Expiry, cancellation, payment confirmation, and handover serialize on the canonical order row. Replays cannot release or deduct twice.
 
@@ -37,23 +39,28 @@ Status: owner-approved lifecycle rules are implemented and verified against disp
 - Repeated pickup/handover writes one stock movement and deducts on-hand once.
 - Expiry/payment, expiry/cancellation, expiry/handover, payment/handover, and cancellation/handover races preserve one valid terminal outcome and nonnegative balances.
 - Courier handover remains `UNPAID` until a separate authenticated payment confirmation occurs.
+- Handler tests exercise the consolidated API handler for missing authentication, Staff denial, canonical payment mapping, ignored browser payment-state claims, duplicate idempotency keys, pickup/courier mapping, database denial, and state conflict responses.
 - Ordinary cancellation after handover and cancellation after payment are rejected.
 - Local allowed, excluded, and unknown barangay fixtures plus nationwide PHP 120 and local PHP 60 totals pass server-side validation.
 - Anonymous and non-Owner/Admin lifecycle calls are denied. Expiry execution is service-role-only; customer checkout/customer lookup privileges remain unchanged.
 - Persistent order and inventory effects: none. All containers and fixtures are disposable.
+- Focused checks passed: `test:stlolab-admin-order-actions`, `test:orders-dual-read`, `test:orders-dashboard`, `test:orders-dashboard-browser`, `test:order-readiness-actions`, `test:order-readiness-interactions-browser`, `test:stlolab-checkout-route`, payment-confirmation unit tests, and the Admin build.
+- The full SW3 PostgreSQL suite also passes with POS M3B inserted between Admin M2B and the SW3 migrations, proving the final shared function retains POS authorization and reservation protection in the proposed order.
 
 ## POS audit
 
 - Full POS checkout source is available at `C:\Users\ROG\Downloads\CODEX\trry-pos-sale-m3`, branch `codex/pos-sale-m3`, commit `b67c09098c64cad6b8e9a52424111a16c8dc30ff`.
 - That checkout locks on-hand stock and records each sale through `private.m2b_record_sale_stock_movement`, which delegates to `private.m2b_apply_stock_movement`. The later Admin reservation migration protects that shared primitive from consuming reserved units.
-- POS commit `b67c090` is not an ancestor of local POS `origin/main` at `82e9d0f735f21ed67fe71bc282d92480a1cbbc26`; the M3B checkout migration is absent from that `origin/main` tree. The deployed POS commit is not established by local source.
+- Vercel project `trry-pos` (`prj_OXFRieJe4VlBWFClY38K06QYMn1Z`) currently serves production alias `trry-pos.vercel.app` from READY deployment `dpl_DTe5j92W5MT1hbBY3xq47wmy4aER`, Git commit `bcbe14837915defb101d248f939bba171bab526d` on `main`.
+- POS commit `b67c090` is not an ancestor of deployed `bcbe148`. The deployed tree contains neither the M2B inventory migration nor M3B atomic checkout migration, so deployed POS cannot yet be accepted as respecting SW3 reservations.
+- Required ordering is documented in `docs/runbooks/STLOLAB_SW3_STAGING_RUNBOOK.md`: POS M3B precedes the Admin reservation work, and `20260911134759` leaves a final `private.m2b_apply_stock_movement` that retains both POS and Admin actor authority plus the reservation floor.
 
 ## Remaining staging acceptance blockers
 
-1. Apply and review the three local SW3 migrations in the existing staging database only, then verify the exact staging `Main Retail Stock` location UUID and nominate clearly labeled test variant quantities.
+1. Apply and review the four local SW3 migrations in the existing staging database only, then verify the exact staging `Main Retail Stock` location UUID and nominate clearly labeled test variant quantities.
 2. Supply the positive local-delivery barangay allowlist or an approved manual eligibility workflow. The approximate 15 km description and exclusions are not a machine-verifiable allow rule.
-3. Choose and configure an existing free-project expiry runner and cadence to call the service-role-only expiry RPC. No cron job or external automation is installed by source.
-4. Connect the accepted canonical payment-confirmation path to the protected paid-state transition with a durable payment reference. Payment failure remains blocked and undefined.
-5. Connect authenticated Orders operations to the protected pickup/courier handover transition and run a real staging order through Orders, reservation, handover, and confirmation access checks.
-6. Identify the deployed POS commit and verify its live checkout path plus the final staging definition of `private.m2b_apply_stock_movement`; run real shared-stock contention after all migrations are ordered.
+3. Approve and install the proposed Supabase Cron runner: every 15 minutes, batch size 100, calling the service-only expiry RPC. The SQL is documented but was not activated.
+4. Apply and verify the new canonical order-payment event migration and authenticated Orders handler in staging.
+5. Select an owner-approved POS lineage containing M2B/M3B, deploy it separately, verify the final staging definition of `private.m2b_apply_stock_movement`, and run real shared-stock contention.
+6. Run a real staging order through Orders payment confirmation, reservation, pickup/courier handover, expiry, and confirmation access checks.
 7. Decide paid cancellation/refund and returns behavior before enabling those transitions. Neither is implemented or inferred.

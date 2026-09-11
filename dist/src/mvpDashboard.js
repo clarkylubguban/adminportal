@@ -94,6 +94,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   ) ? "queued" : productionStage(item);
 
   const hasNativeOrderAuthority = (item) => item?.sourceType === "native" && Boolean(item.nativeOrderId || item.orderReference || item.sourceInquiryId);
+  const isStlolabRetail = (item) => item?.isStlolabRetail === true || item?.nativeSourceType === "STLOLAB_RETAIL";
   const isInactiveInquiryStatus = (item) => ["lost", "cancelled", "canceled"].includes(key(item.status));
   const hasLegacyOrderCompatibility = (item) => item?.sourceType === "legacy" && key(item.status) === "won" && key(item.quoteStatus) === "approved" && hasExistingOrder(item);
   const confirmed = (item) => {
@@ -1024,7 +1025,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function orderIdentityCell(item) {
-    const source = item.sourceType === "native" || sourceInquiryReference(item) !== "Not linked" ? "FROM INQUIRY" : "LEGACY ORDER";
+    const source = isStlolabRetail(item) ? "STLOLAB" : item.sourceType === "native" || sourceInquiryReference(item) !== "Not linked" ? "FROM INQUIRY" : "LEGACY ORDER";
     return `<span class="order-identity">${copyButton(orderReference(item), orderReference(item), "order reference")}<small>${html(source)}</small></span>`;
   }
 
@@ -1079,6 +1080,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function orderNextAction(item) {
     const payment = paymentState(item);
+    if (isStlolabRetail(item) && key(item.orderStatus) === "expired") return "EXPIRED";
+    if (isStlolabRetail(item) && key(item.orderStatus) === "cancelled") return "CANCELLED";
+    if (isStlolabRetail(item) && key(item.fulfillmentState) === "handed_over") return "HANDED OVER";
+    if (isStlolabRetail(item) && payment.key === "paid") return "FULFILLMENT";
     if (productionBlocker(item)) return "RESOLVE BLOCKER";
     if (payment.key === "verification") return "REVIEW PAYMENT";
     if (payment.key !== "paid") return "AWAITING PAYMENT";
@@ -1271,7 +1276,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       ${detailLine("Address", item.deliveryAddress || item.address || messageValue(item.message, ["Delivery Address", "Address"]) || "Not set")}
       ${detailLine("Sub-status", tracking(item))}
       ${detailLine("Customer Note", item.trackingNote || customerNotes(item) || "Not set")}
-    </div><p class="mvp-inline-note">Order-owned customer fulfillment data only. Production packing/QC handoff remains in Production.</p></section>${trackingForm ? `<section class="mvp-order-panel readonly"><h3>TRACKING CONTRACT</h3><p class="mvp-inline-note">Customer tracking writes remain on the existing inquiry bridge outside this drawer phase.</p></section>` : ""}`;
+    </div><p class="mvp-inline-note">${isStlolabRetail(item) ? "The final handover action owns the reserved-stock deduction." : "Order-owned customer fulfillment data only. Production packing/QC handoff remains in Production."}</p></section>${trackingForm || ""}`;
   }
 
   function orderDrawerHistory(item) {
@@ -1281,6 +1286,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
 
   function orderHistoryRows(item) {
     const rows = [];
+    if (item.handedOverAt) rows.push({ title: item.handoverKind === "CUSTOMER_PICKUP" ? "Customer pickup recorded" : "Courier handover recorded", when: dateTime(item.handedOverAt), source: "Canonical fulfillment state" });
     if (Array.isArray(item.paymentHistory)) item.paymentHistory.forEach((entry) => rows.push({ title: `Payment confirmed${entry.amount ? ` ${money(entry.amount)}` : ""}`, when: dateTime(entry.confirmedAt), source: "Persisted payment_history" }));
     if (item.paymentConfirmedAt || item.paymentVerifiedAt) rows.push({ title: "Payment confirmed", when: dateTime(item.paymentConfirmedAt || item.paymentVerifiedAt), source: "Derived from payment fields" });
     if (item.productionUpdatedAt && (releasedNativeOrder(item) || productionStage(item) !== "queued")) rows.push({ title: "Released to production", when: dateTime(item.productionUpdatedAt), source: "Derived from production fields" });
@@ -1294,6 +1300,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderDrawerFooter(item, gate, activeTab) {
     if (!hasNativeOrderAuthority(item)) return `<button class="mvp-secondary-action" type="button" disabled title="Historical Order compatibility records are read only.">Historical Read Only</button>`;
     const statusState = orderOperationalState(item);
+    if (isStlolabRetail(item) && statusState.key === "ready_fulfillment") return `<button class="mvp-primary-action" type="button" data-mvp-order-tab="fulfillment">Open Fulfillment</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="payment">Payment</button>`;
+    if (isStlolabRetail(item) && statusState.key === "fulfilled") return `<button class="mvp-secondary-action" type="button" disabled>Handover Recorded</button>`;
+    if (isStlolabRetail(item) && statusState.key === "closed") return `<button class="mvp-secondary-action" type="button" disabled>${html(statusState.label)}</button>`;
     if (["awaiting_payment", "payment_review"].includes(statusState.key)) return `<button class="mvp-primary-action" type="button" data-mvp-order-tab="payment">${statusState.key === "payment_review" ? "Review Payment" : "Record Payment"}</button><button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Requirements</button>`;
     if (statusState.key === "blocked") return `<button class="mvp-secondary-action" type="button" data-mvp-order-tab="requirements">Review Blocker</button><button class="mvp-secondary-action" type="button" disabled title="${html(productionBlocker(item) || gate.join(", "))}">Resolve Blocker</button>`;
     if (statusState.key === "ready_to_release") return orderReleaseFooter(item, gate);
@@ -1310,6 +1319,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function orderOperationalState(item) {
     const payment = paymentState(item);
     const stage = displayProductionStage(item);
+    if (isStlolabRetail(item)) {
+      if (["expired", "cancelled"].includes(key(item.orderStatus))) return { key: "closed", label: key(item.orderStatus).toUpperCase(), tone: "overdue" };
+      if (key(item.fulfillmentState) === "handed_over") return { key: "fulfilled", label: "HANDED OVER", tone: "completed" };
+      if (payment.key === "paid") return { key: "ready_fulfillment", label: "READY FOR HANDOVER", tone: "ready" };
+      return { key: "awaiting_payment", label: "AWAITING PAYMENT", tone: "payment" };
+    }
     if (productionBlocker(item)) return { key: "blocked", label: "BLOCKED", tone: "overdue" };
     if (releasedNativeOrder(item) && stage === "queued") return { key: "released", label: "QUEUED FOR PRODUCTION", tone: "ready" };
     if (payment.key === "verification") return { key: "payment_review", label: "PAYMENT REVIEW", tone: "payment" };
@@ -2600,7 +2615,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       const id = button.dataset.mvpFulfillmentAction;
       const trackingSubstatus = button.dataset.mvpFulfillmentStatus;
       if (!id || !trackingSubstatus) return;
-      if (trackingSubstatus === "completed" && !window.confirm("Confirm the customer has received the order. This will mark the order Completed.")) return;
+      if (["completed", "customer_pickup", "courier_handover"].includes(trackingSubstatus)) {
+        const prompt = trackingSubstatus === "customer_pickup"
+          ? "Confirm the customer has physically picked up this order. Reserved stock will be deducted once."
+          : trackingSubstatus === "courier_handover"
+            ? "Confirm this order was physically handed to the courier. Reserved stock will be deducted once; COD payment will remain separate."
+            : "Confirm the customer has received the order. This will mark the order Completed.";
+        if (!window.confirm(prompt)) return;
+      }
       state.orderFulfillmentId = id;
       state.orderFulfillmentError = "";
       button.disabled = true;

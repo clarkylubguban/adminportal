@@ -40,6 +40,10 @@
       "destination": "/api/inquiries/:id/workflow?_nativeOrderAction=convert"
     },
     {
+      "source": "/api/orders/:orderId/actions",
+      "destination": "/api/assignment-users?_adminRoute=order-actions&orderId=:orderId"
+    },
+    {
       "source": "/api/tasks/:id/history",
       "destination": "/api/tasks/:id?_taskAction=history"
     },

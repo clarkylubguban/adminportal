@@ -70,6 +70,12 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
     extractSizeBreakdown(quantity) ||
     extractSizeBreakdown(sourceInquiry?.qty);
   const bridgeId = sourceInquiryId || nativeOrderId || orderReference;
+  const nativeSourceType = getFirstValue(row, ["source_type", "sourceType"]);
+  const isStlolabRetail = nativeSourceType === "STLOLAB_RETAIL";
+  const paymentState = getFirstValue(row, ["payment_state", "paymentState"]);
+  const fulfillmentState = getFirstValue(row, ["fulfillment_state", "fulfillmentState"]);
+  const totalAmount = getNullableNumber(row, ["total_amount", "totalAmount", "quoted_amount", "quotedAmount"]);
+  const fulfillmentDetails = getFirstValue(row, ["fulfillment_details", "fulfillmentDetails"]);
 
   if (!bridgeId) return null;
 
@@ -77,6 +83,9 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
     ...(sourceInquiry || {}),
     id: bridgeId,
     sourceType: "native",
+    nativeSourceType,
+    sourceChannel: getFirstValue(row, ["source_channel", "sourceChannel"]),
+    isStlolabRetail,
     nativeOrderId,
     sourceInquiryId,
     sourceInquiryReference:
@@ -109,6 +118,19 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
     quoteApprovedAt: getFirstValue(row, ["quote_approved_at", "quoteApprovedAt"]) || sourceInquiry?.quoteApprovedAt || "",
     quotePublishedAt: getFirstValue(row, ["quote_published_at", "quotePublishedAt"]) || sourceInquiry?.quotePublishedAt || "",
     fulfillmentMethod: getFirstValue(row, ["fulfillment_method", "fulfillmentMethod"]) || sourceInquiry?.fulfillmentMethod || "",
+    fulfillmentDetails: fulfillmentDetails && typeof fulfillmentDetails === "object" ? fulfillmentDetails : null,
+    deliveryAddress: formatRetailAddress(fulfillmentDetails?.address) || sourceInquiry?.deliveryAddress || "",
+    paymentStatus: isStlolabRetail ? paymentState.toLowerCase() : sourceInquiry?.paymentStatus || "",
+    paymentState,
+    paymentConfirmedAmount: isStlolabRetail && paymentState === "PAID" ? totalAmount : sourceInquiry?.paymentConfirmedAmount,
+    paymentVerifiedAmount: isStlolabRetail && paymentState === "PAID" ? totalAmount : sourceInquiry?.paymentVerifiedAmount,
+    paymentReference: getFirstValue(row, ["payment_reference", "paymentReference"]) || sourceInquiry?.paymentReference || "",
+    paymentConfirmedAt: getFirstValue(row, ["paid_at", "paidAt"]) || sourceInquiry?.paymentConfirmedAt || "",
+    fulfillmentState,
+    handedOverAt: getFirstValue(row, ["handed_over_at", "handedOverAt"]),
+    handoverKind: getFirstValue(row, ["handover_kind", "handoverKind"]),
+    reservationExpiresAt: getFirstValue(row, ["reservation_expires_at", "reservationExpiresAt"]),
+    source: isStlolabRetail ? "STLOLAB" : sourceInquiry?.source || "",
     dueDate: normalizeDate(getFirstValue(row, ["due_date", "dueDate"])) || sourceInquiry?.dueDate || "",
     createdAt: getFirstValue(row, ["created_at", "createdAt"]) || sourceInquiry?.createdAt || "",
     updatedAt: getFirstValue(row, ["updated_at", "updatedAt"]) || sourceInquiry?.updatedAt || "",
@@ -121,6 +143,8 @@ export function normalizeNativeOrderResponseToRow(order) {
     id: order.id,
     order_reference: order.orderReference,
     source_inquiry_id: order.sourceInquiryId,
+    source_type: order.sourceType,
+    source_channel: order.sourceChannel,
     status: order.status,
     quoted_amount: order.quotedAmount,
     amount_due: order.amountDue,
@@ -138,6 +162,12 @@ export function normalizeNativeOrderResponseToRow(order) {
     due_date: order.dueDate,
     created_at: order.createdAt,
     updated_at: order.updatedAt,
+    payment_state: order.paymentState,
+    payment_reference: order.paymentReference,
+    paid_at: order.paidAt,
+    fulfillment_state: order.fulfillmentState,
+    handed_over_at: order.handedOverAt,
+    handover_kind: order.handoverKind,
   };
 }
 
@@ -180,6 +210,14 @@ function findInquiryBySource(inquiries, row) {
   const sourceInquiryId = normalizeIdentity(getFirstValue(row, ["source_inquiry_id", "sourceInquiryId"]));
   if (!sourceInquiryId) return null;
   return inquiries.find((item) => normalizeIdentity(item?.id) === sourceInquiryId) || null;
+}
+
+function formatRetailAddress(address) {
+  if (!address || typeof address !== "object") return "";
+  return [address.line1, address.line2, address.barangay, address.city, address.province, address.postalCode]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(", ");
 }
 
 function isLegacyOrderInquiry(item) {

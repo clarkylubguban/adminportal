@@ -60,6 +60,27 @@ const nativeRow = {
   quote_approved_at: "2026-08-08T03:00:00.000Z",
 };
 
+const retailRow = {
+  id: "96000000-0000-4000-8000-000000000333",
+  order_reference: "TRRY-ORD-STLOLAB1",
+  source_inquiry_id: null,
+  source_type: "STLOLAB_RETAIL",
+  source_channel: "STLOLAB",
+  status: "awaiting_payment",
+  customer_name: "SW3 Test Customer",
+  customer_contact: "0917-111-2222",
+  product: "Glow N Underground (S)",
+  quantity: "S: 1",
+  quoted_amount: 790,
+  amount_due: 790,
+  total_amount: 790,
+  fulfillment_method: "pickup",
+  fulfillment_details: { address: null, label: "TRRY Apparel Shop" },
+  payment_state: "UNPAID",
+  fulfillment_state: "PENDING",
+  reservation_expires_at: "2026-09-14T04:00:00.000Z",
+};
+
 const legacyOnly = buildDualReadOrders({ inquiries: [legacyInquiry], nativeRows: [] });
 assert.equal(legacyOnly.length, 1, "legacy-only approved inquiries should remain visible as orders");
 assert.equal(legacyOnly[0].sourceType, "legacy");
@@ -103,24 +124,42 @@ assert.equal(normalized.reference, "");
 assert.equal(normalized.code, "");
 assert.equal(normalized.odooSO, "");
 
+const retail = normalizeNativeOrder(retailRow);
+assert.equal(retail.id, retailRow.id, "direct retail orders use canonical Order ID for actions");
+assert.equal(retail.isStlolabRetail, true);
+assert.equal(retail.paymentStatus, "unpaid");
+assert.equal(retail.paymentConfirmedAmount, undefined);
+assert.equal(retail.fulfillmentState, "PENDING");
+assert.equal(retail.source, "STLOLAB");
+
 global.window = {
-  location: { search: "?order=TRRY-ORD-NATIVE01" },
+  location: { search: "?order=TRRY-ORD-STLOLAB1" },
 };
 const dashboard = createMvpDashboard({
   navigate: () => {},
   getAssignmentContext: () => ({ users: [], loadState: "success", error: "" }),
 });
 assert.equal(dashboard.helpers.findOrderByIdentity(mixed, "TRRY-ORD-NATIVE01")?.nativeOrderId, nativeRow.id);
-const rendered = dashboard.renderOrders({ items: mixed });
+dashboard.state.orderTab = "payment";
+dashboard.state.orderId = retail.id;
+const rendered = dashboard.renderOrders({
+  items: [...mixed, retail],
+  renderPayment: () => "RETAIL_PAYMENT_FORM",
+  renderTracking: () => "RETAIL_HANDOVER_ACTION",
+});
 assert.ok(rendered.includes("TRRY-ORD-NATIVE01"), "Orders UI renders native order_reference");
 assert.ok(!rendered.includes("SO-SHOULD-NOT-SHOW"), "native order rendering must not expose legacy Odoo identity");
+assert.ok(rendered.includes("TRRY-ORD-STLOLAB1"), "Orders UI renders direct STLOLAB order");
+assert.ok(rendered.includes("STLOLAB"), "direct order source is labeled correctly");
+assert.ok(rendered.includes("RETAIL_PAYMENT_FORM"), "direct retail order exposes canonical payment action content");
 
 const main = await readFile("src/main.js", "utf8");
 assert.ok(main.includes("buildDualReadOrders"), "/orders uses the dual-read compatibility collection");
 assert.ok(main.includes("getNativeOrderRows"), "native orders are read through the compatibility service");
 assert.ok(main.includes("payment-confirmations"), "existing payment confirmation contract remains present");
 assert.ok(main.includes('["proof_submitted", "under_review", "correction_required"]'), "required payment state remains neutral until a payment method is selected");
-assert.ok(main.includes("Reference number <small>(optional for Cash)</small>"), "cash payment reference is explicitly optional");
+assert.ok(main.includes('const referenceHint = isRetail ? "required" : "optional for Cash"'), "retail payment requires a durable reference without changing inquiry cash behavior");
+assert.ok(main.includes("requestAdminOrderAction"), "direct retail payment and handover use the authenticated Orders handler");
 assert.ok(main.includes("Review the Messenger receipt"), "verified online payment review guidance remains available");
 assert.ok(main.includes("if (routePath === legacyOrderDashboardPath) return `${activeOrdersPath}${url.search}`;"), "/order-dashboard preserves compatible query string");
 assert.ok(main.includes("normalizeLegacyOrderDashboardRoute()"), "legacy dashboard route is normalized before render");

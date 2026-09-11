@@ -6,6 +6,8 @@ import { createHash } from 'node:crypto';
 const name = `trry-stlolab-sw3-${process.pid}`;
 const image = process.env.TRRY_VERIFY_POSTGRES_IMAGE || 'postgres:16-alpine';
 const ownerId = '96000000-0000-4000-8000-000000000001';
+const posUserId = '96000000-0000-4000-8000-000000000002';
+const posM3bMigration = process.env.TRRY_POS_M3B_MIGRATION || '';
 let started = false;
 
 try {
@@ -32,8 +34,13 @@ try {
     '20260820000000_m2b_inventory_foundation.sql', '20260831021438_add_customer_identity_c1.sql',
     '20260902142917_repair_customer_identity_c1_audit_users.sql', '20260903010100_customer_identity_linking_c2_1.sql',
     '20260911110045_stlolab_sw3_checkout_foundation.sql', '20260911113647_stlolab_sw3_inventory_reservations.sql',
-    '20260911130719_stlolab_sw3_fulfillment_lifecycle.sql',
-  ]) sql(readFileSync(`supabase/migrations/${file}`, 'utf8'));
+    '20260911130719_stlolab_sw3_fulfillment_lifecycle.sql', '20260911134759_stlolab_sw3_admin_order_actions.sql',
+  ]) {
+    sql(readFileSync(`supabase/migrations/${file}`, 'utf8'));
+    if (file === '20260820000000_m2b_inventory_foundation.sql' && posM3bMigration) {
+      sql(readFileSync(posM3bMigration, 'utf8'));
+    }
+  }
 
   sql(`insert into public.product_categories(name,code) values('Tees','TEE');
     insert into public.products(category_id,brand_id,master_product_id,product_code,name,active,product_type,readiness_status,sellable,eligible_channels)
@@ -52,6 +59,11 @@ try {
       where l.location_code='MAIN-RETAIL' and v.sku in('STLO-S','STLO-LAST');
     insert into auth.users(id,email) values('${ownerId}','owner@example.test');
     insert into public.admin_users(user_id,email,role,is_active) values('${ownerId}','owner@example.test','owner',true);`);
+  if (posM3bMigration) {
+    sql(`insert into auth.users(id,email) values('${posUserId}','pos@example.test');
+      insert into public.pos_staff_profiles(user_id,display_name,role,active,default_branch_id)
+      select '${posUserId}','SW3 POS Tester','CASHIER',true,id from public.branches where branch_code='SW3-TEST';`);
+  }
 
   const variant = one(`select id from public.product_variants where sku='STLO-S'`).id;
   const lastVariant = one(`select id from public.product_variants where sku='STLO-LAST'`).id;
@@ -60,6 +72,8 @@ try {
   const delivery = (code, barangay) => `jsonb_build_object('method','delivery','optionCode','${code}','address',jsonb_build_object('line1','Test street','barangay','${barangay}','city','Iligan City','province','Lanao del Norte','postalCode','9200'))`;
   const call = (key = 'ABCDEFGHIJKLMNOP', price = 79000, qty = 2, token = 'b'.repeat(64), fulfillment = pickup, variantId = variant) =>
     `select trry_api.create_stlolab_order_sw3('staging','${key}','${createHash('sha256').update([key, price, qty, variantId, fulfillment].join(':')).digest('hex')}','${token}',jsonb_build_object('fullName','SW3 Staging Tester','mobile','09171234567','email','sw3@example.test'),${fulfillment},jsonb_build_array(jsonb_build_object('variantId','${variantId}','quantity',${qty},'unitPriceMinor',${price}))) as result`;
+  const payment = (orderId, reference, key, amount = 790, method = 'gcash') =>
+    `select trry_api.confirm_stlolab_order_payment_sw3('${orderId}',${amount},'${method}','${reference}',null,'${key}') as result`;
 
   fails(call(), /not enabled/);
   sql(`insert into public.stlolab_checkout_config(environment,enabled,inventory_policy,inventory_location_id)
@@ -114,8 +128,11 @@ try {
   const winningToken = winningKey === 'LASTITEMORDER001' ? '1'.repeat(64) : '2'.repeat(64);
   assert.equal(one(`select trry_api.cancel_stlolab_order_sw3('${winningLast}','${'9'.repeat(64)}','WRONGTOKENCANCEL1',null) as result`).result, null);
   fails(owner(`select private.m2b_apply_stock_movement('${location}','${lastVariant}','SALE',-1,'SALE','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','POS-RESERVED','POS-RESERVED-1',null)`), /consume reserved inventory/);
+  if (posM3bMigration) {
+    fails(pos(`select private.m2b_apply_stock_movement('${location}','${lastVariant}','SALE',-1,'SALE','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','POS-RESERVED-CASHIER','POS-RESERVED-CASHIER-1',null)`), /consume reserved inventory/);
+  }
   one(`select trry_api.cancel_stlolab_order_sw3('${winningLast}','${winningToken}','CANCELLASTITEM01',null) as result`);
-  sql(owner(`select private.m2b_apply_stock_movement('${location}','${lastVariant}','SALE',-1,'SALE','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','POS-AFTER-RELEASE','POS-AFTER-RELEASE-1',null)`));
+  sql((posM3bMigration ? pos : owner)(`select private.m2b_apply_stock_movement('${location}','${lastVariant}','SALE',-1,'SALE','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','POS-AFTER-RELEASE','POS-AFTER-RELEASE-1',null)`));
   assert.deepEqual(balance(lastVariant), { quantity_on_hand: 0, reserved_quantity: 0 });
 
   const expiryOrder = one(call('EXPIRYORDERKEY01', 79000, 1, '3'.repeat(64))).result.orderId;
@@ -142,9 +159,11 @@ try {
   assert.equal(orderState(courierOrder).payment_state, 'UNPAID');
 
   const paidOrder = one(call('PAIDORDERTEST001', 79000, 1, '6'.repeat(64))).result.orderId;
-  sql(staff(`select trry_api.mark_stlolab_order_paid_sw3('${paidOrder}','PAY-TEST-001','PAYMENTIDEMPOTENT1')`));
-  sql(staff(`select trry_api.mark_stlolab_order_paid_sw3('${paidOrder}','PAY-TEST-001','PAYMENTIDEMPOTENT2')`));
-  fails(staff(`select trry_api.mark_stlolab_order_paid_sw3('${paidOrder}','PAY-OTHER','PAYMENTIDEMPOTENT3')`), /replay conflicts/);
+  sql(staff(payment(paidOrder, 'PAY-TEST-001', 'PAYMENTIDEMPOTENT1')));
+  sql(staff(payment(paidOrder, 'PAY-TEST-001', 'PAYMENTIDEMPOTENT1')));
+  fails(staff(payment(paidOrder, 'PAY-TEST-001', 'PAYMENTIDEMPOTENT2')), /already confirmed/);
+  assert.equal(one(`select count(*)::int as count from public.order_payment_events where order_id='${paidOrder}'`).count, 1);
+  assert.equal(one(`select payment_reference from public.orders where id='${paidOrder}'`).payment_reference, 'PAY-TEST-001');
   makeExpired(paidOrder);
   one(`select trry_api.expire_stlolab_reservations_sw3('2026-09-04T00:00:00Z',100) as result`);
   assert.equal(orderState(paidOrder).payment_state, 'PAID');
@@ -161,6 +180,10 @@ try {
   fails(`select trry_api.expire_stlolab_reservations_sw3(clock_timestamp()+interval '1 hour',1)`, /cannot be in the future/);
   fails(`set role anon;select trry_api.handover_stlolab_order_sw3('${pickupOrder}','CUSTOMER_PICKUP','UNAUTHORIZEDTEST1')`, /permission denied/);
   fails(`set role authenticated;set request.jwt.claim.sub='97000000-0000-4000-8000-000000000001';select trry_api.handover_stlolab_order_sw3('${paidOrder}','CUSTOMER_PICKUP','UNAUTHORIZEDTEST2')`, /Owner\/Admin identity is required/);
+  fails(`set role authenticated;set request.jwt.claim.sub='${ownerId}';select trry_api.mark_stlolab_order_paid_sw3('${paidOrder}','BROWSER-CLAIM','DIRECTBROWSERCLAIM')`, /permission denied/);
+  const tamperedPaymentOrder = one(call('TAMPEREDPAYMENT01', 79000, 1, 'd'.repeat(64))).result.orderId;
+  fails(staff(payment(tamperedPaymentOrder, 'PAY-TAMPERED', 'TAMPEREDPAYMENTKEY', 1)), /canonical order amount/);
+  assert.equal(one(`select count(*)::int as count from public.order_payment_events where order_id='${tamperedPaymentOrder}'`).count, 0);
   fails(`update public.stlolab_checkout_config set inventory_policy='DEDUCT_ON_SUBMIT' where environment='staging'`, /inventory_policy/);
   console.log('PASS STLOLAB SW3 reservation expiry, payment/cancellation/handover races, atomic handover deduction, delivery coverage, POS exclusion, and idempotency');
 
@@ -169,7 +192,7 @@ try {
     makeExpired(id);
     await Promise.allSettled([
       asyncSql(`select trry_api.expire_stlolab_reservations_sw3('2026-09-04T00:00:00Z',100)`),
-      asyncSql(staff(`select trry_api.mark_stlolab_order_paid_sw3('${id}','PAY-RACE-001','RACEPAYMENTKEY01')`)),
+      asyncSql(staff(payment(id, 'PAY-RACE-001', 'RACEPAYMENTKEY01'))),
     ]);
     const state = orderState(id);
     assert.ok((state.status === 'expired' && state.payment_state === 'UNPAID') || (state.status === 'paid' && state.payment_state === 'PAID'));
@@ -206,7 +229,7 @@ try {
     const id = one(call('RACEPAYHANDOVER1', 79000, 1, 'a'.repeat(64))).result.orderId;
     const before = balance(variant).quantity_on_hand;
     await Promise.all([
-      asyncSql(staff(`select trry_api.mark_stlolab_order_paid_sw3('${id}','PAY-RACE-HANDOVER','RACEPAYHANDOVER1')`)),
+      asyncSql(staff(payment(id, 'PAY-RACE-HANDOVER', 'RACEPAYHANDOVER1'))),
       asyncSql(staff(`select trry_api.handover_stlolab_order_sw3('${id}','CUSTOMER_PICKUP','RACEHANDOVERPAY1')`)),
     ]);
     assert.deepEqual(orderState(id), { status: 'released', payment_state: 'PAID', fulfillment_state: 'HANDED_OVER' });
@@ -243,6 +266,7 @@ try {
 }
 
 function owner(source) { return `set request.jwt.claim.sub='${ownerId}';${source};`; }
+function pos(source) { return `set request.jwt.claim.sub='${posUserId}';${source};`; }
 function staff(source) { return `set role authenticated;set request.jwt.claim.sub='${ownerId}';${source};`; }
 function sql(source) { const r = run(['exec', '-i', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-X', '-v', 'ON_ERROR_STOP=1', '-q'], { input: source, allow: true }); if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim()); return r.stdout; }
 function one(query) { const r = run(['exec', '-i', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-X', '-v', 'ON_ERROR_STOP=1', '-t', '-A', '-q'], { input: `select row_to_json(q)::text from (${query.replace(/;+$/, '')})q;`, allow: true }); if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim()); return JSON.parse(r.stdout.trim()); }

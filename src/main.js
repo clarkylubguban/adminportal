@@ -3819,7 +3819,7 @@ function renderMvpOrdersPage() {
     notices: `${renderOpsPersistenceNotice()}${renderNativeOrdersPersistenceNotice()}`,
     schemaNotice: renderOrderDashboardSchemaNotice(),
     renderPayment: renderMvpPaymentConfirmation,
-    renderTracking: renderOpsCustomerTracking,
+    renderTracking: renderMvpOrderFulfillment,
   });
 }
 
@@ -4454,6 +4454,7 @@ function renderMvpPaymentConfirmation(item) {
   const paymentMethod = String(item.paymentMethod || "").trim().toLowerCase();
   const isShop = ["pay_at_shop", "payment_pending_at_shop"].includes(status) || paymentType === "shop";
   const isOnline = ["proof_submitted", "under_review", "correction_required"].includes(status) || paymentMethod === "online";
+  const isRetail = item.isStlolabRetail === true;
 
   if (isPaid) {
     return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">PAYMENT CONFIRMED. ${escapeHtml(formatOpsValue(paid))} recorded${item.paymentConfirmedAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.paymentConfirmedAt))}` : ""}.</p></section>`;
@@ -4463,8 +4464,10 @@ function renderMvpPaymentConfirmation(item) {
     return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>Payment Confirmation</h3><p class="mvp-inline-note">No outstanding balance is available for payment confirmation.</p></section>`;
   }
 
-  const title = isOnline && !isShop ? "REVIEW & CONFIRM ONLINE PAYMENT" : "RECORD PAYMENT RECEIVED";
-  const warning = isShop
+  const title = isRetail ? "CONFIRM RETAIL PAYMENT" : isOnline && !isShop ? "REVIEW & CONFIRM ONLINE PAYMENT" : "RECORD PAYMENT RECEIVED";
+  const warning = isRetail
+    ? "Confirm only against payment actually received by TRRY. A durable receipt or provider reference is required."
+    : isShop
     ? "Confirm only after staff receives payment at the shop."
     : isOnline
       ? "Review the Messenger receipt before confirming. This does not use in-app receipt upload."
@@ -4475,7 +4478,21 @@ function renderMvpPaymentConfirmation(item) {
       ? `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(request.message || "Payment confirmation saved.")}</p>`
       : `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(warning)}</p>`;
 
-  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number <small>(optional for Cash)</small></span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label></div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
+  const referenceHint = isRetail ? "required" : "optional for Cash";
+  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number <small>(${referenceHint})</small></span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label></div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
+}
+
+function renderMvpOrderFulfillment(item) {
+  if (!item?.isStlolabRetail) return renderOpsCustomerTracking(item);
+  if (String(item.fulfillmentState || "").toUpperCase() === "HANDED_OVER") {
+    const kind = item.handoverKind === "CUSTOMER_PICKUP" ? "Customer pickup" : "Courier handover";
+    return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>FULFILLMENT COMPLETED</h3><p class="mvp-inline-note">${escapeHtml(kind)} recorded${item.handedOverAt ? ` / ${escapeHtml(formatOpsTrackingDate(item.handedOverAt))}` : ""}. Stock was deducted once by the canonical inventory authority.</p></section>`;
+  }
+  const method = String(item.fulfillmentMethod || "").toLowerCase();
+  const action = method === "pickup" ? "customer_pickup" : method === "delivery" ? "courier_handover" : "";
+  if (!action) return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>FULFILLMENT BLOCKED</h3><p class="mvp-inline-note">The saved order has no supported fulfillment method.</p></section>`;
+  const label = action === "customer_pickup" ? "CONFIRM CUSTOMER PICKUP" : "CONFIRM COURIER HANDOVER";
+  return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>FINAL HANDOVER</h3><div class="mvp-payment-warning"><strong>STOCK ACTION</strong><span>This records physical handover and atomically deducts reserved stock. Courier handover does not confirm COD payment.</span></div><button class="mvp-primary-action" data-mvp-fulfillment-action="${escapeHtml(item.id)}" data-mvp-fulfillment-status="${action}" type="button">${label}</button></section>`;
 }
 
 function renderOpsProductionStage(item) {
@@ -5299,6 +5316,43 @@ async function requestMvpPaymentConfirmation(inquiryId, body) {
   return payload;
 }
 
+async function requestAdminOrderAction(orderId, body) {
+  const response = await fetch(`/api/orders/${encodeURIComponent(orderId)}/actions`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(adminAuthSession?.access_token ? { Authorization: `Bearer ${adminAuthSession.access_token}` } : {}),
+    },
+    body: JSON.stringify(body),
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok || !payload?.ok) throw new Error(payload?.error || "Order action failed.");
+  return payload;
+}
+
+function findRetailOrderRow(value) {
+  const target = String(value || "").trim().toLowerCase();
+  return nativeOrderRows.find((row) => row?.source_type === "STLOLAB_RETAIL" && [row.id, row.order_reference]
+    .some((candidate) => String(candidate || "").trim().toLowerCase() === target));
+}
+
+function mergeRetailOrderTransition(orderId, transition = {}) {
+  nativeOrderRows = nativeOrderRows.map((row) => String(row.id) !== String(orderId) ? row : {
+    ...row,
+    payment_state: transition.paymentState || row.payment_state,
+    payment_reference: transition.paymentReference || row.payment_reference,
+    paid_at: transition.paidAt || row.paid_at,
+    fulfillment_state: transition.fulfillmentState || row.fulfillment_state,
+    handover_kind: transition.handoverKind || row.handover_kind,
+    handed_over_at: transition.fulfillmentState === "HANDED_OVER" ? new Date().toISOString() : row.handed_over_at,
+    status: transition.fulfillmentState === "HANDED_OVER" ? "released" : transition.paymentState === "PAID" ? "paid" : row.status,
+  });
+}
+
+function orderActionKey(prefix) {
+  return `${prefix}-${crypto.randomUUID()}`;
+}
+
 function mergeNativeOrderPayload(order) {
   const row = normalizeNativeOrderResponseToRow(order);
   if (!row) return;
@@ -5326,6 +5380,23 @@ async function confirmMvpOrderPayment(inquiryId, form) {
   render();
 
   try {
+    const retailOrder = findRetailOrderRow(inquiryId);
+    if (retailOrder) {
+      const reference = String(form.referenceNumber || "").trim();
+      if (!reference) throw new Error("Enter the durable receipt or provider reference.");
+      const payload = await requestAdminOrderAction(retailOrder.id, {
+        action: "confirm_payment",
+        amountReceived,
+        paymentSource: form.paymentSource,
+        paymentReference: reference,
+        internalNote: form.internalNote,
+        idempotencyKey: orderActionKey("admin-retail-payment"),
+      });
+      mergeRetailOrderTransition(retailOrder.id, payload.transition);
+      await loadNativeOrderRows().catch(() => null);
+      mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "success", message: "Canonical payment confirmation saved." } };
+      return;
+    }
     const payload = await requestMvpPaymentConfirmation(inquiryId, {
       ...form,
       amountReceived,
@@ -13479,6 +13550,23 @@ async function approveMvpOrderArtwork(id) {
 }
 
 async function saveMvpFulfillmentFields(id, changes) {
+  const retailOrder = findRetailOrderRow(id);
+  if (retailOrder) {
+    const action = String(changes?.trackingSubstatus || "");
+    if (!["customer_pickup", "courier_handover"].includes(action)) return { ok: false, error: "Fulfillment action is not valid for this Order." };
+    try {
+      const payload = await requestAdminOrderAction(retailOrder.id, {
+        action,
+        idempotencyKey: orderActionKey(`admin-retail-${action}`),
+      });
+      mergeRetailOrderTransition(retailOrder.id, payload.transition);
+      await loadNativeOrderRows().catch(() => null);
+      return { ok: true, transition: payload.transition };
+    } catch (error) {
+      console.error("Unable to save STLOLAB handover.", error);
+      return { ok: false, error: error.message || "Unable to save handover." };
+    }
+  }
   const inquiryId = resolveMvpOrderInquiryId(id);
   const current = opsInquiries.find((item) => item.id === inquiryId);
   if (!current || !hasNativeOrderAuthority(nativeOrderRows, inquiryId)) return { ok: false, error: "Confirmed native Order required." };
