@@ -16,6 +16,10 @@
       "destination": "/api/assignment-users?_publicRoute=stlolab-order-confirmation"
     },
     {
+      "source": "/api/stlolab-order-cancel",
+      "destination": "/api/assignment-users?_publicRoute=stlolab-order-cancel"
+    },
+    {
       "source": "/api/my-tasks",
       "destination": "/api/task-views"
     },

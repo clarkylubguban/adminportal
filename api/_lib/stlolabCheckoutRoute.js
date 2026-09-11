@@ -12,6 +12,19 @@ export default async function stlolabCheckoutHandler(request, response, action =
   try {
     const body = await readJson(request);
     const supabase = createServerSupabaseClient().schema("trry_api");
+    if (action === "cancel") {
+      const orderId = uuid(body.orderId);
+      const token = opaqueToken(body.confirmationToken, 32, 180);
+      const idempotencyKey = opaqueToken(body.idempotencyKey, 16, 120, /^[A-Za-z0-9_-]+$/);
+      if (!orderId || !token || !idempotencyKey) return send(response, 400, { ok: false, code: "INVALID_CANCELLATION" });
+      const { data, error } = await supabase.rpc("cancel_stlolab_order_sw3", {
+        p_order_id: orderId, p_confirmation_token_hash: sha256(token),
+        p_idempotency_key: idempotencyKey, p_reason: text(body.reason, 500) || null,
+      });
+      if (error) return sendKnownError(response, error);
+      if (!data) return send(response, 404, { ok: false, code: "ORDER_NOT_FOUND" });
+      return send(response, 200, { ok: true, order: data });
+    }
     if (action === "confirmation") {
       const orderId = uuid(body.orderId);
       const token = opaqueToken(body.confirmationToken, 32, 180);

@@ -13,6 +13,8 @@ try{
  assert.match(migration,/revoke all on function trry_api\.create_stlolab_order_sw3[\s\S]+from public, anon, authenticated/);
  assert.match(migration,/grant execute on function trry_api\.create_stlolab_order_sw3[\s\S]+to service_role/);
  assert.match(migration,/source_type = 'STLOLAB_RETAIL'/);assert.match(migration,/inventory_policy = 'UNCONFIRMED'/);
+ const reservations=readFileSync('supabase/migrations/20260911113647_stlolab_sw3_inventory_reservations.sql','utf8');
+ assert.match(reservations,/RESERVE_ON_SUBMIT/);assert.match(reservations,/would consume reserved inventory/);assert.doesNotMatch(reservations,/DEDUCT_ON_SUBMIT/);
  console.log('PASS STLOLAB checkout route is fail-closed, gateway-authenticated, and service-role-only');
 }finally{process.env=original;}
 

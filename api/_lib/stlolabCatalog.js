@@ -2,6 +2,11 @@ import { garmentGuides, httpsUrl } from "../../src/shared/stlolabContent.js";
 
 export const STAGING_REF = "fszkypwovpdthqfobxrk";
 const short = (value, max = 2000) => typeof value === "string" ? value.trim().slice(0, max) : "";
+export function availabilityFromBalances(rows, variantIds) {
+  const result = new Map((rows || []).map(item => [item.variant_id, Number(item.quantity_on_hand) - Number(item.reserved_quantity) > 0 ? "available" : "sold-out"]));
+  for (const id of variantIds) if (!result.has(id)) result.set(id, "sold-out");
+  return result;
+}
 export function eligibleProduct(row) {
   return row.product_type === "PHYSICAL" && row.active === true && row.sellable === true && row.readiness_status === "READY_FOR_SALE" && !row.archived_at && row.eligible_channels?.includes("STLOLAB");
 }
@@ -62,12 +67,11 @@ export async function readStlolabCatalog(supabase, { slug = "", offset = 0 } = {
   if (process.env.STLO_CHECKOUT_ENABLED === "true" && process.env.STLO_CHECKOUT_ENV === "staging") {
     const config = await supabase.from("stlolab_checkout_config").select("enabled,inventory_policy,inventory_location_id").eq("environment", "staging").maybeSingle();
     if (config.error) throw new Error("Checkout availability configuration failed");
-    if (config.data?.enabled && config.data.inventory_policy === "VALIDATE_ONLY" && config.data.inventory_location_id) {
+    if (config.data?.enabled && config.data.inventory_policy === "RESERVE_ON_SUBMIT" && config.data.inventory_location_id) {
       const variantIds = (variants.data || []).map(v => v.id);
-      const balances = await supabase.from("inventory_balances").select("variant_id,quantity_on_hand").eq("location_id", config.data.inventory_location_id).in("variant_id", variantIds);
+      const balances = await supabase.from("inventory_balances").select("variant_id,quantity_on_hand,reserved_quantity").eq("location_id", config.data.inventory_location_id).in("variant_id", variantIds);
       if (balances.error) throw new Error("Checkout availability query failed");
-      availabilityByVariant = new Map((balances.data || []).map(item => [item.variant_id, item.quantity_on_hand > 0 ? "available" : "sold-out"]));
-      for (const id of variantIds) if (!availabilityByVariant.has(id)) availabilityByVariant.set(id, "sold-out");
+      availabilityByVariant = availabilityFromBalances(balances.data, variantIds);
     }
   }
   const products = rows.map(r => publicProduct(r, variants.data || [], images.data || [], availabilityByVariant)).filter(Boolean);

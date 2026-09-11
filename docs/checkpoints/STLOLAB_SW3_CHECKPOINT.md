@@ -1,6 +1,6 @@
 # STLOLAB SW3 checkout checkpoint
 
-Status: source implementation and disposable-database verification complete; staging migration, configuration, deployment, and live order acceptance are intentionally pending.
+Status: source implementation and disposable-database verification complete; staging migration, fulfillment configuration, deployment, and live order acceptance are intentionally pending.
 
 ## Source boundary
 
@@ -19,22 +19,31 @@ Status: source implementation and disposable-database verification complete; sta
 - Idempotency is keyed by environment and client request key; replay requires the same payload hash.
 - Confirmation lookup requires both order UUID and a high-entropy token hash.
 - Bag state and checkout draft are session-persisted. Variant edits, quantity changes, removal, totals, pickup/delivery validation, and saved confirmation rendering are implemented.
-- Catalog availability remains `unknown` unless the staging checkout gate and a confirmed inventory location are active. Missing balances become sold out, never available.
+- Owner decision recorded: use the existing `Main Retail Stock` location, reserve atomically on order submit, and release on cancellation.
+- Active reservations are durable and idempotent, and `inventory_balances.reserved_quantity` is changed under the same balance lock as checkout, cancellation, and stock movements.
+- Catalog and Admin sellable quantities are `quantity_on_hand - reserved_quantity`. Missing balances become sold out, never available.
+- The canonical `private.m2b_apply_stock_movement` primitive rejects POS or other negative stock movements that would consume active reservations.
+- Repeated cancellation is idempotent and cannot release a reservation twice. Direct status cancellation is blocked while a reservation remains active.
 
 ## Decisions required before any staging order
 
 1. Which fulfillment methods are offered: pickup, delivery, or both.
 2. Exact fee for each offered method and any delivery-zone rule. No fee has been assumed.
 3. For pickup: the customer-facing label, stable pickup code, and approved pickup instructions/location.
-4. The existing staging inventory location that is eligible to fulfill STLOLAB orders. `Main Retail Stock` is not assumed.
-5. Inventory timing: validate only, reserve, or deduct; when it occurs; reservation expiry; and cancellation, failed-payment, fulfillment, and return reversals. `DEDUCT_ON_SUBMIT` remains blocked in code pending this decision.
+4. Reservation expiry behavior, if any.
+5. Payment-failure handling, fulfillment-time stock deduction, and return movements.
 
-Proposed acceptance-only configuration: create one clearly named staging fulfillment option `SW3_ACCEPTANCE` at PHP 0, select an owner-approved existing staging inventory location containing only documented test stock, and use an owner-approved inventory movement/reversal policy. This is a proposal, not applied configuration.
+Proposed acceptance-only configuration: create one clearly named staging fulfillment option `SW3_ACCEPTANCE` at PHP 0 and place documented test stock in the existing staging `Main Retail Stock` location. Checkout reserves on submit; cancellation releases. This is a proposal, not applied configuration.
 
 ## Disposable fixtures and effects
 
 - Product: `PRD-260911-8DC1A1`, `Glow N Underground`; fixture variant `STLO-S`, size S, Black, PHP 790.
 - Customer: `SW3 Staging Tester`, `09171234567`, `sw3@example.test`.
-- Location: `UNCONFIRMED-TEST`; beginning and ending fixture quantity 3.
+- Location: disposable `MAIN-RETAIL` / `Main Retail Stock`; on-hand quantity is unchanged by reservation/cancellation tests.
 - Fulfillment fixtures: `TEST-PICKUP` and an incomplete delivery payload used only for rejection testing.
+- Last-item races allow exactly one order; duplicate submits create one reservation; POS cannot consume reserved stock; repeated cancellation releases once.
 - Containers are removed after each run. Persistent inventory effects: none.
+
+## POS audit boundary
+
+The accepted repository intentionally excludes the full POS checkout engine. Its tracked stock authority is the shared `private.m2b_apply_stock_movement` primitive and wrappers. That primitive and `v_inventory_sellable` now enforce reservations. A separately deployed POS engine that bypasses this canonical primitive cannot be proven from this worktree and must be identified before staging acceptance.

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { contentFromDraft, stlolabDraftFields } from '../src/shared/stlolabContent.js';
-import { publicProduct, publicHero, readStlolabCatalog, STAGING_REF } from '../api/_lib/stlolabCatalog.js';
+import { availabilityFromBalances, publicProduct, publicHero, readStlolabCatalog, STAGING_REF } from '../api/_lib/stlolabCatalog.js';
 import { createCatalogHandler } from '../api/_lib/stlolabCatalogRoute.js';
 
 const row={id:'product-1',product_code:'PIECE-001',name:'Test piece',description:'Public description',product_type:'PHYSICAL',active:true,sellable:true,readiness_status:'READY_FOR_SALE',archived_at:null,eligible_channels:['STLOLAB'],typed_config:{material:'Cotton',production_notes:'PRIVATE',stlolab:{care:'Cold wash'}}};
@@ -13,6 +13,10 @@ test('only published STLOLAB physical products cross the public boundary',()=>{
   assert.equal(result.variants[0].priceMinor,110055);assert.equal(result.variants[0].availability,'unknown');
   assert.equal(publicProduct(row,[variant],[image],new Map([[variant.id,'available']])).variants[0].availability,'available');
   assert.equal(JSON.stringify(result).includes('PRIVATE'),false);assert.equal('unit_cost' in result.variants[0],false);assert.equal('typed_config' in result,false);
+});
+test('catalog availability subtracts reservations and fails missing balances closed',()=>{
+ const availability=availabilityFromBalances([{variant_id:'open',quantity_on_hand:2,reserved_quantity:1},{variant_id:'held',quantity_on_hand:1,reserved_quantity:1}],['open','held','missing']);
+ assert.equal(availability.get('open'),'available');assert.equal(availability.get('held'),'sold-out');assert.equal(availability.get('missing'),'sold-out');
 });
 test('archived images, bad prices and inactive variants cannot appear',()=>{
   assert.equal(publicProduct(row,[{...variant,selling_price:null}],[image]),null);

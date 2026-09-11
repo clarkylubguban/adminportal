@@ -8,6 +8,7 @@ export default async function handler(request, response) {
   if (route.pathname === "/api/stlolab-catalog" || route.searchParams.get("_publicRoute") === "stlolab-catalog") return catalogHandler(request, response);
   if (route.pathname === "/api/stlolab-checkout" || route.searchParams.get("_publicRoute") === "stlolab-checkout") return checkoutHandler(request, response, "create");
   if (route.pathname === "/api/stlolab-order-confirmation" || route.searchParams.get("_publicRoute") === "stlolab-order-confirmation") return checkoutHandler(request, response, "confirmation");
+  if (route.pathname === "/api/stlolab-order-cancel" || route.searchParams.get("_publicRoute") === "stlolab-order-cancel") return checkoutHandler(request, response, "cancel");
   if (request.method !== "GET") return sendJson(response, 405, { ok: false, error: "method not allowed" });
 
   const token = getBearerToken(request);
