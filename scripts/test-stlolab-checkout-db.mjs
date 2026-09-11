@@ -35,6 +35,7 @@ try {
     '20260902142917_repair_customer_identity_c1_audit_users.sql', '20260903010100_customer_identity_linking_c2_1.sql',
     '20260911110045_stlolab_sw3_checkout_foundation.sql', '20260911113647_stlolab_sw3_inventory_reservations.sql',
     '20260911130719_stlolab_sw3_fulfillment_lifecycle.sql', '20260911134759_stlolab_sw3_admin_order_actions.sql',
+    '20260911142227_stlolab_sw3_preserve_shared_stock_authority.sql',
   ]) {
     sql(readFileSync(`supabase/migrations/${file}`, 'utf8'));
     if (file === '20260820000000_m2b_inventory_foundation.sql' && posM3bMigration) {
