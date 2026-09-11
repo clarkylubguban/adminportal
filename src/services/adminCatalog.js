@@ -1,4 +1,5 @@
-﻿import {
+import { contentFromDraft, stlolabDraftFields } from "../shared/stlolabContent.js";
+import {
   createSupabaseRowWithAuth,
   executeSupabaseRpcWithAuth,
   isSupabaseReady,
@@ -353,6 +354,7 @@ function mapProductToCanonicalRow(product, { create = false } = {}) {
 
 function mapProductToTypedConfig(product) {
   return {
+    stlolab: contentFromDraft(product),
     price_label: emptyToNull(product.priceLabel),
     minimum_quantity: Number(product.minimumQuantity || 1),
     print_methods: product.printMethods ?? [],
@@ -697,6 +699,7 @@ function mapCanonicalRowToProduct(row, category, brand, variants, images) {
     status: mapCanonicalStatusToCatalog(row),
     productType: normalizeProductType(row.product_type),
     subcategory: typedConfig.subcategory ?? "",
+    ...stlolabDraftFields(typedConfig.stlolab),
     material: typedConfig.material ?? "",
     weightGsm: typedConfig.weight_gsm ?? "",
     fitCut: typedConfig.fit_cut ?? "",

@@ -1,3 +1,4 @@
+import { garmentGuides, contentFromDraft, stlolabDraftFields } from "./shared/stlolabContent.js";
 import { createMvpDashboard } from "./mvpDashboard.js";
 import {
   approveTaskDraft,
@@ -8611,6 +8612,7 @@ function renderCatalogProductEditorPage(editorRoute) {
             ${renderCatalogEditorImages(draft, canWrite, isSaving)}
             ${renderCatalogEditorPricing(draft, isSaving || !canWrite)}
             ${renderCatalogEditorProduction(draft, isSaving || !canWrite)}
+            ${renderStlolabContentEditor(draft, isSaving || !canWrite)}
           </div>
           <aside class="catalog-editor-side-column">
             ${renderCatalogEditorStatusCard(draft, isSaving || !canWrite)}
@@ -8717,6 +8719,38 @@ function renderCatalogEditorProduction(draft, disabled = false) {
       </div>
     </article>
   `;
+}
+
+function renderStlolabContentEditor(draft, disabled = false) {
+  const spec = garmentGuides[draft.stloGarment];
+  const sizes = [...new Set(getCatalogDraftVariantRows(draft).map(v => v.size).filter(Boolean))];
+  return `<article class="catalog-editor-card" aria-label="STLOLAB storefront content">
+    <header><h2>STLOLAB storefront</h2><p>Customer-facing details for this exact product. Internal production notes remain private.</p></header>
+    <div class="catalog-editor-field-grid">
+      ${renderCatalogInput("stloCollection", "Collection label", draft.stloCollection, "text", false, disabled)}
+      ${renderCatalogField("stloGarment", "Size guide / garment", `<select id="catalog-stloGarment" data-catalog-field="stloGarment" ${disabled ? "disabled" : ""}><option value="">No guide assigned</option>${Object.entries(garmentGuides).map(([key, value]) => `<option value="${key}" ${draft.stloGarment === key ? "selected" : ""}>${value.title}</option>`).join("")}</select>`)}
+      ${renderCatalogTextarea("stloConstruction", "Construction / finishing", draft.stloConstruction, disabled)}
+      ${renderCatalogTextarea("stloCare", "Care instructions", draft.stloCare, disabled)}
+      ${renderCatalogInput("stloModel", "Model height and size worn", draft.stloModel, "text", false, disabled)}
+      ${renderCatalogInput("stloVideo", "Fit video URL (HTTPS)", draft.stloVideo, "url", false, disabled)}
+    </div>
+    <p>Material, GSM and fit use the existing fields above. Changing garment type clears measurements. Editing a measurement requires confirmation again.</p>
+    ${spec ? `<h3>${spec.title} measurements / cm</h3><p>Revision ${Number(draft.stloContent?.guide?.revision || 0)}. Save a changed chart to create the next revision. Measure the actual garment laid flat.</p>
+      <div style="overflow-x:auto"><table><thead><tr><th>Size</th>${spec.columns.map(c => `<th>${escapeHtml(c)}</th>`).join("")}</tr></thead><tbody>${sizes.map(size => `<tr><th>${escapeHtml(size)}</th>${spec.columns.map((column, i) => `<td><input type="number" min="0.1" max="300" step="0.1" style="width:90px" aria-label="${escapeHtml(size + ' ' + column)}" data-stlo-measure="${escapeHtml(size)}" data-stlo-column="${i}" value="${escapeHtml(draft.stloMeasurements?.[size]?.[i] ?? '')}" ${disabled ? "disabled" : ""}></td>`).join("")}</tr>`).join("")}</tbody></table></div>
+      ${!sizes.length ? "<p>Add product variants first to create measurement rows.</p>" : ""}
+      ${renderCatalogTextarea("stloGuideNotes", "How to measure (one instruction per line)", draft.stloGuideNotes, disabled)}
+      <label><input type="checkbox" data-catalog-field="stloGuideVerified" ${draft.stloGuideVerified ? "checked" : ""} ${disabled ? "disabled" : ""}> I checked every measurement against this garment.</label>` : ""}
+    <details><summary>Homepage hero for this featured product</summary><p>Mark the product Featured to use this campaign. The button opens this product; text and image crop are edited separately. Use one featured hero per release.</p><div class="catalog-editor-field-grid">
+      ${renderCatalogInput("stloHeroImage", "Hero image URL (HTTPS)", draft.stloHeroImage, "url", false, disabled)}
+      ${renderCatalogInput("stloHeroAlt", "Hero image description", draft.stloHeroAlt, "text", false, disabled)}
+      ${renderCatalogInput("stloHeroEyebrow", "Hero collection label", draft.stloHeroEyebrow, "text", false, disabled)}
+      ${renderCatalogTextarea("stloHeroTitle", "Hero headline (one line per row)", draft.stloHeroTitle, disabled)}
+      ${renderCatalogInput("stloHeroSubtitle", "Hero supporting text", draft.stloHeroSubtitle, "text", false, disabled)}
+      ${renderCatalogInput("stloHeroButton", "Hero button label", draft.stloHeroButton, "text", false, disabled)}
+      ${renderCatalogInput("stloHeroMobile", "Phone crop (horizontal% vertical%)", draft.stloHeroMobile || "50% 50%", "text", false, disabled)}
+      ${renderCatalogInput("stloHeroDesktop", "Desktop crop (horizontal% vertical%)", draft.stloHeroDesktop || "50% 50%", "text", false, disabled)}
+    </div></details>
+  </article>`;
 }
 
 function renderCatalogEditorVariants(draft, disabled = false) {
@@ -9369,6 +9403,7 @@ function getCatalogEditorReadiness(draft) {
 }
 
 function validateCatalogProductEditor(draft, product) {
+  try { contentFromDraft(product); } catch (error) { return error.message; }
   const baseError = validateCatalogProduct(product);
   if (baseError) return baseError;
   if (!draft.brandId) return "Brand is required.";
@@ -9634,6 +9669,7 @@ function createCatalogDraft(product = null) {
   }
 
   return {
+    ...stlolabDraftFields(),
     imageDraftId: createDraftImageId(),
     catalogKey: activeCatalogKey,
     catalogKeys: [activeCatalogKey],
@@ -12956,7 +12992,23 @@ function bindEvents() {
     const eventName = field.type === "checkbox" ? "change" : "input";
     field.addEventListener(eventName, (event) => {
       updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
+      if (field.dataset.catalogField === "stloGarment") {
+        catalogDraft = { ...catalogDraft, stloMeasurements: {}, stloGuideVerified: false };
+        render();
+      }
       if (field.dataset.catalogField === "productType") render();
+    });
+  });
+
+  document.querySelectorAll("[data-stlo-measure]").forEach((field) => {
+    field.addEventListener("input", () => {
+      if (!catalogDraft || !canWriteCatalogProducts()) return;
+      const size = field.dataset.stloMeasure;
+      const values = [...(catalogDraft.stloMeasurements?.[size] || [])];
+      values[Number(field.dataset.stloColumn)] = field.value;
+      catalogDraft = { ...catalogDraft, stloGuideVerified: false, stloMeasurements: { ...catalogDraft.stloMeasurements, [size]: values } };
+      const verified = document.querySelector('[data-catalog-field="stloGuideVerified"]');
+      if (verified) verified.checked = false;
     });
   });
 
