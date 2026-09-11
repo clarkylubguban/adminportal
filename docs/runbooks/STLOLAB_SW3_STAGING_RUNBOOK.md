@@ -205,3 +205,41 @@ The 72-hour deadline does not release stock by itself. Checkout subtracts `reser
 - Authorization to apply the listed migrations/configuration and nominate staging test stock.
 - Authorization to install the proposed expiry cron job.
 - Refund, return, and payment-failure policies remain undefined; their transitions stay unavailable.
+
+## Next-session Preview handoff
+
+POS Preview deployment is not yet authorized. After explicit owner approval, run the deployment from `C:\tmp\trry-pos-sw3-reconcile` at exact commit `382fc386331b59c1078581297fa0e219073a4979`. Bind the command to the existing owner and project identifiers so an absent local `.vercel` directory cannot select or create another project:
+
+```powershell
+$env:VERCEL_ORG_ID='team_lLNAY28RJHud9QjW9vcIh7WO'
+$env:VERCEL_PROJECT_ID='prj_OXFRieJe4VlBWFClY38K06QYMn1Z'
+npx.cmd vercel deploy --yes --scope clarkylubguban1
+```
+
+Do not add `--prod`, promote the result, or assign the production alias. Configure only the Vercel **Preview** scope. Required configuration names are listed here with values deliberately omitted from this handoff:
+
+```text
+VITE_APP_ENV
+VITE_DATA_MODE
+VITE_SUPABASE_ENABLED
+VITE_SUPABASE_URL
+VITE_SUPABASE_PUBLISHABLE_KEY
+VITE_ALLOW_REMOTE_SUPABASE_WRITES
+VITE_POS_REGISTER_ID
+VITE_POS_INVENTORY_LOCATION_ID
+```
+
+The approved non-secret project, register, and stock-source identities remain in the preceding sections. No service-role key, database password, Vercel token, or Admin/storefront gateway secret belongs in POS browser configuration.
+
+Perform these read-only checks immediately after deployment and before any staging order or stock action:
+
+1. Run `npx.cmd vercel inspect <preview-url> --scope clarkylubguban1` and verify project `trry-pos`, READY state, Preview target, and source commit `382fc386331b59c1078581297fa0e219073a4979`.
+2. Confirm the Preview has no `trry-pos.vercel.app` alias and that owner-private deployment protection remains enabled. Reinspect the production alias read-only and confirm it still resolves to deployment `dpl_DTe5j92W5MT1hbBY3xq47wmy4aER` from deployed commit `bcbe14837915defb101d248f939bba171bab526d`.
+3. Request the Preview URL without an authenticated owner session and confirm protection denies or redirects access; do not use a temporary `_vercel_share` URL as permanent configuration.
+4. In an authenticated owner browser session, verify the staging banner, canonical catalog, operator access, customer capture, and sellable quantity display. Do not submit checkout during this read-only pass.
+5. Confirm the browser bundle contains no service-role credential, database password, Vercel token, or Admin/storefront gateway secret.
+6. Recheck the staging migration ledger and final definitions of `private.m2b_apply_stock_movement(...)`, `private.m2b_record_sale_stock_movement(...)`, and `trry_api.handover_stlolab_order_sw3(...)` without applying migrations or invoking write paths.
+
+The remaining Auth-dependent browser check is `npm.cmd run phase8a:verify-browser-modes`. Its `supabase_read` branch needs reachable staging-compatible Supabase Auth and the expected seeded QA identity; the prior local run stopped at `supabase_read auth sign-in failed`. Run it only when that Auth fixture is deliberately available, and keep remote writes disabled during the check.
+
+Tomorrow's first task is to obtain and record explicit owner approval for the POS Preview, set the eight variables in Preview scope only, deploy the exact reconciled commit with the command above, and complete the read-only checks before any migration, order, or stock write. Subsequent staging acceptance remains blocked on migration/configuration authorization, Cron authorization, controlled test-stock authorization, positive local-delivery coverage or manual review, real handler-to-database lifecycle and POS contention evidence, and decisions for refund, return, and payment-failure transitions.

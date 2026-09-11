@@ -78,3 +78,15 @@ Status: owner-approved lifecycle rules and authenticated Admin Orders actions ar
 5. Approve and Preview-deploy reconciled POS commit `382fc386331b59c1078581297fa0e219073a4979` from `C:\tmp\trry-pos-sw3-reconcile`; verify the final staging definition of `private.m2b_apply_stock_movement`, then run real shared-stock contention. The local reconciliation preserves deployed authority/customer/runtime guards and excludes the divergent candidate bundle.
 6. Run a real staging order through Orders payment confirmation, reservation, pickup/courier handover, expiry, and confirmation access checks.
 7. Decide paid cancellation/refund and returns behavior before enabling those transitions. Neither is implemented or inferred.
+
+## End-of-session handoff (2026-09-11)
+
+Source identities were reverified read-only before this documentation update. All three worktrees were clean, and no unexpected changes were present:
+
+- Admin: `C:\tmp\trry-admin-stlolab-sw3-checkout`, branch `codex/stlolab-sw3-checkout`, remote `https://github.com/clarkylubguban/adminportal.git`, verified HEAD `9e40498926a46dbc588fbef7ff59dc499e6dfa8a` before this documentation-only commit.
+- Storefront: `C:\tmp\stlolab-sw3-checkout`, branch `codex/stlolab-sw3-checkout`, remote `https://git.chatgpt-team.site/34e4df0b-d845-4167-af7b-7163706dca37/appgprj_6a8978ad58bc8191bc74e2fba33f4528.git`, HEAD `42997da07639aceb04ca487f788c9ccd02013df3`.
+- POS: `C:\tmp\trry-pos-sw3-reconcile`, branch `codex/pos-sw3-reconcile`, remote `https://github.com/clarkylubguban/trry-pos.git`, HEAD `382fc386331b59c1078581297fa0e219073a4979`.
+
+Completed local verification remains as recorded above; already-passed suites were not rerun for this checkpoint. The one unresolved browser check is POS `npm.cmd run phase8a:verify-browser-modes`: its `supabase_read` case requires a reachable Supabase Auth service with the expected seeded QA identity, and the prior run stopped at `supabase_read auth sign-in failed`. This is an Auth-dependent environment acceptance item, not evidence that the compiled POS flow failed.
+
+POS Preview deployment approval remains pending. No push, deployment, merge, migration, Cron activation, order creation, stock change, or remote configuration change occurred during this checkpoint. V6, working size selection, and disabled live ordering remain preserved.
