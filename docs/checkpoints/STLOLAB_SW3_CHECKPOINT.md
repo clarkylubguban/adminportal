@@ -90,3 +90,20 @@ Source identities were reverified read-only before this documentation update. Al
 Completed local verification remains as recorded above; already-passed suites were not rerun for this checkpoint. The one unresolved browser check is POS `npm.cmd run phase8a:verify-browser-modes`: its `supabase_read` case requires a reachable Supabase Auth service with the expected seeded QA identity, and the prior run stopped at `supabase_read auth sign-in failed`. This is an Auth-dependent environment acceptance item, not evidence that the compiled POS flow failed.
 
 POS Preview deployment approval remains pending. No push, deployment, merge, migration, Cron activation, order creation, stock change, or remote configuration change occurred during this checkpoint. V6, working size selection, and disabled live ordering remain preserved.
+
+## POS Preview outcome (2026-09-12)
+
+Owner approval was limited to the existing POS Preview and read-only verification. Source preflight reconfirmed clean POS HEAD `382fc386331b59c1078581297fa0e219073a4979` on `codex/pos-sw3-reconcile` and clean Admin checkpoint HEAD `fbf580509a111c1d89ee87d81d00593956629e9b` before this documentation-only update.
+
+- Vercel project: existing `trry-pos` / `prj_OXFRieJe4VlBWFClY38K06QYMn1Z` under `team_lLNAY28RJHud9QjW9vcIh7WO`.
+- Preview deployment: `dpl_H1d9bJYPtWxgbrhADzer7tJfpiKu` at `https://trry-7vvu5yyo1-clarkylubguban1.vercel.app`.
+- Vercel metadata reports source `cli`, branch `codex/pos-sw3-reconcile`, commit `382fc386331b59c1078581297fa0e219073a4979`, state `READY`, target Preview (`null`/non-production), and no aliases.
+- The production alias `trry-pos.vercel.app` remains on READY deployment `dpl_DTe5j92W5MT1hbBY3xq47wmy4aER`, commit `bcbe14837915defb101d248f939bba171bab526d`; it was not promoted or changed.
+- Branch-scoped Preview variables were rejected because the branch is intentionally not pushed to the connected Git repository. Vercel created none. The eight approved values were supplied as build variables to this deployment only. Authenticated `vercel curl` confirmed staging mode, Supabase project `fszkypwovpdthqfobxrk`, remote-write approval, register `0f65cfbc-e85d-4324-ad89-c0c41c8d2f7d`, and location `9cc81235-0af3-4ad6-aa95-35af81178312`. No service-role credential or database password appeared in the runtime configuration.
+- Unauthenticated requests receive Vercel SSO redirects, so deployment protection remains active. A temporary `_vercel_share` URL was used only for the browser check and was not stored in application configuration.
+- Protected browser smoke reached the `TRRY POS` / `Counter sign in` shell with `supabase` + `staging` runtime values and the approved register/location. The Phase 8A login attempt returned `Invalid login credentials` and created no session.
+- Read-only staging SQL confirms `phase8a-read@example.test` is absent and legacy `public.staff_profiles` is absent. The current Phase 8A browser-mode script therefore cannot complete against staging without an unauthorized Auth fixture/schema change.
+- Read-only canonical data confirms Glow N Underground `PRD-260911-8DC1A1`, Black S/M/L/XL, PHP 790, active/sellable/`READY_FOR_SALE`. Main Retail Stock has no balance rows for those variants, so inventory quantity display cannot show acceptance stock yet.
+- Staging currently has zero active customer rows and does not contain `trry_api.resolve_pos_walk_in_customer_identity_c2_4b(text,text)`. Customer lookup cannot be exercised, and using the UI's find-or-create path would violate this verification's no-customer-write constraint.
+
+Remaining blockers after deployment: provide an existing POS-authorized staging QA login for authenticated UI verification; obtain separate owner authorization before applying the C2.4B/SW3 migration sequence; authorize controlled Main Retail Stock test receipts before quantity/stock-contention checks; and retain the existing local-delivery, Cron, refund, return, and payment-failure blockers. No migration, Cron job, order, sale, receipt, customer, or stock movement was created, and STLOLAB ordering remains disabled.
