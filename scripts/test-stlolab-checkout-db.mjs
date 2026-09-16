@@ -9,14 +9,18 @@ const ownerId = '96000000-0000-4000-8000-000000000001';
 const posUserId = '96000000-0000-4000-8000-000000000002';
 const posM3bMigration = process.env.TRRY_POS_M3B_MIGRATION || '';
 const posCompatibilityMigrations = JSON.parse(process.env.TRRY_POS_COMPAT_MIGRATIONS_JSON || '[]');
+const checkoutPermissionMigration = '20260916082231_stlolab_sw3_checkout_service_role_permissions.sql';
+const psqlBridge = process.env.TRRY_VERIFY_PSQL_BRIDGE || '';
 let started = false;
 
 try {
-  run(['run', '--rm', '-d', '--name', name, '-e', 'POSTGRES_PASSWORD=postgres', '-e', 'POSTGRES_DB=trry_verify', image]);
-  started = true;
+  if (!psqlBridge) {
+    run(['run', '--rm', '-d', '--name', name, '-e', 'POSTGRES_PASSWORD=postgres', '-e', 'POSTGRES_DB=trry_verify', image]);
+    started = true;
+  }
   let ready = false;
   for (let i = 0; i < 120; i++) {
-    if (run(['exec', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-tAc', 'select 1'], { allow: true }).status === 0) { ready = true; break; }
+    if (psqlRun('select 1', { allow: true }).status === 0) { ready = true; break; }
     Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 500);
   }
   if (!ready) throw new Error('Disposable Postgres did not become ready.');
@@ -27,7 +31,9 @@ try {
     do $$begin create role service_role bypassrls;exception when duplicate_object then null;end$$;
     create table auth.users(id uuid primary key,email text);
     create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint);
-    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;`);
+    create function auth.uid() returns uuid language sql stable as $$select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid$$;
+    grant usage on schema auth to anon, authenticated, service_role;
+    grant execute on function auth.uid() to public;`);
   for (const file of [
     '202607110001_create_catalog_products.sql', '202607220001_harden_admin_auth_profiles.sql',
     '202608080001_phase3d_native_orders.sql', '202608110001_add_master_catalog_m0_foundation.sql',
@@ -46,6 +52,9 @@ try {
       }
     }
   }
+  sql(`grant all privileges on all tables in schema public to service_role;
+    grant all privileges on all sequences in schema public to service_role;
+    grant execute on all functions in schema public to service_role;`);
 
   sql(`insert into public.product_categories(name,code) values('Tees','TEE');
     insert into public.products(category_id,brand_id,master_product_id,product_code,name,active,product_type,readiness_status,sellable,eligible_channels)
@@ -82,7 +91,18 @@ try {
   const payment = (orderId, reference, key, amount = 790, method = 'gcash') =>
     `select trry_api.confirm_stlolab_order_payment_sw3('${orderId}',${amount},'${method}','${reference}',null,'${key}') as result`;
 
-  fails(call(), /not enabled/);
+  fails(service(call()), /permission denied for schema private/);
+  sql(readFileSync(`supabase/migrations/${checkoutPermissionMigration}`, 'utf8'));
+  assert.equal(one(`select has_schema_privilege('service_role','private','usage') as allowed`).allowed, true);
+  assert.equal(one(`select has_function_privilege('service_role','private.stlolab_place_key(text)','execute') as allowed`).allowed, true);
+  assert.equal(one(`select has_function_privilege('service_role','private.stlolab_reserve_order_item_sw3()','execute') as allowed`).allowed, false);
+  for (const role of ['anon', 'authenticated']) {
+    assert.equal(one(`select has_schema_privilege('${role}','private','usage') as allowed`).allowed, false);
+    assert.equal(one(`select has_function_privilege('${role}','private.stlolab_place_key(text)','execute') as allowed`).allowed, false);
+    fails(`set role ${role};select private.stlolab_place_key('Poblacion')`, /permission denied/);
+    fails(`set role ${role};${call()}`, /permission denied/);
+  }
+  fails(service(call()), /not enabled/);
   sql(`insert into public.stlolab_checkout_config(environment,enabled,inventory_policy,inventory_location_id)
       values('staging',true,'RESERVE_ON_SUBMIT','${location}');
     insert into public.stlolab_fulfillment_options(environment,option_code,method,enabled,fee_amount,requires_address,pickup_code,customer_label,coverage_mode,coverage_rules,customer_instructions)
@@ -91,8 +111,8 @@ try {
       ('staging','LOCAL_DELIVERY','delivery',true,60,true,null,'Local delivery','EXPLICIT_BARANGAYS',jsonb_build_object('allowedBarangays',jsonb_build_array('Poblacion'),'excludedBarangays',jsonb_build_array('Buru-un','Linamon','Dalipuga','Pugaan','Suarez','Santa Elena')),null),
       ('staging','NATIONWIDE_DELIVERY','delivery',true,120,true,null,'Nationwide delivery','NATIONWIDE','{}',null);`);
 
-  const created = one(call()).result;
-  const replay = one(call()).result;
+  const created = oneAsService(call()).result;
+  const replay = oneAsService(call()).result;
   assert.equal(created.orderId, replay.orderId);
   assert.equal(created.orderReference, replay.orderReference);
   assert.equal(created.totalMinor, 158000);
@@ -118,23 +138,23 @@ try {
     fails(pos(`select trry_api.receive_inventory('${location}','${variant}',1,'SW3-E7-DENIED-1','SW3-E7-DENIED','unauthorized compatibility receiving')`), /Inventory receiving permission|Owner\/Admin identity/);
   }
 
-  await Promise.all([asyncSql(call('CONCURRENTKEY123', 79000, 1, 'e'.repeat(64))), asyncSql(call('CONCURRENTKEY123', 79000, 1, 'e'.repeat(64)))]);
+  await Promise.all([asyncSql(service(call('CONCURRENTKEY123', 79000, 1, 'e'.repeat(64)))), asyncSql(service(call('CONCURRENTKEY123', 79000, 1, 'e'.repeat(64))))]);
   assert.equal(one(`select count(*)::int as count from public.stlolab_checkout_requests where idempotency_key='CONCURRENTKEY123'`).count, 1);
   const lastRace = await Promise.allSettled([
-    asyncSql(call('LASTITEMORDER001', 79000, 1, '1'.repeat(64), pickup, lastVariant)),
-    asyncSql(call('LASTITEMORDER002', 79000, 1, '2'.repeat(64), pickup, lastVariant)),
+    asyncSql(service(call('LASTITEMORDER001', 79000, 1, '1'.repeat(64), pickup, lastVariant))),
+    asyncSql(service(call('LASTITEMORDER002', 79000, 1, '2'.repeat(64), pickup, lastVariant))),
   ]);
   assert.equal(lastRace.filter(result => result.status === 'fulfilled').length, 1);
   assert.equal(lastRace.filter(result => result.status === 'rejected').length, 1);
   assert.match(lastRace.find(result => result.status === 'rejected').reason.message, /variant is unavailable/);
-  fails(call('ABCDEFGHIJKLMNOP', 79000, 1), /different checkout data/);
-  fails(call('QRSTUVWXYZABCDEF', 1, 1), /canonical price/);
-  fails(call('ZYXWVUTSRQPONMLK', 79000, 31), /unavailable/);
-  fails(call('DELIVERYTESTKEY1', 79000, 1, 'c'.repeat(64), `jsonb_build_object('method','delivery','optionCode','LOCAL_DELIVERY','address',jsonb_build_object())`), /including barangay/);
-  fails(call('LOCALBANNEDKEY01', 79000, 1, 'c'.repeat(64), delivery('LOCAL_DELIVERY', 'Buru-un')), /excluded from local/);
-  fails(call('LOCALUNKNOWNKEY1', 79000, 1, 'c'.repeat(64), delivery('LOCAL_DELIVERY', 'Unknown')), /not in configured local/);
-  const local = one(call('LOCALALLOWEDKEY1', 79000, 1, 'd'.repeat(64), delivery('LOCAL_DELIVERY', 'Poblacion'))).result;
-  const nationwide = one(call('NATIONWIDEKEY001', 79000, 1, 'f'.repeat(64), delivery('NATIONWIDE_DELIVERY', 'Unknown'))).result;
+  fails(service(call('ABCDEFGHIJKLMNOP', 79000, 1)), /different checkout data/);
+  fails(service(call('QRSTUVWXYZABCDEF', 1, 1)), /canonical price/);
+  fails(service(call('ZYXWVUTSRQPONMLK', 79000, 31)), /unavailable/);
+  fails(service(call('DELIVERYTESTKEY1', 79000, 1, 'c'.repeat(64), `jsonb_build_object('method','delivery','optionCode','LOCAL_DELIVERY','address',jsonb_build_object())`)), /including barangay/);
+  fails(service(call('LOCALBANNEDKEY01', 79000, 1, 'c'.repeat(64), delivery('LOCAL_DELIVERY', 'Buru-un'))), /excluded from local/);
+  fails(service(call('LOCALUNKNOWNKEY1', 79000, 1, 'c'.repeat(64), delivery('LOCAL_DELIVERY', 'Unknown'))), /not in configured local/);
+  const local = oneAsService(call('LOCALALLOWEDKEY1', 79000, 1, 'd'.repeat(64), delivery('LOCAL_DELIVERY', 'Poblacion'))).result;
+  const nationwide = oneAsService(call('NATIONWIDEKEY001', 79000, 1, 'f'.repeat(64), delivery('NATIONWIDE_DELIVERY', 'Unknown'))).result;
   assert.equal(local.fulfillmentMinor, 6000);
   assert.equal(nationwide.fulfillmentMinor, 12000);
   assert.equal(one(`select trry_api.get_stlolab_order_confirmation_sw3('${created.orderId}','${'c'.repeat(64)}') as result`).result, null);
@@ -157,7 +177,7 @@ try {
   sql((posM3bMigration ? pos : owner)(`select private.m2b_apply_stock_movement('${location}','${lastVariant}','SALE',-1,'SALE','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','POS-AFTER-RELEASE','POS-AFTER-RELEASE-1',null)`));
   assert.deepEqual(balance(lastVariant), { quantity_on_hand: 0, reserved_quantity: 0 });
 
-  const expiryOrder = one(call('EXPIRYORDERKEY01', 79000, 1, '3'.repeat(64))).result.orderId;
+  const expiryOrder = oneAsService(call('EXPIRYORDERKEY01', 79000, 1, '3'.repeat(64))).result.orderId;
   makeExpired(expiryOrder);
   const beforeExpiry = balance(variant).quantity_on_hand;
   assert.equal(one(`select trry_api.expire_stlolab_reservations_sw3('2026-09-04T00:00:00Z',100) as result`).result.expiredCount, 1);
@@ -166,7 +186,7 @@ try {
   assert.equal(balance(variant).quantity_on_hand, beforeExpiry);
   assert.equal(one(`select count(*)::int as count from public.inventory_reservations where order_id='${expiryOrder}' and status='EXPIRED' and release_reason='UNPAID_72_HOUR_EXPIRY'`).count, 1);
 
-  const pickupOrder = one(call('PICKUPHANDOVER01', 79000, 1, '4'.repeat(64))).result.orderId;
+  const pickupOrder = oneAsService(call('PICKUPHANDOVER01', 79000, 1, '4'.repeat(64))).result.orderId;
   const pickupBefore = balance(variant).quantity_on_hand;
   sql(staff(`select trry_api.handover_stlolab_order_sw3('${pickupOrder}','CUSTOMER_PICKUP','PICKUPHANDOVERKEY1')`));
   sql(staff(`select trry_api.handover_stlolab_order_sw3('${pickupOrder}','CUSTOMER_PICKUP','PICKUPHANDOVERKEY2')`));
@@ -176,11 +196,11 @@ try {
   assert.equal(one(`select count(*)::int as count from public.stock_movements where source_id='${pickupOrder}'`).count, 1);
   fails(`select trry_api.cancel_stlolab_order_sw3('${pickupOrder}','${'4'.repeat(64)}','CANCELAFTERPICKUP',null)`, /after payment, expiry, or handover/);
 
-  const courierOrder = one(call('COURIERHANDOVER1', 79000, 1, '5'.repeat(64), delivery('NATIONWIDE_DELIVERY', 'Unknown'))).result.orderId;
+  const courierOrder = oneAsService(call('COURIERHANDOVER1', 79000, 1, '5'.repeat(64), delivery('NATIONWIDE_DELIVERY', 'Unknown'))).result.orderId;
   sql(staff(`select trry_api.handover_stlolab_order_sw3('${courierOrder}','COURIER_HANDOVER','COURIERHANDOVERKEY')`));
   assert.equal(orderState(courierOrder).payment_state, 'UNPAID');
 
-  const paidOrder = one(call('PAIDORDERTEST001', 79000, 1, '6'.repeat(64))).result.orderId;
+  const paidOrder = oneAsService(call('PAIDORDERTEST001', 79000, 1, '6'.repeat(64))).result.orderId;
   sql(staff(payment(paidOrder, 'PAY-TEST-001', 'PAYMENTIDEMPOTENT1')));
   sql(staff(payment(paidOrder, 'PAY-TEST-001', 'PAYMENTIDEMPOTENT1')));
   fails(staff(payment(paidOrder, 'PAY-TEST-001', 'PAYMENTIDEMPOTENT2')), /already confirmed/);
@@ -203,14 +223,14 @@ try {
   fails(`set role anon;select trry_api.handover_stlolab_order_sw3('${pickupOrder}','CUSTOMER_PICKUP','UNAUTHORIZEDTEST1')`, /permission denied/);
   fails(`set role authenticated;set request.jwt.claim.sub='97000000-0000-4000-8000-000000000001';select trry_api.handover_stlolab_order_sw3('${paidOrder}','CUSTOMER_PICKUP','UNAUTHORIZEDTEST2')`, /Owner\/Admin identity is required/);
   fails(`set role authenticated;set request.jwt.claim.sub='${ownerId}';select trry_api.mark_stlolab_order_paid_sw3('${paidOrder}','BROWSER-CLAIM','DIRECTBROWSERCLAIM')`, /permission denied/);
-  const tamperedPaymentOrder = one(call('TAMPEREDPAYMENT01', 79000, 1, 'd'.repeat(64))).result.orderId;
+  const tamperedPaymentOrder = oneAsService(call('TAMPEREDPAYMENT01', 79000, 1, 'd'.repeat(64))).result.orderId;
   fails(staff(payment(tamperedPaymentOrder, 'PAY-TAMPERED', 'TAMPEREDPAYMENTKEY', 1)), /canonical order amount/);
   assert.equal(one(`select count(*)::int as count from public.order_payment_events where order_id='${tamperedPaymentOrder}'`).count, 0);
   fails(`update public.stlolab_checkout_config set inventory_policy='DEDUCT_ON_SUBMIT' where environment='staging'`, /inventory_policy/);
   console.log('PASS STLOLAB SW3 reservation expiry, payment/cancellation/handover races, atomic handover deduction, delivery coverage, POS exclusion, M4/E7 compatibility, and idempotency');
 
   async function raceExpiryPayment() {
-    const id = one(call('RACEEXPIRYPAY001', 79000, 1, '7'.repeat(64))).result.orderId;
+    const id = oneAsService(call('RACEEXPIRYPAY001', 79000, 1, '7'.repeat(64))).result.orderId;
     makeExpired(id);
     await Promise.allSettled([
       asyncSql(`select trry_api.expire_stlolab_reservations_sw3('2026-09-04T00:00:00Z',100)`),
@@ -223,7 +243,7 @@ try {
 
   async function raceExpiryCancellation() {
     const token = '8'.repeat(64);
-    const id = one(call('RACEEXPIRYCANCEL01', 79000, 1, token)).result.orderId;
+    const id = oneAsService(call('RACEEXPIRYCANCEL01', 79000, 1, token)).result.orderId;
     makeExpired(id);
     await Promise.allSettled([
       asyncSql(`select trry_api.expire_stlolab_reservations_sw3('2026-09-04T00:00:00Z',100)`),
@@ -234,7 +254,7 @@ try {
   }
 
   async function raceExpiryHandover() {
-    const id = one(call('RACEEXPIRYHAND01', 79000, 1, '9'.repeat(64))).result.orderId;
+    const id = oneAsService(call('RACEEXPIRYHAND01', 79000, 1, '9'.repeat(64))).result.orderId;
     makeExpired(id);
     const before = balance(variant).quantity_on_hand;
     await Promise.allSettled([
@@ -248,7 +268,7 @@ try {
   }
 
   async function racePaymentHandover() {
-    const id = one(call('RACEPAYHANDOVER1', 79000, 1, 'a'.repeat(64))).result.orderId;
+    const id = oneAsService(call('RACEPAYHANDOVER1', 79000, 1, 'a'.repeat(64))).result.orderId;
     const before = balance(variant).quantity_on_hand;
     await Promise.all([
       asyncSql(staff(payment(id, 'PAY-RACE-HANDOVER', 'RACEPAYHANDOVER1'))),
@@ -261,7 +281,7 @@ try {
 
   async function raceCancellationHandover() {
     const token = '0'.repeat(64);
-    const id = one(call('RACECANCELHAND01', 79000, 1, token)).result.orderId;
+    const id = oneAsService(call('RACECANCELHAND01', 79000, 1, token)).result.orderId;
     const before = balance(variant).quantity_on_hand;
     await Promise.allSettled([
       asyncSql(`select trry_api.cancel_stlolab_order_sw3('${id}','${token}','RACECANCELHAND01',null)`),
@@ -290,8 +310,11 @@ try {
 function owner(source) { return `set request.jwt.claim.sub='${ownerId}';${source};`; }
 function pos(source) { return `set request.jwt.claim.sub='${posUserId}';${source};`; }
 function staff(source) { return `set role authenticated;set request.jwt.claim.sub='${ownerId}';${source};`; }
-function sql(source) { const r = run(['exec', '-i', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-X', '-v', 'ON_ERROR_STOP=1', '-q'], { input: source, allow: true }); if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim()); return r.stdout; }
-function one(query) { const r = run(['exec', '-i', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-X', '-v', 'ON_ERROR_STOP=1', '-t', '-A', '-q'], { input: `select row_to_json(q)::text from (${query.replace(/;+$/, '')})q;`, allow: true }); if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim()); return JSON.parse(r.stdout.trim()); }
-function fails(query, pattern) { const r = run(['exec', '-i', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-X', '-v', 'ON_ERROR_STOP=1', '-q'], { input: query, allow: true }); assert.notEqual(r.status, 0); assert.match(r.stderr || r.stdout, pattern); }
-function asyncSql(source) { return new Promise((resolve, reject) => { const child = spawn('docker', ['exec', '-i', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-X', '-v', 'ON_ERROR_STOP=1', '-q'], { stdio: ['pipe', 'pipe', 'pipe'] }); let out = '', err = ''; child.stdout.on('data', chunk => out += chunk); child.stderr.on('data', chunk => err += chunk); child.on('close', code => code === 0 ? resolve(out) : reject(new Error((err || out).trim()))); child.stdin.end(source); }); }
+function service(source) { return `set role service_role;${source};`; }
+function sql(source) { const r = psqlRun(source, { allow: true }); if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim()); return r.stdout; }
+function one(query) { const r = psqlRun(`select row_to_json(q)::text from (${query.replace(/;+$/, '')})q;`, { allow: true }); if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim()); return JSON.parse(r.stdout.trim()); }
+function oneAsService(query) { const r = psqlRun(`set role service_role;select row_to_json(q)::text from (${query.replace(/;+$/, '')})q;`, { allow: true }); if (r.status !== 0) throw new Error((r.stderr || r.stdout).trim()); return JSON.parse(r.stdout.trim()); }
+function fails(query, pattern) { const r = psqlRun(query, { allow: true }); assert.notEqual(r.status, 0); assert.match(r.stderr || r.stdout, pattern); }
+function asyncSql(source) { return new Promise((resolve, reject) => { const command = psqlBridge ? process.execPath : 'docker'; const args = psqlBridge ? [psqlBridge] : ['exec', '-i', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-X', '-v', 'ON_ERROR_STOP=1', '-q']; const child = spawn(command, args, { stdio: ['pipe', 'pipe', 'pipe'] }); let out = '', err = ''; child.stdout.on('data', chunk => out += chunk); child.stderr.on('data', chunk => err += chunk); child.on('close', code => code === 0 ? resolve(out) : reject(new Error((err || out).trim()))); child.stdin.end(source); }); }
+function psqlRun(source, { allow = false } = {}) { return psqlBridge ? spawnSync(process.execPath, [psqlBridge], { encoding: 'utf8', input: source, maxBuffer: 20 * 1024 * 1024 }) : run(['exec', '-i', name, 'psql', '-U', 'postgres', '-d', 'trry_verify', '-X', '-v', 'ON_ERROR_STOP=1', '-q'], { input: source, allow }); }
 function run(args, { input = null, allow = false } = {}) { const r = spawnSync('docker', args, { encoding: 'utf8', input, maxBuffer: 20 * 1024 * 1024 }); if (r.status !== 0 && !allow) throw new Error((r.stderr || r.stdout).trim()); return r; }

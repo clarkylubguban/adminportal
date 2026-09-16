@@ -138,3 +138,31 @@ Owner approval covered deployment of the tested loader correction and read-only 
 - A staging-only QA variant was placed in the browser-local cart to reach customer capture, then the cart was closed. Checkout, hold, payment, receipt, and every stock-writing action were not invoked. No order, sale, customer, receipt, or inventory movement was created.
 
 Remaining acceptance blockers are unchanged except that corrected POS Preview deployment and basic authenticated read-only loader verification are complete. Owner authorization is still required for the five-migration SW3 staging batch, controlled Main Retail Stock acceptance receipts and shared-stock contention, and Cron activation. Local-delivery coverage, refunds, returns, and payment-failure transitions remain blocked. STLOLAB ordering remains disabled, and C2.4B was not reapplied.
+
+## Checkout service-role permission correction (2026-09-16)
+
+Source identity was reverified before editing. Admin was `fb4af7b54b6b8724c363000c2e41bf918f51b4eb` on `codex/stlolab-sw3-checkout`; Storefront was clean at `4b9fb63c400ababcfa3b25cf710506f20a933d23` on `codex/stlolab-sw3-checkout`; POS was clean at `70bb10abe6427692b50bdd96822883a85d243fcd` on `codex/pos-sw3-reconcile`. The Admin worktree contained only this task's migration and regression-test edits.
+
+- The controlled staging checkout attempt failed atomically with PostgreSQL `42501: permission denied for schema private`. No order, checkout request, customer, reservation, payment, or stock movement was created; the database checkout row and both server gates were returned to disabled.
+- `trry_api.create_stlolab_order_sw3` is `SECURITY INVOKER`. Its only direct private dependency is `private.stlolab_place_key(text)`, called while normalizing and validating delivery barangays. The reservation helper `private.stlolab_reserve_order_item_sw3()` is reached only through the `order_items` trigger; PostgreSQL does not require the caller to hold direct `EXECUTE` on a trigger function.
+- Additive migration `20260916082231_stlolab_sw3_checkout_service_role_permissions.sql` grants `service_role` only `USAGE` on schema `private` and `EXECUTE` on `private.stlolab_place_key(text)`. It explicitly revokes those privileges from `PUBLIC`, `anon`, and `authenticated`. It does not grant the trigger helper, alter default privileges, disable RLS, or change function security mode.
+- Disposable PostgreSQL 17 reproduced the pre-migration failure under `SET ROLE service_role`. After applying the migration, checkout succeeded under the same role, duplicate and concurrent retries remained idempotent, the reservation trigger completed while direct service-role execute on its helper remained false, and `anon`/`authenticated` could execute neither the private helper nor checkout RPC. The complete SW3 lifecycle/concurrency suite passed. Fixtures represented Supabase's managed service-role access to `auth.uid()`, public tables, sequences, and public functions; those baseline grants are test setup only and are not in the migration.
+- Temporary verification used loopback PostgreSQL only. No Supabase credentials were loaded, and no remote migration, deployment, order attempt, account/configuration change, or stock write occurred.
+
+Exact corrective SQL:
+
+```sql
+grant usage on schema private to service_role;
+grant execute on function private.stlolab_place_key(text) to service_role;
+
+revoke usage on schema private from public, anon, authenticated;
+revoke execute on function private.stlolab_place_key(text) from public, anon, authenticated;
+```
+
+Staging apply and retry plan, pending separate owner authorization:
+
+1. Keep Admin `STLO_CHECKOUT_ENABLED=false`, Storefront `STLO_CHECKOUT_ENABLED=false`, and `public.stlolab_checkout_config.enabled=false`. Verify target project ref `fszkypwovpdthqfobxrk`; do not use production credentials.
+2. Run `npx.cmd supabase migration list --project-ref fszkypwovpdthqfobxrk`, then `npx.cmd supabase db push --project-ref fszkypwovpdthqfobxrk --skip-vault --dry-run`. Stop unless the only pending file is `20260916082231_stlolab_sw3_checkout_service_role_permissions.sql`.
+3. With explicit migration approval, run `npx.cmd supabase db push --project-ref fszkypwovpdthqfobxrk --skip-vault --yes`. Re-list the ledger and read back `has_schema_privilege`/`has_function_privilege`: `service_role` must have the two intended privileges; `anon` and `authenticated` must have neither; service role must still lack direct execute on `private.stlolab_reserve_order_item_sw3()`.
+4. If privilege verification fails, keep all gates closed. Because staging was verified to lack both service-role grants before this migration, rollback only these additions with `revoke execute on function private.stlolab_place_key(text) from service_role; revoke usage on schema private from service_role;`, then record the rollback separately. Do not alter browser roles, defaults, RLS, or function security.
+5. Only after privilege verification and separate order-test approval, open the database and two server gates for the controlled window, retry exactly one M-size pickup submission using the original client idempotency key and access token, verify one canonical order/request/reservation, and close both server gates plus the database gate in a `finally` procedure even if retry fails. Do not confirm payment or hand over stock.
