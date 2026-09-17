@@ -292,3 +292,25 @@ No supported authenticated canonical adjustment surface is currently available i
 Required owner UI capability: an authenticated staging Owner/Admin must be able to open Inventory, select Main Retail Stock, select Glow N Underground / Black / S (`9a8f3cc9-b22f-40ad-890c-b78add622acd`), choose Remove `1`, enter the dedicated cleanup reference `SW3-STAGING-DURABLE-ACCESS-S-CLEANUP-01` and idempotency key `SW3-ACCESS-S-CLEANUP-01`, and submit through `trry_api.adjust_inventory`. The control must display the canonical RPC result and movement ID. This UI/action must be implemented and deployed to staging before the owner can perform that step; there is no safe existing button to click today.
 
 Cleanup remains blocked and S is intentionally unchanged at `1/0/1`. Preserved M order `49dc89ae-2e30-4f8a-b4e8-3b746c5d70e2` / `TRRY-ORD-8B12C7F9` remains `awaiting_payment`, reservation `ACTIVE`, and balance `1/1/0`. Database checkout creation is `false`; Sites environment revision `15` still has `STLO_CHECKOUT_ENABLED=false` and the seven-day access lifetime. Admin configuration was not changed. No production change occurred.
+
+## Local authenticated Admin inventory adjustment action (2026-09-17)
+
+Worktree governance and source identities were reverified before editing. Admin resumed at clean checkpoint `2dd6bbcd39229d40ed637ce0511c86ecfa71046a` on `codex/stlolab-sw3-checkout` with remote `https://github.com/clarkylubguban/adminportal.git`. Storefront remained clean and untouched at `ebae78847512f87c92f814ec56e7d0ad06e473bf` on `codex/stlolab-sw3-checkout`. POS remained clean and untouched at `70bb10abe6427692b50bdd96822883a85d243fcd` on `codex/pos-sw3-reconcile`.
+
+The existing Admin Inventory page now exposes a narrowly scoped Adjust action for Owner/Admin only. It requires an explicit canonical inventory location, variant, add/remove direction, positive whole-number quantity, audit reference, operational reason, stable idempotency key, and a separate confirmation checkbox. It sends the current real Admin access token to the existing schema-aware `trry_api.adjust_inventory` RPC and refreshes balances and movements from canonical tables after success. Retries retain the same key, in-flight repeat clicks are blocked, and the client never writes `inventory_balances` or `stock_movements` directly.
+
+No database migration was added. Existing canonical authority remains the enforcement boundary: `trry_api.adjust_inventory` is executable by `authenticated` only, with `anon`, `PUBLIC`, and `service_role` denied; its private shared-stock helper validates active Owner/Admin identity from `auth.uid()`, takes the idempotency lock, preserves the reservation floor, and appends the audited movement. UI role gating is supplementary and does not replace that server-side check.
+
+Local verification passed:
+
+- `node --check src/main.js` and `node --check src/services/adminInventory.js`.
+- `npm.cmd run test:admin-inventory-p0`, including exact schema RPC routing, real bearer-session propagation, stable cleanup key/reference payload, no direct stock writes or fabricated claims, and canonical post-adjustment display refresh.
+- Complete disposable PostgreSQL migration suite through `C:\tmp\codex-embedded-postgres-sw3\run-sw3-test.mjs`, exit `0`, using actual `anon` and `authenticated` roles. It verifies anonymous denial, non-Owner/Admin denial, duplicate/retry creates exactly one adjustment movement and one balance change, and a removal crossing reserved quantity is denied without a movement.
+- `npm.cmd run test:admin-inventory-responsive` at 1920, 1366, tablet, and 390 pixels.
+- `npm.cmd run build` with refreshed tracked `dist` artifacts.
+
+Read-only staging verification after local testing confirms no remote mutation: Main Retail Stock S remains on-hand `1`, reserved `0`, available `1`; M remains on-hand `1`, reserved `1`, available `0`; and `public.stlolab_checkout_config.enabled=false`. The later approved S cleanup values remain reserved exactly as documented: reference `SW3-STAGING-DURABLE-ACCESS-S-CLEANUP-01` and idempotency key `SW3-ACCESS-S-CLEANUP-01`.
+
+The POS `ADJUST STOCK` issue is still unresolved. Its visible action remains mock-only and does not call the canonical RPC; this Admin implementation neither changes nor validates that POS path.
+
+Exact future staging deployment scope is Admin-only: deploy the tested commit from this worktree to the existing protected `adminportal-staging` Preview/project, retaining its staging Supabase configuration and real Owner/Admin login. No migration, environment change, Sites/POS deployment, production alias, checkout-gate change, or stock mutation belongs to that deployment. After separate deployment approval, the already approved cleanup may be submitted once through Admin Inventory for Glow N Underground / Black / S at Main Retail Stock, Remove `1`, with the preserved reference and idempotency key; canonical balance and movement readback must precede any retry. This checkpoint does not perform that deployment or cleanup.

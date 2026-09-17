@@ -94,6 +94,14 @@ try {
   const payment = (orderId, reference, key, amount = 790, method = 'gcash') =>
     `select trry_api.confirm_stlolab_order_payment_sw3('${orderId}',${amount},'${method}','${reference}',null,'${key}') as result`;
 
+  fails(`set role anon;select trry_api.adjust_inventory('${location}','${variant}',-1,'denied adjustment','SW3-ADJUST-DENIED-ANON','SW3-ADJUST-DENIED')`, /permission denied/);
+  fails(`set role authenticated;set request.jwt.claim.sub='97000000-0000-4000-8000-000000000001';select trry_api.adjust_inventory('${location}','${variant}',-1,'denied adjustment','SW3-ADJUST-DENIED-USER','SW3-ADJUST-DENIED')`, /Owner\/Admin identity is required/);
+  const adjustmentBefore = balance(variant);
+  sql(staff(`select trry_api.adjust_inventory('${location}','${variant}',-1,'disposable adjustment fixture','SW3-ADJUST-RETRY-01','SW3-ADJUST-FIXTURE')`));
+  sql(staff(`select trry_api.adjust_inventory('${location}','${variant}',-1,'disposable adjustment fixture','SW3-ADJUST-RETRY-01','SW3-ADJUST-FIXTURE')`));
+  assert.deepEqual(balance(variant), { quantity_on_hand: adjustmentBefore.quantity_on_hand - 1, reserved_quantity: adjustmentBefore.reserved_quantity });
+  assert.equal(one(`select count(*)::int as count from public.stock_movements where idempotency_key='SW3-ADJUST-RETRY-01' and movement_type='ADJUSTMENT' and source_reference='SW3-ADJUST-FIXTURE'`).count, 1);
+
   fails(service(callOld()), /permission denied for schema private/);
   sql(readFileSync(`supabase/migrations/${checkoutPermissionMigration}`, 'utf8'));
   assert.equal(one(`select has_schema_privilege('service_role','private','usage') as allowed`).allowed, true);
@@ -165,6 +173,10 @@ try {
   assert.equal(lastRace.filter(result => result.status === 'fulfilled').length, 1);
   assert.equal(lastRace.filter(result => result.status === 'rejected').length, 1);
   assert.match(lastRace.find(result => result.status === 'rejected').reason.message, /variant is unavailable/);
+  const reservedFloorBefore = balance(lastVariant);
+  fails(staff(`select trry_api.adjust_inventory('${location}','${lastVariant}',-1,'must not consume reserved stock','SW3-ADJUST-RESERVED-01','SW3-ADJUST-RESERVED')`), /consume reserved inventory/);
+  assert.deepEqual(balance(lastVariant), reservedFloorBefore);
+  assert.equal(one(`select count(*)::int as count from public.stock_movements where idempotency_key='SW3-ADJUST-RESERVED-01'`).count, 0);
   fails(service(call('ABCDEFGHIJKLMNOP', 79000, 1)), /different checkout data/);
   fails(service(call('QRSTUVWXYZABCDEF', 1, 1)), /canonical price/);
   fails(service(call('ZYXWVUTSRQPONMLK', 79000, 31)), /unavailable/);
@@ -245,7 +257,7 @@ try {
   fails(staff(payment(tamperedPaymentOrder, 'PAY-TAMPERED', 'TAMPEREDPAYMENTKEY', 1)), /canonical order amount/);
   assert.equal(one(`select count(*)::int as count from public.order_payment_events where order_id='${tamperedPaymentOrder}'`).count, 0);
   fails(`update public.stlolab_checkout_config set inventory_policy='DEDUCT_ON_SUBMIT' where environment='staging'`, /inventory_policy/);
-  console.log('PASS STLOLAB SW3 reservation expiry, payment/cancellation/handover races, atomic handover deduction, delivery coverage, POS exclusion, M4/E7 compatibility, and idempotency');
+  console.log('PASS STLOLAB SW3 reservation expiry, payment/cancellation/handover races, authenticated adjustment denial/retry/reservation floor, atomic handover deduction, delivery coverage, POS exclusion, M4/E7 compatibility, and idempotency');
 
   async function raceExpiryPayment() {
     const id = oneAsService(call('RACEEXPIRYPAY001', 79000, 1, '7'.repeat(64))).result.orderId;

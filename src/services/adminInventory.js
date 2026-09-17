@@ -11,7 +11,11 @@ export const STOCK_MOVEMENTS_TABLE = "stock_movements";
 export const INVENTORY_RECEIVE_RPC_SCHEMA = "trry_api";
 export const INVENTORY_RECEIVE_RPC = "receive_inventory";
 export const INVENTORY_RECEIVE_RPC_LABEL = `${INVENTORY_RECEIVE_RPC_SCHEMA}.${INVENTORY_RECEIVE_RPC}`;
+export const INVENTORY_ADJUST_RPC_SCHEMA = "trry_api";
+export const INVENTORY_ADJUST_RPC = "adjust_inventory";
+export const INVENTORY_ADJUST_RPC_LABEL = `${INVENTORY_ADJUST_RPC_SCHEMA}.${INVENTORY_ADJUST_RPC}`;
 export const PRODUCTION_SUPABASE_PROJECT_REF = "wcgtwfctpnwgpglywvvx";
+export const STAGING_SUPABASE_PROJECT_REF = "fszkypwovpdthqfobxrk";
 
 const MASTER_PRODUCTS_TABLE = "products";
 const PRODUCT_VARIANTS_TABLE = "product_variants";
@@ -102,12 +106,30 @@ export async function receiveAdminInventoryStock(payload, authSession) {
   }, getAccessToken(authSession));
 }
 
+export async function adjustAdminInventoryStock(payload, authSession) {
+  assertCanonicalInventoryAdjustmentProject();
+  assertAdjustmentPayload(payload);
+
+  return executeSupabaseSchemaRpcWithAuth(INVENTORY_ADJUST_RPC_SCHEMA, INVENTORY_ADJUST_RPC, {
+    p_location_id: payload.locationId,
+    p_variant_id: payload.variantId,
+    p_quantity_delta: payload.quantityDelta,
+    p_reason: payload.reason.trim(),
+    p_idempotency_key: payload.idempotencyKey.trim(),
+    p_source_reference: payload.sourceReference.trim(),
+  }, getAccessToken(authSession));
+}
+
 export function createInventoryIdempotencyKey(prefix = "receive") {
   const randomPart = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`;
   return `admin-inventory-${prefix}-${randomPart}`;
 }
 
 export function canReceiveInventoryForRole(role) {
+  return ["owner", "admin"].includes(String(role || "").trim().toLowerCase());
+}
+
+export function canAdjustInventoryForRole(role) {
   return ["owner", "admin"].includes(String(role || "").trim().toLowerCase());
 }
 
@@ -118,6 +140,19 @@ export function assertProductionSupabaseProject() {
   }
 }
 
+export function assertCanonicalInventoryAdjustmentProject() {
+  const { url } = getSupabaseConfig();
+  let hostname = "";
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    hostname = "";
+  }
+  if (![PRODUCTION_SUPABASE_PROJECT_REF, STAGING_SUPABASE_PROJECT_REF].some((projectRef) => hostname === `${projectRef}.supabase.co`)) {
+    throw new Error("Inventory adjustments are only enabled for canonical TRRY Supabase projects.");
+  }
+}
+
 function assertReceivePayload(payload) {
   if (!payload?.variantId) throw new Error("Select a product variant.");
   if (!payload?.locationId) throw new Error("Select an inventory location.");
@@ -125,6 +160,17 @@ function assertReceivePayload(payload) {
     throw new Error("Quantity must be a positive whole number.");
   }
   if (!payload?.idempotencyKey) throw new Error("Receive idempotency key is missing.");
+}
+
+function assertAdjustmentPayload(payload) {
+  if (!payload?.variantId) throw new Error("Select a product variant.");
+  if (!payload?.locationId) throw new Error("Select an inventory location.");
+  if (!Number.isInteger(payload.quantityDelta) || payload.quantityDelta === 0) {
+    throw new Error("Adjustment quantity must be a non-zero whole number.");
+  }
+  if (!String(payload.reason || "").trim()) throw new Error("Adjustment reason is required.");
+  if (!String(payload.sourceReference || "").trim()) throw new Error("Adjustment reference is required.");
+  if (!String(payload.idempotencyKey || "").trim()) throw new Error("Adjustment idempotency key is missing.");
 }
 
 function isEligibleInventoryProduct(product) {

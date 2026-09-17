@@ -76,7 +76,10 @@ import {
   updateAdminProduct,
 } from "./services/adminCatalog.js";
 import {
+  INVENTORY_ADJUST_RPC_LABEL,
   INVENTORY_RECEIVE_RPC_LABEL,
+  adjustAdminInventoryStock,
+  canAdjustInventoryForRole,
   canReceiveInventoryForRole,
   createInventoryIdempotencyKey,
   getAdminInventory,
@@ -538,6 +541,7 @@ let inventoryStockStateFilter = "all";
 let inventoryMovementTypeFilter = "all";
 let inventoryMovementSourceFilter = "all";
 let inventoryReceiveDrawer = { open: false, mode: "", rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
+let inventoryAdjustmentDrawer = createClosedInventoryAdjustmentDrawer();
 let suppliers = [];
 let supplierLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
 let supplierLoadError = "";
@@ -1687,6 +1691,9 @@ async function loadInventory({ force = false } = {}) {
     if (inventoryLocations.length === 1) inventoryLocationFilter = inventoryLocations[0].id;
     if (inventoryReceiveDrawer.open && !inventoryRows.some((row) => row.id === inventoryReceiveDrawer.rowId)) {
       inventoryReceiveDrawer = createClosedInventoryReceiveDrawer();
+    }
+    if (inventoryAdjustmentDrawer.open && !inventoryRows.some((row) => row.id === inventoryAdjustmentDrawer.rowId)) {
+      inventoryAdjustmentDrawer = createClosedInventoryAdjustmentDrawer();
     }
   } catch (error) {
     console.error("Unable to apply inventory.", error);
@@ -7312,10 +7319,12 @@ function sortSuppliers(a, b) {
 
 function renderInventoryPage() {
   const canReceive = canReceiveInventoryForRole(adminUser?.role);
+  const canAdjust = canAdjustInventoryForRole(adminUser?.role);
   const visibleRows = getVisibleInventoryRows();
   const visibleMovements = getVisibleInventoryMovements();
   const summary = getInventorySummary();
   const selectedReceiveRow = inventoryRows.find((row) => row.id === inventoryReceiveDrawer.rowId) ?? null;
+  const selectedAdjustmentRow = inventoryRows.find((row) => row.id === inventoryAdjustmentDrawer.rowId) ?? null;
 
   return `
     <main class="orders-page catalog-page inventory-page admin-saas-page">
@@ -7334,10 +7343,11 @@ function renderInventoryPage() {
       ${inventoryView === "movements" ? renderInventoryMovementSummary(visibleMovements) : renderInventoryStockSummary(summary)}
       ${renderInventoryTabs(summary)}
       ${inventoryView === "movements" ? renderInventoryMovementFilters() : renderInventoryStockFilters()}
-      ${renderInventoryNotice(canReceive)}
-      ${inventoryView === "movements" ? renderInventoryMovementTable(visibleMovements) : renderInventoryStockTable(visibleRows, canReceive)}
+      ${renderInventoryNotice(canReceive, canAdjust)}
+      ${inventoryView === "movements" ? renderInventoryMovementTable(visibleMovements) : renderInventoryStockTable(visibleRows, canReceive, canAdjust)}
       <div class="inventory-rule-note"><strong>${inventoryView === "movements" ? "AUDIT TRAIL" : "STOCK RULE"}</strong><span>${inventoryView === "movements" ? "Movements are append-only operational records. Corrections create a new reversing movement; history is never overwritten." : "On Hand is never edited directly. Receive, Sale, Return, Stock Count, and Adjustment create ledger movements."}</span></div>
       ${inventoryReceiveDrawer.open ? renderInventoryReceiveDrawer(selectedReceiveRow, canReceive) : ""}
+      ${inventoryAdjustmentDrawer.open ? renderInventoryAdjustmentDrawer(selectedAdjustmentRow, canAdjust) : ""}
     </main>
   `;
 }
@@ -7430,15 +7440,16 @@ function renderInventoryMovementFilters() {
   `;
 }
 
-function renderInventoryNotice(canReceive) {
+function renderInventoryNotice(canReceive, canAdjust) {
+  if (inventoryAdjustmentDrawer.status === "success") return `<div class="catalog-notice success">Inventory adjustment submitted through ${INVENTORY_ADJUST_RPC_LABEL} and canonical quantities were refreshed.</div>`;
   if (inventoryReceiveDrawer.status === "success") return `<div class="catalog-notice success">Receive Stock submitted through ${INVENTORY_RECEIVE_RPC_LABEL}.</div>`;
   if (inventoryLoadState === "loading") return `<div class="catalog-notice">Loading canonical inventory...</div>`;
   if (inventoryLoadState === "error") return `<div class="catalog-notice error">Unable to load canonical inventory. ${escapeHtml(inventoryLoadError || "Check Supabase access and inventory RLS policies.")}</div>`;
-  if (!canReceive) return `<div class="catalog-notice">Inventory receive is restricted to Owner and Admin roles. Current role is read-only.</div>`;
+  if (!canReceive || !canAdjust) return `<div class="catalog-notice">Inventory receiving and adjustment are restricted to Owner and Admin roles. Current role is read-only.</div>`;
   return "";
 }
 
-function renderInventoryStockTable(rows, canReceive) {
+function renderInventoryStockTable(rows, canReceive, canAdjust) {
   return `
     <article class="content-card table-card catalog-table-card inventory-table-card">
       <p class="table-helper-text catalog-count-label">${rows.length} ${rows.length === 1 ? "SKU" : "SKUS"}</p>
@@ -7467,14 +7478,14 @@ function renderInventoryStockTable(rows, canReceive) {
             <th>Action</th>
           </tr>
         </thead>
-        <tbody>${rows.map((row) => renderInventoryStockRow(row, canReceive)).join("")}</tbody>
+        <tbody>${rows.map((row) => renderInventoryStockRow(row, canReceive, canAdjust)).join("")}</tbody>
       </table>
       ${renderInventoryStockEmptyState(rows)}
     </article>
   `;
 }
 
-function renderInventoryStockRow(row, canReceive) {
+function renderInventoryStockRow(row, canReceive, canAdjust) {
   const action = row.onHand <= 0 ? "Receive" : "View";
   return `
     <tr>
@@ -7486,7 +7497,7 @@ function renderInventoryStockRow(row, canReceive) {
       <td data-mobile-label="Stock">${renderInventoryStockPill(row.stockState)}</td>
       <td data-mobile-label="Last Cost">${formatInventoryMoney(row.unitCost)}</td>
       <td data-mobile-label="Stock Value">${formatInventoryMoney(row.stockValue)}</td>
-      <td data-mobile-label="Action"><button class="${action === "Receive" ? "primary-button" : "note-button"} compact-action" data-inventory-receive="${escapeHtml(row.id)}" type="button" ${canReceive ? "" : "disabled"}>${action}</button></td>
+      <td data-mobile-label="Action"><div class="inventory-row-actions"><button class="${action === "Receive" ? "primary-button" : "note-button"} compact-action" data-inventory-receive="${escapeHtml(row.id)}" type="button" ${canReceive ? "" : "disabled"}>${action}</button><button class="note-button compact-action" data-inventory-adjust="${escapeHtml(row.id)}" type="button" ${canAdjust ? "" : "disabled"}>Adjust</button></div></td>
     </tr>
   `;
 }
@@ -7590,6 +7601,64 @@ function renderInventoryReceiveDrawer(row, canReceive) {
           <div>
             <button class="note-button" data-inventory-close-receive type="button" ${inventoryReceiveDrawer.status === "saving" ? "disabled" : ""}>Cancel</button>
             <button class="primary-button catalog-save-button" type="submit" ${disabled ? "disabled" : ""}>${inventoryReceiveDrawer.status === "saving" ? "Receiving..." : "Confirm Receive"}</button>
+          </div>
+        </footer>
+      </form>
+    </aside>
+  `;
+}
+
+function renderInventoryAdjustmentDrawer(row, canAdjust) {
+  const saving = inventoryAdjustmentDrawer.status === "saving";
+  const disabled = saving || !canAdjust || !row;
+  const direction = inventoryAdjustmentDrawer.direction;
+  const quantity = escapeHtml(inventoryAdjustmentDrawer.quantity);
+  const signedQuantity = getInventoryAdjustmentQuantityDelta();
+  return `
+    <div class="catalog-drawer-backdrop" data-inventory-close-adjustment></div>
+    <aside class="catalog-drawer inventory-receive-drawer inventory-adjustment-drawer" aria-label="Adjust inventory drawer">
+      <header>
+        <div>
+          <span>OWNER / ADMIN ACTION</span>
+          <h2>Adjust Inventory</h2>
+          <p>Adjustment creates an append-only canonical movement. Reserved stock cannot be removed.</p>
+          ${row ? renderInventoryStockPill(row.stockState) : ""}
+        </div>
+        <button class="catalog-drawer-close" data-inventory-close-adjustment type="button" aria-label="Close inventory adjustment drawer">X</button>
+      </header>
+      <form class="catalog-form" id="inventory-adjustment-form">
+        ${inventoryAdjustmentDrawer.error ? `<p class="catalog-form-error">${escapeHtml(inventoryAdjustmentDrawer.error)}</p>` : ""}
+        ${!canAdjust ? `<p class="catalog-form-error">Only Owner and Admin can adjust inventory.</p>` : ""}
+        ${row ? `
+          <section class="catalog-drawer-section">
+            <h3>Canonical Stock Target</h3>
+            <div class="inventory-readonly-grid">
+              ${renderInventoryReadonlyFact("Product", row.productName)}
+              ${renderInventoryReadonlyFact("Variant", row.variantLabel)}
+              ${renderInventoryReadonlyFact("SKU", row.sku)}
+              ${renderInventoryReadonlyFact("Location", row.locationName)}
+              ${renderInventoryReadonlyFact("On Hand", row.onHand)}
+              ${renderInventoryReadonlyFact("Reserved", row.reserved)}
+              ${renderInventoryReadonlyFact("Available", row.sellable)}
+              ${renderInventoryReadonlyFact("After Adjustment", Number.isInteger(signedQuantity) ? row.onHand + signedQuantity : "-")}
+            </div>
+          </section>
+          <section class="catalog-drawer-section">
+            <h3>Adjustment Details</h3>
+            <label class="catalog-field"><span>Inventory Location</span><select data-inventory-adjustment-field="locationId" ${disabled ? "disabled" : ""}>${inventoryLocations.map((location) => `<option value="${escapeHtml(location.id)}" ${location.id === row.locationId ? "selected" : ""}>${escapeHtml(formatInventoryLocation(location))}</option>`).join("")}</select></label>
+            <label class="catalog-field"><span>Adjustment Type</span><select data-inventory-adjustment-field="direction" ${disabled ? "disabled" : ""}><option value="remove" ${direction === "remove" ? "selected" : ""}>Remove stock</option><option value="add" ${direction === "add" ? "selected" : ""}>Add stock</option></select></label>
+            <label class="catalog-field"><span>Quantity</span><input data-inventory-adjustment-field="quantity" min="1" step="1" inputmode="numeric" type="number" value="${quantity}" ${disabled ? "disabled" : ""} required></label>
+            <label class="catalog-field"><span>Cleanup / Audit Reference</span><input data-inventory-adjustment-field="sourceReference" value="${escapeHtml(inventoryAdjustmentDrawer.sourceReference)}" ${disabled ? "disabled" : ""} placeholder="Required movement reference" required></label>
+            <label class="catalog-field"><span>Reason</span><textarea data-inventory-adjustment-field="reason" rows="3" ${disabled ? "disabled" : ""} placeholder="Required operational reason" required>${escapeHtml(inventoryAdjustmentDrawer.reason)}</textarea></label>
+            <label class="catalog-field"><span>Idempotency Key</span><input data-inventory-adjustment-field="idempotencyKey" value="${escapeHtml(inventoryAdjustmentDrawer.idempotencyKey)}" ${disabled ? "disabled" : ""} required></label>
+            <label class="inventory-adjustment-confirm"><input data-inventory-adjustment-field="confirmed" type="checkbox" ${inventoryAdjustmentDrawer.confirmed ? "checked" : ""} ${disabled ? "disabled" : ""}><span>I confirm this adjustment targets the displayed variant and location and will create a permanent movement record.</span></label>
+          </section>
+        ` : `<section class="catalog-drawer-section"><p>The selected canonical inventory row is no longer available. Close and reopen this action.</p></section>`}
+        <footer class="catalog-drawer-footer">
+          <span>${inventoryAdjustmentDrawer.idempotencyKey ? `Retry key: ${escapeHtml(inventoryAdjustmentDrawer.idempotencyKey)}` : "A retry key is required."}</span>
+          <div>
+            <button class="note-button" data-inventory-close-adjustment type="button" ${saving ? "disabled" : ""}>Cancel</button>
+            <button class="primary-button catalog-save-button" type="submit" ${disabled || !inventoryAdjustmentDrawer.confirmed ? "disabled" : ""}>${saving ? "Adjusting..." : "Confirm Adjustment"}</button>
           </div>
         </footer>
       </form>
@@ -7704,6 +7773,10 @@ function createClosedInventoryReceiveDrawer() {
   return { open: false, mode: "", rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
 }
 
+function createClosedInventoryAdjustmentDrawer() {
+  return { open: false, rowId: "", direction: "remove", quantity: "", sourceReference: "", reason: "", confirmed: false, error: "", status: "idle", idempotencyKey: "" };
+}
+
 function openInventoryReceiveDrawer(rowId = "") {
   if (!canReceiveInventoryForRole(adminUser?.role)) return;
   const row = rowId ? inventoryRows.find((item) => item.id === rowId) : null;
@@ -7785,6 +7858,89 @@ async function submitInventoryReceive() {
   } catch (error) {
     console.error("Unable to receive inventory stock.", error);
     inventoryReceiveDrawer = { ...inventoryReceiveDrawer, status: "idle", error: error.message || "Receive Stock failed." };
+    render();
+  }
+}
+
+function openInventoryAdjustmentDrawer(rowId) {
+  if (!canAdjustInventoryForRole(adminUser?.role)) return;
+  const row = inventoryRows.find((item) => item.id === rowId);
+  if (!row) return;
+  inventoryAdjustmentDrawer = {
+    ...createClosedInventoryAdjustmentDrawer(),
+    open: true,
+    rowId: row.id,
+    idempotencyKey: createInventoryIdempotencyKey("adjust"),
+  };
+  render();
+}
+
+function updateInventoryAdjustmentField(field, value) {
+  if (field === "locationId") {
+    const currentRow = inventoryRows.find((row) => row.id === inventoryAdjustmentDrawer.rowId);
+    const nextRow = inventoryRows.find((row) => row.variantId === currentRow?.variantId && row.locationId === value);
+    inventoryAdjustmentDrawer = { ...inventoryAdjustmentDrawer, rowId: nextRow?.id || inventoryAdjustmentDrawer.rowId, confirmed: false, error: "" };
+    render();
+    return;
+  }
+  const shouldRender = field === "direction" || field === "confirmed" || inventoryAdjustmentDrawer.confirmed;
+  inventoryAdjustmentDrawer = {
+    ...inventoryAdjustmentDrawer,
+    [field]: field === "confirmed" ? Boolean(value) : value,
+    confirmed: field === "confirmed" ? Boolean(value) : false,
+    error: "",
+  };
+  if (shouldRender) render();
+}
+
+function getInventoryAdjustmentQuantityDelta() {
+  const quantity = Number(inventoryAdjustmentDrawer.quantity);
+  if (!Number.isInteger(quantity) || quantity <= 0) return null;
+  return inventoryAdjustmentDrawer.direction === "add" ? quantity : -quantity;
+}
+
+function validateInventoryAdjustment(row) {
+  if (!canAdjustInventoryForRole(adminUser?.role)) return "Only Owner and Admin can adjust inventory.";
+  if (!adminAuthSession?.access_token) return "Authenticated Owner/Admin session is required.";
+  if (!row?.variantId) return "Select a product variant.";
+  if (!row?.locationId) return "Select an inventory location.";
+  const quantityDelta = getInventoryAdjustmentQuantityDelta();
+  if (!Number.isInteger(quantityDelta) || quantityDelta === 0) return "Quantity must be a positive whole number.";
+  if (!inventoryAdjustmentDrawer.sourceReference.trim()) return "Adjustment reference is required.";
+  if (!inventoryAdjustmentDrawer.reason.trim()) return "Adjustment reason is required.";
+  if (!inventoryAdjustmentDrawer.idempotencyKey.trim()) return "Adjustment idempotency key is required.";
+  if (!inventoryAdjustmentDrawer.confirmed) return "Confirm the canonical adjustment before submitting.";
+  return "";
+}
+
+async function submitInventoryAdjustment() {
+  if (inventoryAdjustmentDrawer.status === "saving") return;
+  const row = inventoryRows.find((item) => item.id === inventoryAdjustmentDrawer.rowId);
+  const validationError = validateInventoryAdjustment(row);
+  if (validationError) {
+    inventoryAdjustmentDrawer = { ...inventoryAdjustmentDrawer, error: validationError };
+    render();
+    return;
+  }
+
+  inventoryAdjustmentDrawer = { ...inventoryAdjustmentDrawer, status: "saving", error: "" };
+  render();
+
+  try {
+    await adjustAdminInventoryStock({
+      variantId: row.variantId,
+      locationId: row.locationId,
+      quantityDelta: getInventoryAdjustmentQuantityDelta(),
+      reason: inventoryAdjustmentDrawer.reason,
+      sourceReference: inventoryAdjustmentDrawer.sourceReference,
+      idempotencyKey: inventoryAdjustmentDrawer.idempotencyKey,
+    }, adminAuthSession);
+    inventoryAdjustmentDrawer = { ...createClosedInventoryAdjustmentDrawer(), status: "success" };
+    hasLoadedInventory = false;
+    await loadInventory({ force: true });
+  } catch (error) {
+    console.error("Unable to adjust inventory stock.", error);
+    inventoryAdjustmentDrawer = { ...inventoryAdjustmentDrawer, status: "idle", error: error.message || "Inventory adjustment failed." };
     render();
   }
 }
@@ -12701,6 +12857,24 @@ function bindEvents() {
   document.getElementById("inventory-receive-form")?.addEventListener("submit", async (event) => {
     event.preventDefault();
     await submitInventoryReceive();
+  });
+  document.querySelectorAll("[data-inventory-adjust]").forEach((button) => {
+    button.addEventListener("click", () => openInventoryAdjustmentDrawer(button.dataset.inventoryAdjust));
+  });
+  document.querySelectorAll("[data-inventory-close-adjustment]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      inventoryAdjustmentDrawer = createClosedInventoryAdjustmentDrawer();
+      render();
+    });
+  });
+  document.querySelectorAll("[data-inventory-adjustment-field]").forEach((field) => {
+    const eventName = field.type === "checkbox" || field.tagName === "SELECT" ? "change" : "input";
+    field.addEventListener(eventName, (event) => updateInventoryAdjustmentField(field.dataset.inventoryAdjustmentField, field.type === "checkbox" ? event.target.checked : event.target.value));
+  });
+  document.getElementById("inventory-adjustment-form")?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    await submitInventoryAdjustment();
   });
 
   document.getElementById("supplier-search")?.addEventListener("input", (event) => {
