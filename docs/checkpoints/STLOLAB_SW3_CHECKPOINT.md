@@ -382,6 +382,16 @@ The checkout keys above are non-secret test identifiers. Before each browser sub
 
 Expected successful final balances are S `0/0/0`, M `1/1/0`, L `0/0/0`, XL `0/0/0`. Expected new stock ledger effects are two receipts totaling `+3` and exactly three `SALE -1` movements: pickup L, courier XL, and the single contention winner. Payment confirmations do not move stock. No adjustment, cancellation, expiry, refund, return, sale void, or payment-failure transition belongs to this batch.
 
+## Staging acceptance deployment stopped before stock receipt (2026-09-17)
+
+Owner approval deployed exact Admin commit `a5e2909b755f4150711cc99527fb2308a576d784` to the existing protected `adminportal-staging` Vercel project `prj_K0oDSa6r1MgAEpQMcl3mKVdJvtNI`. Preview deployment `dpl_HygA8vMN1Lprs4xZoKJn2E99CKUq` is READY at `https://adminportal-staging-9wk9a846u-clarkylubguban1.vercel.app`; Vercel metadata reports the exact approved source SHA, branch `codex/stlolab-sw3-checkout`, 12 functions, no alias, and no production target. The existing staging Owner authenticated successfully in that Preview.
+
+Acceptance stopped before the first stock mutation because the deployed Admin Receive Stock path is not staging-capable. `receiveAdminInventoryStock()` calls `assertProductionSupabaseProject()`, which accepts only production ref `wcgtwfctpnwgpglywvvx` and rejects approved staging ref `fszkypwovpdthqfobxrk`. The visible receive form also creates an opaque random key inside `submitInventoryReceive()` and exposes no supported field or controlled session record for the exact approved receipt keys `SW3-BATCH-RECEIVE-L2-01` and `SW3-BATCH-RECEIVE-XL1-01`. No Confirm Receive action was submitted. No raw RPC, token copy, direct SQL write, adjustment, POS mock control, or alternate key was used.
+
+Post-stop canonical readback confirms zero use of the planned checkout and movement keys, database checkout `enabled=false`, and unchanged Main Retail Stock balances: S `0/0/0`, M `1/1/0`, L `0/0/0`, XL `0/0/0`. Preserved order `TRRY-ORD-8B12C7F9` remains untouched. Sites project `appgprj_6a8978ad58bc8191bc74e2fba33f4528` remains at environment revision `15` with `STLO_CHECKOUT_ENABLED=false`, seven-day staging access, staging Supabase, and unchanged secret entries. No Sites publish, gate opening, order, customer, receipt, payment, handover, sale, stock movement, migration, Cron activation, production change, or merge occurred.
+
+Required forward correction is narrowly scoped: permit the canonical Admin receive adapter on the allowlisted staging ref while retaining production support and expose a stable Owner/Admin-entered receipt idempotency key with validation and retry retention. Add focused tests for staging allowlisting, production compatibility, unauthorized denial, exact-key duplicate safety, and unchanged canonical receipt authority. Deploy that forward commit only after owner review, then restart this batch from the immutable baseline above; do not reuse this READY deployment for receipts.
+
 ### Exact release and mutation scope for approval
 
 1. Deploy only the new tested Admin commit from this worktree to the existing protected `adminportal-staging` Preview. No migration is required. Keep POS at `70bb10a` and Sites source at `ebae788`.
