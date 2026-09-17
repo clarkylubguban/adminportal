@@ -326,3 +326,69 @@ Using a genuine authenticated staging Owner/Admin session in the exact deployed 
 Canonical post-mutation readback shows exactly one matching `ADJUSTMENT` movement: `dc8ac6fe-b125-4fd4-b110-c52906f189f5`, quantity delta `-1`, balance `1 -> 0`, location `9cc81235-0af3-4ad6-aa95-35af81178312`, variant `9a8f3cc9-b22f-40ad-890c-b78add622acd`, and the preserved key/reference. Final S is on-hand `0`, reserved `0`, available `0`; S has zero `SALE` movements. Preserved M is unchanged at on-hand `1`, reserved `1`, available `0`.
 
 All creation gates remain closed. Database `public.stlolab_checkout_config.enabled=false`; Sites project `appgprj_6a8978ad58bc8191bc74e2fba33f4528` remains environment revision `15` with `STLO_CHECKOUT_ENABLED=false`; and the Admin Preview configuration was inherited unchanged. The POS mock adjustment control was not used. No new order, payment, handover, sale, receipt, customer, production change, or unrelated mutation occurred.
+
+## Remaining staging acceptance batch preparation (2026-09-17)
+
+This pass was read-only against staging. No gate, deployment, database row, stock balance, order, payment, handover, receipt, sale, shift, or remote configuration was changed.
+
+### Verified identities and deployed paths
+
+- Admin worktree: clean starting HEAD `aeb318225d8c560b931180b60fbdd11f6fccc6ab`, branch `codex/stlolab-sw3-checkout`, remote `https://github.com/clarkylubguban/adminportal.git`.
+- Storefront worktree: clean HEAD `ebae78847512f87c92f814ec56e7d0ad06e473bf`, branch `codex/stlolab-sw3-checkout`, existing Sites git remote.
+- POS worktree: clean HEAD `70bb10abe6427692b50bdd96822883a85d243fcd`, branch `codex/pos-sw3-reconcile`, remote `https://github.com/clarkylubguban/trry-pos.git`.
+- Admin Preview `dpl_7wjgMHTdBYyb1N3VSA8srsCnb5ep` is READY at `https://adminportal-staging-g6i0e8v0c-clarkylubguban1.vercel.app`, project `adminportal-staging` / `prj_K0oDSa6r1MgAEpQMcl3mKVdJvtNI`, exact deployed commit `9844d07ec3acb95f48858715689f84f7d213a86b`, no alias.
+- POS Preview `dpl_8SypXZNwzkjC17jzxxyYAu4hQruw` is READY at `https://trry-hq9k4cdk6-clarkylubguban1.vercel.app`, project `trry-pos` / `prj_OXFRieJe4VlBWFClY38K06QYMn1Z`, exact deployed commit `70bb10abe6427692b50bdd96822883a85d243fcd`, no alias.
+- The protected POS runtime is the intended staging write build: `VITE_APP_ENV=staging`, `VITE_DATA_MODE=supabase`, remote writes explicitly enabled, Supabase `fszkypwovpdthqfobxrk`, register `0f65cfbc-e85d-4324-ad89-c0c41c8d2f7d`, and Main Retail Stock `9cc81235-0af3-4ad6-aa95-35af81178312`. The publishable browser key is not reproduced here; no privileged key is present in the browser runtime.
+- Sites version `18` / deployment `appgdep_6aabe893b79481918bccf3ba8f43c54a` is published owner-private at the existing hostname from exact commit `ebae78847512f87c92f814ec56e7d0ad06e473bf`. Environment revision `15` has `STLO_CHECKOUT_ENABLED=false`, seven-day staging order access, pickup at PHP 0, and nationwide delivery at PHP 120.
+- Staging records all required migrations through `20260917074538_stlolab_order_access_lifecycle`; no migration is pending for this batch.
+
+The deployed Admin Orders UI was inspected with a real Owner session. Canonical STLOLAB rows expose the payment form and the fulfillment action. Payment calls `POST /api/orders/:orderId/actions` with `confirm_payment`; pickup and delivery use the same protected endpoint with `customer_pickup` or `courier_handover`. Both server operations require authenticated Owner/Admin authority. Handover presents an explicit confirmation and the database atomically consumes the active reservation and deducts on-hand once. Courier handover intentionally leaves COD payment unchanged. The protected POS `/sale` route redirects an expired session to `/login`; acceptance therefore requires a fresh existing POS/Sales-authorized staging login, not a new account.
+
+### Current canonical baseline
+
+- Main Retail Stock and Main Counter are active in the same Main Shop branch. Open shift `SHF-20260820-00001` exists for the register; recheck it immediately before acceptance rather than opening another shift.
+- Glow N Underground `ceb96960-67ef-41c0-bca7-55a063dd70b2`, Black variants: S `9a8f3cc9-b22f-40ad-890c-b78add622acd` = `0/0/0`; M `651d79c6-a6a9-47a5-ba1a-77d8ebb5cbd6` = `1/1/0`; L `86d11ac3-efc1-4778-a768-809603a67745` = `0/0/0`; XL `fdbdb5d4-c80c-4dda-8ba4-602a48de9b35` = `0/0/0`. Values are on-hand/reserved/available.
+- Preserved M order `49dc89ae-2e30-4f8a-b4e8-3b746c5d70e2` / `TRRY-ORD-8B12C7F9` remains `awaiting_payment`, `UNPAID`, `PENDING`, with its ACTIVE reservation and absolute expiry `2026-09-20 01:59:44.487094+00`. This batch must not readjust its clock or invoke expiry.
+- Database creation gate is `false`; Sites creation gate is `false`. Admin Preview contains the expected encrypted Preview-only gate/configuration names. Secret values were not pulled.
+
+### Focused local fix
+
+The deployed database and handler contracts already support all three acceptance flows. One UI retry defect was confirmed: Admin generated a new payment or handover idempotency key for every click, so an uncertain response could not be replayed with the same key. The local Admin source now stores one key per order/action/payload in session storage, reuses it after errors or reloads, rotates it if the payment payload changes, and clears it only after a verified response. This changes no authorization, RPC, schema, layout, or storefront behavior.
+
+Focused verification passed:
+
+- `npm.cmd run test:stlolab-order-action-attempts`
+- `npm.cmd run test:stlolab-admin-order-actions`
+- `npm.cmd run build`
+
+The first build attempt completed validation but could not replace a generated `dist/404.html` under the restricted filesystem. Re-running the same build with normal workspace write access completed and created `dist`. This was a local filesystem issue, not an application failure.
+
+### Exact proposed acceptance fixtures
+
+Minimum new stock is three units, received through authenticated canonical `trry_api.receive_inventory` only:
+
+| Variant | Quantity | Source reference | Idempotency key |
+| --- | ---: | --- | --- |
+| Black / L | 2 | `SW3-STAGING-BATCH-L2-RECEIVE-01` | `SW3-BATCH-RECEIVE-L2-01` |
+| Black / XL | 1 | `SW3-STAGING-BATCH-XL1-RECEIVE-01` | `SW3-BATCH-RECEIVE-XL1-01` |
+
+Use reason `SW3 remaining acceptance test stock`. Owner/Admin authority is required. Expected receipt movements are L `+2` and XL `+1`, leaving L `2/0/2`, XL `1/0/1`, S `0/0/0`, and M `1/1/0`.
+
+1. Pickup fixture: Black/L x 1, `SHOP_PICKUP`, subtotal PHP 790, fee PHP 0, total PHP 790. Customer `SW3 Pickup Acceptance`, mobile `09170000031`, email `sw3-pickup@example.test`. Checkout idempotency key `SW3-BATCH-PICKUP-L-CREATE-01`. After creation require L `2/1/1`. Owner/Admin then confirms the full PHP 790 using method `cash`, reference `SW3-TEST-PICKUP-PAYMENT-01`, internal note `STAGING ACCEPTANCE FIXTURE - no real funds`, and action key `SW3-BATCH-PICKUP-L-PAY-01`. Only after canonical `PAID` readback, confirm customer pickup with `SW3-BATCH-PICKUP-L-HANDOVER-01`. Expected one L `SALE -1`, reservation `CONSUMED`, and L `1/0/1`.
+2. Nationwide COD fixture: Black/XL x 1, `NATIONWIDE_DELIVERY`, subtotal PHP 790, fee PHP 120, total PHP 910. Customer `SW3 Nationwide COD Acceptance`, mobile `09170000032`, email `sw3-cod@example.test`; address line `STAGING TEST - DO NOT SHIP`, barangay `Test Fixture`, city `Cebu City`, province `Cebu`, postal code `6000`, note `SW3 acceptance only; no real parcel`. Checkout key `SW3-BATCH-COD-XL-CREATE-01`. Require XL `1/1/0`, then Owner/Admin confirms courier handover while the order remains `UNPAID` using `SW3-BATCH-COD-XL-HANDOVER-01`. Expected one XL `SALE -1`, reservation `CONSUMED`, XL `0/0/0`, fulfillment `HANDED_OVER`, payment still `UNPAID`. Only after that readback, confirm PHP 910 separately with method `cash`, reference `SW3-TEST-COD-PAYMENT-01`, note `STAGING COD ACCEPTANCE FIXTURE - no real funds`, and `SW3-BATCH-COD-XL-PAY-01`; payment becomes `PAID` with no additional stock movement.
+3. Last-L contention fixture: after fixture 1, race one POS Black/L x 1 sale against one storefront Black/L x 1 pickup submission. The POS side uses the existing POS/Sales-authorized Owner session, Main Counter, Main Retail Stock, walk-in customer snapshot `SW3 Contention POS Fixture`, GCash reference `SW3-TEST-CONTENTION-POS-L-01`, exact PHP 790, and operation key `SW3-BATCH-CONTENTION-POS-L-01`. The storefront side uses customer `SW3 Contention Storefront`, mobile `09170000033`, email `sw3-contention@example.test`, checkout key `SW3-BATCH-CONTENTION-STOREFRONT-L-01`, and total PHP 790. Start both final submissions from a shared barrier. Exactly one may commit. If POS wins, require one sale/payment/receipt and one L `SALE -1`, no storefront order, L `0/0/0`. If storefront wins, require one order/reservation, POS rejection for unavailable stock, and interim L `1/1/0`; then confirm its synthetic PHP 790 payment with `SW3-BATCH-CONTENTION-STOREFRONT-L-PAY-01` and pickup with `SW3-BATCH-CONTENTION-STOREFRONT-L-HANDOVER-01`, producing exactly one L `SALE -1` and final L `0/0/0`.
+
+The checkout keys above are non-secret test identifiers. Before each browser submit, place the specified key in the existing `stlolab-checkout-attempt-v2` retry record for the exact checkout fingerprint; do not add a customer-facing override or change checkout code. For each Admin action, pre-seed the same authenticated tab's session record `trry-admin-order-action:<order UUID>:<action>` with the exact key and matching payload fingerprint; actions are `confirm-payment`, `customer-pickup`, and `courier-handover`. The local helper then retains that key across uncertain retries and clears it only after a verified response. If this controlled session setup cannot be verified, stop rather than falling back to per-click keys. Record canonical order, reservation, payment-event, sale, receipt, and movement IDs after each commit. If a response is uncertain, query canonical state before replaying the same key.
+
+Expected successful final balances are S `0/0/0`, M `1/1/0`, L `0/0/0`, XL `0/0/0`. Expected new stock ledger effects are two receipts totaling `+3` and exactly three `SALE -1` movements: pickup L, courier XL, and the single contention winner. Payment confirmations do not move stock. No adjustment, cancellation, expiry, refund, return, sale void, or payment-failure transition belongs to this batch.
+
+### Exact release and mutation scope for approval
+
+1. Deploy only the new tested Admin commit from this worktree to the existing protected `adminportal-staging` Preview. No migration is required. Keep POS at `70bb10a` and Sites source at `ebae788`.
+2. Reverify project IDs, commits, active register/location, open shift, all four balances, zero use of every planned key, and all three closed creation gates. Stop on any discrepancy.
+3. Receive only L x 2 and XL x 1 using the two exact receipt keys above. Do not receive S or M.
+4. For the shortest possible creation window, point the owner-private Sites checkout/catalog variables at the newly deployed Admin Preview, enable Admin Preview checkout and Sites checkout, publish privately, and enable `public.stlolab_checkout_config` last. Create the pickup and COD fixtures, run their ordered payment/handover transitions, then run the contention race.
+5. Close creation in fail-closed order regardless of result: Sites `STLO_CHECKOUT_ENABLED=false` and private republish first; database `enabled=false` second; Admin Preview checkout false with a closed Preview deployment third. Verify every public/private checkout surface reports closed. Old gate-open deployment URLs must not remain a permanent catalog or checkout configuration.
+6. Complete only the already-created contention winner as described above. Preserve every audit row. On uncertainty or failure, close gates, inspect state, and stop; do not improvise a refund, return, payment-failure action, stock edit, or compensating sale.
+
+This approval would authorize at most two stock receipts, two guaranteed storefront orders plus one conditional contention storefront order, two guaranteed Admin payments/handovers plus one conditional contention payment/handover, or one POS sale if POS wins. It does not authorize production changes, migrations, Cron activation, changes to the M order, S stock, local-delivery coverage, refunds, returns, payment-failure policy, or unrelated cleanup.

@@ -23,6 +23,7 @@ import {
   updateTaskDraft,
 } from "./services/tasks.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
+import { createOrderActionAttemptStore } from "./services/orderActionAttempts.js";
 import {
   createAdminCustomer,
   findOrCreateAdminCustomerIdentity,
@@ -5356,9 +5357,10 @@ function mergeRetailOrderTransition(orderId, transition = {}) {
   });
 }
 
-function orderActionKey(prefix) {
-  return `${prefix}-${crypto.randomUUID()}`;
-}
+const retailOrderActionAttempts = createOrderActionAttemptStore({
+  storage: window.sessionStorage,
+  randomUUID: () => crypto.randomUUID(),
+});
 
 function mergeNativeOrderPayload(order) {
   const row = normalizeNativeOrderResponseToRow(order);
@@ -5391,14 +5393,20 @@ async function confirmMvpOrderPayment(inquiryId, form) {
     if (retailOrder) {
       const reference = String(form.referenceNumber || "").trim();
       if (!reference) throw new Error("Enter the durable receipt or provider reference.");
-      const payload = await requestAdminOrderAction(retailOrder.id, {
-        action: "confirm_payment",
+      const action = "confirm-payment";
+      const attemptPayload = {
         amountReceived,
         paymentSource: form.paymentSource,
         paymentReference: reference,
         internalNote: form.internalNote,
-        idempotencyKey: orderActionKey("admin-retail-payment"),
+      };
+      const idempotencyKey = retailOrderActionAttempts.getKey(retailOrder.id, action, attemptPayload);
+      const payload = await requestAdminOrderAction(retailOrder.id, {
+        action: "confirm_payment",
+        ...attemptPayload,
+        idempotencyKey,
       });
+      retailOrderActionAttempts.clear(retailOrder.id, action, idempotencyKey);
       mergeRetailOrderTransition(retailOrder.id, payload.transition);
       await loadNativeOrderRows().catch(() => null);
       mvpPaymentConfirmationRequests = { ...mvpPaymentConfirmationRequests, [inquiryId]: { status: "success", message: "Canonical payment confirmation saved." } };
@@ -13728,11 +13736,14 @@ async function saveMvpFulfillmentFields(id, changes) {
   if (retailOrder) {
     const action = String(changes?.trackingSubstatus || "");
     if (!["customer_pickup", "courier_handover"].includes(action)) return { ok: false, error: "Fulfillment action is not valid for this Order." };
+    const attemptAction = action.replaceAll("_", "-");
+    const idempotencyKey = retailOrderActionAttempts.getKey(retailOrder.id, attemptAction);
     try {
       const payload = await requestAdminOrderAction(retailOrder.id, {
         action,
-        idempotencyKey: orderActionKey(`admin-retail-${action}`),
+        idempotencyKey,
       });
+      retailOrderActionAttempts.clear(retailOrder.id, attemptAction, idempotencyKey);
       mergeRetailOrderTransition(retailOrder.id, payload.transition);
       await loadNativeOrderRows().catch(() => null);
       return { ok: true, transition: payload.transition };
