@@ -132,7 +132,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return { key: "future", label };
   };
 
-  const product = (item) => item.productDesc || messageValue(item.message, ["Product", "Garment", "Item", "Inquiry / Product"]) || item.service || "Not set";
+  const product = (item) => isStlolabRetail(item)
+    ? item.retailProductName || item.service || "Not set"
+    : item.productDesc || messageValue(item.message, ["Product", "Garment", "Item", "Inquiry / Product"]) || item.service || "Not set";
   const hasProductAndQuantity = (item) => Boolean(product(item) && product(item) !== "Not set" && serviceDisplay(item) !== "-" && item.qty);
   const hasQuoteApproval = (item) => key(item.quoteStatus) === "approved" && amount(item.quotedAmount || item.amountDue) > 0 && Boolean(item.quoteApprovedAt || key(item.status) === "approved");
   const hasArtworkApproval = (item) => key(item.artworkStatus) === "approved";
@@ -1523,6 +1525,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function quantityDisplay(item) {
+    if (isStlolabRetail(item) && item.retailQuantitySummary) return item.retailQuantitySummary;
     const quantity = String(item.qty || "").trim();
     const sizes = String(item.sizeBreakdown || "").trim();
     if (!quantity) return "-";
@@ -2909,7 +2912,14 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   function stationFor(item) { const value = String(item.service || "").toLowerCase(); return value.includes("embro") ? "embroidery" : value.includes("screen") ? "screen_printing" : "printing"; }
   function inquiryDue(item) { if (!item.followUpDate) return "none"; const date = new Date(`${item.followUpDate}T00:00:00`); const today = new Date(`${todayIso()}T00:00:00`); if (date < today) return "overdue"; if (+date === +today) return "today"; return "week"; }
   function fulfillment(item) { const value = key(item.fulfillmentMethod); return value === "pickup" ? "Pickup" : value === "delivery" ? "Delivery" : "Not set"; }
-  function tracking(item) { const labels = { ready_for_pickup: "Ready for Pickup", out_for_delivery: "Out for Delivery", delivered: "Delivered", completed: "Completed" }; return labels[key(item.trackingSubstatus)] || "Not set"; }
+  function tracking(item) {
+    const labels = { ready_for_pickup: "Ready for Pickup", out_for_delivery: "Out for Delivery", delivered: "Delivered", completed: "Completed" };
+    const legacy = labels[key(item.trackingSubstatus)];
+    if (legacy) return legacy;
+    if (!isStlolabRetail(item)) return "Not set";
+    const canonical = { pending: "Pending", handed_over: item.handoverKind === "CUSTOMER_PICKUP" ? "Picked up" : "Handed over" };
+    return canonical[key(item.fulfillmentState)] || item.fulfillmentState || "Not set";
+  }
   function paymentSummary(item) { const total = amount(item.quotedAmount); const selected = amount(item.paymentSelectedAmount); const paid = amount(item.paymentVerifiedAmount || item.paymentConfirmedAmount); const balance = Math.max(total - paid, 0); return detailSection("Payment", [["Status", paymentLabel(item)], ["Method", paymentMethodLabel(item.paymentMethod)], ["Type", paymentTypeLabel(item.paymentType)], ["Selected Amount", selected ? money(selected) : "Not selected"], ["Reference", item.paymentReference || "Not set"], ["Customer Note", item.paymentCustomerNote || "Not set"], ["Total Amount", money(total)], ["Amount Verified", money(paid)], ["Balance", money(balance)]]); }
   function paymentTypeLabel(value) { const text = key(value); if (text === "down_payment") return "50% Down Payment"; if (text === "full") return "Full Payment"; if (text === "shop") return "Pay at Shop"; return "Not selected"; }
   function paymentMethodLabel(value) { const text = key(value); if (text === "online") return "Pay Online"; if (text === "cash") return "Cash at Shop"; if (text === "gcash") return "GCash"; if (text === "bank_transfer") return "Bank Transfer"; if (text === "card") return "Card"; if (text === "other") return "Other"; return "Not selected"; }

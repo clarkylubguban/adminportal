@@ -25,9 +25,10 @@ export async function getNativeOrderRows(authSession) {
       getAccessToken(authSession)
     );
 
+    const enrichedRows = await enrichRetailOrderRows(Array.isArray(rows) ? rows : [], authSession);
     return {
-      rows: Array.isArray(rows) ? rows : [],
-      status: rows?.length ? "success" : "empty",
+      rows: enrichedRows,
+      status: enrichedRows.length ? "success" : "empty",
       source: "supabase",
       error: null,
     };
@@ -40,6 +41,30 @@ export async function getNativeOrderRows(authSession) {
       error,
     };
   }
+}
+
+export async function enrichRetailOrderRows(rows, authSession, request = fetch) {
+  const accessToken = getAccessToken(authSession);
+  return Promise.all(rows.map(async (row) => {
+    if (getFirstValue(row, ["source_type", "sourceType"]) !== "STLOLAB_RETAIL") return row;
+    const orderId = getFirstValue(row, ["id"]);
+    if (!orderId || !accessToken) throw new Error("Admin session required to load canonical retail order details.");
+    const response = await request(`/api/orders/${encodeURIComponent(orderId)}/actions`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+      },
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok || !payload?.ok) {
+      throw new Error(payload?.error || "Unable to load canonical retail order details.");
+    }
+    return {
+      ...row,
+      fulfillment_state: payload.order?.fulfillmentState || row.fulfillment_state,
+      order_items: Array.isArray(payload.order?.items) ? payload.order.items : [],
+    };
+  }));
 }
 
 export function buildDualReadOrders({ inquiries = [], nativeRows = [] } = {}) {
@@ -76,6 +101,11 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
   const fulfillmentState = getFirstValue(row, ["fulfillment_state", "fulfillmentState"]);
   const totalAmount = getNullableNumber(row, ["total_amount", "totalAmount", "quoted_amount", "quotedAmount"]);
   const fulfillmentDetails = getFirstValue(row, ["fulfillment_details", "fulfillmentDetails"]);
+  const retailItems = normalizeRetailItems(getFirstValue(row, ["order_items", "orderItems"]));
+  const retailProductName = uniqueRetailValues(retailItems, "productName").join(", ");
+  const retailColor = uniqueRetailValues(retailItems, "color").join(", ");
+  const retailSizes = uniqueRetailValues(retailItems, "size").join(", ");
+  const retailQuantitySummary = retailItems.map((item) => `${item.size || "-"} × ${item.quantity}`).join(", ");
 
   if (!bridgeId) return null;
 
@@ -86,6 +116,9 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
     nativeSourceType,
     sourceChannel: getFirstValue(row, ["source_channel", "sourceChannel"]),
     isStlolabRetail,
+    retailItems,
+    retailProductName,
+    retailQuantitySummary,
     nativeOrderId,
     sourceInquiryId,
     sourceInquiryReference:
@@ -103,10 +136,11 @@ export function normalizeNativeOrder(row, sourceInquiry = null) {
     customer: getFirstValue(row, ["customer_name", "customerName", "customer"]) || sourceInquiry?.customer || "",
     contact: getFirstValue(row, ["customer_contact", "contact", "phone"]) || sourceInquiry?.contact || "",
     company: getFirstValue(row, ["company", "business_name", "businessName"]) || sourceInquiry?.company || "",
-    service: getFirstValue(row, ["product", "service", "service_type", "serviceType"]) || sourceInquiry?.service || "-",
+    service: retailProductName || getFirstValue(row, ["product", "service", "service_type", "serviceType"]) || sourceInquiry?.service || "-",
     productDesc: getFirstValue(row, ["product_desc", "productDesc"]) || sourceInquiry?.productDesc || "",
-    qty: quantity,
-    sizeBreakdown,
+    qty: retailQuantitySummary || quantity,
+    sizeBreakdown: retailSizes || sizeBreakdown,
+    color: retailColor || sourceInquiry?.color || sourceInquiry?.garmentColor || "",
     status: getFirstValue(sourceInquiry, ["status"]) || "",
     quoteStatus: getFirstValue(sourceInquiry, ["quoteStatus", "quote_status"]) || "approved",
     orderStatus: getFirstValue(row, ["status"]),
@@ -169,6 +203,27 @@ export function normalizeNativeOrderResponseToRow(order) {
     handed_over_at: order.handedOverAt,
     handover_kind: order.handoverKind,
   };
+}
+
+function normalizeRetailItems(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => ({
+    id: getFirstValue(item, ["id"]),
+    productId: getFirstValue(item, ["productId", "product_id"]),
+    variantId: getFirstValue(item, ["variantId", "variant_id"]),
+    productCode: getFirstValue(item, ["productCode", "product_code"]),
+    productName: getFirstValue(item, ["productName", "product_name"]),
+    sku: getFirstValue(item, ["sku"]),
+    size: getFirstValue(item, ["size"]),
+    color: getFirstValue(item, ["color"]),
+    quantity: Number(getFirstValue(item, ["quantity"])) || 0,
+    unitPrice: getNullableNumber(item, ["unitPrice", "unit_price"]),
+    lineTotal: getNullableNumber(item, ["lineTotal", "line_total"]),
+  })).filter((item) => item.productName && item.quantity > 0);
+}
+
+function uniqueRetailValues(items, key) {
+  return [...new Set(items.map((item) => String(item[key] || "").trim()).filter(Boolean))];
 }
 
 export function normalizeLegacyOrder(inquiry) {

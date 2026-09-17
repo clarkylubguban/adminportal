@@ -1,10 +1,11 @@
 import { getAuthorizedAdmin, getBearerToken, readJsonBody, sendJson } from "./adminAccess.js";
+import { requireEffectiveModuleAccess } from "./effectiveAccess.js";
 import { createServerSupabaseClient, createServerSupabaseUserClient } from "./supabaseServer.js";
 
 const WRITE_ROLES = new Set(["owner", "admin"]);
 
 export default async function adminOrderActionsHandler(request, response, dependencies = {}) {
-  if (request.method !== "POST") return sendJson(response, 405, { ok: false, error: "method not allowed" });
+  if (!["GET", "POST"].includes(request.method)) return sendJson(response, 405, { ok: false, error: "method not allowed" });
 
   const orderId = getOrderId(request);
   if (!uuid(orderId)) return sendJson(response, 400, { ok: false, error: "invalid order id" });
@@ -16,6 +17,16 @@ export default async function adminOrderActionsHandler(request, response, depend
     const identityClient = dependencies.identityClient || createServerSupabaseClient();
     const caller = dependencies.caller || await getAuthorizedAdmin(identityClient, token);
     if (!caller) return sendJson(response, 401, { ok: false, error: "admin session required" });
+
+    if (request.method === "GET") {
+      const access = dependencies.access || await requireEffectiveModuleAccess(identityClient, caller, "orders");
+      if (!access.allowed) return sendJson(response, 403, { ok: false, error: "Orders access is restricted." });
+      const readDetails = dependencies.readDetails || readCanonicalOrderDetails;
+      const order = await readDetails(identityClient, orderId);
+      if (!order) return sendJson(response, 404, { ok: false, error: "order not found" });
+      return sendJson(response, 200, { ok: true, order });
+    }
+
     if (!WRITE_ROLES.has(String(caller.role || "").toLowerCase())) {
       return sendJson(response, 403, { ok: false, error: "owner or admin access required" });
     }
@@ -29,9 +40,48 @@ export default async function adminOrderActionsHandler(request, response, depend
     if (error) return sendDatabaseError(response, error);
     return sendJson(response, 200, { ok: true, action: operation.action, transition: data });
   } catch (error) {
+    if (error?.status) {
+      return sendJson(response, error.status, { ok: false, error: error.message || "order access is restricted" });
+    }
     console.error("Admin Order action failed.", { message: error?.message, code: error?.code });
     return sendJson(response, 500, { ok: false, error: "order action failed" });
   }
+}
+
+export async function readCanonicalOrderDetails(supabase, orderId) {
+  const { data: order, error: orderError } = await supabase
+    .from("orders")
+    .select("id,source_type,fulfillment_state")
+    .eq("id", orderId)
+    .maybeSingle();
+  if (orderError) throw orderError;
+  if (!order) return null;
+
+  const { data: items, error: itemsError } = await supabase
+    .from("order_items")
+    .select("id,product_id,variant_id,product_code,product_name,sku,size,color,quantity,unit_price,line_total")
+    .eq("order_id", orderId)
+    .order("created_at", { ascending: true });
+  if (itemsError) throw itemsError;
+
+  return {
+    id: order.id,
+    sourceType: order.source_type,
+    fulfillmentState: order.fulfillment_state,
+    items: (items || []).map((item) => ({
+      id: item.id,
+      productId: item.product_id,
+      variantId: item.variant_id,
+      productCode: item.product_code,
+      productName: item.product_name,
+      sku: item.sku,
+      size: item.size,
+      color: item.color,
+      quantity: item.quantity,
+      unitPrice: item.unit_price,
+      lineTotal: item.line_total,
+    })),
+  };
 }
 
 export function buildOperation(orderId, body = {}) {

@@ -201,3 +201,22 @@ Do not run without separate mutation approval. Reuse only order `49dc89ae-2e30-4
 5. Require final order status `cancelled` while payment remains `UNPAID` and fulfillment remains `PENDING`; reservation status `RELEASED` with `release_idempotency_key='SW3-CANCEL-49DC89AE-01'` and reason `CUSTOMER_CANCELLATION`; on-hand `1`, reserved `0`, available `1`; zero stock movements. Replay the identical request once more and require no further change.
 6. Refresh Admin and POS read-only: Admin must show cancelled; POS M must show on-hand `1`, reserved `0`, sellable `1`. Do not add it to a cart or attempt a sale.
 7. In a `finally` cleanup, return the Admin Preview gate to false and verify Storefront, Admin, and database gates are all disabled. Record request IDs, responses, and final SQL evidence without recording secrets.
+
+## Cancellation acceptance attempt and local Admin projection fix (2026-09-17)
+
+Cancellation evidence and the undeployed UI work are intentionally recorded separately.
+
+### Staging cancellation acceptance
+
+- The requested cancellation mutation was not executed. The owner-private browser session that created the order and held its confirmation token in session storage had been closed, and the token is not retained by Admin, Storefront source, or the database. Staging stores only its one-way hash. Reopening browser history did not recover the token.
+- Rotating, reissuing, recovering, or bypassing the confirmation token is outside the documented cancellation scope. The wrong-token control was also not run because opening the dedicated Admin cancellation gate without a valid-token path could not complete the approved acceptance sequence safely. No cancellation endpoint request was sent and no gate was opened.
+- Fresh read-only SQL reconfirmed order `49dc89ae-2e30-4f8a-b4e8-3b746c5d70e2` / `TRRY-ORD-8B12C7F9` remains `awaiting_payment`, `UNPAID`, and `PENDING`, with one ACTIVE reservation for quantity `1`. Main Retail Stock M remains on-hand `1`, reserved `1`, available `0`. The order has zero stock movements, and the total STLOLAB retail order count remains `1`.
+- The database checkout gate remains `false`. The Admin and Sites checkout gates were not changed from their disabled checkpoint state. No order, reservation release, stock movement, payment, handover, sale, customer, or remote configuration change occurred. POS therefore correctly remains blocked for M at available/sellable `0`; released availability cannot be claimed until an authorized cancellation actually succeeds.
+- Required owner action: restore the original token-bearing confirmation browser session. If it cannot be restored, approve a separately reviewed token-reissue procedure that preserves proof of possession and does not weaken the confirmation or cancellation boundary. Do not use a database bypass or disclose the token.
+
+### Local Admin display mapping
+
+- Admin source started clean at `c4ffd4e2bf370b4130c83edf83a6ba49728af9f6` on `codex/stlolab-sw3-checkout`. POS remained clean at `70bb10abe6427692b50bdd96822883a85d243fcd`; Storefront remained clean at `4b9fb63c400ababcfa3b25cf710506f20a933d23`.
+- The existing authenticated `/api/orders/:orderId/actions` function now supports a read-only detail response. It requires canonical Orders effective access, uses the server-side client to read only the canonical fulfillment state and order-line snapshots, and returns no customer data. Existing owner/admin mutation restrictions and action contracts are unchanged; temporary Orders staff receive only the same read authority already granted to their module.
+- The Orders compatibility loader enriches only `STLOLAB_RETAIL` rows. The dashboard now renders canonical `Glow N Underground`, `Black`, `M × 1`, and fulfillment `Pending`; legacy and other native order display behavior remains unchanged. Missing or denied detail reads remain visible as Orders load errors rather than being converted to empty data.
+- Focused verification passed: `node scripts/test-stlolab-admin-order-actions.mjs`, `node scripts/test-orders-dual-read.mjs`, `node scripts/test-orders-dashboard.mjs`, and `npm.cmd run build`. The generated `dist` artifact was refreshed. These Admin changes are local only and were not deployed.

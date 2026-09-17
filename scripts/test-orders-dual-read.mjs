@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { createMvpDashboard } from "../src/mvpDashboard.js";
 import {
   buildDualReadOrders,
+  enrichRetailOrderRows,
   findOrderByIdentity,
   matchesOrderIdentity,
   normalizeNativeOrder,
@@ -79,7 +80,52 @@ const retailRow = {
   payment_state: "UNPAID",
   fulfillment_state: "PENDING",
   reservation_expires_at: "2026-09-14T04:00:00.000Z",
+  order_items: [{
+    id: "96000000-0000-4000-8000-000000000334",
+    product_id: "96000000-0000-4000-8000-000000000335",
+    variant_id: "96000000-0000-4000-8000-000000000336",
+    product_code: "PRD-260911-8DC1A1",
+    product_name: "Glow N Underground",
+    sku: "PRD-260911-8DC1A1-BLACK-M",
+    size: "M",
+    color: "Black",
+    quantity: 1,
+    unit_price: 790,
+    line_total: 790,
+  }],
 };
+
+const [enrichedRetailRow] = await enrichRetailOrderRows(
+  [{ ...retailRow, order_items: undefined }],
+  { access_token: "orders-session-token" },
+  async (url, options) => {
+    assert.equal(url, `/api/orders/${retailRow.id}/actions`);
+    assert.equal(options.headers.Authorization, "Bearer orders-session-token");
+    return {
+      ok: true,
+      json: async () => ({
+        ok: true,
+        order: {
+          fulfillmentState: "PENDING",
+          items: retailRow.order_items.map((item) => ({
+            id: item.id,
+            productId: item.product_id,
+            variantId: item.variant_id,
+            productCode: item.product_code,
+            productName: item.product_name,
+            sku: item.sku,
+            size: item.size,
+            color: item.color,
+            quantity: item.quantity,
+            unitPrice: item.unit_price,
+            lineTotal: item.line_total,
+          })),
+        },
+      }),
+    };
+  }
+);
+assert.equal(enrichedRetailRow.order_items[0].productName, "Glow N Underground", "retail loader uses the authenticated canonical detail response");
 
 const legacyOnly = buildDualReadOrders({ inquiries: [legacyInquiry], nativeRows: [] });
 assert.equal(legacyOnly.length, 1, "legacy-only approved inquiries should remain visible as orders");
@@ -131,6 +177,10 @@ assert.equal(retail.paymentStatus, "unpaid");
 assert.equal(retail.paymentConfirmedAmount, undefined);
 assert.equal(retail.fulfillmentState, "PENDING");
 assert.equal(retail.source, "STLOLAB");
+assert.equal(retail.retailProductName, "Glow N Underground");
+assert.equal(retail.retailQuantitySummary, "M × 1");
+assert.equal(retail.color, "Black");
+assert.equal(retail.sizeBreakdown, "M");
 
 global.window = {
   location: { search: "?order=TRRY-ORD-STLOLAB1" },
@@ -152,6 +202,15 @@ assert.ok(!rendered.includes("SO-SHOULD-NOT-SHOW"), "native order rendering must
 assert.ok(rendered.includes("TRRY-ORD-STLOLAB1"), "Orders UI renders direct STLOLAB order");
 assert.ok(rendered.includes("STLOLAB"), "direct order source is labeled correctly");
 assert.ok(rendered.includes("RETAIL_PAYMENT_FORM"), "direct retail order exposes canonical payment action content");
+dashboard.state.orderTab = "overview";
+const overview = dashboard.renderOrders({ items: [...mixed, retail] });
+assert.ok(overview.includes("Glow N Underground"), "direct retail order renders the canonical line name");
+assert.ok(overview.includes("M × 1"), "direct retail order renders the canonical size and quantity");
+assert.ok(overview.includes("Black"), "direct retail order renders the canonical color");
+assert.ok(!overview.includes("Direct STLOLAB retail checkout"), "generic retail order description does not replace the canonical line name");
+dashboard.state.orderTab = "fulfillment";
+const fulfillment = dashboard.renderOrders({ items: [...mixed, retail] });
+assert.ok(fulfillment.includes("Pending"), "direct retail order renders the canonical fulfillment state");
 
 const main = await readFile("src/main.js", "utf8");
 assert.ok(main.includes("buildDualReadOrders"), "/orders uses the dual-read compatibility collection");

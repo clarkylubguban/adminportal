@@ -6,7 +6,25 @@ import handler, { buildOperation } from "../api/_lib/adminOrderActionsRoute.js";
 const ORDER_ID = "96000000-0000-4000-8000-000000000777";
 const OWNER = { userId: "96000000-0000-4000-8000-000000000001", role: "owner" };
 
-assert.equal((await invoke({ method: "GET" })).status, 405);
+const canonicalItems = [{
+  id: "96000000-0000-4000-8000-000000000778",
+  productName: "Glow N Underground",
+  color: "Black",
+  size: "M",
+  quantity: 1,
+  unitPrice: 790,
+  lineTotal: 790,
+}];
+const read = await invoke({
+  method: "GET",
+  caller: { role: "staff" },
+  access: { allowed: true, source: "temporary" },
+  readDetails: async () => ({ id: ORDER_ID, sourceType: "STLOLAB_RETAIL", fulfillmentState: "PENDING", items: canonicalItems }),
+});
+assert.equal(read.status, 200);
+assert.deepEqual(read.body.order.items, canonicalItems);
+assert.equal((await invoke({ method: "GET", caller: { role: "staff" }, access: { allowed: false } })).status, 403);
+assert.equal((await invoke({ method: "DELETE" })).status, 405);
 assert.equal((await invoke({ headers: {} })).status, 401);
 assert.equal((await invoke({ caller: { role: "staff" } })).status, 403);
 
@@ -68,7 +86,7 @@ assert.equal(readFileSync("src/main.js", "utf8").includes("paymentState: form.pa
 
 console.log("PASS authenticated STLOLAB Orders handlers reject browser state claims, preserve role checks, and map idempotent payment/handover actions");
 
-async function invoke({ method = "POST", body = {}, headers = { authorization: "Bearer admin-token" }, caller, actorClient } = {}) {
+async function invoke({ method = "POST", body = {}, headers = { authorization: "Bearer admin-token" }, caller, actorClient, access, readDetails } = {}) {
   const request = Readable.from([JSON.stringify(body)]);
   request.method = method;
   request.url = `/api/orders/${ORDER_ID}/actions`;
@@ -80,7 +98,7 @@ async function invoke({ method = "POST", body = {}, headers = { authorization: "
     setHeader(name, value) { this.headers[name.toLowerCase()] = value; },
     end(raw = "") { this.raw = raw; },
   };
-  await handler(request, response, { caller, identityClient: {}, actorClient });
+  await handler(request, response, { caller, identityClient: {}, actorClient, access, readDetails });
   return { status: response.statusCode, body: response.raw ? JSON.parse(response.raw) : null };
 }
 
