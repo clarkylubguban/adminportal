@@ -180,3 +180,24 @@ Owner approval covered only the tested permission migration, one M-size pickup o
 - Cleanup completed in fail-closed order. Database `public.stlolab_checkout_config.enabled=false`; Admin Preview environment `STLO_CHECKOUT_ENABLED=false` is deployed READY as `dpl_2EG7WHcxzsVph8bJy7uoyGyiJBtq` at `https://adminportal-staging-o3lm1gghp-clarkylubguban1.vercel.app`; Sites environment revision `7` has `STLO_CHECKOUT_ENABLED=false`, points at that disabled Preview endpoint, and was republished owner-private at `https://stlolab-after-dark-preview.clarkylubguban.chatgpt.site`.
 
 The acceptance record remains awaiting payment and reserved. Do not confirm payment, hand over, cancel, expire, or otherwise alter it without a separately approved acceptance step. Local-delivery coverage, refunds, returns, and payment-failure transitions remain blocked; STLOLAB ordering is disabled.
+
+## Read-only Admin and POS acceptance evidence (2026-09-17)
+
+Admin source was clean at checkpoint `c2032af749214a8544d4199f99c96ed3e740b066`; POS source was clean at `70bb10abe6427692b50bdd96822883a85d243fcd`. Verification used authenticated staging Preview sessions only. The production Admin and POS aliases were not used after their identities were detected, and no action button or write path was invoked.
+
+- Canonical SQL still shows order `49dc89ae-2e30-4f8a-b4e8-3b746c5d70e2` / `TRRY-ORD-8B12C7F9` as `awaiting_payment`, `UNPAID`, `PENDING`, pickup, PHP `790.00`. Its sole line is Glow N Underground `PRD-260911-8DC1A1`, Black, M, quantity `1`, unit price PHP `790.00`. Reservation `7640053c-05a2-4831-9619-6b0c864d7956` remains ACTIVE; Main Retail Stock is on-hand `1`, reserved `1`, available `0`; there are zero order stock movements.
+- The protected Admin Preview Orders page finds `TRRY-ORD-8B12C7F9`, shows `UNPAID`, pickup, M quantity `1`, and PHP `790` due. Two UI discrepancies remain: the item display uses the generic order snapshot `Direct STLOLAB retail checkout` instead of the canonical line name `Glow N Underground`/Black; the Fulfillment tab shows `Sub-status: Not set` instead of canonical `PENDING`. These are display/projection gaps, not canonical-data failures.
+- The protected POS Preview Inventory page shows the correct product at `1 available / 1 reserved / 0 sellable`. Its M row shows on-hand/available `1`, reserved `1`, sellable `0`, and `OUT OF STOCK`. New Sale shows Glow N Underground as `0 sellable`; the Black/M selector shows `Stock: 0` and its `ADD` action is disabled. No sale was attempted.
+- Checkout remains closed: database `stlolab_checkout_config.enabled=false`, Sites environment revision `7` has `STLO_CHECKOUT_ENABLED=false`, and the disabled Admin Preview from the prior acceptance remains the configured checkout endpoint. No order, reservation, payment, handover, cancellation, sale, or stock state changed during this verification.
+
+### Next staging test: token-authorized cancellation
+
+Do not run without separate mutation approval. Reuse only order `49dc89ae-2e30-4f8a-b4e8-3b746c5d70e2`; do not create another order.
+
+1. Recheck the baseline above and confirm the order has not reached its absolute expiry instant `2026-09-20 01:59:44.487094+00`, no Cron cleanup is active, and all checkout gates are disabled.
+2. Keep the Storefront and database checkout gates disabled. Temporarily enable only a dedicated Admin staging Preview for the existing `/api/stlolab-order-cancel` server route. Reuse the existing server-only gateway secret and the confirmation token held by the owner-private submitting session; never print, download, or persist either secret.
+3. Use cancellation idempotency key `SW3-CANCEL-49DC89AE-01` and reason `SW3 staging cancellation acceptance`. First send a wrong-token control request and require HTTP `404 ORDER_NOT_FOUND` with every canonical row unchanged.
+4. Send two concurrent authorized POST requests with the same order ID, confirmation token, idempotency key, and reason. Both may return the same cancelled confirmation, but the transaction must produce exactly one state transition and one reservation release.
+5. Require final order status `cancelled` while payment remains `UNPAID` and fulfillment remains `PENDING`; reservation status `RELEASED` with `release_idempotency_key='SW3-CANCEL-49DC89AE-01'` and reason `CUSTOMER_CANCELLATION`; on-hand `1`, reserved `0`, available `1`; zero stock movements. Replay the identical request once more and require no further change.
+6. Refresh Admin and POS read-only: Admin must show cancelled; POS M must show on-hand `1`, reserved `0`, sellable `1`. Do not add it to a cart or attempt a sale.
+7. In a `finally` cleanup, return the Admin Preview gate to false and verify Storefront, Admin, and database gates are all disabled. Record request IDs, responses, and final SQL evidence without recording secrets.
