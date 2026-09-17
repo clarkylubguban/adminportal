@@ -6,7 +6,7 @@ const MAX_BODY_BYTES = 24_000;
 export default async function stlolabCheckoutHandler(request, response, action = "create") {
   response.setHeader("Cache-Control", "no-store");
   if (request.method !== "POST") return send(response, 405, { ok: false, code: "METHOD_NOT_ALLOWED" });
-  if (!checkoutEnvironmentReady()) return send(response, 503, { ok: false, code: "ORDERS_NOT_OPEN" });
+  if (!checkoutEnvironmentReady(action)) return send(response, 503, { ok: false, code: "ORDERS_NOT_OPEN" });
   if (!authorizedGateway(request)) return send(response, 401, { ok: false, code: "STOREFRONT_AUTH_REQUIRED" });
 
   try {
@@ -44,12 +44,15 @@ export default async function stlolabCheckoutHandler(request, response, action =
       p_idempotency_key: payload.idempotencyKey,
       p_payload_hash: sha256(stableJson(payload.checkout)),
       p_confirmation_token_hash: sha256(payload.confirmationToken),
+      p_confirmation_token_expires_at: payload.confirmationTokenExpiresAt,
       p_customer: payload.checkout.customer,
       p_fulfillment: payload.checkout.fulfillment,
       p_lines: payload.checkout.lines,
     });
     if (error) return sendKnownError(response, error);
-    return send(response, 201, { ok: true, order: data, confirmationToken: payload.confirmationToken });
+    if (!data?.accessExpiresAt) throw new Error("Checkout did not establish durable confirmation access.");
+    const { accessExpiresAt, ...order } = data;
+    return send(response, 201, { ok: true, order, accessExpiresAt });
   } catch (error) {
     if (error?.statusCode) return send(response, error.statusCode, { ok: false, code: error.code });
     console.error("STLOLAB checkout request failed.", { code: error?.code, message: error?.message });
@@ -57,10 +60,10 @@ export default async function stlolabCheckoutHandler(request, response, action =
   }
 }
 
-function checkoutEnvironmentReady() {
-  return process.env.STLO_CHECKOUT_ENABLED === "true"
-    && process.env.STLO_CHECKOUT_ENV === "staging"
+function checkoutEnvironmentReady(action) {
+  const stagingReady = process.env.STLO_CHECKOUT_ENV === "staging"
     && String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").includes("fszkypwovpdthqfobxrk");
+  return stagingReady && (action !== "create" || process.env.STLO_CHECKOUT_ENABLED === "true");
 }
 
 function authorizedGateway(request) {
@@ -73,7 +76,8 @@ function authorizedGateway(request) {
 function normalizeCheckout(body) {
   const idempotencyKey = opaqueToken(body.idempotencyKey, 16, 120, /^[A-Za-z0-9_-]+$/);
   const confirmationToken = opaqueToken(body.confirmationToken, 32, 180);
-  if (!idempotencyKey || !confirmationToken) throw bad("INVALID_CHECKOUT_SECURITY");
+  const confirmationTokenExpiresAt = futureInstant(body.confirmationTokenExpiresAt);
+  if (!idempotencyKey || !confirmationToken || !confirmationTokenExpiresAt) throw bad("INVALID_CHECKOUT_SECURITY");
   const customer = body.customer || {};
   const fullName = text(customer.fullName, 240);
   const mobile = text(customer.mobile, 40);
@@ -92,7 +96,7 @@ function normalizeCheckout(body) {
   })) : [];
   if (!lines.length || lines.length > 20 || lines.some((line) => !line.variantId || !Number.isInteger(line.quantity) || line.quantity < 1 || line.quantity > 99 || !Number.isSafeInteger(line.unitPriceMinor) || line.unitPriceMinor < 1)) throw bad("INVALID_ORDER_LINES");
   if (new Set(lines.map((line) => line.variantId)).size !== lines.length) throw bad("DUPLICATE_VARIANT_LINES");
-  return { idempotencyKey, confirmationToken, checkout: {
+  return { idempotencyKey, confirmationToken, confirmationTokenExpiresAt, checkout: {
     customer: { fullName, mobile, email },
     fulfillment: { method, optionCode, pickupCode: text(fulfillment.pickupCode, 80), address: {
       line1: text(address.line1, 240), line2: text(address.line2, 240), city: text(address.city, 120),
@@ -130,5 +134,6 @@ function sha256(value) { return createHash("sha256").update(value).digest("hex")
 function text(value, max) { return String(value ?? "").trim().slice(0, max); }
 function uuid(value) { const result = text(value, 80).toLowerCase(); return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(result) ? result : ""; }
 function opaqueToken(value, min, max, pattern = /^[A-Za-z0-9_-]+$/) { const result = text(value, max); return result.length >= min && pattern.test(result) ? result : ""; }
+function futureInstant(value) { const result = text(value, 80); const instant = Date.parse(result); return Number.isFinite(instant) && instant > Date.now() ? new Date(instant).toISOString() : ""; }
 function bad(code) { return Object.assign(new Error(code), { statusCode: 400, code }); }
 function send(response, status, body) { response.statusCode = status; response.setHeader("Content-Type", "application/json; charset=utf-8"); response.end(JSON.stringify(body)); }

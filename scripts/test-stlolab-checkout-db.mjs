@@ -10,6 +10,7 @@ const posUserId = '96000000-0000-4000-8000-000000000002';
 const posM3bMigration = process.env.TRRY_POS_M3B_MIGRATION || '';
 const posCompatibilityMigrations = JSON.parse(process.env.TRRY_POS_COMPAT_MIGRATIONS_JSON || '[]');
 const checkoutPermissionMigration = '20260916082231_stlolab_sw3_checkout_service_role_permissions.sql';
+const orderAccessMigration = '20260917034542_stlolab_order_access_lifecycle.sql';
 const psqlBridge = process.env.TRRY_VERIFY_PSQL_BRIDGE || '';
 let started = false;
 
@@ -86,16 +87,19 @@ try {
   const location = one(`select id from public.inventory_locations where location_code='MAIN-RETAIL'`).id;
   const pickup = `jsonb_build_object('method','pickup','optionCode','SHOP_PICKUP','pickupCode','TRRY-SHOP','address',jsonb_build_object())`;
   const delivery = (code, barangay) => `jsonb_build_object('method','delivery','optionCode','${code}','address',jsonb_build_object('line1','Test street','barangay','${barangay}','city','Iligan City','province','Lanao del Norte','postalCode','9200'))`;
-  const call = (key = 'ABCDEFGHIJKLMNOP', price = 79000, qty = 2, token = 'b'.repeat(64), fulfillment = pickup, variantId = variant) =>
+  const callOld = (key = 'ABCDEFGHIJKLMNOP', price = 79000, qty = 2, token = 'b'.repeat(64), fulfillment = pickup, variantId = variant) =>
     `select trry_api.create_stlolab_order_sw3('staging','${key}','${createHash('sha256').update([key, price, qty, variantId, fulfillment].join(':')).digest('hex')}','${token}',jsonb_build_object('fullName','SW3 Staging Tester','mobile','09171234567','email','sw3@example.test'),${fulfillment},jsonb_build_array(jsonb_build_object('variantId','${variantId}','quantity',${qty},'unitPriceMinor',${price}))) as result`;
+  const call = (key = 'ABCDEFGHIJKLMNOP', price = 79000, qty = 2, token = 'b'.repeat(64), fulfillment = pickup, variantId = variant) =>
+    callOld(key, price, qty, token, fulfillment, variantId).replace('))) as result', `)),clock_timestamp()+interval '30 days') as result`);
   const payment = (orderId, reference, key, amount = 790, method = 'gcash') =>
     `select trry_api.confirm_stlolab_order_payment_sw3('${orderId}',${amount},'${method}','${reference}',null,'${key}') as result`;
 
-  fails(service(call()), /permission denied for schema private/);
+  fails(service(callOld()), /permission denied for schema private/);
   sql(readFileSync(`supabase/migrations/${checkoutPermissionMigration}`, 'utf8'));
   assert.equal(one(`select has_schema_privilege('service_role','private','usage') as allowed`).allowed, true);
   assert.equal(one(`select has_function_privilege('service_role','private.stlolab_place_key(text)','execute') as allowed`).allowed, true);
   assert.equal(one(`select has_function_privilege('service_role','private.stlolab_reserve_order_item_sw3()','execute') as allowed`).allowed, false);
+  sql(readFileSync(`supabase/migrations/${orderAccessMigration}`, 'utf8'));
   for (const role of ['anon', 'authenticated']) {
     assert.equal(one(`select has_schema_privilege('${role}','private','usage') as allowed`).allowed, false);
     assert.equal(one(`select has_function_privilege('${role}','private.stlolab_place_key(text)','execute') as allowed`).allowed, false);
@@ -110,6 +114,7 @@ try {
       ('staging','SHOP_PICKUP','pickup',true,0,false,'TRRY-SHOP','TRRY Apparel Shop','PICKUP','{}','Torralba St., Brgy. Poblacion, Iligan City; daily 10 AM-6 PM Philippine time.'),
       ('staging','LOCAL_DELIVERY','delivery',true,60,true,null,'Local delivery','EXPLICIT_BARANGAYS',jsonb_build_object('allowedBarangays',jsonb_build_array('Poblacion'),'excludedBarangays',jsonb_build_array('Buru-un','Linamon','Dalipuga','Pugaan','Suarez','Santa Elena')),null),
       ('staging','NATIONWIDE_DELIVERY','delivery',true,120,true,null,'Nationwide delivery','NATIONWIDE','{}',null);`);
+  fails(service(callOld('LEGACYBYPASSKEY1')), /durable confirmation access is required/);
 
   const created = oneAsService(call()).result;
   const replay = oneAsService(call()).result;
@@ -118,6 +123,19 @@ try {
   assert.equal(created.totalMinor, 158000);
   assert.equal(created.lines[0].size, 'S');
   assert.equal(created.lines[0].quantity, 2);
+  assert.deepEqual(one(`select confirmation_access_version as version,confirmation_token_revoked_at is null as active,
+    extract(epoch from (confirmation_token_expires_at-confirmation_token_issued_at))::int between 2591900 and 2592000 as ttl_ok
+    from public.orders where id='${created.orderId}'`), {version:1,active:true,ttl_ok:true});
+  sql(`update public.orders set confirmation_token_revoked_at=clock_timestamp() where id='${created.orderId}'`);
+  assert.equal(one(`select trry_api.get_stlolab_order_confirmation_sw3('${created.orderId}','${'b'.repeat(64)}') as result`).result, null);
+  assert.equal(one(`select trry_api.cancel_stlolab_order_sw3('${created.orderId}','${'b'.repeat(64)}','REVOKEDCANCELKEY1',null) as result`).result, null);
+  sql(`update public.orders set confirmation_token_revoked_at=null,
+    confirmation_token_issued_at=clock_timestamp()-interval '2 days',confirmation_token_expires_at=clock_timestamp()-interval '1 day'
+    where id='${created.orderId}'`);
+  assert.equal(one(`select trry_api.get_stlolab_order_confirmation_sw3('${created.orderId}','${'b'.repeat(64)}') as result`).result, null);
+  assert.equal(one(`select trry_api.cancel_stlolab_order_sw3('${created.orderId}','${'b'.repeat(64)}','EXPIREDCANCELKEY1',null) as result`).result, null);
+  sql(`update public.orders set confirmation_token_issued_at=clock_timestamp(),confirmation_token_expires_at=clock_timestamp()+interval '30 days'
+    where id='${created.orderId}'`);
   assert.equal(one(`select extract(epoch from (reservation_expires_at-created_at))::int as seconds from public.orders where id='${created.orderId}'`).seconds, 259200);
   assert.equal(one(`select count(*)::int as count from public.orders where source_type='STLOLAB_RETAIL'`).count, 1);
   assert.equal(one(`select count(*)::int as count from public.order_items`).count, 1);
