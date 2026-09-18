@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createOrderActionAttemptStore } from "../src/services/orderActionAttempts.js";
-import { isStlolabAcceptanceKeyControlEnabled } from "../src/services/stlolabAcceptanceKeys.js";
+import { isStlolabAcceptanceKeyControlEnabled, isStlolabAcceptanceKeyRequestAllowed } from "../src/services/stlolabAcceptanceKeys.js";
 
 const values = new Map();
 const storage = {
@@ -39,6 +39,7 @@ assert.equal(attempts.getKey("order-2", "confirm-payment", exactPayment, exactKe
 assert.equal(reloaded.getKey("order-2", "confirm-payment", exactPayment), exactKey, "reload reuses the exact UI-supplied key");
 assert.throws(() => reloaded.getKey("order-2", "confirm-payment", { ...exactPayment, paymentReference: "changed" }, exactKey), /another action payload/);
 assert.throws(() => attempts.getKey("order-3", "customer-pickup", {}, "short"), /16-120/);
+assert.throws(() => attempts.getKey("order-3", "customer-pickup", {}, "ABCDEFGHIJKLMNOP"), /SW3-BATCH/);
 const blockedStorage = { getItem: () => null, setItem: () => { throw new Error("blocked"); }, removeItem: () => {} };
 const blockedAttempts = createOrderActionAttemptStore({ storage: blockedStorage, randomUUID: () => "10000000-0000-4000-8000-000000000001" });
 assert.throws(() => blockedAttempts.getKey("order-4", "customer-pickup", {}, "SW3-BATCH-PICKUP-L-HANDOVER-01"), /persistent retry storage/);
@@ -46,6 +47,10 @@ assert.match(blockedAttempts.getKey("order-4", "customer-pickup"), /^admin-retai
 assert.equal(isStlolabAcceptanceKeyControlEnabled({ VITE_APP_ENV: "staging", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "true" }), true);
 assert.equal(isStlolabAcceptanceKeyControlEnabled({ VITE_APP_ENV: "production", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "true" }), false);
 assert.equal(isStlolabAcceptanceKeyControlEnabled({ VITE_APP_ENV: "staging", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "false" }), false);
+assert.equal(isStlolabAcceptanceKeyControlEnabled({ VITE_APP_ENV: "Staging", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "true" }), false);
+assert.equal(isStlolabAcceptanceKeyRequestAllowed({ VITE_APP_ENV: "production", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "true" }, exactKey), false);
+assert.equal(isStlolabAcceptanceKeyRequestAllowed({ VITE_APP_ENV: "staging", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "true" }, exactKey), true);
+assert.equal(isStlolabAcceptanceKeyRequestAllowed({}, "admin-retail-confirm-payment-00000000"), true);
 
 const main = readFileSync("src/main.js", "utf8");
 assert.match(main, /retailOrderActionAttempts\.getKey\(retailOrder\.id, action, attemptPayload, form\.acceptanceIdempotencyKey\)/, "payment must use the persisted attempt key and optional staging control");

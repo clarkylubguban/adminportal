@@ -1,6 +1,7 @@
 import { getAuthorizedAdmin, getBearerToken, readJsonBody, sendJson } from "./adminAccess.js";
 import { requireEffectiveModuleAccess } from "./effectiveAccess.js";
 import { createServerSupabaseClient, createServerSupabaseUserClient } from "./supabaseServer.js";
+import { isStlolabAcceptanceKeyRequestAllowed } from "../../src/services/stlolabAcceptanceKeys.js";
 
 const WRITE_ROLES = new Set(["owner", "admin"]);
 
@@ -32,6 +33,9 @@ export default async function adminOrderActionsHandler(request, response, depend
     }
 
     const body = await readJsonBody(request);
+    if (!isStlolabAcceptanceKeyRequestAllowed(dependencies.environment || process.env, body.idempotencyKey)) {
+      return sendJson(response, 403, { ok: false, error: "staging acceptance key is unavailable" });
+    }
     const operation = buildOperation(orderId, body);
     if (!operation.ok) return sendJson(response, 400, { ok: false, error: operation.error });
 

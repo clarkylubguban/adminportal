@@ -78,6 +78,28 @@ const conflict = await invoke({
 });
 assert.equal(conflict.status, 409);
 
+let excludedRpcCalls = 0;
+const excludedActorClient = fakeActorClient(async () => {
+  excludedRpcCalls += 1;
+  return { data: {}, error: null };
+});
+for (const environment of [
+  { VITE_APP_ENV: "production", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "true" },
+  { VITE_APP_ENV: "staging", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "false" },
+  { VITE_APP_ENV: "Staging", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "true" },
+]) {
+  const excluded = await invoke({ body: paymentBody(), caller: OWNER, actorClient: excludedActorClient, environment });
+  assert.equal(excluded.status, 403, "direct acceptance-key requests must be server-excluded outside exact staging configuration");
+}
+assert.equal(excludedRpcCalls, 0, "excluded acceptance keys must not reach canonical RPCs");
+const normalProductionKey = await invoke({
+  body: paymentBody({ idempotencyKey: "admin-retail-confirm-payment-00000000" }),
+  caller: OWNER,
+  actorClient: fakeActorClient(async () => ({ data: { idempotent: false }, error: null })),
+  environment: { VITE_APP_ENV: "production", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "false" },
+});
+assert.equal(normalProductionKey.status, 200, "normal generated idempotency keys remain unchanged");
+
 const dispatcher = readFileSync("api/assignment-users.js", "utf8");
 const vercel = JSON.parse(readFileSync("vercel.json", "utf8"));
 assert.match(dispatcher, /adminOrderActionsHandler/);
@@ -86,7 +108,7 @@ assert.equal(readFileSync("src/main.js", "utf8").includes("paymentState: form.pa
 
 console.log("PASS authenticated STLOLAB Orders handlers reject browser state claims, preserve role checks, and map idempotent payment/handover actions");
 
-async function invoke({ method = "POST", body = {}, headers = { authorization: "Bearer admin-token" }, caller, actorClient, access, readDetails } = {}) {
+async function invoke({ method = "POST", body = {}, headers = { authorization: "Bearer admin-token" }, caller, actorClient, access, readDetails, environment = { VITE_APP_ENV: "staging", VITE_STLO_ACCEPTANCE_KEYS_ENABLED: "true" } } = {}) {
   const request = Readable.from([JSON.stringify(body)]);
   request.method = method;
   request.url = `/api/orders/${ORDER_ID}/actions`;
@@ -98,7 +120,7 @@ async function invoke({ method = "POST", body = {}, headers = { authorization: "
     setHeader(name, value) { this.headers[name.toLowerCase()] = value; },
     end(raw = "") { this.raw = raw; },
   };
-  await handler(request, response, { caller, identityClient: {}, actorClient, access, readDetails });
+  await handler(request, response, { caller, identityClient: {}, actorClient, access, readDetails, environment });
   return { status: response.statusCode, body: response.raw ? JSON.parse(response.raw) : null };
 }
 
