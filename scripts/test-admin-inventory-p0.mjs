@@ -55,6 +55,7 @@ const originalFetch = globalThis.fetch;
 let rpcRequest = null;
 globalThis.window = {
   TRRY_ADMIN_ENV: {
+    VITE_APP_ENV: "production",
     VITE_USE_SUPABASE_DATA: "true",
     VITE_SUPABASE_URL: "https://wcgtwfctpnwgpglywvvx.supabase.co",
     VITE_SUPABASE_ANON_KEY: "test-anon-key",
@@ -153,6 +154,9 @@ assert.ok(keyA.startsWith("admin-inventory-receive-"), "Inventory idempotency ke
 assert.notEqual(keyA, keyB, "Inventory idempotency key must be unique per operation");
 assert.ok(main.includes('inventoryReceiveDrawer.status === "saving"'), "Receive submit must have saving state");
 assert.ok(main.includes('if (inventoryReceiveDrawer.status === "saving") return;'), "Double-submit guard missing");
+assert.ok(main.includes('data-inventory-receive-field="idempotencyKey"'), "Receive Stock exact retry-key field missing");
+assert.ok(main.includes("inventoryReceiveAttempts.claim"), "Receive Stock payload-bound retry claim missing");
+assert.ok(main.includes("inventoryReceiveAttempts.loadDraft"), "Receive Stock reload recovery missing");
 assert.ok(main.includes("Quantity must be a positive whole number."), "Positive integer validation missing");
 assert.equal(main.includes("?? getVisibleInventoryRows()[0]"), false, "Global Receive Stock must not default to the first visible inventory row");
 assert.ok(main.includes('mode: row ? "row" : "global"'), "Receive Stock must distinguish global and row-level entry routes");
@@ -180,6 +184,7 @@ assert.equal(/createSupabaseRowWithAuth\(\s*STOCK_MOVEMENTS_TABLE/.test(service)
 assert.ok(service.includes("executeSupabaseSchemaRpcWithAuth(INVENTORY_ADJUST_RPC_SCHEMA, INVENTORY_ADJUST_RPC"), "Adjustment must call the canonical schema-aware RPC helper");
 assert.equal(service.includes("request.jwt.claim"), false, "Inventory service must not fabricate JWT claims");
 assert.ok(service.includes("PRODUCTION_SUPABASE_PROJECT_REF"), "Production project write gate missing");
+assert.ok(service.includes("assertInventoryWriteProject"), "Environment-aware inventory write gate missing");
 assert.ok(service.includes("wcgtwfctpnwgpglywvvx"), "Canonical production Supabase ref missing");
 assert.ok(service.includes("fszkypwovpdthqfobxrk"), "Canonical staging Supabase ref missing");
 

@@ -39,6 +39,7 @@
     "test:stlolab-checkout-route": "node scripts/test-stlolab-checkout-route.mjs",
     "test:stlolab-admin-order-actions": "node scripts/test-stlolab-admin-order-actions.mjs",
     "test:stlolab-order-action-attempts": "node scripts/test-stlolab-order-action-attempts.mjs",
+    "test:stlolab-inventory-receive": "node scripts/test-stlolab-inventory-receive.mjs",
     "test:native-order-status-authority": "node scripts/test-native-order-status-authority.mjs",
     "test:inquiry-order-cutover": "node scripts/test-inquiry-order-cutover.mjs",
     "test:inquiry-order-cutover-browser": "node scripts/test-inquiry-order-cutover-browser.mjs",

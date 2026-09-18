@@ -227,6 +227,7 @@ async function createEnvScript() {
     ...(await readLocalEnv(".env.local")),
   };
   const publicEnv = {
+    VITE_APP_ENV: process.env.VITE_APP_ENV ?? env.VITE_APP_ENV ?? "",
     VITE_SUPABASE_URL: process.env.VITE_SUPABASE_URL ?? env.VITE_SUPABASE_URL ?? "",
     VITE_SUPABASE_ANON_KEY: process.env.VITE_SUPABASE_ANON_KEY ?? env.VITE_SUPABASE_ANON_KEY ?? "",
     VITE_USE_SUPABASE_DATA: process.env.VITE_USE_SUPABASE_DATA ?? env.VITE_USE_SUPABASE_DATA ?? "true",

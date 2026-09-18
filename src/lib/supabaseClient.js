@@ -11,6 +11,7 @@ export function getSupabaseConfig() {
     url: normalizeUrl(env.VITE_SUPABASE_URL ?? ""),
     anonKey: env.VITE_SUPABASE_ANON_KEY ?? "",
     useSupabaseData: String(env.VITE_USE_SUPABASE_DATA ?? "true") === "true",
+    environment: String(env.VITE_APP_ENV ?? "").trim().toLowerCase(),
   };
 }
 

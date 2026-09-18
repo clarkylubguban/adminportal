@@ -25,6 +25,10 @@ import {
 import { getAdminClientPrograms } from "./services/adminClients.js";
 import { createOrderActionAttemptStore } from "./services/orderActionAttempts.js";
 import {
+  createInventoryReceiveAttemptStore,
+  validateInventoryReceiveIdempotencyKey,
+} from "./services/inventoryReceiveAttempts.js";
+import {
   createAdminCustomer,
   findOrCreateAdminCustomerIdentity,
   getAdminCustomers,
@@ -541,7 +545,8 @@ let inventoryLocationFilter = "all";
 let inventoryStockStateFilter = "all";
 let inventoryMovementTypeFilter = "all";
 let inventoryMovementSourceFilter = "all";
-let inventoryReceiveDrawer = { open: false, mode: "", rowId: "", quantity: "", sourceReference: "", reason: "", error: "", status: "idle", idempotencyKey: "" };
+const inventoryReceiveAttempts = createInventoryReceiveAttemptStore(window.localStorage);
+let inventoryReceiveDrawer = inventoryReceiveAttempts.loadDraft() || createClosedInventoryReceiveDrawer();
 let inventoryAdjustmentDrawer = createClosedInventoryAdjustmentDrawer();
 let suppliers = [];
 let supplierLoadState = shouldLoadSupabaseOrders ? "idle" : "empty";
@@ -7601,11 +7606,12 @@ function renderInventoryReceiveDrawer(row, canReceive) {
             <label class="catalog-field"><span>Inventory Location</span><select data-inventory-receive-field="locationId" ${disabled ? "disabled" : ""}>${inventoryLocations.map((location) => `<option value="${escapeHtml(location.id)}" ${location.id === row.locationId ? "selected" : ""}>${escapeHtml(formatInventoryLocation(location))}</option>`).join("")}</select></label>
             <label class="catalog-field"><span>Quantity</span><input data-inventory-receive-field="quantity" min="1" step="1" inputmode="numeric" type="number" value="${quantity}" ${disabled ? "disabled" : ""} required></label>
             <label class="catalog-field"><span>Source Reference</span><input data-inventory-receive-field="sourceReference" value="${escapeHtml(inventoryReceiveDrawer.sourceReference)}" ${disabled ? "disabled" : ""} placeholder="Receipt, invoice, or manual reference"></label>
+            <label class="catalog-field"><span>Idempotency Key</span><input data-inventory-receive-field="idempotencyKey" value="${escapeHtml(inventoryReceiveDrawer.idempotencyKey)}" ${disabled ? "disabled" : ""} placeholder="Stable retry key" required></label>
             <label class="catalog-field"><span>Reason / Note</span><textarea data-inventory-receive-field="reason" rows="3" ${disabled ? "disabled" : ""} placeholder="Operational note">${escapeHtml(inventoryReceiveDrawer.reason)}</textarea></label>
           </section>
         ` : `<section class="catalog-drawer-section"><p>Select a product variant before entering the received quantity.</p></section>`}
         <footer class="catalog-drawer-footer">
-          <span>${inventoryReceiveDrawer.idempotencyKey ? `Idempotency: ${escapeHtml(inventoryReceiveDrawer.idempotencyKey)}` : "Idempotency key is created on submit."}</span>
+          <span>${inventoryReceiveDrawer.idempotencyKey ? `Retry key: ${escapeHtml(inventoryReceiveDrawer.idempotencyKey)}` : "A retry key is required."}</span>
           <div>
             <button class="note-button" data-inventory-close-receive type="button" ${inventoryReceiveDrawer.status === "saving" ? "disabled" : ""}>Cancel</button>
             <button class="primary-button catalog-save-button" type="submit" ${disabled ? "disabled" : ""}>${inventoryReceiveDrawer.status === "saving" ? "Receiving..." : "Confirm Receive"}</button>
@@ -7801,6 +7807,7 @@ function openInventoryReceiveDrawer(rowId = "") {
     status: "idle",
     idempotencyKey: "",
   };
+  inventoryReceiveAttempts.saveDraft(inventoryReceiveDrawer);
   render();
 }
 
@@ -7814,6 +7821,7 @@ function updateInventoryReceiveField(field, value) {
       reason: "",
       error: "",
     };
+    inventoryReceiveAttempts.saveDraft(inventoryReceiveDrawer);
     render();
     return;
   }
@@ -7821,10 +7829,12 @@ function updateInventoryReceiveField(field, value) {
     const currentRow = inventoryRows.find((row) => row.id === inventoryReceiveDrawer.rowId);
     const nextRow = inventoryRows.find((row) => row.variantId === currentRow?.variantId && row.locationId === value);
     inventoryReceiveDrawer = { ...inventoryReceiveDrawer, rowId: nextRow?.id || inventoryReceiveDrawer.rowId, error: "" };
+    inventoryReceiveAttempts.saveDraft(inventoryReceiveDrawer);
     render();
     return;
   }
   inventoryReceiveDrawer = { ...inventoryReceiveDrawer, [field]: value, error: "" };
+  inventoryReceiveAttempts.saveDraft(inventoryReceiveDrawer);
 }
 
 function validateInventoryReceive(row) {
@@ -7834,6 +7844,11 @@ function validateInventoryReceive(row) {
   if (!row?.locationId) return "Select an inventory location.";
   const quantity = Number(inventoryReceiveDrawer.quantity);
   if (!Number.isInteger(quantity) || quantity <= 0) return "Quantity must be a positive whole number.";
+  try {
+    validateInventoryReceiveIdempotencyKey(inventoryReceiveDrawer.idempotencyKey);
+  } catch (error) {
+    return error.message;
+  }
   return "";
 }
 
@@ -7847,25 +7862,27 @@ async function submitInventoryReceive() {
     return;
   }
 
-  const idempotencyKey = inventoryReceiveDrawer.idempotencyKey || createInventoryIdempotencyKey();
-  inventoryReceiveDrawer = { ...inventoryReceiveDrawer, status: "saving", error: "", idempotencyKey };
-  render();
-
   try {
-    await receiveAdminInventoryStock({
+    const payload = {
       variantId: row.variantId,
       locationId: row.locationId,
       quantity: Number(inventoryReceiveDrawer.quantity),
-      idempotencyKey,
       sourceReference: inventoryReceiveDrawer.sourceReference,
       reason: inventoryReceiveDrawer.reason,
-    }, adminAuthSession);
+    };
+    const idempotencyKey = inventoryReceiveAttempts.claim(inventoryReceiveDrawer.idempotencyKey, payload);
+    inventoryReceiveDrawer = { ...inventoryReceiveDrawer, status: "saving", error: "", idempotencyKey };
+    inventoryReceiveAttempts.saveDraft(inventoryReceiveDrawer);
+    render();
+    await receiveAdminInventoryStock({ ...payload, idempotencyKey }, adminAuthSession);
+    inventoryReceiveAttempts.clearDraft();
     inventoryReceiveDrawer = { ...createClosedInventoryReceiveDrawer(), status: "success" };
     hasLoadedInventory = false;
     await loadInventory({ force: true });
   } catch (error) {
     console.error("Unable to receive inventory stock.", error);
     inventoryReceiveDrawer = { ...inventoryReceiveDrawer, status: "idle", error: error.message || "Receive Stock failed." };
+    inventoryReceiveAttempts.saveDraft(inventoryReceiveDrawer);
     render();
   }
 }
@@ -12854,6 +12871,7 @@ function bindEvents() {
   document.querySelectorAll("[data-inventory-close-receive]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.preventDefault();
+      inventoryReceiveAttempts.clearDraft();
       inventoryReceiveDrawer = createClosedInventoryReceiveDrawer();
       render();
     });

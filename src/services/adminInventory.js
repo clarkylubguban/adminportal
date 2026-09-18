@@ -16,6 +16,10 @@ export const INVENTORY_ADJUST_RPC = "adjust_inventory";
 export const INVENTORY_ADJUST_RPC_LABEL = `${INVENTORY_ADJUST_RPC_SCHEMA}.${INVENTORY_ADJUST_RPC}`;
 export const PRODUCTION_SUPABASE_PROJECT_REF = "wcgtwfctpnwgpglywvvx";
 export const STAGING_SUPABASE_PROJECT_REF = "fszkypwovpdthqfobxrk";
+const INVENTORY_WRITE_PROJECTS = Object.freeze({
+  production: PRODUCTION_SUPABASE_PROJECT_REF,
+  staging: STAGING_SUPABASE_PROJECT_REF,
+});
 
 const MASTER_PRODUCTS_TABLE = "products";
 const PRODUCT_VARIANTS_TABLE = "product_variants";
@@ -93,7 +97,7 @@ export async function getAdminInventory(authSession) {
 }
 
 export async function receiveAdminInventoryStock(payload, authSession) {
-  assertProductionSupabaseProject();
+  assertInventoryWriteProject();
   assertReceivePayload(payload);
 
   return executeSupabaseSchemaRpcWithAuth(INVENTORY_RECEIVE_RPC_SCHEMA, INVENTORY_RECEIVE_RPC, {
@@ -133,10 +137,22 @@ export function canAdjustInventoryForRole(role) {
   return ["owner", "admin"].includes(String(role || "").trim().toLowerCase());
 }
 
-export function assertProductionSupabaseProject() {
-  const { url } = getSupabaseConfig();
-  if (!url.includes(PRODUCTION_SUPABASE_PROJECT_REF)) {
-    throw new Error("Inventory writes are only enabled for the canonical production Supabase project.");
+export function assertInventoryWriteProject() {
+  const { url, environment } = getSupabaseConfig();
+  const expectedProjectRef = INVENTORY_WRITE_PROJECTS[environment];
+  if (!expectedProjectRef) {
+    throw new Error("Inventory writes require VITE_APP_ENV=production or VITE_APP_ENV=staging.");
+  }
+
+  let hostname = "";
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    hostname = "";
+  }
+
+  if (hostname !== `${expectedProjectRef}.supabase.co`) {
+    throw new Error(`Inventory ${environment} writes require the configured ${environment} Supabase project.`);
   }
 }
 
