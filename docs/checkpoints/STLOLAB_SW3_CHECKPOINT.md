@@ -392,6 +392,27 @@ Post-stop canonical readback confirms zero use of the planned checkout and movem
 
 Required forward correction is narrowly scoped: permit the canonical Admin receive adapter on the allowlisted staging ref while retaining production support and expose a stable Owner/Admin-entered receipt idempotency key with validation and retry retention. Add focused tests for staging allowlisting, production compatibility, unauthorized denial, exact-key duplicate safety, and unchanged canonical receipt authority. Deploy that forward commit only after owner review, then restart this batch from the immutable baseline above; do not reuse this READY deployment for receipts.
 
+## Local staging Receive Stock correction (2026-09-18)
+
+Worktree governance and identity were reverified before editing. `C:\tmp\trry-admin-stlolab-sw3-checkout` was clean at `7a13063a2c940dd8eaa076bb4c74687fd8302747` on `codex/stlolab-sw3-checkout`, registered under the existing Admin repository, with remote `https://github.com/clarkylubguban/adminportal.git`. Storefront and POS were not changed.
+
+Tested code commit `16d563c9980b16e81dddbf98f8ea7e95c7e8a27b` is the narrow forward correction. Admin now emits explicit browser-visible `VITE_APP_ENV` configuration and permits inventory writes only when the exact environment/project pair matches: `staging` / `fszkypwovpdthqfobxrk` or `production` / `wcgtwfctpnwgpglywvvx`. Missing, unknown, cross-wired, malformed, or otherwise mismatched values fail before RPC. Production validation remains fail-closed rather than being removed.
+
+Receive Stock remains Owner/Admin-only in the UI and continues to send the genuine Admin bearer session to `trry_api.receive_inventory`; no service role, fabricated claim, direct balance write, mock state, or new database authority was added. The form now requires an explicit 16-120 character idempotency key, accepts the approved `SW3-BATCH-RECEIVE-L2-01` and `SW3-BATCH-RECEIVE-XL1-01` values exactly, persists the open draft and key through reload, binds each retained key to one normalized payload, rejects conflicting payload reuse, retains the same key after an uncertain response, and keeps the existing in-flight duplicate-submit lock. Successful receipt clears only the open draft; the local payload fingerprint remains to prevent later conflicting reuse.
+
+Passing verification:
+
+- `npm.cmd run test:stlolab-inventory-receive`: configured staging/production matching, unknown and mismatched rejection, exact approved keys, reload persistence, same-payload retry, conflicting-payload rejection, missing-session denial before RPC, authenticated schema-aware RPC routing, and exact-key replay.
+- `npm.cmd run test:admin-inventory-p0`, `npm.cmd run test:employee-e5g`, `npm.cmd run test:admin-purchasing-m3`, and `npm.cmd run test:admin-inventory-responsive` at 1920, 1366, tablet, and 390 pixels.
+- Disposable embedded PostgreSQL complete SW3 suite: reservation/payment/cancellation/handover races, authenticated adjustment denial and retry, reservation floor, atomic deduction, POS exclusion, M4/E7 compatibility, and idempotency.
+- `npm.cmd run build`: validation passed and static production output completed.
+
+`npm.cmd run test:employee-e5g-runtime` did not reach fixtures because the local Docker Desktop engine was unavailable and did not become ready during the bounded wait. This is recorded as an environment prerequisite gap, not a passing runtime result. Its source authorization contract passed, and the repository's independent embedded PostgreSQL SW3 authority/idempotency suite passed. No remote test or remote mutation was substituted.
+
+Exact future staging deployment scope is Admin-only: deploy code commit `16d563c9980b16e81dddbf98f8ea7e95c7e8a27b` to the existing protected `adminportal-staging` Preview/project, add Preview value `VITE_APP_ENV=staging`, retain the existing exact `VITE_SUPABASE_URL=https://fszkypwovpdthqfobxrk.supabase.co`, publishable browser key, genuine Admin authentication, protection, server-only secrets, and all closed checkout gates. No migration, Sites/POS deployment, production alias, production environment change, or stock/order mutation belongs to that release. A future production deployment of this code requires the existing production environment to declare `VITE_APP_ENV=production` while retaining the exact production Supabase URL; do not configure or deploy that in SW3.
+
+Fresh read-only staging evidence after local testing confirms database checkout `enabled=false`, approved receipt-key count `0`, S/L/XL `0/0/0`, and preserved M `1/1/0`. `TRRY-ORD-8B12C7F9` remains `awaiting_payment`, `UNPAID`, `PENDING`, with its reservation `ACTIVE`. No stock, order, gate, migration, deployment, Storefront, POS, or production state changed during this local correction.
+
 ### Exact release and mutation scope for approval
 
 1. Deploy only the new tested Admin commit from this worktree to the existing protected `adminportal-staging` Preview. No migration is required. Keep POS at `70bb10a` and Sites source at `ebae788`.
