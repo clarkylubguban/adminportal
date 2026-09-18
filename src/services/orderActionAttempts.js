@@ -1,3 +1,5 @@
+import { normalizeStlolabAcceptanceKey } from "./stlolabAcceptanceKeys.js";
+
 const STORAGE_PREFIX = "trry-admin-order-action";
 
 function storageKey(orderId, action) {
@@ -24,8 +26,10 @@ export function createOrderActionAttemptStore({ storage, randomUUID }) {
     fallback.set(key, value);
     try {
       storage?.setItem(key, JSON.stringify(value));
+      return true;
     } catch {
       // Session storage can be unavailable in hardened browser contexts.
+      return false;
     }
   }
 
@@ -39,16 +43,27 @@ export function createOrderActionAttemptStore({ storage, randomUUID }) {
   }
 
   return {
-    getKey(orderId, action, payload = {}) {
+    getKey(orderId, action, payload = {}, requestedKey = "") {
       const key = storageKey(orderId, action);
       const fingerprint = payloadFingerprint(payload);
       const existing = read(key);
+      const acceptedKey = normalizeStlolabAcceptanceKey(requestedKey);
       if (existing?.fingerprint === fingerprint && existing?.idempotencyKey) {
+        if (acceptedKey && existing.idempotencyKey !== acceptedKey) {
+          throw new Error("This action already has a different retry key.");
+        }
         return existing.idempotencyKey;
       }
+      if (acceptedKey && existing?.idempotencyKey === acceptedKey && existing?.fingerprint && existing.fingerprint !== fingerprint) {
+        throw new Error("This staging acceptance key is already bound to another action payload.");
+      }
 
-      const idempotencyKey = `admin-retail-${action}-${randomUUID()}`;
-      write(key, { fingerprint, idempotencyKey });
+      const idempotencyKey = acceptedKey || `admin-retail-${action}-${randomUUID()}`;
+      const persisted = write(key, { fingerprint, idempotencyKey });
+      if (acceptedKey && !persisted) {
+        fallback.delete(key);
+        throw new Error("Staging acceptance keys require persistent retry storage.");
+      }
       return idempotencyKey;
     },
 

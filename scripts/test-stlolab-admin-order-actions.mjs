@@ -58,10 +58,10 @@ assert.equal(duplicate.status, 200);
 assert.equal(duplicate.body.transition.idempotent, true);
 assert.equal(rpcCalls, 2);
 
-const pickup = buildOperation(ORDER_ID, { action: "customer_pickup", idempotencyKey: "PICKUPACTIONKEY01" });
+const pickup = buildOperation(ORDER_ID, { action: "customer_pickup", idempotencyKey: "SW3-BATCH-PICKUP-L-HANDOVER-01" });
 assert.equal(pickup.functionName, "handover_stlolab_order_sw3");
 assert.equal(pickup.parameters.p_handover_kind, "CUSTOMER_PICKUP");
-const courier = buildOperation(ORDER_ID, { action: "courier_handover", idempotencyKey: "COURIERACTIONKEY1" });
+const courier = buildOperation(ORDER_ID, { action: "courier_handover", idempotencyKey: "SW3-BATCH-COD-XL-HANDOVER-01" });
 assert.equal(courier.parameters.p_handover_kind, "COURIER_HANDOVER");
 
 const denied = await invoke({
@@ -109,7 +109,7 @@ function paymentBody(overrides = {}) {
     paymentSource: "gcash",
     paymentReference: "GCASH-TEST-001",
     internalNote: "Disposable handler fixture",
-    idempotencyKey: "PAYMENTACTIONKEY01",
+    idempotencyKey: "SW3-BATCH-PICKUP-L-PAY-01",
     ...overrides,
   };
 }

@@ -2589,10 +2589,11 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       const paymentSource = form?.querySelector(`[data-mvp-payment-field="paymentSource"]`)?.value || "";
       const referenceNumber = form?.querySelector(`[data-mvp-payment-field="referenceNumber"]`)?.value || "";
       const internalNote = form?.querySelector(`[data-mvp-payment-field="internalNote"]`)?.value || "";
+      const acceptanceIdempotencyKey = form?.querySelector(`[data-mvp-payment-field="acceptanceIdempotencyKey"]`)?.value || "";
       if (message) message.textContent = "Saving payment confirmation...";
       button.disabled = true;
       button.textContent = "Confirming...";
-      await confirmPayment?.(id, { amountReceived, paymentSource, referenceNumber, internalNote });
+      await confirmPayment?.(id, { amountReceived, paymentSource, referenceNumber, internalNote, acceptanceIdempotencyKey });
       rerender();
     }));
     root.querySelectorAll("[data-mvp-release-order]").forEach((button) => button.addEventListener("click", async () => {
@@ -2617,6 +2618,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       if (button.disabled) return;
       const id = button.dataset.mvpFulfillmentAction;
       const trackingSubstatus = button.dataset.mvpFulfillmentStatus;
+      const acceptanceIdempotencyKey = button.closest("[data-mvp-fulfillment-confirmation]")?.querySelector("[data-mvp-fulfillment-idempotency-key]")?.value || "";
       if (!id || !trackingSubstatus) return;
       if (["completed", "customer_pickup", "courier_handover"].includes(trackingSubstatus)) {
         const prompt = trackingSubstatus === "customer_pickup"
@@ -2634,6 +2636,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
         const result = await saveFulfillment?.(id, {
           trackingSubstatus,
           trackingNote: trackingSubstatus === "ready_for_pickup" ? "Ready for pickup." : undefined,
+          acceptanceIdempotencyKey,
         });
         if (result && result.ok === false) throw new Error(result.error || "Fulfillment update failed.");
       } catch (error) {

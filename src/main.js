@@ -24,6 +24,7 @@ import {
 } from "./services/tasks.js";
 import { getAdminClientPrograms } from "./services/adminClients.js";
 import { createOrderActionAttemptStore } from "./services/orderActionAttempts.js";
+import { isStlolabAcceptanceKeyControlEnabled } from "./services/stlolabAcceptanceKeys.js";
 import {
   createInventoryReceiveAttemptStore,
   validateInventoryReceiveIdempotencyKey,
@@ -4492,7 +4493,10 @@ function renderMvpPaymentConfirmation(item) {
       : `<p class="mvp-payment-message" data-mvp-payment-message>${escapeHtml(warning)}</p>`;
 
   const referenceHint = isRetail ? "required" : "optional for Cash";
-  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number <small>(${referenceHint})</small></span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label></div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
+  const acceptanceKeyField = isRetail && isStlolabAcceptanceKeyControlEnabled(window.TRRY_ADMIN_ENV)
+    ? `<label class="wide"><span>Staging acceptance key <small>(optional)</small></span><input data-mvp-payment-field="acceptanceIdempotencyKey" maxlength="120" pattern="[A-Za-z0-9_-]{16,120}" autocomplete="off" ${isLoading ? "disabled" : ""} /><small>Blank keeps automatic retry-key generation.</small></label>`
+    : "";
+  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-payment-confirmation="${escapeHtml(item.id)}"><h3>${title}</h3><div class="mvp-payment-warning"><strong>FINANCIAL ACTION</strong><span>${escapeHtml(warning)}</span></div><div class="mvp-payment-form"><label><span>Amount received</span><input data-mvp-payment-field="amountReceived" min="0.01" max="${escapeHtml(String(balance))}" step="0.01" type="number" value="${escapeHtml(balance || total || "")}" ${isLoading ? "disabled" : ""} /></label><label><span>Payment source</span><select data-mvp-payment-field="paymentSource" ${isLoading ? "disabled" : ""}><option value="cash">Cash</option><option value="gcash">GCash</option><option value="card">Card</option><option value="bank_transfer">Bank Transfer</option></select></label><label><span>Reference number <small>(${referenceHint})</small></span><input data-mvp-payment-field="referenceNumber" type="text" value="${escapeHtml(item.paymentReference || "")}" ${isLoading ? "disabled" : ""} /></label><label class="wide"><span>Internal note</span><textarea data-mvp-payment-field="internalNote" rows="2" ${isLoading ? "disabled" : ""}>${escapeHtml(item.paymentInternalNote || "")}</textarea></label>${acceptanceKeyField}</div>${message}<button class="mvp-primary-action" type="button" data-mvp-confirm-payment="${escapeHtml(item.id)}" ${isLoading || balance <= 0 ? "disabled" : ""}>${isLoading ? "CONFIRMING..." : `CONFIRM ${escapeHtml(formatOpsValue(balance || total))} PAYMENT`}</button></section>`;
 }
 
 function renderMvpOrderFulfillment(item) {
@@ -4505,7 +4509,10 @@ function renderMvpOrderFulfillment(item) {
   const action = method === "pickup" ? "customer_pickup" : method === "delivery" ? "courier_handover" : "";
   if (!action) return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>FULFILLMENT BLOCKED</h3><p class="mvp-inline-note">The saved order has no supported fulfillment method.</p></section>`;
   const label = action === "customer_pickup" ? "CONFIRM CUSTOMER PICKUP" : "CONFIRM COURIER HANDOVER";
-  return `<section class="mvp-drawer-section mvp-payment-confirmation"><h3>FINAL HANDOVER</h3><div class="mvp-payment-warning"><strong>STOCK ACTION</strong><span>This records physical handover and atomically deducts reserved stock. Courier handover does not confirm COD payment.</span></div><button class="mvp-primary-action" data-mvp-fulfillment-action="${escapeHtml(item.id)}" data-mvp-fulfillment-status="${action}" type="button">${label}</button></section>`;
+  const acceptanceKeyField = isStlolabAcceptanceKeyControlEnabled(window.TRRY_ADMIN_ENV)
+    ? `<label class="mvp-acceptance-key"><span>Staging acceptance key <small>(optional)</small></span><input data-mvp-fulfillment-idempotency-key maxlength="120" pattern="[A-Za-z0-9_-]{16,120}" autocomplete="off" /><small>Blank keeps automatic retry-key generation.</small></label>`
+    : "";
+  return `<section class="mvp-drawer-section mvp-payment-confirmation" data-mvp-fulfillment-confirmation><h3>FINAL HANDOVER</h3><div class="mvp-payment-warning"><strong>STOCK ACTION</strong><span>This records physical handover and atomically deducts reserved stock. Courier handover does not confirm COD payment.</span></div>${acceptanceKeyField}<button class="mvp-primary-action" data-mvp-fulfillment-action="${escapeHtml(item.id)}" data-mvp-fulfillment-status="${action}" type="button">${label}</button></section>`;
 }
 
 function renderOpsProductionStage(item) {
@@ -5405,7 +5412,7 @@ async function confirmMvpOrderPayment(inquiryId, form) {
         paymentReference: reference,
         internalNote: form.internalNote,
       };
-      const idempotencyKey = retailOrderActionAttempts.getKey(retailOrder.id, action, attemptPayload);
+      const idempotencyKey = retailOrderActionAttempts.getKey(retailOrder.id, action, attemptPayload, form.acceptanceIdempotencyKey);
       const payload = await requestAdminOrderAction(retailOrder.id, {
         action: "confirm_payment",
         ...attemptPayload,
@@ -13755,7 +13762,7 @@ async function saveMvpFulfillmentFields(id, changes) {
     const action = String(changes?.trackingSubstatus || "");
     if (!["customer_pickup", "courier_handover"].includes(action)) return { ok: false, error: "Fulfillment action is not valid for this Order." };
     const attemptAction = action.replaceAll("_", "-");
-    const idempotencyKey = retailOrderActionAttempts.getKey(retailOrder.id, attemptAction);
+    const idempotencyKey = retailOrderActionAttempts.getKey(retailOrder.id, attemptAction, {}, changes?.acceptanceIdempotencyKey);
     try {
       const payload = await requestAdminOrderAction(retailOrder.id, {
         action,
