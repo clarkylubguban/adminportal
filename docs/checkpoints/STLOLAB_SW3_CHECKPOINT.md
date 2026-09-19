@@ -565,3 +565,15 @@ Using the genuine existing staging Owner/POS/Sales session, the deployed **Trans
 One unrelated visible discrepancy remains: the Transactions row labels the sale `NO RECEIPT` and disables receipt actions even though the canonical acceptance record has receipt `RCT-20260919-00001`. This appears to be a canonical receipt-type/link mapping issue and was not changed under the approved payment-display deployment scope.
 
 All creation and acceptance controls remain closed. No database query or mutation, stock change, M-order change, Admin/Storefront deployment, or production change occurred in this release verification.
+
+## Local POS canonical receipt mapping correction (2026-09-19)
+
+POS worktree `C:\tmp\trry-pos-sw3-reconcile` was verified on branch `codex/pos-sw3-reconcile` at exact accepted baseline `3c272453571687729ed699258a845c83187109f0`, remote `https://github.com/clarkylubguban/trry-pos.git`. Vercel's pre-existing `.env*` addition to `.gitignore` was preserved and excluded. Tested receipt fix `b1988adec4375a86c58e7e14a7209a3e021ee0a4` is a direct descendant of the baseline and is committed separately from the payment-display fix.
+
+Root cause: canonical receipt rows were mapped with type `RETAIL SALE`, while `findReceiptForTransaction()` deliberately recognizes retail links only as `RETAIL SALE RECEIPT`. The canonical mapper also omitted `sales.sale_reference`, and refreshed transactions were not enriched with persisted receipt ID/number. As a result, `SALE-20260919-00001` loaded its real receipt row but the Transactions page displayed `NO RECEIPT` and disabled receipt actions.
+
+The correction classifies canonical receipt rows as `RETAIL SALE RECEIPT`, retains both the canonical sale UUID and sale reference, and enriches each refreshed canonical transaction with its persisted receipt ID and number. The completion screen, transaction list, detail drawer, and receipt preview now resolve the same canonical receipt. No RPC receipt-number fallback is used when the persisted receipt is missing: those cases show `Unavailable` / `RECEIPT UNAVAILABLE`, surface a warning after checkout, and keep View/Print actions disabled. The corrected canonical payment display remains unchanged.
+
+Local verification passed: focused Playwright payment-and-receipt display suite `22/22`, including receipt-present, receipt preview linkage, receipt-missing, payment-missing, retry/replay, and full reload states; canonical post-login browser modes `32/32`; canonical POS handler `12/12`; M3B atomic checkout contract `50/50`; SW3 acceptance-key contract `21/21`; C2.4A operator authority and C2.4B customer identity contracts; and the production build.
+
+This task was local-only. No receipt was created or reissued, no sale was replayed, and no database, stock, gate, deployment, Admin/Storefront, or production state changed. Any future staging release is POS Preview-only at exact commit `b1988adec4375a86c58e7e14a7209a3e021ee0a4`, from a clean checkout, with existing staging configuration and acceptance disabled; it requires separate approval.
