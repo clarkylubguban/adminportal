@@ -1,6 +1,6 @@
 # STLOLAB SW3 checkout checkpoint
 
-Status: owner-approved lifecycle rules and authenticated Admin Orders actions are implemented and verified locally. All migrations, configuration, deployment, remote writes, and live ordering remain disabled pending staging acceptance.
+Status: SW3 staging lifecycle acceptance is substantially complete and every creation/acceptance gate is closed. Production launch is not ready: production release gates, lifecycle schema, catalog/stock, expiry automation, and owner policy decisions remain outstanding.
 
 ## Source identity
 
@@ -754,3 +754,97 @@ Two same-profile confirmation tabs were prepared for the requested concurrent du
 Fail-closed shutdown completed. Final Admin Preview `dpl_EA1Aum97SaHeDWpZeGZU8wAq1Kax` is READY at `https://adminportal-staging-3hedu6bop-clarkylubguban1.vercel.app`, project `adminportal-staging` / `prj_K0oDSa6r1MgAEpQMcl3mKVdJvtNI`, target Preview. Final Storefront Preview `dpl_FMXHfbjTm3HUSsMbBWCioaM6EfqX` is READY at `https://stlolab-staging-ncstt7xs7-clarkylubguban1.vercel.app`, project `stlolab-staging` / `prj_1qpqKNRMElvGyRQwCkl7d7tbBovK`, exact reviewed Storefront source `91aad3612f8a43ab352f420578522023adf4976e`, target Preview. Stable alias `https://stlolab-staging-preview.vercel.app` resolves to that closed Storefront deployment. The protected Admin checkout and Storefront prepare routes each return `503 ORDERS_NOT_OPEN`; the authenticated Storefront renders `STAGING CATALOG Orders are unavailable`; the database gate is `false`; Storefront creation and acceptance flags were rebuilt false; and unauthenticated requests to both final Previews return `302` to Vercel SSO. No production alias or promotion changed.
 
 Final canonical state: new order `TRRY-ORD-2017C362` is cancelled with its reservation released; original order `TRRY-ORD-8B12C7F9` remains expired with its original reservation EXPIRED; M is `1/0/1`; S is `0/0/0`; no payment, handover, sale deduction, receipt, additional stock, Cron, migration, or production mutation occurred. The bounded stable-origin order lifecycle and protected confirmation passed. SW3 still has one explicitly recorded acceptance gap: a genuine supported duplicate/replay cancellation request was not observed live.
+
+## Consolidated SW3 launch-readiness report (2026-09-20)
+
+### Current identities and fail-closed state
+
+Worktree governance, this checkpoint, and `docs/runbooks/STLOLAB_SW3_STAGING_RUNBOOK.md` were reread before this audit. No passed suite was rerun and no remote mutation occurred.
+
+- Admin `C:\tmp\trry-admin-stlolab-sw3-checkout` is clean on `codex/stlolab-sw3-checkout` at `69776ac25740b428d1cd6662088bf9d6633ef09d`, remote `https://github.com/clarkylubguban/adminportal.git`. Final closed Admin Preview `dpl_EA1Aum97SaHeDWpZeGZU8wAq1Kax` is READY at `https://adminportal-staging-3hedu6bop-clarkylubguban1.vercel.app`, project `prj_K0oDSa6r1MgAEpQMcl3mKVdJvtNI`. It was uploaded from `270eb69f37e23292e15f5f66b193b32754367651`; the only change from that SHA through `69776ac` is this checkpoint, and the application tree is identical.
+- Storefront `C:\tmp\stlolab-app-ui-v2-vercel` is clean on `codex/stlolab-app-ui-v2-vercel` at exact source `91aad3612f8a43ab352f420578522023adf4976e`, Sites-managed remote. Stable alias `https://stlolab-staging-preview.vercel.app` resolves to READY Preview `dpl_FMXHfbjTm3HUSsMbBWCioaM6EfqX` / `https://stlolab-staging-ncstt7xs7-clarkylubguban1.vercel.app`, project `prj_1qpqKNRMElvGyRQwCkl7d7tbBovK`, from that exact source.
+- POS `C:\tmp\trry-pos-sw3-reconcile` is on `codex/pos-sw3-reconcile` at `b1988adec4375a86c58e7e14a7209a3e021ee0a4`, remote `https://github.com/clarkylubguban/trry-pos.git`. Its pre-existing `.gitignore` modification remains preserved and excluded. Exact source `b1988ad` was released from a clean detached checkout as READY Preview `dpl_5ZjRX6VAGYEcK1xe7HgTTWpXz1XG` / `https://trry-7t57tir90-clarkylubguban1.vercel.app`, project `prj_OXFRieJe4VlBWFClY38K06QYMn1Z`.
+- Unauthenticated requests to all three current staging surfaces return `302` to Vercel sign-in. Protected Admin checkout and Storefront checkout-prepare probes each return `503 ORDERS_NOT_OPEN`. Staging database `fszkypwovpdthqfobxrk` reports `stlolab_checkout_config.enabled=false`, policy `RESERVE_ON_SUBMIT`, Main Retail Stock `9cc81235-0af3-4ad6-aa95-35af81178312`, and private POS acceptance `enabled=false`. The Storefront was rebuilt with creation and acceptance false. No `pg_cron` extension or `cron.job` table exists.
+- Configured staging fulfillment remains pickup PHP `0` and nationwide delivery PHP `120`. Local delivery PHP `60` remains disabled with coverage `UNCONFIRMED`.
+
+### Canonical staging reconciliation
+
+Fresh canonical readback found exactly six `STLOLAB_RETAIL` orders and six checkout-request rows:
+
+| Order | Item and total | Final order / reservation | Ledger effect |
+| --- | --- | --- | --- |
+| `TRRY-ORD-8B12C7F9` / `49dc89ae-2e30-4f8a-b4e8-3b746c5d70e2` | Black/M x 1, PHP 790 | `expired`, `UNPAID`, `PENDING`; reservation `7640053c-05a2-4831-9619-6b0c864d7956` `EXPIRED` at `2026-09-20 07:41:41.293528+00`, reason `UNPAID_72_HOUR_EXPIRY` | Released reserved quantity only; no stock movement |
+| `TRRY-ORD-17390094` / `72ffd058-6c3f-4531-85eb-f525237ba405` | Black/S x 1, PHP 790 | `cancelled`, `UNPAID`, `PENDING`; reservation `938c6ec9-2d1f-4e7c-810b-269abb589e31` `RELEASED`, reason `CUSTOMER_CANCELLATION` | No sale movement; its first S test receipt `9dfff587-79bd-447b-ba00-e72da51d168e` was later removed by adjustment `dc8ac6fe-b125-4fd4-b110-c52906f189f5` |
+| `TRRY-ORD-DD0BA5FF` / `4d8dcb29-43b9-4421-850d-af3bdb00a38e` | Black/L x 1, PHP 790 pickup | `released`, `PAID`, `HANDED_OVER`; reservation `887f5a41-2e53-468f-b13d-f5b5f6cf5e82` `CONSUMED` | Payment event `cde69921-686f-4533-9289-7f678d21b26b`; one SALE movement `6c578475-d811-4187-850d-5791e2c6aa6f` |
+| `TRRY-ORD-6086FF7D` / `a0887b09-fede-4352-9524-3656b34681f7` | Black/XL x 1, PHP 910 nationwide | `released`, `PAID`, `HANDED_OVER`; reservation `2b393fae-fc45-4212-a21d-41f378cb1629` `CONSUMED` | Courier handover occurred while unpaid; SALE movement `5596428f-76fb-4bef-935d-368b3aa03af6`; later payment event `e8fe0fb6-715f-4954-a5f8-bc51a7ea1533` |
+| `TRRY-ORD-82B4788D` / `3546ccf6-8d79-42df-9618-52e41c6fb6f7` | Black/S x 1, PHP 790 | `cancelled`, `UNPAID`, `PENDING`; formerly stranded reservation `2aa2fc1b-73b1-45d1-a151-695ea2f34668` `RELEASED`, reason `CUSTOMER_CANCELLATION` | Retained old-origin HttpOnly session performed the supported cancellation without token transfer; no sale movement. Receipt `9dbc4d17-80ca-42b0-9f17-d23b9d2bc51d` was removed after release by adjustment `9e660a31-e699-466a-8691-eab8e5527bea` |
+| `TRRY-ORD-2017C362` / `ea6afc50-246b-4d5c-8cff-dbff23695159` | Black/M x 1, PHP 790 | `cancelled`, `UNPAID`, `PENDING`; reservation `32bea2fd-939e-42a8-902c-29409b1c1c3d` `RELEASED`, exact key `SW3-VERCEL-STABLE-M-CANCEL-01` | No stock movement; stable-origin confirmation remains canonical and protected |
+
+The original M reservation was released only by the one owner-authorized expiry-function invocation after its exact 72-hour deadline; expiry did not deduct on-hand. The stranded Vercel S reservation was released only through its legitimate old-host confirmation cookie and supported cancellation UI; no token extraction or database bypass occurred. S reached `0/0/0` through two separate, fully audited cycles: receipt `9dfff587...` then adjustment `dc8ac6fe...`, and receipt `9dbc4d17...` then adjustment `9e660a31...`. Neither S cancellation created a SALE movement.
+
+The separate POS contention record remains canonical: sale `0fdf5b4b-5ed0-4727-ba1c-f45599b39580` / `SALE-20260919-00001`, payment `04ef19a6-8449-4e7b-b2a5-a892a3ada72e` for PHP 790, receipt `1e92b07b-b538-495c-8433-528b8b58d0cb` / `RCT-20260919-00001`, and one L SALE movement `77d1235c-25ad-419e-a42c-301f1b23a300`. The competing Storefront key has zero checkout-request rows.
+
+Final Main Retail Stock is S `0/0/0`, M `1/0/1`, L `0/0/0`, XL `0/0/0`. The remaining M is the original staging receipt movement `14459591-4f9f-4918-8be3-d4034e0fce6b`, `RECEIPT +1`, balance `0 -> 1`, reference `SW3-STAGING-ACCEPTANCE-01`, key `SW3-ACCEPT-01-RECEIVE-M`. It is not production stock.
+
+### Prepared M cleanup, not executed
+
+The smallest supported staging cleanup is the existing authenticated Admin Inventory action. A genuine Owner/Admin must select Main Retail Stock `9cc81235-0af3-4ad6-aa95-35af81178312`, Glow N Underground / Black/M variant `651d79c6-a6a9-47a5-ba1a-77d8ebb5cbd6`, verify `1/0/1` and receipt `14459591...`, choose **Remove 1**, and confirm:
+
+- Reference: `SW3-STAGING-M-ACCEPTANCE-CLEANUP-01`
+- Idempotency key: `SW3-STAGING-M-CLEANUP-01`
+- Reason: `Remove unused Black/M staging acceptance unit after SW3 launch-readiness closeout.`
+- Expected result: one canonical `ADJUSTMENT -1`, balance `1 -> 0`, final M `0/0/0`.
+
+Both proposed reference and key currently match zero movements. Submit once through `trry_api.adjust_inventory`; if the UI response is uncertain, inspect canonical balance and key before retrying. This audit did not execute the action.
+
+### Acceptance classification
+
+**Verified live**
+
+- Protected APP UI V2 catalog, Home/Product/Bag/Checkout routing, canonical Glow N Underground PHP 790 Black S-XL data, contained mobile image, disabled-order state, and stable Preview origin.
+- Server-side checkout creation, canonical price/product/variant resolution, reservation on submit, token-protected confirmation, no-cookie/wrong-cookie denial, full browser-process restart persistence, and single supported cancellation with one release and no deduction.
+- Pickup payment confirmation followed by pickup handover: one payment event, one reservation consumption, one deduction.
+- Nationwide COD sequence: courier handover while `UNPAID`, then separate synthetic payment confirmation, with payment and stock states remaining separate.
+- Original M expiry through one protected lifecycle-function invocation after eligibility: one expiry/release and no stock movement.
+- Genuine Owner/Admin receiving and adjustment workflows, reservation-floor preservation, and audited S cleanup movements.
+- POS canonical login/loader, catalog/inventory display, one last-L POS winner, saved payment/receipt, corrected PHP 790 payment display, and linked receipt view. Canonical records prove one POS sale/deduction and no competing Storefront order.
+
+**Verified locally only**
+
+- Concurrent duplicate checkout, interrupted-response retry, conflicting idempotency-key reuse, concurrent duplicate cancellation and replay, duplicate payment/handover, and exactly-once inventory adjustment.
+- Price tampering, invalid variants, unknown/unavailable stock, Origin/CSRF denial, anonymous/Staff lifecycle denial, missing schema/permission visibility, and browser-role denial of privileged RPCs.
+- Payment/expiry, cancellation/expiry, handover/expiry, payment/handover, cancellation/handover, and last-item database races using disposable PostgreSQL fixtures.
+- Production exclusion and disabled-state enforcement for staging acceptance controls.
+
+**Blocked or unverified**
+
+- Live duplicate/replay cancellation is unverified. `TRRY-ORD-17390094` and `TRRY-ORD-2017C362` each prove one supported cancellation and one release, but no live replay completed; the second stable-origin concurrent click did not dispatch.
+- Actual POS-versus-Storefront request overlap is unverified. Both UI actions recorded the same click-start millisecond and the Storefront remained pending for 5,788 ms while POS committed, but no raw request start/end evidence was available. The canonical single-winner result is live; request-level overlap is not claimed.
+- Automatic expiry is unverified and unavailable. Staging has no `pg_cron` extension/job; only the one manual protected invocation was accepted.
+- No production checkout, reservation, payment, handover, cancellation, expiry, or stock-contention test exists.
+
+### Concrete launch blockers
+
+1. **Production schema is absent.** Production Supabase `wcgtwfctpnwgpglywvvx` is `ACTIVE_HEALTHY`, but read-only inspection found no `stlolab_checkout_config`, `inventory_reservations`, `order_payment_events`, expiry function, `reserved_quantity`, or SW3 migration ledger rows. Existing production M2B/M2C/M3B stock foundations are present, but the SW3 migration/dependency batch has not been reconciled or applied.
+2. **Production catalog and stock are absent.** Product code `PRD-260911-8DC1A1` has zero production product rows and zero variants; therefore no production price, image, sellability, or Main Retail Stock balance exists. Staging M `1/0/1` must not be copied or treated as production stock.
+3. **Current code deliberately blocks production.** Storefront `lib/environment.ts` throws `Production catalog requires the release gate`; Admin catalog accepts only staging and Admin checkout hard-codes staging environment/project. A reviewed production-specific forward change is required before any production deployment.
+4. **No production Storefront release configuration exists.** Public hostname/access policy, production Admin catalog/checkout endpoints, server-only gateway/bypass configuration, production TTL, CSRF origin, database config, fulfillment rows, and all three closed-first application/database gates require an owner-approved production plan.
+5. **No expiry automation exists.** Overdue ACTIVE reservations continue blocking stock until the lifecycle function commits. Approve an existing-plan scheduler, cadence, batch size, monitoring and rollback before unattended ordering. The documented proposal remains every 15 minutes, batch `100`; it is not active or approved for production.
+6. **Recovery is incomplete.** Clearing cookies or switching devices still loses customer confirmation/cancellation access. Order ID or phone alone correctly grants nothing, but email OTP/token reissue and an authorized support recovery flow remain unimplemented.
+7. **Policy decisions remain open.** Exact local-delivery coverage, refunds, returns, post-handover cancellation, and payment-failure handling are undefined. Nationwide COD should not launch until unpaid courier failure/collection handling is approved. Actual online payment collection is not implemented.
+8. **Two live evidence gaps require an owner disposition.** Run a future supported live duplicate/replay cancellation and a request-timed POS/Storefront overlap test, or explicitly accept the local-only evidence. Neither is evidence of a known data defect, but both remain acceptance gaps.
+
+Features that can remain disabled for a smallest initial launch are local delivery, nationwide COD, online payment, refunds/returns/post-handover cancellation, payment-failure automation, rewards, and cross-device recovery. The recommended first mode is pickup only, pay at shop, with authenticated Admin payment confirmation and pickup handover. Acceptance controls must remain disabled permanently outside bounded staging tests. Cross-device recovery still requires explicit owner risk acceptance even for that limited mode.
+
+### Smallest next release scope
+
+Do not promote the existing staging Previews. Prepare one disabled production-readiness release from exact baselines Admin `69776ac25740b428d1cd6662088bf9d6633ef09d`, Storefront `91aad3612f8a43ab352f420578522023adf4976e`, and POS `b1988adec4375a86c58e7e14a7209a3e021ee0a4`. No existing SHA is production-ready; a new reviewed forward commit is required.
+
+1. Add explicit production release gates to Admin catalog/checkout and Storefront environment validation while retaining the current staging allowlists, server-only gateway, HttpOnly access, Origin/CSRF, canonical pricing, idempotency, and fail-closed defaults. Keep all production creation flags false.
+2. Produce an exact production migration manifest from the live ledger. Known SW3 files, subject to dependency review, are `20260911110045`, `20260911113647`, `20260911130719`, `20260911134759`, `20260911142227`, `20260916082231`, and `20260917034542` in that order. Do not apply the staging-only POS acceptance-control migration in production and do not apply any file until the complete dependency diff passes disposable PostgreSQL from the production baseline.
+3. Configure disabled production values only after review: Admin `VITE_APP_ENV=production`, exact production Supabase URL/publishable key, server-only service role, `STLO_CATALOG_ENV=production`, `STLO_CATALOG_ENABLED=false`, `STLO_CHECKOUT_ENV=production`, `STLO_CHECKOUT_ENABLED=false`, and gateway secret; Storefront `STLO_ENV=production`, exact production Supabase URL, production catalog/checkout URLs, `STLO_CHECKOUT_ENABLED=false`, acceptance controls absent/false, owner-approved `STLO_ORDER_ACCESS_TTL_SECONDS`, gateway secret and protected-hop credential. POS production needs the approved real register/location and acceptance disabled; staging IDs must not be copied blindly.
+4. Deploy disabled, verify catalog read-only and every closed gate, then separately create/publish the canonical product and receive only owner-approved production quantities through authorized workflows. Public ordering remains closed until production stock, expiry automation, policies, and a final zero-mutation preflight are accepted.
+
+Rollback is gate-first: set Storefront and Admin creation false, set database config false, disable/unschedule the expiry runner, then restore the prior verified deployments/aliases. Before any version-1 production order, the new deployment can be rolled back normally. After any version-1 order exists, retain lifecycle schema and audit rows; use gate closure and forward correction rather than destructive migration rollback or compensating stock edits.
+
+Required owner decisions before this scope can move beyond preparation: public production hostname/access; pickup-only recommendation versus nationwide COD; production order-access lifetime; expiry cadence/monitoring; production product publication and quantities; recovery/support policy; refunds/returns/payment-failure policy; and whether to run or waive the two live evidence gaps.
