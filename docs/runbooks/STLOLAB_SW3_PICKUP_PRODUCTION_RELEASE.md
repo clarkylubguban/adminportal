@@ -6,7 +6,7 @@ Prepared locally on 2026-09-20. This package performs no remote write and keeps 
 
 - Admin implementation: `98873b2b5082058e19693d97435b3a79f1f87de4` on `codex/stlolab-sw3-production-readiness`.
 - Storefront implementation: `8e38a074282c33204e63b4eddf60f8fb25b3b204` on `codex/stlolab-production-readiness`.
-- POS: retain deployed production `bcbe14837915defb101d248f939bba171bab526d`. No POS deployment is required for the pickup-only release. Preview fixes through `b1988adec4375a86c58e7e14a7209a3e021ee0a4` remain outside this package.
+- POS safety correction: `1d8f4f6b7483d1ea5f9d1326227963c0483c9c04` on `codex/pos-sw3-production-compat`, based directly on deployed production `bcbe14837915defb101d248f939bba171bab526d`. It does not import the newer staging POS implementation. Deploying it makes the retained POS read-only for inventory mutation; it does not provide canonical POS checkout. Preview fixes through `b1988adec4375a86c58e7e14a7209a3e021ee0a4` remain outside this package.
 
 No release branch has been pushed or merged.
 
@@ -21,6 +21,25 @@ No release branch has been pushed or merged.
 - Main Counter register: `e16c12fa-8d7b-47e9-abbf-10d0a8ac9c50` (`POS-01`).
 
 Read-only preflight found five existing production orders, no null `source_inquiry_id`, no unsupported order status for the SW3 constraint, 35 inventory balance rows, no negative on-hand balance, and no production row for `PRD-260911-8DC1A1`. Production has M2B/M2C/M3B but none of the SW3 reservation, payment, access, or expiry schema. `pg_cron` and `pg_net` are available but not installed.
+
+## Retained production POS compatibility
+
+The retained deployed source `bcbe14837915defb101d248f939bba171bab526d` is not compatible with live shared reservations as an operational POS checkout. Its production build selects `supabase_read` and sets remote writes false. The legacy RPC adapter (`complete_retail_sale`, held-sale, receiving, and payment RPC names) is reachable only in localhost-only `supabase_write_local`; the supported production UI instead completes a sale and writes its movement against browser-local products and `localStorage`. That cannot corrupt canonical database balances, but it can tell an operator that a local sale succeeded and cause physical fulfillment of a unit already reserved by STLOLAB.
+
+Audited inventory paths at exact `bcbe148` are:
+
+- retail sale: decrements local `availableQuantity`; held-sale completion reaches the same decrement;
+- held sale: changes only local `reservedQuantity` until completion;
+- manual adjustment: can add, remove, or set local quantity and enforces only the local reserved floor;
+- receiving and refund restock: increase local quantity only;
+- external-order reservation/deduction adapters: inactive stubs;
+- legacy Supabase write repositories: not bound in configured Production mode and do not match the canonical `complete_pos_sale` contract.
+
+Canonical production database checkout remains `trry_api.complete_pos_sale` -> `private.m2b_record_sale_stock_movement` -> `private.m2b_apply_stock_movement`. In disposable PostgreSQL, the historical production M3B, M4, and M5 definitions followed by the exact eight-migration manifest below passed the full SW3 suite. Both Owner/Admin and authenticated POS attempts to apply `SALE -1` while on-hand equalled reserved were rejected; after the reservation release, the same POS-authorized movement succeeded once. M4 reversal and E7 receiving authorization/idempotency remained valid.
+
+Local correction `1d8f4f6b7483d1ea5f9d1326227963c0483c9c04` is the smallest safe descendant of `bcbe148`: in canonical `supabase_read` mode it blocks opening/completing checkout, the stock-decrement primitive, new holds, receiving, and manual adjustments with an explicit read-only message. Authentication, read views, customer capture, local/offline development, build host guards, and remote-write prohibition remain unchanged. Focused compatibility contract `18/18`, C2.4A operator authorization, C2.4B customer capture, the production build, and the disposable PostgreSQL suite passed.
+
+This correction intentionally does not claim canonical POS sale support. Before production ordering opens, choose one of two safe states: deploy `1d8f4f6` and accept that production POS inventory mutation is temporarily unavailable, or separately review and release the canonical POS implementation. Leaving `bcbe148` unchanged while allowing shared physical stock to be sold through both POS and STLOLAB is blocked.
 
 ## Exact migration manifest
 
@@ -107,15 +126,16 @@ The 72-hour timestamp does not release stock by itself. An eligible reservation 
 2. Verify all eight hashes, apply only the manifest in order, and verify grants: `service_role` only for customer checkout/access; Owner/Admin only for payment, handover, receive, and adjustment; no new `anon`, `authenticated`, or `PUBLIC` privilege.
 3. Insert the disabled production config and pickup-only option. Keep `enabled=false`.
 4. Configure Admin Production with both catalog and checkout false, then deploy Admin `98873b2b5082058e19693d97435b3a79f1f87de4`. Verify exact SHA, project, alias, and closed API responses.
-5. Configure the existing Storefront project's Production scope with checkout false, then deploy Storefront `8e38a074282c33204e63b4eddf60f8fb25b3b204` to the owner-approved public hostname. Verify Home/Product/Bag/Checkout routes and the unavailable-order state. Do not promote a staging deployment.
-6. Publish the canonical product and receive only approved production quantities. Re-read product, variants, images, price, Main Retail Stock on-hand/reserved/available, and movement IDs.
-7. Enable catalog only and verify the public projection. Checkout remains false in Storefront, Admin, and database.
-8. Install and observe expiry automation. Run a zero-mutation preflight: no STLO orders/reservations/payment events, no negative or over-reserved balances, pickup is the only enabled option, acceptance controls are false, and server secrets are absent from client bundles.
-9. Opening production ordering is a separate approval after all owner decisions below. Gate order is database config, Admin, then Storefront; closure order is Storefront, Admin, then database.
+5. Before any production stock is shared with STLOLAB, either deploy POS safety correction `1d8f4f6b7483d1ea5f9d1326227963c0483c9c04` and verify checkout/holds/receiving/adjustment fail closed in Production, or complete a separate canonical POS release review. Do not leave unchanged `bcbe148` available for sales against shared stock.
+6. Configure the existing Storefront project's Production scope with checkout false, then deploy Storefront `8e38a074282c33204e63b4eddf60f8fb25b3b204` to the owner-approved public hostname. Verify Home/Product/Bag/Checkout routes and the unavailable-order state. Do not promote a staging deployment.
+7. Publish the canonical product and receive only approved production quantities. Re-read product, variants, images, price, Main Retail Stock on-hand/reserved/available, and movement IDs.
+8. Enable catalog only and verify the public projection. Checkout remains false in Storefront, Admin, and database.
+9. Install and observe expiry automation. Run a zero-mutation preflight: no STLO orders/reservations/payment events, no negative or over-reserved balances, pickup is the only enabled option, acceptance controls are false, and server secrets are absent from client bundles.
+10. Opening production ordering is a separate approval after all owner decisions below. Gate order is database config, Admin, then Storefront; closure order is Storefront, Admin, then database.
 
 ## Rollback
 
-Close Storefront creation first, redeploy its last verified disabled build, close Admin creation and catalog as needed, then set the database config `enabled=false`. Unschedule expiry only if the lifecycle is intentionally paused and verify no eligible reservations are stranded. Restore the prior Admin and Storefront deployments/aliases without touching POS. Do not delete orders, reservations, payment events, movements, or schema. Never compensate by directly editing balances.
+Close Storefront creation first, redeploy its last verified disabled build, close Admin creation and catalog as needed, then set the database config `enabled=false`. Unschedule expiry only if the lifecycle is intentionally paused and verify no eligible reservations are stranded. Restore the prior Admin and Storefront deployments/aliases. Do not roll POS back from `1d8f4f6` to `bcbe148` while STLOLAB ordering or shared-stock use remains open; restore the old POS only after all shared-stock creation gates are closed, or replace it with a reviewed canonical POS release. Do not delete orders, reservations, payment events, movements, or schema. Never compensate by directly editing balances.
 
 ## Owner decisions still required
 
@@ -126,5 +146,6 @@ Close Storefront creation first, redeploy its last verified disabled build, clos
 5. Explicit acceptance that initial launch is pickup-only and pay-at-shop, with no online payment or delivery.
 6. Support handling when a customer clears cookies or switches devices; recovery/token reissue remains unavailable.
 7. Whether local-only duplicate/replay cancellation evidence and the unverified request-level POS/Storefront overlap are accepted for launch or require a future production-like acceptance window.
+8. Whether the pickup launch may temporarily disable production POS inventory mutation with `1d8f4f6`, or must wait for a separately reviewed canonical POS release.
 
 Refunds, returns, post-handover cancellation, payment-failure automation, local delivery, nationwide COD, rewards, and cross-device recovery remain disabled/deferred. They do not block a pickup-only, pay-at-shop launch if the owner explicitly accepts those limits.
