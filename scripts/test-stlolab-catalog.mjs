@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { contentFromDraft, stlolabDraftFields } from '../src/shared/stlolabContent.js';
-import { availabilityFromBalances, publicProduct, publicHero, readStlolabCatalog, STAGING_REF } from '../api/_lib/stlolabCatalog.js';
+import { availabilityFromBalances, canReadStagingAvailability, publicProduct, publicHero, readStlolabCatalog, STAGING_REF } from '../api/_lib/stlolabCatalog.js';
 import { createCatalogHandler } from '../api/_lib/stlolabCatalogRoute.js';
 
 const row={id:'product-1',product_code:'PIECE-001',name:'Test piece',description:'Public description',product_type:'PHYSICAL',active:true,sellable:true,readiness_status:'READY_FOR_SALE',archived_at:null,eligible_channels:['STLOLAB'],typed_config:{material:'Cotton',production_notes:'PRIVATE',stlolab:{care:'Cold wash'}}};
@@ -17,6 +17,22 @@ test('only published STLOLAB physical products cross the public boundary',()=>{
 test('catalog availability subtracts reservations and fails missing balances closed',()=>{
  const availability=availabilityFromBalances([{variant_id:'open',quantity_on_hand:2,reserved_quantity:1},{variant_id:'held',quantity_on_hand:1,reserved_quantity:1}],['open','held','missing']);
  assert.equal(availability.get('open'),'available');assert.equal(availability.get('held'),'sold-out');assert.equal(availability.get('missing'),'sold-out');
+});
+test('staging catalog can read availability while order creation remains disabled',async()=>{
+ const previous=Object.fromEntries(['STLO_CATALOG_ENABLED','STLO_CATALOG_ENV','STLO_CHECKOUT_ENV','STLO_CHECKOUT_ENABLED'].map(key=>[key,process.env[key]]));
+ Object.assign(process.env,{STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'staging',STLO_CHECKOUT_ENV:'staging',STLO_CHECKOUT_ENABLED:'false'});
+ try {
+  assert.equal(canReadStagingAvailability(),true);
+  const result=await readStlolabCatalog(client({products:[row],product_variants:[variant],product_images:[image],stlolab_checkout_config:[{enabled:false,inventory_policy:'RESERVE_ON_SUBMIT',inventory_location_id:'location-1'}],inventory_balances:[{variant_id:variant.id,quantity_on_hand:1,reserved_quantity:0}]}));
+  assert.equal(result.products[0].variants[0].availability,'available');
+ } finally {
+  for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
+ }
+});
+test('availability projection remains excluded outside the explicit staging catalog',()=>{
+ assert.equal(canReadStagingAvailability({STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'production',STLO_CHECKOUT_ENV:'staging'}),false);
+ assert.equal(canReadStagingAvailability({STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'staging',STLO_CHECKOUT_ENV:'production'}),false);
+ assert.equal(canReadStagingAvailability({STLO_CATALOG_ENV:'staging',STLO_CHECKOUT_ENV:'staging'}),false);
 });
 test('archived images, bad prices and inactive variants cannot appear',()=>{
   assert.equal(publicProduct(row,[{...variant,selling_price:null}],[image]),null);
@@ -57,7 +73,7 @@ test('hero fields are separate, safe, featured-only and tied to the product',()=
   assert.throws(()=>contentFromDraft({...draft,stloHeroMobile:'120% 0%'}),/crop/);
 });
 function client(data={products:[row],product_variants:[variant],product_images:[image]}, fail=false) {
-  return {from(table){const q={};for(const method of ['select','eq','is','contains','order','range','in','limit'])q[method]=()=>q;q.then=(resolve)=>Promise.resolve({data:data[table]||[],error:fail?{message:'PRIVATE SQL'}:null}).then(resolve);return q;}};
+  return {from(table){const q={};for(const method of ['select','eq','is','contains','order','range','in','limit'])q[method]=()=>q;q.maybeSingle=()=>Promise.resolve({data:(data[table]||[])[0]||null,error:fail?{message:'PRIVATE SQL'}:null});q.then=(resolve)=>Promise.resolve({data:data[table]||[],error:fail?{message:'PRIVATE SQL'}:null}).then(resolve);return q;}};
 }
 test('catalog reader projects rows and keeps empty collections empty',async()=>{
   const result=await readStlolabCatalog(client());assert.equal(result.products.length,1);assert.equal(result.nextOffset,null);

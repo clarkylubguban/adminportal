@@ -2,6 +2,9 @@ import { garmentGuides, httpsUrl } from "../../src/shared/stlolabContent.js";
 
 export const STAGING_REF = "fszkypwovpdthqfobxrk";
 const short = (value, max = 2000) => typeof value === "string" ? value.trim().slice(0, max) : "";
+export function canReadStagingAvailability(env = process.env) {
+  return env.STLO_CATALOG_ENABLED === "true" && env.STLO_CATALOG_ENV === "staging" && env.STLO_CHECKOUT_ENV === "staging";
+}
 export function availabilityFromBalances(rows, variantIds) {
   const result = new Map((rows || []).map(item => [item.variant_id, Number(item.quantity_on_hand) - Number(item.reserved_quantity) > 0 ? "available" : "sold-out"]));
   for (const id of variantIds) if (!result.has(id)) result.set(id, "sold-out");
@@ -64,10 +67,10 @@ export async function readStlolabCatalog(supabase, { slug = "", offset = 0 } = {
   if (variants.error || images.error) throw new Error("Catalog details query failed");
   if (variants.data?.length >= 1000 || images.data?.length >= 1000) throw new Error("Catalog detail window exceeded");
   let availabilityByVariant = new Map();
-  if (process.env.STLO_CHECKOUT_ENABLED === "true" && process.env.STLO_CHECKOUT_ENV === "staging") {
+  if (canReadStagingAvailability()) {
     const config = await supabase.from("stlolab_checkout_config").select("enabled,inventory_policy,inventory_location_id").eq("environment", "staging").maybeSingle();
     if (config.error) throw new Error("Checkout availability configuration failed");
-    if (config.data?.enabled && config.data.inventory_policy === "RESERVE_ON_SUBMIT" && config.data.inventory_location_id) {
+    if (config.data?.inventory_policy === "RESERVE_ON_SUBMIT" && config.data.inventory_location_id) {
       const variantIds = (variants.data || []).map(v => v.id);
       const balances = await supabase.from("inventory_balances").select("variant_id,quantity_on_hand,reserved_quantity").eq("location_id", config.data.inventory_location_id).in("variant_id", variantIds);
       if (balances.error) throw new Error("Checkout availability query failed");
