@@ -1,9 +1,17 @@
 import { garmentGuides, httpsUrl } from "../../src/shared/stlolabContent.js";
 
 export const STAGING_REF = "fszkypwovpdthqfobxrk";
+export const PRODUCTION_REF = "wcgtwfctpnwgpglywvvx";
+export const PROJECT_REFS = Object.freeze({ staging: STAGING_REF, production: PRODUCTION_REF });
 const short = (value, max = 2000) => typeof value === "string" ? value.trim().slice(0, max) : "";
-export function canReadStagingAvailability(env = process.env) {
-  return env.STLO_CATALOG_ENABLED === "true" && env.STLO_CATALOG_ENV === "staging" && env.STLO_CHECKOUT_ENV === "staging";
+export function configuredCatalogEnvironment(env = process.env) {
+  const mode = String(env.STLO_CATALOG_ENV || "");
+  const url = String(env.SUPABASE_URL || env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+  return PROJECT_REFS[mode] && url === `https://${PROJECT_REFS[mode]}.supabase.co` ? mode : "";
+}
+export function canReadAvailability(env = process.env) {
+  const mode = configuredCatalogEnvironment(env);
+  return env.STLO_CATALOG_ENABLED === "true" && mode !== "" && env.STLO_CHECKOUT_ENV === mode;
 }
 export function availabilityFromBalances(rows, variantIds) {
   const result = new Map((rows || []).map(item => [item.variant_id, Number(item.quantity_on_hand) - Number(item.reserved_quantity) > 0 ? "available" : "sold-out"]));
@@ -51,7 +59,7 @@ export function publicHero(row, product) {
     eyebrow: short(h.eyebrow, 80), subtitle: short(h.subtitle, 300), buttonLabel: short(h.buttonLabel, 50),
     href: `/product/${encodeURIComponent(product.slug)}`, mobilePosition: position(h.mobilePosition), desktopPosition: position(h.desktopPosition) };
 }
-export async function readStlolabCatalog(supabase, { slug = "", offset = 0 } = {}) {
+export async function readStlolabCatalog(supabase, { slug = "", offset = 0, environment = configuredCatalogEnvironment(), env = process.env } = {}) {
   let query = supabase.from("products").select("id,product_code,name,description,product_type,active,sellable,readiness_status,archived_at,eligible_channels,typed_config")
     .eq("product_type", "PHYSICAL").eq("active", true).eq("sellable", true).eq("readiness_status", "READY_FOR_SALE").is("archived_at", null).contains("eligible_channels", ["STLOLAB"]);
   if (slug) query = query.eq("product_code", slug);
@@ -67,8 +75,8 @@ export async function readStlolabCatalog(supabase, { slug = "", offset = 0 } = {
   if (variants.error || images.error) throw new Error("Catalog details query failed");
   if (variants.data?.length >= 1000 || images.data?.length >= 1000) throw new Error("Catalog detail window exceeded");
   let availabilityByVariant = new Map();
-  if (canReadStagingAvailability()) {
-    const config = await supabase.from("stlolab_checkout_config").select("enabled,inventory_policy,inventory_location_id").eq("environment", "staging").maybeSingle();
+  if (canReadAvailability(env) && environment) {
+    const config = await supabase.from("stlolab_checkout_config").select("enabled,inventory_policy,inventory_location_id").eq("environment", environment).maybeSingle();
     if (config.error) throw new Error("Checkout availability configuration failed");
     if (config.data?.inventory_policy === "RESERVE_ON_SUBMIT" && config.data.inventory_location_id) {
       const variantIds = (variants.data || []).map(v => v.id);

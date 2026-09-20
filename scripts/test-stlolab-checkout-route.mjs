@@ -10,6 +10,10 @@ try{
  Object.assign(process.env,{STLO_CHECKOUT_ENABLED:'true',STLO_CHECKOUT_ENV:'staging',SUPABASE_URL:'https://fszkypwovpdthqfobxrk.supabase.co',SUPABASE_SERVICE_ROLE_KEY:'local-test-only',STLO_STOREFRONT_GATEWAY_SECRET:'x'.repeat(40)});
  result=await invoke('POST',{}, {'x-stlolab-gateway-secret':'wrong'});assert.equal(result.status,401);
  result=await invoke('POST',{idempotencyKey:'ABCDEFGHIJKLMNOP',confirmationToken:'x'.repeat(64)}, {'x-stlolab-gateway-secret':'x'.repeat(40)});assert.equal(result.status,400);assert.equal(result.body.code,'INVALID_CHECKOUT_SECURITY');
+ Object.assign(process.env,{STLO_CHECKOUT_ENV:'production',SUPABASE_URL:'https://wcgtwfctpnwgpglywvvx.supabase.co'});
+ result=await invoke('POST',{idempotencyKey:'ABCDEFGHIJKLMNOP',confirmationToken:'x'.repeat(64)}, {'x-stlolab-gateway-secret':'x'.repeat(40)});assert.equal(result.status,400);assert.equal(result.body.code,'INVALID_CHECKOUT_SECURITY');
+ process.env.SUPABASE_URL='https://fszkypwovpdthqfobxrk.supabase.co';result=await invoke('POST',{}, {'x-stlolab-gateway-secret':'x'.repeat(40)});assert.equal(result.status,503);assert.equal(result.body.code,'ORDERS_NOT_OPEN');
+ Object.assign(process.env,{STLO_CHECKOUT_ENV:'staging',SUPABASE_URL:'https://fszkypwovpdthqfobxrk.supabase.co'});
  process.env.STLO_CHECKOUT_ENABLED='false';result=await invoke('POST',{}, {'x-stlolab-gateway-secret':'x'.repeat(40)},'confirmation');assert.equal(result.status,400);assert.equal(result.body.code,'INVALID_CONFIRMATION_ACCESS');process.env.STLO_CHECKOUT_ENABLED='true';
  const migration=readFileSync('supabase/migrations/20260911110045_stlolab_sw3_checkout_foundation.sql','utf8');
  assert.match(migration,/revoke all on function trry_api\.create_stlolab_order_sw3[\s\S]+from public, anon, authenticated/);
@@ -28,6 +32,11 @@ try{
  assert.match(access,/durable confirmation access is required for new STLOLAB orders/);
  assert.match(access,/grant execute on function trry_api\.create_stlolab_order_sw3\(text,text,text,text,jsonb,jsonb,jsonb,timestamptz\) to service_role/);
  assert.doesNotMatch(access,/grant .* to (anon|authenticated|public)/i);
+ const productionRelease=readFileSync('supabase/migrations/20260920111117_stlolab_production_environment_release.sql','utf8');
+ assert.match(productionRelease,/checkout_environment in \('staging', 'production'\)/);
+ assert.match(productionRelease,/where environment = v_order\.checkout_environment/);
+ assert.match(productionRelease,/p_environment not in \('staging', 'production'\)/);
+ assert.doesNotMatch(productionRelease,/insert into public\.stlolab_checkout_config|insert into public\.stlolab_fulfillment_options/i);
  console.log('PASS STLOLAB checkout route is fail-closed, gateway-authenticated, and service-role-only');
 }finally{process.env=original;}
 

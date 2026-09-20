@@ -1,12 +1,14 @@
 import { createHash, timingSafeEqual } from "node:crypto";
 import { createServerSupabaseClient } from "./supabaseServer.js";
+import { PROJECT_REFS } from "./stlolabCatalog.js";
 
 const MAX_BODY_BYTES = 24_000;
 
 export default async function stlolabCheckoutHandler(request, response, action = "create") {
   response.setHeader("Cache-Control", "no-store");
   if (request.method !== "POST") return send(response, 405, { ok: false, code: "METHOD_NOT_ALLOWED" });
-  if (!checkoutEnvironmentReady(action)) return send(response, 503, { ok: false, code: "ORDERS_NOT_OPEN" });
+  const environment = checkoutEnvironmentReady(action);
+  if (!environment) return send(response, 503, { ok: false, code: "ORDERS_NOT_OPEN" });
   if (!authorizedGateway(request)) return send(response, 401, { ok: false, code: "STOREFRONT_AUTH_REQUIRED" });
 
   try {
@@ -40,7 +42,7 @@ export default async function stlolabCheckoutHandler(request, response, action =
 
     const payload = normalizeCheckout(body);
     const { data, error } = await supabase.rpc("create_stlolab_order_sw3", {
-      p_environment: "staging",
+      p_environment: environment,
       p_idempotency_key: payload.idempotencyKey,
       p_payload_hash: sha256(stableJson(payload.checkout)),
       p_confirmation_token_hash: sha256(payload.confirmationToken),
@@ -61,9 +63,10 @@ export default async function stlolabCheckoutHandler(request, response, action =
 }
 
 function checkoutEnvironmentReady(action) {
-  const stagingReady = process.env.STLO_CHECKOUT_ENV === "staging"
-    && String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").includes("fszkypwovpdthqfobxrk");
-  return stagingReady && (action !== "create" || process.env.STLO_CHECKOUT_ENABLED === "true");
+  const mode = String(process.env.STLO_CHECKOUT_ENV || "");
+  const url = String(process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || "").replace(/\/$/, "");
+  const exactProject = PROJECT_REFS[mode] && url === `https://${PROJECT_REFS[mode]}.supabase.co`;
+  return exactProject && (action !== "create" || process.env.STLO_CHECKOUT_ENABLED === "true") ? mode : "";
 }
 
 function authorizedGateway(request) {

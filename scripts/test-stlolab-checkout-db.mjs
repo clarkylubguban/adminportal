@@ -11,6 +11,7 @@ const posM3bMigration = process.env.TRRY_POS_M3B_MIGRATION || '';
 const posCompatibilityMigrations = JSON.parse(process.env.TRRY_POS_COMPAT_MIGRATIONS_JSON || '[]');
 const checkoutPermissionMigration = '20260916082231_stlolab_sw3_checkout_service_role_permissions.sql';
 const orderAccessMigration = '20260917034542_stlolab_order_access_lifecycle.sql';
+const productionEnvironmentMigration = '20260920111117_stlolab_production_environment_release.sql';
 const psqlBridge = process.env.TRRY_VERIFY_PSQL_BRIDGE || '';
 let started = false;
 
@@ -108,6 +109,7 @@ try {
   assert.equal(one(`select has_function_privilege('service_role','private.stlolab_place_key(text)','execute') as allowed`).allowed, true);
   assert.equal(one(`select has_function_privilege('service_role','private.stlolab_reserve_order_item_sw3()','execute') as allowed`).allowed, false);
   sql(readFileSync(`supabase/migrations/${orderAccessMigration}`, 'utf8'));
+  sql(readFileSync(`supabase/migrations/${productionEnvironmentMigration}`, 'utf8'));
   for (const role of ['anon', 'authenticated']) {
     assert.equal(one(`select has_schema_privilege('${role}','private','usage') as allowed`).allowed, false);
     assert.equal(one(`select has_function_privilege('${role}','private.stlolab_place_key(text)','execute') as allowed`).allowed, false);
@@ -148,6 +150,14 @@ try {
   assert.equal(one(`select count(*)::int as count from public.orders where source_type='STLOLAB_RETAIL'`).count, 1);
   assert.equal(one(`select count(*)::int as count from public.order_items`).count, 1);
   assert.equal(balance(variant).reserved_quantity, 2);
+
+  sql(`insert into public.stlolab_checkout_config(environment,enabled,inventory_policy,inventory_location_id)
+      values('production',true,'RESERVE_ON_SUBMIT','${location}');
+    insert into public.stlolab_fulfillment_options(environment,option_code,method,enabled,fee_amount,requires_address,pickup_code,customer_label,coverage_mode,coverage_rules,customer_instructions)
+      values('production','SHOP_PICKUP','pickup',true,0,false,'TRRY-SHOP','TRRY Apparel Shop','PICKUP','{}','Production pickup fixture.');`);
+  const productionCreated = oneAsService(call('PRODUCTIONORDER01',79000,1,'c'.repeat(64)).replace("create_stlolab_order_sw3('staging'", "create_stlolab_order_sw3('production'")).result;
+  assert.equal(one(`select checkout_environment as environment from public.orders where id='${productionCreated.orderId}'`).environment, 'production');
+  assert.equal(one(`select count(*)::int as count from public.inventory_reservations where order_id='${productionCreated.orderId}' and status='ACTIVE'`).count, 1);
 
   if (posCompatibilityMigrations.length) {
     const compatibilityBefore = balance(variant);

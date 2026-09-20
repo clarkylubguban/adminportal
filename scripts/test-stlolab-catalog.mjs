@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { contentFromDraft, stlolabDraftFields } from '../src/shared/stlolabContent.js';
-import { availabilityFromBalances, canReadStagingAvailability, publicProduct, publicHero, readStlolabCatalog, STAGING_REF } from '../api/_lib/stlolabCatalog.js';
+import { availabilityFromBalances, canReadAvailability, publicProduct, publicHero, readStlolabCatalog, PRODUCTION_REF, STAGING_REF } from '../api/_lib/stlolabCatalog.js';
 import { createCatalogHandler } from '../api/_lib/stlolabCatalogRoute.js';
 
 const row={id:'product-1',product_code:'PIECE-001',name:'Test piece',description:'Public description',product_type:'PHYSICAL',active:true,sellable:true,readiness_status:'READY_FOR_SALE',archived_at:null,eligible_channels:['STLOLAB'],typed_config:{material:'Cotton',production_notes:'PRIVATE',stlolab:{care:'Cold wash'}}};
@@ -22,17 +22,19 @@ test('staging catalog can read availability while order creation remains disable
  const previous=Object.fromEntries(['STLO_CATALOG_ENABLED','STLO_CATALOG_ENV','STLO_CHECKOUT_ENV','STLO_CHECKOUT_ENABLED'].map(key=>[key,process.env[key]]));
  Object.assign(process.env,{STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'staging',STLO_CHECKOUT_ENV:'staging',STLO_CHECKOUT_ENABLED:'false'});
  try {
-  assert.equal(canReadStagingAvailability(),true);
+  process.env.SUPABASE_URL=`https://${STAGING_REF}.supabase.co`;
+  assert.equal(canReadAvailability(),true);
   const result=await readStlolabCatalog(client({products:[row],product_variants:[variant],product_images:[image],stlolab_checkout_config:[{enabled:false,inventory_policy:'RESERVE_ON_SUBMIT',inventory_location_id:'location-1'}],inventory_balances:[{variant_id:variant.id,quantity_on_hand:1,reserved_quantity:0}]}));
   assert.equal(result.products[0].variants[0].availability,'available');
  } finally {
   for(const [key,value] of Object.entries(previous)){if(value===undefined)delete process.env[key];else process.env[key]=value;}
  }
 });
-test('availability projection remains excluded outside the explicit staging catalog',()=>{
- assert.equal(canReadStagingAvailability({STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'production',STLO_CHECKOUT_ENV:'staging'}),false);
- assert.equal(canReadStagingAvailability({STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'staging',STLO_CHECKOUT_ENV:'production'}),false);
- assert.equal(canReadStagingAvailability({STLO_CATALOG_ENV:'staging',STLO_CHECKOUT_ENV:'staging'}),false);
+test('availability projection requires an exact environment and project pair',()=>{
+ assert.equal(canReadAvailability({STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'production',STLO_CHECKOUT_ENV:'production',SUPABASE_URL:`https://${PRODUCTION_REF}.supabase.co`}),true);
+ assert.equal(canReadAvailability({STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'production',STLO_CHECKOUT_ENV:'staging',SUPABASE_URL:`https://${PRODUCTION_REF}.supabase.co`}),false);
+ assert.equal(canReadAvailability({STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'staging',STLO_CHECKOUT_ENV:'staging',SUPABASE_URL:`https://${PRODUCTION_REF}.supabase.co`}),false);
+ assert.equal(canReadAvailability({STLO_CATALOG_ENV:'staging',STLO_CHECKOUT_ENV:'staging',SUPABASE_URL:`https://${STAGING_REF}.supabase.co`}),false);
 });
 test('archived images, bad prices and inactive variants cannot appear',()=>{
   assert.equal(publicProduct(row,[{...variant,selling_price:null}],[image]),null);
@@ -84,9 +86,13 @@ async function request(env,method='GET',url='/api/stlolab-catalog',db=client()){
   await createCatalogHandler({env,createClient:()=>{calls++;return db;}})({method,url},response);return {...response,calls};
 }
 const env={STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'staging',SUPABASE_URL:`https://${STAGING_REF}.supabase.co`};
-test('disabled, production and write requests fail before any database call',async()=>{
-  for(const settings of [{},{...env,STLO_CATALOG_ENV:'production'},{...env,SUPABASE_URL:'https://wcgtwfctpnwgpglywvvx.supabase.co'}]){const r=await request(settings);assert.equal(r.statusCode,503);assert.equal(r.calls,0);}
+test('disabled, cross-wired and write requests fail before any database call',async()=>{
+  for(const settings of [{},{...env,STLO_CATALOG_ENV:'production'},{...env,SUPABASE_URL:`https://${PRODUCTION_REF}.supabase.co`}]){const r=await request(settings);assert.equal(r.statusCode,503);assert.equal(r.calls,0);}
   const write=await request(env,'POST');assert.equal(write.statusCode,405);assert.equal(write.calls,0);
+});
+test('production catalog requires its exact project and reports production',async()=>{
+  const production={STLO_CATALOG_ENABLED:'true',STLO_CATALOG_ENV:'production',SUPABASE_URL:`https://${PRODUCTION_REF}.supabase.co`};
+  const result=await request(production);assert.equal(result.statusCode,200);assert.equal(result.body.environment,'production');assert.equal(result.calls,1);
 });
 test('API validates input and never returns database errors or private rows',async()=>{
   const invalid=await request(env,'GET','/api/stlolab-catalog?offset=-1');assert.equal(invalid.statusCode,400);assert.equal(invalid.calls,0);
