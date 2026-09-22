@@ -953,3 +953,18 @@ The live catalog endpoint returns HTTP 200, environment `production`, the one ca
 The unchanged Storefront Production deployment at `https://stlolab-staging.vercel.app` now consumes the live catalog. Browser verification passed Home to Product navigation, direct product route `https://stlolab-staging.vercel.app/product/PRD-260922-8C8E1D`, Bag, and direct Checkout refresh. It displays Glow N Underground, PHP 790, Black S-XL, 100% Premium Combed Cotton, and `240 GSM`. The 1200 x 1200 image loaded from production storage and renders with `object-fit: contain`. All variants correctly show sold out/currently unavailable because no production stock exists. The global orders-unavailable banner remains visible and Checkout remains closed.
 
 Status is **READY FOR AUTHORIZED PRODUCTION STOCK SETUP**, not ready for public ordering. Catalog viewing alone is enabled; Admin checkout, Storefront checkout, acceptance controls, and the database creation gate remain closed.
+
+## 2026-09-22 - Production Black S-XL initial stock observed
+
+The owner approved exactly one production unit each of Glow N Underground Black S, M, L, and XL. The canonical pre-submit check found that the four receipts had already committed, so no additional Receive Stock action was submitted and no duplicate stock was created.
+
+The production ledger contains exactly four movements for product `d1024e8a-8d46-40a9-899e-11295a67ffc1`, each `RECEIPT +1`, balance `0 -> 1`, source `RECEIVING`:
+
+- Black/L: movement `6d569231-5ebb-42c5-99fe-0969a84b85a6`, key `PRD-260922-8C8E1D-BLACK-L`.
+- Black/M: movement `4f489711-8568-4a2d-9d27-6b608d4ffac7`, key `PRD-260922-8C8E1D-BLACK-M`.
+- Black/S: movement `07ffa73c-2961-47c2-b9d3-f297c6a70e90`, key `PRD-260922-8C8E1D-BLACK-S`.
+- Black/XL: movement `e0511693-a786-425b-bc8c-d2e954d5781e`, key `PRD-260922-8C8E1D-BLACK-XL`.
+
+Read-only postflight is S `1/0/1`, M `1/0/1`, L `1/0/1`, and XL `1/0/1` for on-hand/reserved/available. Totals are four on-hand, zero reserved, zero reservations, and zero order items. The live catalog reports all four variants `available`, while the Storefront still displays the global orders-unavailable notice. `stlolab_checkout_config.production.enabled=false`; no order, payment, reservation, handover, sale deduction, adjustment, additional receipt, Cron change, deployment, or gate opening was performed in this verification.
+
+Status remains **STOCKED BUT ORDERING DISABLED**. Expiry automation and final launch approval are still required before opening production checkout.
