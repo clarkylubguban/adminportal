@@ -3761,8 +3761,12 @@ function shortTaskTitle(title) {
   return value.length > 28 ? `${value.slice(0, 25)}...` : value;
 }
 
+// Owner-requested display exclusions. Keep production ledger, reservations, and receipts intact.
+const hiddenAdminInquiryIds = new Set(["TRRY-C9DSV4DC", "TRRY-G69VZNCT", "TRRY-KZTGEJ9S"]);
+const hiddenAdminOrderReferences = new Set(["TRRY-ORD-2FB6A4AE", "TRRY-ORD-C9FDBCD3", "TRRY-ORD-WR5ZJNVH"]);
+
 function getMvpDashboardItems() {
-  return opsInquiries.map((item) => ({
+  return opsInquiries.filter((item) => !hiddenAdminInquiryIds.has(item.id)).map((item) => ({
     ...item,
     ...getNativeOrderIdentityForInquiry(item.id),
     orderCreationState: nativeOrderConversionRequests[item.id]?.status || "",
@@ -3777,7 +3781,7 @@ function getMvpOrderItems() {
   const inquiries = getMvpDashboardItems();
   return buildDualReadOrders({
     inquiries,
-    nativeRows: nativeOrderRows,
+    nativeRows: nativeOrderRows.filter((row) => !hiddenAdminOrderReferences.has(row.order_reference || row.orderReference)),
   });
 }
 
