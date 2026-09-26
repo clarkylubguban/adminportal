@@ -405,8 +405,8 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     if (!state.inquiryIntakeOpen || typeof renderIntake !== "function") return "";
     const intake = renderIntake();
     if (!intake) return "";
-    return `<section class="mvp-inquiry-intake-panel" aria-label="Inquiry customer capture">
-      ${intake}
+    return `<div class="mvp-inquiry-intake-backdrop" data-mvp-close-intake></div><section class="mvp-inquiry-intake-panel" role="dialog" aria-modal="true" aria-labelledby="ops-intake-title">
+      <button class="mvp-inquiry-intake-close" type="button" data-mvp-close-intake aria-label="Close inquiry intake">×</button>${intake}
     </section>`;
   }
 
@@ -2312,6 +2312,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
       rerender();
       if (state.inquiryIntakeOpen) requestAnimationFrame(() => root.querySelector("#ops-raw-message")?.focus());
     }));
+    root.querySelectorAll("[data-mvp-close-intake]").forEach((button) => button.addEventListener("click", () => { state.inquiryIntakeOpen = false; rerender(); root.querySelector("[data-mvp-new-inquiry]")?.focus(); }));
     root.querySelectorAll("[data-mvp-stage]").forEach((button) => button.addEventListener("click", () => { state.inquiry.stage = button.dataset.mvpStage; state.inquiry.page = 1; clearQuery(); rerender(); }));
     root.querySelectorAll("[data-mvp-filter]").forEach((field) => {
       const [scope, name] = field.dataset.mvpFilter.split(":");
