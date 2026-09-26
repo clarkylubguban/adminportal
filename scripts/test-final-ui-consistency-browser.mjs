@@ -44,7 +44,7 @@ try {
     await setViewport(cdp, viewport);
     await verifyDashboard(cdp, viewport, "/inquiries", "Inquiry", "CODE|CUSTOMER|ITEM|REQUEST|SERVICE|QTY|QUOTE STATUS|FOLLOW-UP|OWNER|ACTION");
     await verifyDashboard(cdp, viewport, "/orders", "Orders", "ORDER|CUSTOMER|ITEM|AMOUNT|PROGRESS|DUE|ACTION");
-    await verifyDashboard(cdp, viewport, "/production", "Production", "JOB|CUSTOMER|SUMMARY|METHOD|DUE|STAFF|STAGE|ACTION");
+    await verifyDashboard(cdp, viewport, "/production", "Production", "JOB|CUSTOMER|ITEM|METHOD|DUE|STAGE|ACTION");
     await verifyDrawers(cdp, viewport);
   }
 

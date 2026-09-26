@@ -1627,9 +1627,9 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function productionDashboardTable(items, total, currentPage, pageCount, pageSize) {
-    const headers = ["JOB", "CUSTOMER", "SUMMARY", "METHOD", "DUE", "STAFF", "STAGE", "ACTION"];
+    const headers = ["JOB", "CUSTOMER", "ITEM", "METHOD", "DUE", "STAGE", "ACTION"];
     const emptyText = total ? "NO PRODUCTION JOBS MATCH THESE FILTERS" : "NO RELEASED PRODUCTION JOBS";
-    return `<section class="mvp-production-table-wrap"><div class="mvp-production-table" role="table" aria-label="Production dashboard"><div class="mvp-production-table-head" role="row">${headers.map((header) => `<span role="columnheader">${html(header)} <i aria-hidden="true">&#8597;</i></span>`).join("")}</div><div role="rowgroup">${items.length ? items.map(productionDashboardRow).join("") : empty(emptyText)}</div></div>${productionPagination(total, currentPage, pageCount, pageSize)}</section>`;
+    return `<section class="mvp-production-table-wrap"><div class="mvp-production-table" role="table" aria-label="Production dashboard"><div class="mvp-production-table-head" role="row">${headers.map((header) => `<span role="columnheader">${html(header)}</span>`).join("")}</div><div role="rowgroup">${items.length ? items.map(productionDashboardRow).join("") : empty(emptyText)}</div></div>${productionPagination(total, currentPage, pageCount, pageSize)}</section>`;
   }
 
   function productionDashboardRow(item) {
@@ -1638,13 +1638,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const action = productionDashboardAction(item);
     return `<div class="mvp-production-table-row" data-mvp-open="production" data-mvp-id="${html(item.id)}" role="row" tabindex="0">
       ${productionJobIdentityCell(item)}
-      <span class="customer" title="${html(item.customer || "Unnamed customer")}">${html(item.customer || "Unnamed customer")}</span>
+      <span class="mvp-two-line customer"><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(assigned(item) === "Not Yet Assigned" ? "Unassigned" : assigned(item))}</small></span>
       <span class="summary" title="${html(productionSummaryPrimary(item))}">${html(productionSummaryPrimary(item))}</span>
       <span class="method">${html(productionMethod(item))}</span>
       ${productionDashboardDueCell(dueState, item)}
-      ${productionStaffCell(item)}
       <span class="stage-cell">${status(productionDashboardStageLabel(stage), stage.tone)}</span>
-      <span class="mvp-production-row-action"><button type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}">${html(action)} <i aria-hidden="true">&rsaquo;</i></button><button type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}" aria-label="More actions for ${html(jobReference(item))}">&ctdot;</button></span>
+      <span class="mvp-production-row-action"><button type="button" data-mvp-open="production" data-mvp-id="${html(item.id)}">${html(action)} <i aria-hidden="true">&rsaquo;</i></button></span>
     </div>`;
   }
 
