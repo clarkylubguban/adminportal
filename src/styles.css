@@ -31936,3 +31936,38 @@ pre,
 .mvp-overview-page .mvp-module-link b{background:#f1f5e9;color:#263b13}
 @media(max-width:1100px){.mvp-overview-page .mvp-overview-grid.phase3{grid-template-columns:1fr}}
 @media(max-width:700px){.mvp-overview-page{padding:20px 14px 64px}.mvp-overview-page .mvp-page-title{align-items:flex-start;gap:8px}.mvp-overview-page .mvp-page-title h1{font-size:22px}.mvp-overview-page .mvp-page-title>strong{font-size:9px}.mvp-overview-page .mvp-metrics.attention{grid-template-columns:repeat(2,minmax(0,1fr))}.mvp-overview-page .mvp-metric{min-height:78px;padding:12px;border-bottom:1px solid #eef0f3}.mvp-overview-page .mvp-metric:nth-child(2n){border-right:0}.mvp-overview-page .mvp-metric strong{font-size:23px}.app-shell .sidebar,.app-shell.admin-saas-shell .sidebar{width: min(280px,85vw);flex-basis:auto}}
+
+/* Customers uses the same shell width and navigation treatment as Inquiries. */
+@media (min-width:769px){
+  .app-shell:has(.customers-page) .sidebar{flex:0 0 184px;width:184px;padding:24px 16px 20px}
+  .app-shell:has(.customers-page) .workspace{flex:1 1 0;width:calc(100vw - 184px);min-width:0;max-width:calc(100vw - 184px)}
+}
+.app-shell:has(.customers-page) .sidebar .brand-lockup{border:0;margin:0 0 23px;padding:5px 10px;height:auto}
+.app-shell:has(.customers-page) .sidebar .brand-lockup strong{font-size:26px;letter-spacing:-.045em !important}
+.app-shell:has(.customers-page) .sidebar .brand-lockup span{display:block;color:#b3f044;font-size:9px;margin-top:8px}
+.app-shell:has(.customers-page) .sidebar nav{gap:4px}
+.app-shell:has(.customers-page) .sidebar a,
+.app-shell:has(.customers-page) .sidebar .sidebar-group-toggle{background:transparent;border:0;box-shadow:none;color:#d9dde4;border-radius:8px;min-height:40px;padding:0 12px}
+.app-shell:has(.customers-page) .sidebar a.active,
+.app-shell:has(.customers-page) .sidebar .sidebar-group-toggle.active{background:#191e28;color:#b3f044;box-shadow:inset 3px 0 0 #b3f044}
+.app-shell:has(.customers-page) .sidebar a .nav-label,
+.app-shell:has(.customers-page) .sidebar .sidebar-group-toggle .nav-label{font-size:12px;font-weight:550}
+.app-shell:has(.customers-page) .top-header{grid-template-columns:minmax(0,1fr) minmax(0,340px) auto;min-width:0}
+.app-shell:has(.customers-page) .header-brand{min-width:0}
+.app-shell:has(.customers-page) .header-brand strong{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.customers-page{box-sizing:border-box;width:100%;max-width:100%;min-width:0;overflow-x:hidden;background:#f7f6f1;padding:24px 28px}
+.customers-header{min-width:0;background:transparent}
+.customers-header h1{font-size:30px;line-height:36px}
+.customer-metrics{grid-template-columns:repeat(3,minmax(0,1fr));min-width:0}
+.customer-metric-card{box-sizing:border-box;min-width:0;width:auto;border:1px solid #edf0f3}
+.customer-toolbar,.customer-table-wrap{box-sizing:border-box;min-width:0;max-width:100%}
+.customer-table{table-layout:fixed;min-width:0;width:100%}
+.customer-table th:nth-child(1),.customer-table td:nth-child(1){width:29%}
+.customer-table th:nth-child(2),.customer-table td:nth-child(2){width:25%}
+.customer-table th:nth-child(3),.customer-table td:nth-child(3){width:24%}
+.customer-table th:nth-child(4),.customer-table td:nth-child(4){width:12%}
+.customer-table th:nth-child(5),.customer-table td:nth-child(5){width:10%}
+.customer-table td{overflow:hidden;text-overflow:ellipsis}
+@media(max-width:1100px){.app-shell:has(.customers-page) .global-search-wrap{display:none}.app-shell:has(.customers-page) .top-header{grid-template-columns:minmax(0,1fr) auto}.customer-table th,.customer-table td{padding:12px 10px}}
+@media(max-width:800px){.customer-metrics{grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.customer-metric-card{padding:10px;gap:7px}.customer-metric-icon{display:none}.customer-table th:nth-child(3),.customer-table td:nth-child(3){display:none}.customer-table th:nth-child(1),.customer-table td:nth-child(1){width:35%}.customer-table th:nth-child(2),.customer-table td:nth-child(2){width:39%}.customer-table th:nth-child(4),.customer-table td:nth-child(4){width:14%}.customer-table th:nth-child(5),.customer-table td:nth-child(5){width:12%}}
+@media(max-width:700px){.customers-page{padding:18px 14px 80px}.customer-table{display:block}.customer-table td:nth-child(3){display:block}.customer-table td{overflow:visible}.app-shell:has(.customers-page) .workspace{width:100%;max-width:100%}}
