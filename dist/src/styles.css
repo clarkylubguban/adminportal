@@ -31770,3 +31770,32 @@ pre,
     justify-self: stretch;
   }
 }
+
+/* Inquiry intake modal */
+.mvp-inquiry-intake-backdrop{position:fixed;inset:0;z-index:999;background:rgba(20,32,47,.55);backdrop-filter:blur(2px)}
+.mvp-inquiry-intake-panel{position:fixed;z-index:1000;top:50%;left:50%;transform:translate(-50%,-50%);width:min(620px,calc(100vw - 32px));max-height:min(90vh,850px);overflow-y:auto;margin:0;padding:26px 28px 0;border:0;border-radius:20px;background:#fff;box-shadow:0 25px 80px rgba(18,30,49,.28)}
+.mvp-inquiry-intake-close{position:absolute;top:22px;right:24px;width:34px;height:34px;border:0;border-radius:9px;background:#f2f4f6;color:#617080;font-size:23px;line-height:1;cursor:pointer}
+.mvp-inquiry-intake-workflow .ops-section-heading{display:block;margin:0 40px 22px 0}
+.mvp-inquiry-intake-workflow .ops-section-heading h2{font-size:23px;letter-spacing:-.035em;margin:0 0 6px}
+.mvp-inquiry-intake-workflow .ops-section-heading p{font-size:13px;color:#718092}
+.mvp-inquiry-intake-workflow label>span{display:block;margin-bottom:7px;color:#425064;font-size:12px;font-weight:650}
+.mvp-inquiry-intake-workflow #ops-raw-message{min-height:112px}
+.mvp-inquiry-intake-workflow .ops-review-box{border:0;border-top:1px solid #edf0f3;border-radius:0;background:#fff;padding:20px 0 0;margin-top:20px}
+.mvp-inquiry-intake-workflow .ops-review-heading strong{font-size:15px;color:#1b2733}
+.mvp-inquiry-intake-workflow .ops-review-heading p{font-size:12px;color:#7c8998;margin:5px 0 12px}
+.mvp-inquiry-intake-workflow .ops-review-grid{gap:12px}
+.mvp-inquiry-intake-workflow .ops-review-stack{margin-top:12px}
+.mvp-inquiry-intake-workflow .ops-review-box input,.mvp-inquiry-intake-workflow .ops-review-box select,.mvp-inquiry-intake-workflow .ops-review-box textarea,.mvp-inquiry-intake-workflow #ops-raw-message{border:1px solid #dfe5eb;border-radius:10px;background:#fff;padding:11px 12px;font-size:14px;font-weight:400;color:#19212d;min-height:43px}
+.mvp-inquiry-intake-workflow .ops-review-box input:focus,.mvp-inquiry-intake-workflow .ops-review-box select:focus,.mvp-inquiry-intake-workflow .ops-review-box textarea:focus,.mvp-inquiry-intake-workflow #ops-raw-message:focus{border:1px solid #96ce3d;box-shadow:0 0 0 3px rgba(168,239,48,.18);padding:11px 12px;outline:none}
+.mvp-inquiry-intake-workflow .ops-review-stack textarea{min-height:72px;resize:vertical}
+.mvp-inquiry-intake-workflow .ops-action-row small{font-size:12px;color:#82909e}
+.mvp-inquiry-intake-workflow .ops-intake-more{padding:16px 0;margin-top:4px;color:#4c6073;font-size:13px}
+.mvp-inquiry-intake-workflow .ops-intake-more summary{cursor:pointer;font-weight:650}
+.mvp-inquiry-intake-workflow .ops-intake-more .ops-review-grid{margin-top:14px}
+.mvp-inquiry-intake-workflow .ops-intake-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid #edf0f3;margin:0 -28px;padding:14px 28px;display:flex;justify-content:space-between;align-items:center;gap:10px}
+.mvp-inquiry-intake-workflow .ops-intake-footer>span{font-size:12px;color:#718092}
+.mvp-inquiry-intake-workflow .ops-intake-footer .ops-action-row{margin:0}
+.mvp-inquiry-intake-workflow .ops-gold-button,.mvp-inquiry-intake-workflow .ops-light-button{border-radius:10px;padding:10px 16px;min-height:40px;font-size:13px;letter-spacing:0;text-transform:none}
+.mvp-inquiry-intake-workflow .ops-gold-button{border:0;background:#b3f044;color:#1d2c0e}
+.mvp-inquiry-intake-workflow .ops-light-button{border:1px solid #dce3e9;background:#fff;color:#2f3c49}
+@media(max-width:540px){.mvp-inquiry-intake-panel{max-height:94vh;padding:22px 18px 0}.mvp-inquiry-intake-workflow .ops-review-grid{grid-template-columns:1fr}.mvp-inquiry-intake-workflow .ops-intake-footer{margin:0 -18px;padding:12px 18px}.mvp-inquiry-intake-workflow .ops-intake-footer>span{display:none}}

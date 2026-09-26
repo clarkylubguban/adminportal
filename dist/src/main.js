@@ -3925,30 +3925,23 @@ function renderOpsSummaryCard(card) {
 function renderOpsIntakeWorkflow() {
   if (!opsExtractFields) opsExtractFields = { ...emptyOpsExtract };
   return `<div class="ops-ai-card mvp-inquiry-intake-workflow">
-    <div class="ops-section-heading">
-      <span>CUSTOMER CAPTURE</span>
-      <h2>Inquiry Intake</h2>
-      <p>Customer identity and request details</p>
-    </div>
-    ${opsSavedNotice ? `<div class="ops-save-notice">Inquiry saved.</div>` : ""}
+    <div class="ops-section-heading"><h2 id="ops-intake-title">New inquiry</h2><p>Paste a message, check the details, then save.</p></div>
     ${opsLoadState === "error" && opsLoadError ? `<div class="ops-persistence-card error"><strong>Inquiry save failed</strong><span>${escapeHtml(opsLoadError)}</span></div>` : ""}
-    <label>
-      <span>Message / Inquiry Notes</span>
-      <textarea id="ops-raw-message" rows="5" placeholder="Paste the inquiry message or type the walk-in request here.">${escapeHtml(opsRawMessage)}</textarea>
-    </label>
-    <div class="ops-action-row">
-      <button class="ops-dark-button" id="ops-extract-inquiry" type="button" ${opsRawMessage.trim() ? "" : "disabled"}>Extract Inquiry</button>
-      <button class="ops-light-button" id="ops-cancel-inquiry-intake" type="button">Cancel</button>
-    </div>
+    <label><span>Customer message</span><textarea id="ops-raw-message" rows="4" placeholder="Paste the customer message or type a walk-in request...">${escapeHtml(opsRawMessage)}</textarea></label>
+    <div class="ops-action-row"><button class="ops-light-button" id="ops-extract-inquiry" type="button" ${opsRawMessage.trim() ? "" : "disabled"}>Extract details</button><small>Or enter the known details below.</small></div>
     ${opsExtractFields ? renderOpsReviewForm() : ""}
   </div>`;
 }
 
 function renderOpsReviewForm() {
   const fields = opsExtractFields;
-  const simpleFields = [["customerName", "Customer Name"], ["mobileNumber", "PH Mobile"], ["businessName", "Business Name"], ["quantity", "Quantity"], ["neededDate", "Needed Date"], ["nextAction", "Next Action"]];
-  const textFields = [["summary", "Summary", 2], ["missingDetails", "Missing Details", 2], ["suggestedReply", "Suggested Reply", 3]];
-  return `<div class="ops-review-box"><p class="ops-review-label">Review before saving - edit anything AI got wrong</p><div class="ops-review-grid">${simpleFields.map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}<label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label><label><span>Suggested Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div><div class="ops-review-stack">${textFields.map(([key, label, rows]) => renderOpsTextarea(key, label, fields[key], rows)).join("")}</div><div class="ops-action-row"><button class="ops-gold-button" id="ops-save-inquiry" type="button" ${opsInquirySaveInFlight ? "disabled" : ""}>${opsInquirySaveInFlight ? "Saving..." : "Save Inquiry"}</button><button class="ops-light-button" id="ops-clear-inquiry" type="button" ${opsInquirySaveInFlight ? "disabled" : ""}>Clear</button></div></div>`;
+  const quickFields = [["customerName", "Customer Name"], ["mobileNumber", "PH Mobile"], ["quantity", "Quantity"]];
+  return `<div class="ops-review-box"><div class="ops-review-heading"><strong>Quick review</strong><p>Only add what's known. Complete other details later.</p></div>
+    <div class="ops-review-grid">${quickFields.slice(0, 2).map(([key, label]) => renderOpsInput(key, label, fields[key])).join("")}${renderOpsServiceTypeSelect(fields.serviceType)}${renderOpsInput("quantity", "Quantity", fields.quantity)}<label><span>Needed by</span><input type="date" data-ops-field="neededDate" value="${escapeHtml(fields.neededDate)}" /></label><label><span>Source</span><select data-ops-field="source">${Object.keys(opsSource).map((source) => `<option value="${source}" ${source === fields.source ? "selected" : ""}>${source}</option>`).join("")}</select></label></div>
+    <div class="ops-review-stack">${renderOpsTextarea("summary", "Summary", fields.summary, 2)}</div>
+    <details class="ops-intake-more"><summary>More details</summary><div class="ops-review-grid">${renderOpsInput("businessName", "Business name", fields.businessName)}${renderOpsInput("nextAction", "Next action", fields.nextAction)}<label><span>Status</span><select data-ops-field="suggestedStatus">${["New / Inquiry Received", "Quote Sent", "Follow Up"].map((status) => `<option value="${status}" ${status === fields.suggestedStatus ? "selected" : ""}>${status}</option>`).join("")}</select></label></div></details>
+    <div class="ops-intake-footer"><span>New · Inquiry received</span><div class="ops-action-row"><button class="ops-light-button" id="ops-cancel-inquiry-intake" type="button">Cancel</button><button class="ops-gold-button" id="ops-save-inquiry" type="button" ${opsInquirySaveInFlight ? "disabled" : ""}>${opsInquirySaveInFlight ? "Saving..." : "Save Inquiry"}</button></div></div>
+  </div>`;
 }
 
 function renderOpsServiceTypeSelect(value) {
@@ -5038,6 +5031,7 @@ async function saveOpsInquiry() {
     opsRawMessage = "";
     opsExtractFields = null;
     opsSavedNotice = true;
+    mvpDashboard.state.inquiryIntakeOpen = false;
   } catch (error) {
     console.error("Unable to save Ops Board inquiry.", error);
     opsLoadState = "error";
@@ -5068,7 +5062,7 @@ function buildOpsInquiryFromExtract() {
     customer: customerName,
     contact: opsExtractFields.mobileNumber || "",
     source: opsSource[opsExtractFields.source] ? opsExtractFields.source : "FB",
-    message: opsRawMessage,
+    message: opsExtractFields.summary?.trim() ? `Summary: ${opsExtractFields.summary.trim()}${opsRawMessage.trim() ? `\n\nCustomer message: ${opsRawMessage.trim()}` : ""}` : opsRawMessage,
     service: opsExtractFields.serviceType || "-",
     qty: opsExtractFields.quantity || "-",
     priority: "normal",
