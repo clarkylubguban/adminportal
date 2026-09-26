@@ -256,8 +256,6 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const inProgress = ACTIVE_STAGES.reduce((sum, value) => sum + production[value], 0);
     const followUpsDue = inquiries.filter(isFollowUpDue).length;
     const awaitingPayment = orders.filter((item) => ["Payment Required", "Pay at Shop", "Correction Required"].includes(paymentLabel(item))).length;
-    const paymentProofs = orders.filter((item) => paymentLabel(item) === "For Verification").length;
-    const blockedOrders = orders.filter((item) => blockedReason(item)).length;
     const overdueProduction = productionJobs.filter((item) => due(item).key === "overdue").length;
     const priorities = buildPriorities(orders, inquiries);
     const bottlenecks = buildBottlenecks({ inquiries, orders, productionJobs, pipeline });
@@ -265,14 +263,10 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     return `<main class="mvp-page ops-board-page mvp-overview-page">
       ${pageTitle("Overview", "What needs attention today", new Date().toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" }))}
       ${notices}
-      ${metricSection("Attention Snapshot", [
+      ${metricSection("Needs attention", [
         metric("Needs Quote", pipeline.new, "/inquiries?stage=new", "Inquiries", pipeline.new ? "warning" : ""),
         metric("Follow-up Due", followUpsDue, "/inquiries?stage=follow_due", "Inquiries", followUpsDue ? "warning" : ""),
-        metric("Confirmed Orders", orders.length, "/orders", "Orders"),
         metric("Awaiting Payment", awaitingPayment, "/orders?payment=awaiting", "Orders", awaitingPayment ? "warning" : ""),
-        metric("Payment Review", paymentProofs, "/orders", "Orders", paymentProofs ? "warning" : ""),
-        metric("Blocked Release", blockedOrders, "/orders", "Orders", blockedOrders ? "danger" : ""),
-        metric("Released Jobs", productionJobs.length, "/production", "Production"),
         metric("Overdue Jobs", overdueProduction, "/production?due=overdue", "Production", overdueProduction ? "danger" : ""),
       ], "attention")}
       <section class="mvp-overview-grid phase3">
