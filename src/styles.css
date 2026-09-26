@@ -31815,3 +31815,17 @@ pre,
 .mvp-order-progress small{width:100%;font-family:var(--trry-font-ui);font-size:9px;font-weight:400;line-height:13px;color:#5c667a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mvp-orders-row-action button{min-width:60px}
 @media(max-width:768px){.mvp-orders-table-wrap{display:none}}
+
+/* Production list: Inquiries text hierarchy and room for the actual work. */
+.mvp-production-page .mvp-production-table{min-width:1120px}
+.mvp-production-page .mvp-production-table-head,.mvp-production-page .mvp-production-table-row{grid-template-columns:155px 180px minmax(190px,1fr) 120px 105px 145px 82px !important;column-gap:12px;padding:0 18px}
+.mvp-production-page .mvp-production-table-head{background:#f8fafc;border-color:#eef0f3}
+.mvp-production-page .mvp-production-table-head span{font-family:var(--trry-font-ui);font-size:9px;font-weight:700;color:#5c667a}
+.mvp-production-page .mvp-production-table-row{min-height:70px;border-color:#eef0f3}
+.mvp-production-page .mvp-production-table-row:hover,.mvp-production-page .mvp-production-table-row:focus-visible{background:#fbfcfe}
+.mvp-production-page .mvp-production-table-row .customer{display:grid;align-content:center;gap:3px}
+.mvp-production-page .mvp-production-table-row .customer strong,.mvp-production-page .mvp-production-table-row .summary,.mvp-production-page .mvp-production-table-row .method,.mvp-production-page .mvp-production-table-row .due strong{font-family:var(--trry-font-ui);font-size:11px;font-weight:700;line-height:15px;color:#0e1116;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mvp-production-page .mvp-production-table-row .customer small{font-family:var(--trry-font-ui);font-size:9px;font-weight:400;line-height:13px;color:#5c667a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mvp-production-page .mvp-production-table-row .mvp-copy span{font-family:var(--trry-font-ui);font-size:11px;font-weight:700;line-height:15px}
+.mvp-production-page .mvp-production-table-row .mvp-status{font-family:var(--trry-font-ui);font-size:9px !important;font-weight:700 !important;min-height:22px !important;max-height:22px !important;height:22px !important;border-radius:5px;padding:0 8px}
+.mvp-production-page .mvp-production-row-action button{font-size:12px;min-width:66px;height:32px}

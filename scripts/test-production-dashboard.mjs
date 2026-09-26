@@ -68,7 +68,7 @@ for (const tab of ["All Jobs", "Queued", "Ready", "In Production", "Quality Chec
   assert.ok(html.includes(tab), `status tab renders: ${tab}`);
 }
 assert.ok(!html.includes("Pickup / Delivery"), "Production dashboard no longer exposes fulfillment-owned Pickup / Delivery tab");
-for (const header of ["JOB", "CUSTOMER", "SUMMARY", "METHOD", "DUE", "STAFF", "STAGE", "ACTION"]) {
+for (const header of ["JOB", "CUSTOMER", "ITEM", "METHOD", "DUE", "STAGE", "ACTION"]) {
   assert.ok(html.includes(header), `table header renders: ${header}`);
 }
 for (const removedHeader of ["MATERIALS", "ARTWORK"]) {
