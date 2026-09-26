@@ -31897,3 +31897,42 @@ pre,
   .customer-drawer{border-radius:12px 12px 0 0}
   .customer-identity-grid{grid-template-columns:1fr}
 }
+
+/* Overview and shared shell refresh: compact navigation and clear action hierarchy. */
+.app-shell .sidebar,.app-shell.admin-saas-shell .sidebar{background:#11151b;border-right:0;box-shadow:none;padding:20px 12px;flex-basis:212px;width:212px}
+.app-shell .brand-lockup,.app-shell.admin-saas-shell .brand-lockup{border:0;margin:0 0 23px;padding:5px 12px;height:auto;justify-items:start}
+.app-shell .brand-lockup strong,.app-shell.admin-saas-shell .brand-lockup strong{font-size:23px;letter-spacing:-.045em}
+.app-shell .sidebar nav,.app-shell.admin-saas-shell .sidebar nav{gap:3px}
+.app-shell .sidebar a,.app-shell .sidebar-group-toggle,.app-shell.admin-saas-shell .sidebar a{min-height:38px;height:auto;border:0;border-radius:8px;padding:0 11px;gap:10px;color:#bdc6d0}
+.app-shell .sidebar a .nav-label,.app-shell .sidebar-group-toggle .nav-label,.app-shell.admin-saas-shell .sidebar a .nav-label{font-family:var(--trry-font-ui);font-size:12px;font-weight:550}
+.app-shell .sidebar a.active,.app-shell .sidebar-group-toggle.active,.app-shell.admin-saas-shell .sidebar a.active{background:#252f1b;color:#b3f044;box-shadow:none;border:0}
+.app-shell .sidebar a.active::before,.app-shell .sidebar-group-toggle.active::before{display:none}
+.app-shell .sidebar a:hover,.app-shell .sidebar-group-toggle:hover{background:#1e2630;color:#fff}
+.app-shell .sidebar .nav-icon{height:16px;width:16px}
+.app-shell .top-header{background:#fff;border-bottom:1px solid #eef0f3;box-shadow:none;min-height:62px}
+.app-shell .top-header .header-brand strong{font-size:13px;color:#24303d}
+.app-shell .top-header .header-brand strong span{color:#24303d}
+.mvp-overview-page{background:#f7f8fa;gap:20px;padding:28px 32px 64px}
+.mvp-overview-page .mvp-page-title{border:0;min-height:0;padding:0 0 4px;align-items:center}
+.mvp-overview-page .mvp-page-title span{font-size:10px;color:#718092;text-transform:none}
+.mvp-overview-page .mvp-page-title h1{font-size:25px;letter-spacing:-.035em;font-weight:750}
+.mvp-overview-page .mvp-page-title>strong{font-size:11px;font-weight:500;text-transform:none;letter-spacing:0}
+.mvp-overview-page .mvp-section{border:0;border-radius:10px;box-shadow:none;overflow:hidden}
+.mvp-overview-page .mvp-section-title{border-color:#eef0f3;min-height:45px;padding:0 17px}
+.mvp-overview-page .mvp-section-title h2{font-size:13px;font-weight:700}
+.mvp-overview-page .mvp-metrics.attention{gap:0;grid-template-columns:repeat(4,minmax(0,1fr));padding:0}
+.mvp-overview-page .mvp-metric{border:0;border-right:1px solid #eef0f3;min-height:90px;padding:17px 19px;gap:5px}
+.mvp-overview-page .mvp-metric:last-child{border-right:0}
+.mvp-overview-page .mvp-metric span,.mvp-overview-page .mvp-metric small{font-family:var(--trry-font-ui);font-size:10px;letter-spacing:0;text-transform:none;color:#718092}
+.mvp-overview-page .mvp-metric strong{font-family:var(--trry-font-ui);font-size:26px;letter-spacing:-.04em}
+.mvp-overview-page .mvp-metric.warning,.mvp-overview-page .mvp-metric.danger{box-shadow:none}
+.mvp-overview-page .mvp-overview-grid.phase3{gap:16px;grid-template-columns:minmax(0,1.5fr) minmax(280px,.85fr)}
+.mvp-overview-page .mvp-side-stack{gap:16px}
+.mvp-overview-page .mvp-priority-list>button,.mvp-overview-page .mvp-bottleneck-row,.mvp-overview-page .mvp-module-link{border-color:#eef0f3;min-height:57px;padding:11px 17px;gap:9px}
+.mvp-overview-page .mvp-priority-list strong,.mvp-overview-page .mvp-bottleneck-row strong,.mvp-overview-page .mvp-module-link strong{font-size:11px;font-weight:700}
+.mvp-overview-page .mvp-priority-list span,.mvp-overview-page .mvp-bottleneck-row small,.mvp-overview-page .mvp-module-link small{font-size:10px;color:#718092}
+.mvp-overview-page .mvp-priority-list code,.mvp-overview-page .mvp-priority-list b,.mvp-overview-page .mvp-priority-list i,.mvp-overview-page .mvp-bottleneck-row b,.mvp-overview-page .mvp-module-link b{font-family:var(--trry-font-ui);font-size:9px;letter-spacing:0}
+.mvp-overview-page .mvp-bottleneck-row.warning,.mvp-overview-page .mvp-bottleneck-row.danger{box-shadow:none}
+.mvp-overview-page .mvp-module-link b{background:#f1f5e9;color:#263b13}
+@media(max-width:1100px){.mvp-overview-page .mvp-overview-grid.phase3{grid-template-columns:1fr}}
+@media(max-width:700px){.mvp-overview-page{padding:20px 14px 64px}.mvp-overview-page .mvp-page-title{align-items:flex-start;gap:8px}.mvp-overview-page .mvp-page-title h1{font-size:22px}.mvp-overview-page .mvp-page-title>strong{font-size:9px}.mvp-overview-page .mvp-metrics.attention{grid-template-columns:repeat(2,minmax(0,1fr))}.mvp-overview-page .mvp-metric{min-height:78px;padding:12px;border-bottom:1px solid #eef0f3}.mvp-overview-page .mvp-metric:nth-child(2n){border-right:0}.mvp-overview-page .mvp-metric strong{font-size:23px}.app-shell .sidebar,.app-shell.admin-saas-shell .sidebar{width: min(280px,85vw);flex-basis:auto}}
