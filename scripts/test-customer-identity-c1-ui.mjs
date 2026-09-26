@@ -19,9 +19,11 @@ for (const contract of ["/customers", "renderCustomersPage", "No customer record
 }
 assert.ok(main.includes("validationMessage ?"), "validation messages must render while Save is disabled");
 assert.ok(main.includes('firstSource: "ADMIN_MANUAL"'), "C1 create payload keeps the admin/manual source default");
-for (const figmaContract of ["customer-metrics", "customer-segments", "customer-consent", "EMAIL (OPTIONAL)", "BIRTHDAY (OPTIONAL)", "PRIMARY MOBILE VERIFIED"]) {
-  assert.ok(main.includes(figmaContract), `missing C1 Figma UI contract: ${figmaContract}`);
+for (const uiContract of ["customer-metrics", "customer-toolbar", "customer-consent", "EMAIL (OPTIONAL)", "BIRTHDAY (OPTIONAL)", "Mobile on file"]) {
+  assert.ok(main.includes(uiContract), `missing Customers UI contract: ${uiContract}`);
 }
+assert.ok(!main.includes('class="customer-segments"'), "Customers must not display nonfunctional segment tabs");
+assert.ok(!main.includes("PRIMARY MOBILE VERIFIED"), "A saved mobile is not proof of verification");
 for (const forbidden of ["lifetime spend", "loyalty points", "ADD BENEFIT"]) {
   assert.ok(!main.toLowerCase().includes(forbidden.toLowerCase()), `C1 UI leaked later-phase copy: ${forbidden}`);
 }
