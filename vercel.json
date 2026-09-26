@@ -4,6 +4,10 @@
   "outputDirectory": "dist",
   "rewrites": [
     {
+      "source": "/api/stlolab-catalog",
+      "destination": "/api/assignment-users?_publicRoute=stlolab-catalog"
+    },
+    {
       "source": "/api/my-tasks",
       "destination": "/api/task-views"
     },
