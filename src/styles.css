@@ -31799,3 +31799,19 @@ pre,
 .mvp-inquiry-intake-workflow .ops-gold-button{border:0;background:#b3f044;color:#1d2c0e}
 .mvp-inquiry-intake-workflow .ops-light-button{border:1px solid #dce3e9;background:#fff;color:#2f3c49}
 @media(max-width:540px){.mvp-inquiry-intake-panel{max-height:94vh;padding:22px 18px 0}.mvp-inquiry-intake-workflow .ops-review-grid{grid-template-columns:1fr}.mvp-inquiry-intake-workflow .ops-intake-footer{margin:0 -18px;padding:12px 18px}.mvp-inquiry-intake-workflow .ops-intake-footer>span{display:none}}
+
+/* Compact Orders list follows the Inquiries typography and spacing. */
+.mvp-orders-table{min-width:1060px}
+.mvp-orders-table-head,.mvp-orders-table-row{grid-template-columns:155px 175px minmax(180px,1fr) 82px 175px 105px 72px;column-gap:12px;padding:0 18px}
+.mvp-orders-table-head{background:#f8fafc;border-color:#eef0f3}
+.mvp-orders-table-head span{font-family:var(--trry-font-ui);font-size:9px;color:#5c667a;font-weight:700}
+.mvp-orders-table-row{border-color:#eef0f3}
+.mvp-orders-table-row:hover,.mvp-orders-table-row:focus-visible{background:#fbfcfe}
+.mvp-orders-table-row .mvp-copy span{display:block;max-width:100%;font-family:var(--trry-font-ui);font-size:11px;font-weight:700;text-overflow:ellipsis;overflow:hidden;white-space:nowrap}
+.mvp-orders-table-row .mvp-two-line strong,.mvp-orders-table-row .amount{font-family:var(--trry-font-ui);font-size:11px;font-weight:700;line-height:15px;color:#0e1116}
+.mvp-orders-table-row .mvp-two-line small,.mvp-orders-table-row .order-identity small{font-family:var(--trry-font-ui);font-size:9px;font-weight:400;line-height:13px;color:#5c667a;text-transform:none}
+.mvp-order-progress{display:grid;justify-items:start;gap:4px;min-width:0}
+.mvp-order-progress .mvp-status{max-width:100%;min-height:22px;border-radius:5px;padding:0 8px;font-size:9px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mvp-order-progress small{width:100%;font-family:var(--trry-font-ui);font-size:9px;font-weight:400;line-height:13px;color:#5c667a;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mvp-orders-row-action button{min-width:60px}
+@media(max-width:768px){.mvp-orders-table-wrap{display:none}}

@@ -74,7 +74,7 @@ try {
       };
     })()`);
     assert.equal(result.hasShell, true, `dashboard shell renders at ${viewport.width}`);
-    assert.equal(result.headers, "ORDER|CUSTOMER|SUMMARY|AMOUNT|PAYMENT|PRODUCTION|DUE|OWNER|NEXT ACTION|ACTION", `Figma table column order at ${viewport.width}`);
+    assert.equal(result.headers, "ORDER|CUSTOMER|ITEM|AMOUNT|PROGRESS|DUE|ACTION", `Figma table column order at ${viewport.width}`);
     assert.equal(result.hasNativeReference, true, `native order reference visible at ${viewport.width}`);
     assert.equal(result.hasLegacyReference, true, `legacy compatibility reference visible at ${viewport.width}`);
     assert.equal(result.rowCanOpen, true, `row opens existing drawer at ${viewport.width}`);

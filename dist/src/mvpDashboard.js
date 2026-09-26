@@ -999,7 +999,7 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
   }
 
   function ordersDashboardTable(items, total, currentPage, pageCount, pageSize) {
-    const headers = ["ORDER", "CUSTOMER", "SUMMARY", "AMOUNT", "PAYMENT", "PRODUCTION", "DUE", "OWNER", "NEXT ACTION", "ACTION"];
+    const headers = ["ORDER", "CUSTOMER", "ITEM", "AMOUNT", "PROGRESS", "DUE", "ACTION"];
     return `<section class="mvp-orders-table-wrap"><div class="mvp-orders-table" role="table" aria-label="Orders dashboard"><div class="mvp-orders-table-head" role="row">${headers.map((header) => `<span role="columnheader">${header}</span>`).join("")}</div><div role="rowgroup">${items.length ? items.map(orderDashboardRow).join("") : empty("NO ORDERS MATCH THIS FILTER")}</div></div>${ordersPagination(total, currentPage, pageCount, pageSize)}</section>`;
   }
 
@@ -1011,15 +1011,12 @@ export function createMvpDashboard({ getAssignmentContext = () => ({ users: [], 
     const action = orderDashboardAction(item);
     return `<div class="mvp-orders-table-row" data-mvp-open="order" data-mvp-id="${html(item.id)}" role="row" tabindex="0">
       ${orderIdentityCell(item)}
-      ${twoLineCell(item.customer || "Unnamed customer", item.contact || "No contact", "customer")}
+      <span class="mvp-two-line customer"><strong>${html(item.customer || "Unnamed customer")}</strong><small>${html(item.contact || "No contact")} · ${html(orderOwner(item))}</small></span>
       ${twoLineCell(orderSummaryPrimary(item), orderSummarySecondary(item), "summary")}
       <span class="amount">${html(money(amount(item.quotedAmount || item.amountDue)))}</span>
-      ${status(orderPaymentDashboardLabel(item), payment.tone)}
-      ${status(orderProductionDashboardLabel(item), orderProductionDashboardTone(item, production))}
+      <span class="mvp-order-progress">${status(orderPaymentDashboardLabel(item), payment.tone)}<small>${html(orderProductionDashboardLabel(item))} · ${html(orderNextAction(item))}</small></span>
       ${twoLineCell(dueParts.primary, dueParts.secondary, `due ${dueState.key}`)}
-      <span class="owner">${html(orderOwner(item))}</span>
-      ${status(orderNextAction(item), orderNextActionTone(item))}
-      <span class="mvp-orders-row-action"><button type="button" data-mvp-open="order" data-mvp-id="${html(item.id)}">${html(action)} <i aria-hidden="true">&rsaquo;</i></button><button type="button" data-mvp-open="order" data-mvp-id="${html(item.id)}" aria-label="More actions for ${html(orderReference(item))}">&ctdot;</button></span>
+      <span class="mvp-orders-row-action"><button type="button" data-mvp-open="order" data-mvp-id="${html(item.id)}">${html(action)} <i aria-hidden="true">&rsaquo;</i></button></span>
     </div>`;
   }
 
