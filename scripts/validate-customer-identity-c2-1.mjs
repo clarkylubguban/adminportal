@@ -166,15 +166,20 @@ try {
   await psqlFile("/workspace/supabase/migrations/20260717043119_align_admin_mvp_workflow_fields.sql");
   await psqlFile("/workspace/supabase/migrations/202607220001_harden_admin_auth_profiles.sql");
   await psqlFile("/workspace/supabase/migrations/202608080001_phase3d_native_orders.sql");
+  await psqlFile("/workspace/supabase/migrations/202608250001_add_employee_temporary_access_grants.sql");
+  await psqlFile("/workspace/supabase/migrations/202608280001_employee_e5i3_pos_sales_temp_access.sql");
   await psqlFile("/workspace/supabase/migrations/20260831021438_add_customer_identity_c1.sql");
   await psqlFile("/workspace/supabase/migrations/20260902142917_repair_customer_identity_c1_audit_users.sql");
   await psqlFile("/workspace/supabase/migrations/20260903010100_customer_identity_linking_c2_1.sql");
   await psqlFile("/workspace/supabase/migrations/20260903010100_customer_identity_linking_c2_1.sql");
+  await psqlFile("/workspace/supabase/migrations/20260910132057_customer_identity_pos_walk_in_c2_4b.sql");
+  await psqlFile("/workspace/supabase/migrations/20260910132057_customer_identity_pos_walk_in_c2_4b.sql");
   await psqlFile("/workspace/supabase/tests/customer_identity_c1.sql");
   await psqlFile("/workspace/supabase/tests/customer_identity_linking_c2_1.sql");
+  await psqlFile("/workspace/supabase/tests/customer_identity_pos_walk_in_c2_4b.sql");
   console.log("Validating concurrent RPC duplicate resolution");
   await validateConcurrentRpcResolution();
-  console.log("Customer Identity C2.1 validation passed.");
+  console.log("Customer Identity C2.1/C2.4B validation passed.");
 } finally {
   run("docker", ["rm", "-f", container], { capture: true, allowFailure: true, timeout: 30_000 });
 }
