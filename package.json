@@ -74,6 +74,7 @@
     "test:grouped-sidebar": "node scripts/test-grouped-sidebar-nav.mjs",
     "validate:customer-identity-c1": "node scripts/validate-customer-identity-c1.mjs",
     "validate:customer-identity-c2-1": "node scripts/validate-customer-identity-c2-1.mjs",
+    "validate:customer-identity-c2-3-1": "node scripts/validate-customer-identity-c2-3-1.mjs",
     "test:customer-identity-c1-ui": "node scripts/test-customer-identity-c1-ui.mjs",
     "test:customer-identity-c2-2": "node scripts/test-customer-identity-c2-2.mjs"
   },
