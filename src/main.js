@@ -8750,7 +8750,7 @@ function renderCatalogEditorVariants(draft, disabled = false) {
             <div class="catalog-variant-row-labels" aria-hidden="true"><span>Color</span><span>Size</span><span>SKU</span><span>Price</span><span>Action</span></div>
             ${variants.map((variant, index) => renderCatalogVariantRow(draft, variant, index, disabled)).join("")}
           </div>`
-        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Select at least one size and color, then generate variants.</span></div>`}
+        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Add sizes or colors only if this product has options.</span></div>`}
     </article>
   `;
 }
@@ -8758,9 +8758,8 @@ function renderCatalogEditorVariants(draft, disabled = false) {
 function renderCatalogVariantGenerator(draft, variants, disabled = false) {
   const sizes = splitCatalogList(draft.availableSizesText);
   const colors = splitCatalogList(draft.availableColorsText);
-  const sizeOptions = uniqueList([...catalogVariantSizeOptions.filter((size) => size !== "XXL"), ...sizes]);
-  const rememberedColors = uniqueList(["White", "Navy", "Cream", ...colors]);
-  const generatedCount = sizes.length * colors.length;
+  const sizeOptions = draft.id ? uniqueList([...catalogVariantSizeOptions.filter((size) => size !== "XXL"), ...sizes]) : sizes;
+  const rememberedColors = uniqueList([...catalogVariantColorOptions, "Navy", "Cream", ...colors]);
 
   return `
     <div class="catalog-variant-generator catalog-variant-generator-v4" aria-label="Variant generator">
@@ -8770,7 +8769,8 @@ function renderCatalogVariantGenerator(draft, variants, disabled = false) {
         <div class="catalog-variant-option-list">
           ${sizeOptions.map((size) => renderCatalogVariantOption("size", size, sizes.some((item) => normalizeVariantToken(item) === normalizeVariantToken(size)), disabled)).join("")}
           <label class="catalog-variant-custom-option">
-            <input type="text" data-catalog-custom-size placeholder="Select sizes…" ${disabled ? "disabled" : ""} aria-label="Add custom size, for example XXS or 3XL">
+            <input type="text" data-catalog-custom-size list="catalog-suggested-sizes" placeholder="Select sizes…" ${disabled ? "disabled" : ""} aria-label="Add a size, then press Enter">
+            <datalist id="catalog-suggested-sizes">${catalogVariantSizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
           </label>
         </div>
       </div>
@@ -9666,8 +9666,8 @@ function createCatalogDraft(product = null) {
     availableSizes: [],
     availableColors: [],
     printMethods: [],
-    availableSizesText: "S, M, L, XL",
-    availableColorsText: "Black, White",
+    availableSizesText: "",
+    availableColorsText: "",
     printMethodsText: "",
     sortOrder: 0,
     isFeatured: false,
@@ -13070,21 +13070,26 @@ function bindEvents() {
     });
   });
 
-  document.querySelector("[data-catalog-custom-size]")?.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    addCatalogCustomVariantValue("size", event.currentTarget.value);
-  });
+  for (const type of ["size", "color"]) {
+    const field = document.querySelector(`[data-catalog-custom-${type}]`);
+    field?.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      addCatalogCustomVariantValue(type, field.value);
+    });
+    field?.addEventListener("input", (event) => {
+      // Browsers emit a replacement input when a datalist suggestion is picked.
+      if (event.inputType === "insertReplacementText" || !event.inputType) {
+        if ([...field.list.options].some((option) => option.value === field.value)) {
+          addCatalogCustomVariantValue(type, field.value);
+        }
+      }
+    });
+  }
 
   document.querySelector("[data-catalog-add-color]")?.addEventListener("click", (event) => {
     event.preventDefault();
     addCatalogCustomVariantValue("color", document.querySelector("[data-catalog-custom-color]")?.value);
-  });
-
-  document.querySelector("[data-catalog-custom-color]")?.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    addCatalogCustomVariantValue("color", event.currentTarget.value);
   });
 
   document.querySelectorAll("[data-catalog-remembered-color]").forEach((button) => {
