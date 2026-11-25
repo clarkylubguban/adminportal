@@ -48,6 +48,19 @@ function operationIds(operations) {
   return operations.map((operation) => operation.existing?.id ?? operation.id);
 }
 
+// Single items and one-dimensional options use the same SKU identity on later edits.
+for (const [color, size] of [["", ""], ["Gold", ""], ["", "12 mm"]]) {
+  const persisted = variant("original", color || null, size || null);
+  const edit = desired(color, size, { sellingPrice: 275 });
+  const result = plan([persisted], [edit]);
+  assert.deepEqual(operationIds(result.updates), ["original"]);
+  assert.equal(result.inserts.length + result.archives.length, 0);
+  const row = mapVariantToRow(edit, product, { update: true });
+  assert.equal(row.color, color || null);
+  assert.equal(row.size, size || null);
+  assert.equal(row.selling_price, 275);
+}
+
 const blackS = variant("A", "Black", "S");
 const blackM = variant("B", "Black", "M");
 const whiteS = variant("C", "White", "S");
