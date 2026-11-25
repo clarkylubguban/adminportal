@@ -70,7 +70,7 @@ export function isGrantActive(grant, now = new Date()) {
     grant &&
     !grant.revoked_at &&
     new Date(grant.starts_at).getTime() <= current &&
-    current < new Date(grant.expires_at).getTime()
+    (grant.expires_at === "infinity" || current < new Date(grant.expires_at).getTime())
   );
 }
 

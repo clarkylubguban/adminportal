@@ -45,10 +45,21 @@ async function handleList(request, response, supabase, caller) {
   const { data, error } = await query;
   if (error) throw error;
 
-  const authUsers = await listAuthUsersById(supabase, (data || []).map((row) => row.user_id));
+  const employees = data || [];
+  const staffIds = employees.filter((row) => row.role === "staff").map((row) => row.id);
+  const ongoing = staffIds.length ? await supabase.from("employee_temporary_access_grants")
+    .select("employee_id,module_code").in("employee_id", staffIds)
+    .eq("expires_at", "infinity").is("revoked_at", null) : { data: [] };
+  if (ongoing.error) throw ongoing.error;
+  const byEmployee = new Map();
+  for (const grant of ongoing.data) {
+    if (!byEmployee.has(grant.employee_id)) byEmployee.set(grant.employee_id, []);
+    byEmployee.get(grant.employee_id).push(grant.module_code);
+  }
+  const authUsers = await listAuthUsersById(supabase, employees.map((row) => row.user_id));
   return sendJson(response, 200, {
     ok: true,
-    users: (data || []).map((row) => sanitizeAdminUser(row, authUsers.get(row.user_id))),
+    users: employees.map((row) => ({ ...sanitizeAdminUser(row, authUsers.get(row.user_id)), ongoingModules: byEmployee.get(row.id) || [] })),
     permissions: getClientPermissions(caller),
   });
 }

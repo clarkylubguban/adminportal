@@ -598,6 +598,16 @@ let staffActionId = "";
 let employeeTemporaryAccess = [];
 let employeeTempAccessLoadState = "idle";
 let employeeTempAccessError = "";
+const employeePermissionPresets = [
+  { name: "Cashier", modules: ["pos_sales"] },
+  { name: "Production staff", modules: ["production"] },
+  { name: "Order desk", modules: ["inquiries", "orders"] },
+];
+let employeePermissionsTab = false;
+let permissionEmployeeId = "";
+let permissionSelection = [];
+let permissionOriginal = [];
+let permissionSaving = false;
 let employeeTempAccessModalOpen = false;
 let employeeTempAccessDraft = createEmptyEmployeeTempAccessDraft();
 let employeeTempAccessSaveState = "idle";
@@ -9766,12 +9776,12 @@ function renderPeopleAccessEmployeesPage() {
     ${tempBanner}
 
     <section class="people-access-tabs" aria-label="People and Access sections">
-      <button class="active" type="button" aria-current="page">Employees</button>
-      <button type="button" disabled aria-disabled="true">Roles &amp; Permissions</button>
+      <button class="${employeePermissionsTab ? "" : "active"}" type="button" data-people-tab="employees" aria-pressed="${!employeePermissionsTab}" ${permissionSaving ? "disabled" : ""}>Employees</button>
+      <button class="${employeePermissionsTab ? "active" : ""}" type="button" data-people-tab="permissions" aria-pressed="${employeePermissionsTab}" ${permissionSaving ? "disabled" : ""}>Roles &amp; Permissions</button>
       <span>${activeCount} ACTIVE</span>
     </section>
 
-    <section class="people-access-kpis" aria-label="Employee summary">
+    ${employeePermissionsTab ? renderOngoingPermissions() : `<section class="people-access-kpis" aria-label="Employee summary">
       ${renderEmployeeKpiCard("TEAM MEMBERS", kpis.teamMembers, "Active accounts")}
       ${renderEmployeeKpiCard("ROLES", kpis.roles, "Access presets")}
       ${renderEmployeeKpiCard("SUSPENDED", kpis.suspended, kpis.suspended ? "Deactivated accounts" : "No suspended users")}
@@ -9807,10 +9817,70 @@ function renderPeopleAccessEmployeesPage() {
         <span>${escapeHtml(getEmployeeShowingLabel(visibleEmployees.length))}</span>
         <button type="button" data-employee-view-deactivated>VIEW DEACTIVATED</button>
       </footer>
-    </section>
+    </section>`}
     ${staffDrawerMode ? renderStaffDrawer() : ""}
     ${employeeTempAccessModalOpen ? renderEmployeeTempAccessModal() : ""}
   </main>`;
+}
+
+function selectPermissionEmployee(id) {
+  const employee = staffUsers.find((user) => user.id === id && isEmployeeTempAccessEligible(user));
+  permissionEmployeeId = employee?.id || "";
+  permissionOriginal = [...(employee?.ongoingModules || [])];
+  permissionSelection = [...permissionOriginal];
+}
+
+function renderOngoingPermissions() {
+  if (staffLoadState === "error") return `<p role="alert">${escapeHtml(staffLoadError)}</p>`;
+  if (staffLoadState !== "ready") return `<p>Loading employees...</p>`;
+  const staff = staffUsers.filter(isEmployeeTempAccessEligible);
+  const employee = staff.find((user) => user.id === permissionEmployeeId);
+  const modules = employeeTemporaryAccessModules.filter((item) => !item.unavailableReason);
+  const changed = [...permissionSelection].sort().join(",") !== [...permissionOriginal].sort().join(",");
+  return `<form class="employee-temp-form ongoing-permissions" id="ongoing-permissions">
+    <h2>Ongoing staff access</h2><p>Choose the POS and Admin modules this employee can use every shift. You can change them here anytime.</p>
+    <fieldset ${permissionSaving ? "disabled" : ""}>
+      <label>Employee<select id="permission-employee">
+        <option value="">${staff.length ? "Select employee" : "No active staff accounts"}</option>
+        ${staff.map((user) => `<option value="${escapeHtml(user.id)}" ${user.id === employee?.id ? "selected" : ""}>${escapeHtml(user.displayName || user.email)}</option>`).join("")}
+      </select></label>
+      ${employee ? `<label>Role preset<select id="permission-preset">
+        <option value="">Custom permissions</option>
+        ${employeePermissionPresets.map(({ name, modules }, i) => `<option value="${i}" ${modules.length === permissionSelection.length && modules.every((code) => permissionSelection.includes(code)) ? "selected" : ""}>${escapeHtml(name)}</option>`).join("")}
+      </select></label>
+      <section class="employee-temp-module-picker" aria-label="Ongoing permissions">
+        ${modules.map(({ code, label }) => `<label class="employee-temp-module-option"><input type="checkbox" data-permission-module value="${code}" ${permissionSelection.includes(code) ? "checked" : ""}/><span>${escapeHtml(label)}</span></label>`).join("")}
+      </section>
+      <button class="people-access-primary" type="submit" ${changed && !permissionSaving ? "" : "disabled"}>${permissionSaving ? "SAVING..." : "SAVE PERMISSIONS"}</button>` : ""}
+    </fieldset></form>`;
+}
+
+async function saveOngoingPermissions(event) {
+  event.preventDefault();
+  if (permissionSaving || !permissionEmployeeId) return;
+  const id = permissionEmployeeId;
+  permissionSaving = true;
+  staffFeedback = "";
+  render();
+  try {
+    const result = await staffApiRequest(`/api/admin-users/${encodeURIComponent(id)}`, {
+      method: "PATCH",
+      body: { action: "set_permissions", modules: permissionSelection, expectedModules: permissionOriginal },
+    });
+    const employee = staffUsers.find((user) => user.id === id);
+    if (employee) employee.ongoingModules = result.ongoingModules;
+    selectPermissionEmployee(id);
+    staffFeedback = "Ongoing permissions saved.";
+  } catch (error) {
+    staffFeedback = error.message || "Unable to save permissions.";
+    if (error.status === 409) {
+      await loadStaffUsers();
+      selectPermissionEmployee(id);
+    }
+  } finally {
+    permissionSaving = false;
+    render();
+  }
 }
 
 function renderEmployeeKpiCard(label, value, helper) {
@@ -9932,10 +10002,13 @@ function renderEmployeeStatusChip(active) {
 }
 
 function renderEmployeeAccessChip(user, tempSummary = { moduleCount: 0 }) {
+  const ongoingCount = user.isActive && user.role === "staff" ? user.ongoingModules?.length || 0 : 0;
+  const ongoing = ongoingCount ? `<b class="employee-chip summary">ONGOING · ${ongoingCount}</b>` : "";
   if (tempSummary.moduleCount) {
-    return `<span class="employee-temp-access-stack"><b class="employee-chip temporary">TEMP · ${tempSummary.moduleCount} ${tempSummary.moduleCount === 1 ? "MODULE" : "MODULES"}</b><small>${escapeHtml(formatEmployeeTempExpiry(tempSummary.expiresAt))}</small></span>`;
+    return `<span class="employee-temp-access-stack">${ongoing}<b class="employee-chip temporary">TEMP · ${tempSummary.moduleCount} ${tempSummary.moduleCount === 1 ? "MODULE" : "MODULES"}</b><small>${escapeHtml(formatEmployeeTempExpiry(tempSummary.expiresAt))}</small></span>`;
   }
   const role = String(user.role || "").toLowerCase();
+  if (ongoing) return ongoing;
   const label = role === "owner" ? "FULL ACCESS" : role === "admin" ? "MANAGEMENT" : "MY WORK";
   const tone = role === "owner" ? "full" : "summary";
   return `<b class="employee-chip ${tone}">${label}</b>`;
@@ -10337,7 +10410,10 @@ async function staffApiRequest(path, { method = "GET", body } = {}) {
     body: body ? JSON.stringify(body) : undefined,
   });
   const payload = await response.json().catch(() => ({}));
-  if (!response.ok || !payload.ok) throw new Error(getStaffApiErrorMessage(response.status, payload?.error));
+  if (!response.ok || !payload.ok) {
+    const message = body?.action === "set_permissions" ? payload.error : getStaffApiErrorMessage(response.status, payload?.error);
+    throw Object.assign(new Error(message || "Unable to save permissions."), { status: response.status });
+  }
   return payload;
 }
 
@@ -12179,6 +12255,28 @@ function bindEvents() {
   document.removeEventListener("keydown", handleAccountEscape);
   document.addEventListener("keydown", handleAccountEscape);
 
+  document.querySelectorAll("[data-people-tab]").forEach((button) => button.addEventListener("click", () => {
+    employeePermissionsTab = button.dataset.peopleTab === "permissions";
+    selectPermissionEmployee("");
+    staffFeedback = "";
+    render();
+  }));
+  document.getElementById("permission-employee")?.addEventListener("change", (event) => {
+    selectPermissionEmployee(event.target.value);
+    staffFeedback = "";
+    render();
+  });
+  document.getElementById("permission-preset")?.addEventListener("change", (event) => {
+    if (event.target.value !== "") permissionSelection = [...employeePermissionPresets[Number(event.target.value)].modules];
+    staffFeedback = "";
+    render();
+  });
+  document.querySelectorAll("[data-permission-module]").forEach((input) => input.addEventListener("change", () => {
+    permissionSelection = [...document.querySelectorAll("[data-permission-module]:checked")].map((item) => item.value);
+    staffFeedback = "";
+    render();
+  }));
+  document.getElementById("ongoing-permissions")?.addEventListener("submit", saveOngoingPermissions);
   document.querySelectorAll("[data-staff-new]").forEach((button) => button.addEventListener("click", openNewStaffDrawer));
   document.querySelectorAll("[data-staff-edit]").forEach((button) => button.addEventListener("click", () => openEditStaffDrawer(button.dataset.staffEdit)));
   document.querySelectorAll("[data-staff-disable]").forEach((button) => button.addEventListener("click", () => updateStaffStatus(button.dataset.staffDisable, "disable")));

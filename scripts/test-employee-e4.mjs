@@ -19,7 +19,7 @@ const packageJson = fs.readFileSync("package.json", "utf8");
 assert.equal(EFFECTIVE_ACCESS_MODULES.has("calendar"), true, "Calendar must remain in the effective-access pilot set.");
 assert.equal(hasPermanentModuleAccess({ role: "owner" }, "calendar"), true, "Owner permanent Calendar access must be preserved.");
 assert.equal(hasPermanentModuleAccess({ role: "admin" }, "calendar"), true, "Admin permanent Calendar access must be preserved.");
-assert.equal(hasPermanentModuleAccess({ role: "staff" }, "calendar"), false, "Staff Calendar access must require temporary grant authority.");
+assert.equal(hasPermanentModuleAccess({ role: "staff" }, "calendar"), false, "Staff Calendar access must require an explicit grant.");
 
 const staff = { id: "staff-row", userId: "staff-auth", role: "staff" };
 const owner = { id: "owner-row", userId: "owner-auth", role: "owner" };
@@ -28,6 +28,11 @@ const activeClient = grantClient([{ module_code: "calendar", starts_at: "2026-08
 const wrongModuleClient = grantClient([{ module_code: "inventory", starts_at: "2026-08-25T05:00:00.000Z", expires_at: "2026-08-25T16:00:00.000Z", revoked_at: null }]);
 const revokedClient = grantClient([{ module_code: "calendar", starts_at: "2026-08-25T05:00:00.000Z", expires_at: "2026-08-25T16:00:00.000Z", revoked_at: "2026-08-25T06:00:00.000Z" }]);
 const expiredClient = grantClient([{ module_code: "calendar", starts_at: "2026-08-24T05:00:00.000Z", expires_at: "2026-08-25T05:59:00.000Z", revoked_at: null }]);
+
+const ongoingClient = grantClient([{ module_code: "calendar", starts_at: "2026-08-24T05:00:00Z", expires_at: "infinity", revoked_at: null }]);
+assert.deepEqual(await getEffectiveModuleAccess(ongoingClient, staff, "calendar", now), {
+  module: "calendar", allowed: true, source: "assigned", expiresAt: null,
+}, "An ongoing staff assignment must still work the following day.");
 
 assert.deepEqual(await getEffectiveModuleAccess(activeClient, owner, "calendar", now), { module: "calendar", allowed: true, source: "permanent", expiresAt: null }, "Permanent access must not depend on grants.");
 assert.equal((await getEffectiveModuleAccess(activeClient, staff, "calendar", now)).source, "temporary", "Active Calendar grant must allow Staff.");
@@ -64,7 +69,7 @@ function grantClient(rows) {
           return query;
         },
         gt(column, value) {
-          query.rows = (query.rows || rows).filter((row) => new Date(row[column]).getTime() > new Date(value).getTime());
+          query.rows = (query.rows || rows).filter((row) => row[column] === "infinity" || new Date(row[column]).getTime() > new Date(value).getTime());
           return query;
         },
         is(column, value) {

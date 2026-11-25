@@ -41,6 +41,7 @@ async function handleRead(request, response, supabase, caller) {
   let query = supabase
     .from("employee_temporary_access_grants")
     .select(GRANT_SELECT)
+    .lt("expires_at", "infinity")
     .is("revoked_at", null)
     .lte("starts_at", now)
     .gt("expires_at", now)
@@ -81,6 +82,7 @@ async function handleGrant(request, response, supabase, caller) {
     .select(GRANT_SELECT)
     .eq("employee_id", employeeId)
     .in("module_code", moduleValidation.codes)
+    .lt("expires_at", "infinity")
     .is("revoked_at", null)
     .lte("starts_at", now.toISOString())
     .gt("expires_at", now.toISOString());
@@ -126,6 +128,7 @@ async function handleRevoke(request, response, supabase, caller) {
     .from("employee_temporary_access_grants")
     .update({ revoked_at: now, revoked_by: caller.id })
     .eq("employee_id", employeeId)
+    .lt("expires_at", "infinity")
     .is("revoked_at", null)
     .lte("starts_at", now)
     .gt("expires_at", now);
@@ -142,6 +145,7 @@ async function sendEmployeeActiveGrants(response, supabase, employeeId, status) 
     .from("employee_temporary_access_grants")
     .select(GRANT_SELECT)
     .eq("employee_id", employeeId)
+    .lt("expires_at", "infinity")
     .is("revoked_at", null)
     .lte("starts_at", now)
     .gt("expires_at", now)
