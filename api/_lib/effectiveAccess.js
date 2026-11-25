@@ -44,12 +44,13 @@ export async function getEffectiveModuleAccess(supabase, actor, moduleCode, now 
     .lte("starts_at", now.toISOString())
     .gt("expires_at", now.toISOString())
     .is("revoked_at", null)
-    .order("expires_at", { ascending: true })
+    .order("expires_at", { ascending: false })
     .limit(1);
 
   if (error) throw error;
 
   const grant = (data || []).find((row) => isGrantActive(row, now));
+  if (grant?.expires_at === "infinity") return { module, allowed: true, source: "assigned", expiresAt: null };
   return grant
     ? { module, allowed: true, source: "temporary", expiresAt: grant.expires_at }
     : { module, allowed: false, source: "none", expiresAt: null };

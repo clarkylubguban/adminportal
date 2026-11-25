@@ -38,7 +38,7 @@ assert(localDev.includes('"/settings"') && localDev.includes('"/settings/people-
 assert(html.includes('/src/employeeE1.css'), "index.html must load employeeE1.css.");
 assert(css.includes(".people-access-page"), "Employee E1 CSS class missing.");
 assert(!renderer.includes("clark@trry.local") && !renderer.includes("Louvelyngel") && !renderer.includes("rachelle@trry.local"), "E1 renderer must not introduce sample employee rows.");
-assert(renderer.includes("Roles &amp; Permissions") && renderer.includes("disabled aria-disabled=\"true\""), "Roles & Permissions must be parked/non-interactive.");
+assert(renderer.includes("Roles &amp; Permissions") && renderer.includes('data-people-tab="permissions"'), "Roles & Permissions must be available.");
 assert(build.includes('await cp("src", "dist/src", { recursive: true })'), "Build must still copy all source files.");
 assert(main.includes("formatEmployeeLastLogin") && main.includes("Asia/Manila") && main.includes("lastSignInAt"), "Last Login must use lastSignInAt in Asia/Manila.");
 assert(main.includes("canViewSettingsRoute") && main.includes("canManageStaffAccounts"), "Settings route must reuse Owner/Admin management gate.");

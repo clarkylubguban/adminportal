@@ -248,7 +248,7 @@ async function resolveCustomerActionAccess(supabase, adminUser, actionOrAsset) {
 }
 
 function enforceTemporaryDesignArtworkBoundary(access, adminUser, actionOrAsset, inquiry) {
-  if (access?.module !== "design_artwork" || access?.source !== "temporary" || adminUser?.role !== "staff") {
+  if (access?.module !== "design_artwork" || adminUser?.role !== "staff") {
     return { ok: true };
   }
 

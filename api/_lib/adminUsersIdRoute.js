@@ -44,6 +44,21 @@ export default async function handler(request, response) {
     const action = cleanText(body.action, 40);
     const updates = { updated_at: new Date().toISOString() };
 
+    if (action === "set_permissions") {
+      if (!Array.isArray(body.modules) || !Array.isArray(body.expectedModules)) {
+        return sendJson(response, 400, { ok: false, error: "Invalid module selection." });
+      }
+      const { data, error } = await supabase.rpc("set_employee_ongoing_permissions", {
+        p_actor: caller.id, p_employee: targetId, p_modules: body.modules, p_expected: body.expectedModules,
+      });
+      if (error) {
+        const status = { "42501": 403, "40001": 409, "22023": 400 }[error.code];
+        if (status) return sendJson(response, status, { ok: false, error: error.message });
+        throw error;
+      }
+      return sendJson(response, 200, { ok: true, ongoingModules: data });
+    }
+
     if (action === "disable") {
       if (target.user_id === caller.userId) return sendJson(response, 403, { ok: false, error: "you cannot disable your own account" });
       if (target.role === "owner" && target.is_active !== false && await countActiveOwners(supabase) <= 1) {

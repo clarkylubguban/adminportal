@@ -649,3 +649,16 @@
     margin-left: 0;
   }
 }
+
+.ongoing-permissions {
+  max-width: 720px;
+  padding: 20px;
+  border: 1px solid #e5e3da;
+  border-radius: 10px;
+  background: white;
+}
+.ongoing-permissions h2, .ongoing-permissions p { margin: 0; }
+.ongoing-permissions p { color: #647084; font-size: 13px; }
+.ongoing-permissions fieldset { display: grid; gap: 14px; min-width: 0; border: 0; padding: 0; margin: 0; }
+.ongoing-permissions button { justify-self: start; padding-inline: 16px; }
+.ongoing-permissions button:disabled { opacity: .5; }

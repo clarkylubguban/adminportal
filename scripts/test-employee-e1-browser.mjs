@@ -27,6 +27,17 @@ const server = createServer(async (request, response) => {
     send(response, 200, "application/json", JSON.stringify({ ok: true, users }));
     return;
   }
+  if (url.pathname === "/api/admin-users/staff-row" && request.method === "PATCH") {
+    let body = "";
+    for await (const chunk of request) body += chunk;
+    const update = JSON.parse(body);
+    const staff = employees.find((row) => row.id === "staff-row");
+    assert.equal(update.action, "set_permissions");
+    assert.deepEqual(update.expectedModules, staff.ongoingModules || []);
+    staff.ongoingModules = update.modules;
+    send(response, 200, "application/json", JSON.stringify({ ok: true, ongoingModules: update.modules }));
+    return;
+  }
   if (/^\/api\/admin-users\/[^/]+\/?$/.test(url.pathname)) {
     send(response, 200, "application/json", JSON.stringify({ ok: true, user: employees[0] }));
     return;
@@ -127,6 +138,25 @@ try {
   assert.equal((await evaluate(cdp, `Boolean(document.querySelector(".staff-drawer"))`)), true, "Edit drawer did not open.");
   await cdp.send("Runtime.evaluate", { expression: `document.querySelector("[data-staff-close]").click(); document.querySelector("[data-staff-new]").click();` });
   assert.equal((await evaluate(cdp, `Boolean(document.querySelector(".staff-drawer")) && document.body.innerText.includes("INVITE EMPLOYEE")`)), true, "Invite drawer did not open.");
+
+  async function openStaffPermissions() {
+    await navigate(cdp, `http://127.0.0.1:${appPort}/settings/people-access`);
+    await waitForEval(cdp, `document.querySelectorAll(".employee-row").length === 3`);
+    await evaluate(cdp, `document.querySelector('[data-people-tab="permissions"]').click()`);
+    await evaluate(cdp, `document.querySelector("#permission-employee").value = "staff-row";
+      document.querySelector("#permission-employee").dispatchEvent(new Event("change"))`);
+  }
+  await openStaffPermissions();
+  await evaluate(cdp, `document.querySelector("#permission-preset").value = "0";
+    document.querySelector("#permission-preset").dispatchEvent(new Event("change"))`);
+  await evaluate(cdp, `document.querySelector("#ongoing-permissions button[type=submit]").click()`);
+  await waitForEval(cdp, `document.querySelector(".staff-feedback")?.textContent === "Ongoing permissions saved."`);
+  await openStaffPermissions();
+  assert.equal(await evaluate(cdp, `document.querySelector('[data-permission-module][value="pos_sales"]').checked`), true);
+  await evaluate(cdp, `document.querySelector('[data-permission-module][value="pos_sales"]').click();
+    document.querySelector("#ongoing-permissions button[type=submit]").click()`);
+  await waitForEval(cdp, `document.querySelector(".staff-feedback")?.textContent === "Ongoing permissions saved."`);
+  assert.deepEqual(employees.find((row) => row.id === "staff-row").ongoingModules, []);
 
   currentRole = "admin";
   await navigate(cdp, `http://127.0.0.1:${appPort}/settings/people-access`);

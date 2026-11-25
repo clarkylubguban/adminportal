@@ -108,7 +108,7 @@ async function resolveWorkflowAccess(supabase, adminUser, action) {
 }
 
 function enforceTemporaryProductionBoundary(access, adminUser, action, body, inquiry) {
-  if (access?.module !== "production" || access?.source !== "temporary" || adminUser?.role !== "staff") {
+  if (access?.module !== "production" || adminUser?.role !== "staff") {
     return { ok: true };
   }
 
