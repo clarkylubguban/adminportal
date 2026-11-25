@@ -512,7 +512,6 @@ let categoryLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
 let categoryLoadError = "";
 let brandLoadState = shouldLoadSupabaseOrders ? "loading" : "empty";
 let brandLoadError = "";
-let activeCatalogKey = "trry_webapp";
 let selectedCatalogProductId = null;
 let catalogExpandedProductId = null;
 let catalogQuickSaveState = "idle";
@@ -9683,8 +9682,8 @@ function createCatalogDraft(product = null) {
 
   return {
     imageDraftId: createDraftImageId(),
-    catalogKey: activeCatalogKey,
-    catalogKeys: [activeCatalogKey],
+    catalogKey: "pos",
+    catalogKeys: ["pos"],
     name: "",
     slug: "",
     productCode: "",
@@ -11941,7 +11940,6 @@ async function saveCatalogDraft() {
     if (savedProduct) {
       catalogProducts = upsertCatalogProduct(catalogProducts, savedProduct);
       selectedCatalogProductId = savedProduct.id;
-      activeCatalogKey = savedProduct.catalogKey;
     }
 
     clearCatalogImagePreview();
@@ -12642,7 +12640,6 @@ function bindEvents() {
 
   document.querySelectorAll("[data-catalog-tab]").forEach((button) => {
     button.addEventListener("click", () => {
-      activeCatalogKey = button.dataset.catalogTab;
       catalogStatusFilter = catalogStatusFilter || "active";
       selectedCatalogProductId = catalogProducts[0]?.id ?? null;
       clearCatalogImagePreview();
