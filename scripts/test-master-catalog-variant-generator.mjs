@@ -6,6 +6,10 @@ const root = process.cwd();
 const main = readFileSync(join(root, "src", "main.js"), "utf8");
 const styles = readFileSync(join(root, "src", "styles.css"), "utf8");
 
+const newDraft = main.slice(main.indexOf("imageDraftId: createDraftImageId()"), main.indexOf("function createDraftImageId()"));
+assert.match(newDraft, /availableSizesText: ""/, "A new product must start with no selected sizes");
+assert.match(newDraft, /availableColorsText: ""/, "A new product must start with no selected colors");
+
 assert.ok(main.includes('const catalogVariantSizeOptions = ["S", "M", "L", "XL", "XXL"];'), "approved size options must be present");
 assert.ok(main.includes('const catalogVariantColorOptions = ["Black", "White"];'), "approved color options must be present");
 assert.ok(main.includes("function renderCatalogVariantGenerator"), "variant generator renderer missing");
