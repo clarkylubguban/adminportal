@@ -8505,6 +8505,7 @@ function getCatalogProductHealthChecks(item) {
 }
 
 function getCatalogVariantCount(item) {
+  if (item.variants?.length) return item.variants.filter((row) => row.active !== false).length;
   const sizes = Array.isArray(item.availableSizes) ? item.availableSizes.filter(Boolean).length : 0;
   const colors = Array.isArray(item.availableColors) ? item.availableColors.filter(Boolean).length : 0;
   if (sizes && colors) return Math.min(sizes * colors, 99);
@@ -8550,7 +8551,7 @@ function renderCatalogProductEditorPage(editorRoute) {
   const summaryMeta = isEdit ? `${brandLabel} - ${skuValue} - ${typeLabel}` : `${brandLabel} - Product code generated on save`;
   const heroImage = getCatalogEditorPrimaryImage(draft);
   const footerMessage = catalogValidationError
-    ? "Fix required fields before creating this product."
+    ? catalogValidationError.message
     : isEdit
       ? "Unsaved changes will remain in this frame only."
       : "Creates as Draft. Ready stays locked until requirements pass.";
@@ -8579,7 +8580,7 @@ function renderCatalogProductEditorPage(editorRoute) {
         ${renderStatusPill(status)}
       </div>
 
-      ${catalogValidationError ? `<div class="catalog-editor-toast error" role="alert"><strong>Fix required fields before creating product</strong><span>${escapeHtml(catalogValidationError)}</span></div>` : ""}
+      ${catalogValidationError ? `<div class="catalog-editor-toast error" role="alert"><strong>Fix required fields before creating product</strong><span id="catalog-validation-message">${escapeHtml(catalogValidationError.message)}</span></div>` : ""}
       ${catalogSaveState === "success" ? `<div class="catalog-editor-toast success" role="status"><strong>${isEdit ? "Changes saved successfully" : "Product created successfully"}</strong><span>${escapeHtml(displayName)} is ${isEdit ? "updated" : "ready to review"}.</span></div>` : ""}
       ${catalogSaveError ? `<div class="catalog-editor-toast error" role="alert"><strong>Save failed</strong><span>${escapeHtml(catalogSaveError)}</span></div>` : ""}
 
@@ -8679,7 +8680,7 @@ function renderCatalogEditorImages(draft, canWrite, isSaving) {
   const disabled = !canWrite || isSaving || images.length >= CATALOG_PRODUCT_IMAGE_LIMIT;
 
   return `
-    <article class="catalog-editor-card ${catalogValidationError && images.length === 0 ? "has-error" : ""}" id="catalog-section-images" tabindex="-1" aria-label="Product Images">
+    <article class="catalog-editor-card" id="catalog-section-images" tabindex="-1" aria-label="Product Images">
       <header>
         <div><h2>Product Images</h2><p>Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product. Choose one PRIMARY image independently from order.</p></div>
         <strong>${images.length} of ${CATALOG_PRODUCT_IMAGE_LIMIT} uploaded</strong>
@@ -8712,18 +8713,20 @@ function renderCatalogEditorPricing(draft, disabled = false) {
 }
 
 function renderCatalogEditorProduction(draft, disabled = false) {
+  const category = getCatalogEditorCategoryLabel(draft);
+  const shirt = draft.productType === "PHYSICAL" && /\b(?:t[ -]?shirts?|shirts?|polos?|(?:box[ -]?)?tees?|oversize|premium cotton)\b/i.test(category);
   return `
-    <article class="catalog-editor-card ${catalogValidationError && !draft.productionUse ? "has-error" : ""}" aria-label="Production Information">
-      <header><h2>Production Information</h2><p>Manufacturing notes used by admin and production teams.</p></header>
+    <details class="catalog-editor-card" data-production-details ${draft.productionDetailsOpen ? "open" : ""}>
+      <summary><strong>${draft.productionDetailsOpen ? "Production details" : "+ Add production details"}</strong></summary>
       <div class="catalog-editor-field-grid">
         ${renderCatalogInput("material", "Material / Fabric", draft.material || "", "text", false, disabled)}
-        ${renderCatalogInput("weightGsm", "Weight / GSM", draft.weightGsm || "", "text", false, disabled)}
-        ${renderCatalogInput("fitCut", "Fit / Cut", draft.fitCut || "", "text", false, disabled)}
+        ${shirt ? renderCatalogInput("weightGsm", "Weight / GSM", draft.weightGsm || "", "text", false, disabled) : ""}
+        ${shirt ? renderCatalogInput("fitCut", "Fit / Cut", draft.fitCut || "", "text", false, disabled) : ""}
         ${renderCatalogInput("productionUse", "Production Use", draft.productionUse || "", "text", false, disabled)}
         ${renderCatalogInput("printMethodsText", "Compatible Methods", draft.printMethodsText, "text", false, disabled)}
         ${renderCatalogTextarea("productionNotes", "Production Notes", draft.productionNotes || "", disabled)}
       </div>
-    </article>
+    </details>
   `;
 }
 
@@ -8733,29 +8736,47 @@ function renderCatalogEditorVariants(draft, disabled = false) {
   const generatorDisabled = disabled || !canWrite;
   const selectedSizes = splitCatalogList(draft.availableSizesText);
   const selectedColors = splitCatalogList(draft.availableColorsText);
-  const canGenerate = selectedSizes.length > 0 && selectedColors.length > 0;
+  const fields = getCatalogOptionFields(draft);
+  const canGenerate = fields.length > 0 && fields.every((field) => field === "size" ? selectedSizes.length : selectedColors.length);
+  const hasNamedRows = variants.some((row) => row.size || row.color);
+  if (!fields.length && !draft.choosingOptions) {
+    return `<article class="catalog-editor-card" id="catalog-section-variants" aria-label="Product options">
+      <header><div><h2>Single item</h2><p>One SKU for sales and inventory.</p>${variants[0]?.sku ? `<small>SKU · ${escapeHtml(variants[0].sku)}</small>` : ""}</div>
+      <button class="note-button" type="button" data-catalog-add-options ${disabled ? "disabled" : ""}>+ Add options</button></header></article>`;
+  }
 
   return `
-    <article class="catalog-editor-card ${catalogValidationError && variants.length === 0 ? "has-error" : ""}" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
+    <article class="catalog-editor-card" id="catalog-section-variants" tabindex="-1" aria-label="Variants">
       <header class="catalog-variants-header">
-        <div><h2>Variants</h2><p>Select sizes and colors, then generate the combinations.</p></div>
+        <div><h2>Product options</h2><p>Choose what customers can select.</p></div>
         <div class="catalog-variant-header-actions">
-          <button class="note-button" type="button" data-catalog-variants-done>Done</button>
+          ${!hasNamedRows ? `<button class="note-button" type="button" data-catalog-single ${disabled ? "disabled" : ""}>Use single item</button>` : ""}
           <button class="primary-button" type="button" data-catalog-generate-variants ${generatorDisabled || !canGenerate ? "disabled" : ""}>Generate Variants</button>
         </div>
       </header>
-      ${renderCatalogVariantGenerator(draft, variants, generatorDisabled)}
-      ${variants.length
-        ? `<div class="catalog-variant-row-stack">
-            <div class="catalog-variant-row-labels" aria-hidden="true"><span>Color</span><span>Size</span><span>SKU</span><span>Price</span><span>Action</span></div>
-            ${variants.map((variant, index) => renderCatalogVariantRow(draft, variant, index, disabled)).join("")}
+      <div class="catalog-variant-header-actions">${["color", "size"].map((field) =>
+        `<button class="note-button" type="button" data-catalog-option-field="${field}" aria-pressed="${fields.includes(field)}"
+          ${disabled || (fields.includes(field) && (field === "size" ? selectedSizes : selectedColors).length) ? "disabled" : ""}>${fields.includes(field) ? "✓" : "+"} ${field === "size" ? "Size" : "Color"}</button>`).join("")}</div>
+      ${fields.length ? renderCatalogVariantGenerator(draft, fields, generatorDisabled) : ""}
+      ${hasNamedRows
+        ? `<div class="catalog-variant-row-stack" data-option-count="${fields.length}">
+            <div class="catalog-variant-row-labels" aria-hidden="true">${fields.includes("color") ? "<span>Color</span>" : ""}${fields.includes("size") ? "<span>Size</span>" : ""}<span>SKU</span><span>Price</span><span>Action</span></div>
+            ${variants.map((variant, index) => renderCatalogVariantRow(draft, variant, index, disabled, fields)).join("")}
           </div>`
-        : `<div class="catalog-editor-empty catalog-variant-empty"><strong>No variants yet</strong><span>Add sizes or colors only if this product has options.</span></div>`}
+        : ""}
     </article>
   `;
 }
 
-function renderCatalogVariantGenerator(draft, variants, disabled = false) {
+function getCatalogOptionFields(draft) {
+  if (draft.optionFields) return draft.optionFields;
+  return ["color", "size"].filter((field) => {
+    const values = field === "size" ? draft.availableSizesText : draft.availableColorsText;
+    return Boolean(values || draft.variants?.some((row) => row.active !== false && row[field]));
+  });
+}
+
+function renderCatalogVariantGenerator(draft, fields, disabled = false) {
   const sizes = splitCatalogList(draft.availableSizesText);
   const colors = splitCatalogList(draft.availableColorsText);
   const sizeOptions = draft.id ? uniqueList([...catalogVariantSizeOptions.filter((size) => size !== "XXL"), ...sizes]) : sizes;
@@ -8763,28 +8784,28 @@ function renderCatalogVariantGenerator(draft, variants, disabled = false) {
 
   return `
     <div class="catalog-variant-generator catalog-variant-generator-v4" aria-label="Variant generator">
-      <div class="catalog-variant-option-row">
+      ${fields.includes("size") ? `<div class="catalog-variant-option-row">
         <span class="catalog-variant-option-name">Option<br><strong>Size</strong></span>
         <span class="catalog-variant-option-values">Values</span>
         <div class="catalog-variant-option-list">
           ${sizeOptions.map((size) => renderCatalogVariantOption("size", size, sizes.some((item) => normalizeVariantToken(item) === normalizeVariantToken(size)), disabled)).join("")}
           <label class="catalog-variant-custom-option">
-            <input type="text" data-catalog-custom-size list="catalog-suggested-sizes" placeholder="Select sizes…" ${disabled ? "disabled" : ""} aria-label="Add a size, then press Enter">
+            <input type="text" data-catalog-custom-size list="catalog-suggested-sizes" placeholder="Size + Enter" ${disabled ? "disabled" : ""} aria-label="Add a size, then press Enter">
             <datalist id="catalog-suggested-sizes">${catalogVariantSizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
           </label>
         </div>
-      </div>
-      <div class="catalog-variant-option-row">
+      </div>` : ""}
+      ${fields.includes("color") ? `<div class="catalog-variant-option-row">
         <span class="catalog-variant-option-name">Option<br><strong>Color</strong></span>
         <span class="catalog-variant-option-values">Values</span>
         <div class="catalog-variant-option-list">
           ${colors.map((color) => renderCatalogVariantOption("color", color, true, disabled)).join("")}
           <label class="catalog-variant-custom-option">
-            <input type="text" data-catalog-custom-color placeholder="Select colors…" list="catalog-remembered-colors" ${disabled ? "disabled" : ""} aria-label="Add custom color">
+            <input type="text" data-catalog-custom-color placeholder="Color + Enter" list="catalog-remembered-colors" ${disabled ? "disabled" : ""} aria-label="Add a color, then press Enter">
           </label>
           <datalist id="catalog-remembered-colors">${rememberedColors.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
         </div>
-      </div>
+      </div>` : ""}
     </div>
   `;
 }
@@ -8808,8 +8829,8 @@ function generateCatalogVariantDrafts() {
   if (!catalogDraft || !canWriteCatalogProducts()) return;
   const sizes = splitCatalogList(catalogDraft.availableSizesText);
   const colors = splitCatalogList(catalogDraft.availableColorsText);
-  if (!sizes.length || !colors.length) {
-    catalogSaveError = "Select at least one size and one color before generating variants.";
+  if (!sizes.length && !colors.length) {
+    catalogSaveError = "Add an option value.";
     render();
     return;
   }
@@ -8817,9 +8838,10 @@ function generateCatalogVariantDrafts() {
   catalogDraft = {
     ...catalogDraft,
     variants: buildCatalogVariantMatrixDraft(catalogDraft, variants, sizes, colors),
+    optionsChanged: false,
   };
   catalogVariantPanel = { mode: "", index: -1, draftId: "", size: "", color: "", sellingPrice: "", error: "" };
-  catalogSaveError = "Variants generated in draft. Review them, then use Save Changes.";
+  catalogSaveError = "";
   catalogValidationError = "";
   render();
   focusCatalogEditorSection("catalog-section-variants");
@@ -8866,23 +8888,23 @@ function renderCatalogVariantPanel(draft, variants, disabled = false) {
   `;
 }
 
-function renderCatalogVariantRow(draft, variant, index, disabled = false) {
+function renderCatalogVariantRow(draft, variant, index, disabled = false, fields = getCatalogOptionFields(draft)) {
   const sizeOptions = uniqueList(getCatalogDraftVariantRows(draft).map((item) => item.size).filter(Boolean));
   const colorOptions = uniqueList(getCatalogDraftVariantRows(draft).map((item) => item.color).filter(Boolean));
   return `
     <div class="catalog-variant-inline-row" data-catalog-variant-row="${index}" data-catalog-variant-id="${escapeHtml(variant.id || variant.masterVariantId || `variant-${index}`)}">
-      <div class="catalog-variant-field-cell">
+      ${fields.includes("color") ? `<div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
           <input type="text" list="catalog-existing-variant-color-options-${index}" data-catalog-existing-variant-field="color" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.color || "")}" ${disabled ? "disabled" : ""} aria-label="Variant color">
           <datalist id="catalog-existing-variant-color-options-${index}">${colorOptions.map((color) => `<option value="${escapeHtml(color)}"></option>`).join("")}</datalist>
         </label>
-      </div>
-      <div class="catalog-variant-field-cell">
+      </div>` : ""}
+      ${fields.includes("size") ? `<div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
           <input type="text" list="catalog-existing-variant-size-options-${index}" data-catalog-existing-variant-field="size" data-catalog-existing-variant-index="${index}" value="${escapeHtml(variant.size || "")}" ${disabled ? "disabled" : ""} aria-label="Variant size">
           <datalist id="catalog-existing-variant-size-options-${index}">${sizeOptions.map((size) => `<option value="${escapeHtml(size)}"></option>`).join("")}</datalist>
         </label>
-      </div>
+      </div>` : ""}
       <div class="catalog-variant-sku-note locked" aria-label="Variant SKU ${escapeHtml(getCatalogVariantSku(draft, variant, index))}"><strong>${escapeHtml(getCatalogVariantSku(draft, variant, index))}</strong></div>
       <div class="catalog-variant-field-cell">
         <label class="catalog-form-field">
@@ -8921,8 +8943,7 @@ function updateCatalogVariantPanelField(field, value) {
 function syncCatalogVariantPanelControls() {
   const submitButton = document.querySelector("[data-catalog-submit-variant]");
   if (submitButton) {
-    submitButton.disabled = !String(catalogVariantPanel.size || "").trim()
-      || !String(catalogVariantPanel.color || "").trim()
+    submitButton.disabled = (!String(catalogVariantPanel.size || "").trim() && !String(catalogVariantPanel.color || "").trim())
       || catalogVariantPanel.sellingPrice === ""
       || Number(catalogVariantPanel.sellingPrice) < 0;
   }
@@ -8942,8 +8963,8 @@ function submitCatalogVariantPanel() {
   const sellingPrice = catalogVariantPanel.sellingPrice === "" ? catalogDraft.startingPrice || 0 : Number(catalogVariantPanel.sellingPrice);
   const editingIndex = catalogVariantPanel.mode === "edit" ? catalogVariantPanel.index : -1;
 
-  if (!size || !color) {
-    catalogVariantPanel = { ...catalogVariantPanel, error: "Enter a real size and color before adding a Variant." };
+  if (!size && !color) {
+    catalogVariantPanel = { ...catalogVariantPanel, error: "Enter a size or color before adding a Variant." };
     render();
     return;
   }
@@ -8976,6 +8997,7 @@ function submitCatalogVariantPanel() {
   catalogDraft = {
     ...catalogDraft,
     variants: nextVariants,
+    optionsChanged: false,
     availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
     availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
   };
@@ -8999,6 +9021,7 @@ function updateCatalogExistingVariantField(index, field, value) {
   catalogDraft = {
     ...catalogDraft,
     variants: nextVariants,
+    optionsChanged: false,
     availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
     availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
   };
@@ -9014,8 +9037,8 @@ function saveCatalogExistingVariant(index) {
   const size = String(variant.size || "").trim();
   const color = String(variant.color || "").trim();
   const price = variant.sellingPrice === "" ? 0 : Number(variant.sellingPrice);
-  if (!size || !color) {
-    catalogSaveError = "Enter a real size and color before saving a Variant.";
+  if (!size && !color) {
+    catalogSaveError = "Enter a size or color before saving a Variant.";
     render();
     return;
   }
@@ -9042,6 +9065,7 @@ function deleteCatalogVariantDraft(index) {
   catalogDraft = {
     ...catalogDraft,
     variants: nextVariants,
+    optionsChanged: false,
     availableSizesText: uniqueList(nextVariants.map((variant) => variant.size).filter(Boolean)).join(", "),
     availableColorsText: uniqueList(nextVariants.map((variant) => variant.color).filter(Boolean)).join(", "),
   };
@@ -9058,13 +9082,15 @@ function updateCatalogVariantGeneratorSelection(type, value, checked) {
 
   catalogDraft = {
     ...catalogDraft,
+    optionFields: getCatalogOptionFields(catalogDraft),
+    optionsChanged: true,
     availableSizesText: selectedSizes.join(", "),
     availableColorsText: selectedColors.join(", "),
   };
   catalogSaveError = "";
   catalogValidationError = "";
   render();
-  focusCatalogEditorSection("catalog-section-variants");
+  document.querySelector(`[data-catalog-custom-${type}]`)?.focus();
 }
 
 function updateCatalogVariantOptionList(values, value, checked) {
@@ -9074,7 +9100,9 @@ function updateCatalogVariantOptionList(values, value, checked) {
 }
 
 function buildCatalogVariantMatrixDraft(draft, variants, sizes, colors) {
-  if (!sizes.length || !colors.length) return [];
+  if (!sizes.length && !colors.length) return [];
+  if (!sizes.length) sizes = [""];
+  if (!colors.length) colors = [""];
   const existingByCombination = new Map();
   variants.forEach((variant) => {
     existingByCombination.set(getCatalogVariantCombinationKey(variant), variant);
@@ -9095,6 +9123,9 @@ function buildCatalogVariantMatrixDraft(draft, variants, sizes, colors) {
 
 function getCatalogDraftVariantRows(draft) {
   const supplied = Array.isArray(draft.variants) ? draft.variants.filter((variant) => variant?.active !== false) : [];
+  if (draft.optionsChanged) {
+    return buildCatalogVariantMatrixDraft(draft, supplied, splitCatalogList(draft.availableSizesText), splitCatalogList(draft.availableColorsText));
+  }
   if (supplied.length) {
     return supplied.map((variant) => ({
       ...variant,
@@ -9177,14 +9208,14 @@ function renderCatalogEditorSummaryCard(draft, skuValue, categoryValue, imageCou
     <article class="catalog-editor-card compact" aria-label="Product Summary">
       <header><h2>Product Summary</h2></header>
       <div class="catalog-kv-list">
-        ${renderCatalogDetailRow("SKU", skuValue)}
+        ${renderCatalogDetailRow("Product code", skuValue)}
         ${renderCatalogDetailRow("Brand", getCatalogEditorBrandLabel(draft) || "Not selected")}
         ${renderCatalogDetailRow("Type", formatProductType(draft.productType) || "Not selected")}
         ${renderCatalogDetailRow("Category", categoryValue || "Not selected")}
-        ${renderCatalogDetailRow("Variants", String(getCatalogDraftVariantRows(draft).length))}
+        ${renderCatalogDetailRow("Product options", getCatalogOptionFields(draft).length ? String(getCatalogDraftVariantRows(draft).length) + " combinations" : "Single item")}
         ${renderCatalogDetailRow("Last updated", draft.updatedAt ? formatCatalogUpdated(draft.updatedAt) : "Not saved")}
         ${renderCatalogDetailRow("Images", `${imageCount} of ${CATALOG_PRODUCT_IMAGE_LIMIT}`)}
-        ${renderCatalogDetailRow("Production info", draft.productionUse ? "Complete" : "Incomplete")}
+
       </div>
     </article>
   `;
@@ -9371,7 +9402,11 @@ function getCatalogEditorReadiness(draft) {
     { label: "Brand and product identity", ready: Boolean(draft.name && draft.brandId && draft.productType && draft.category), target: "catalog-section-product-identity", missing: "Add name, Brand, product type, and category." },
     { label: "Sales Channels", ready: draft.status !== "published" || getCatalogDraftSalesChannelCodes(draft).length > 0, target: "catalog-section-product-identity", missing: "Choose at least one Sales Channel before publishing." },
     { label: "Cost and selling price", ready: Boolean(draft.unitCost && draft.startingPrice), target: "catalog-section-pricing", missing: "Enter unit cost and selling price." },
-    { label: "Variants", ready: Boolean(splitCatalogList(draft.availableSizesText).length || splitCatalogList(draft.availableColorsText).length), target: "catalog-section-variants", missing: "Add at least one size or color." },
+    ...getCatalogOptionFields(draft).map((field) => ({
+      label: field === "size" ? "Size options" : "Color options",
+      ready: Boolean(field === "size" ? draft.availableSizesText : draft.availableColorsText),
+      target: "catalog-section-variants", missing: `Add a ${field} value.`,
+    })),
     { label: "At least one product image", ready: getCatalogEditorImageCount(draft) > 0, target: "catalog-section-images", missing: "Upload a product image." },
   ];
 }
@@ -9379,18 +9414,23 @@ function getCatalogEditorReadiness(draft) {
 function validateCatalogProductEditor(draft, product) {
   const baseError = validateCatalogProduct(product);
   if (baseError) return baseError;
-  if (!draft.brandId) return "Brand is required.";
+  if (!draft.brandId) return { field: "brandId", message: "Brand is required." };
   const brand = brands.find((item) => item.id === draft.brandId);
-  if (!brand) return "Choose a valid Brand.";
-  if (brand.status !== "active") return "Only active Brands can be assigned to products.";
-  if (!draft.productType) return "Product Type is required.";
+  if (!brand) return { field: "brandId", message: "Choose a valid Brand." };
+  if (brand.status !== "active") return { field: "brandId", message: "Only active Brands can be assigned to products." };
+  if (!draft.productType) return { field: "productType", message: "Product Type is required." };
   const category = productCategories.find((item) => item.name === draft.category);
-  if (!draft.category) return "Category is required.";
-  if (category && category.productType !== draft.productType) return "Category must match the selected Product Type.";
+  if (!draft.category) return { field: "category", message: "Category is required." };
+  if (category && category.productType !== draft.productType) return { field: "category", message: "Category must match the selected Product Type." };
   const legacyChannels = getCatalogDraftLegacyChannels(draft);
-  if (legacyChannels.length) return `Legacy channel requires correction: ${legacyChannels.join(", ")}`;
-  if (product.status === "published" && getCatalogDraftSalesChannelCodes(draft).length === 0) return "Ready for Sale sellable products require at least one Sales Channel.";
-  return "";
+  if (legacyChannels.length) return { field: "salesChannels", message: `Legacy channel requires correction: ${legacyChannels.join(", ")}` };
+  if (product.status === "published" && getCatalogDraftSalesChannelCodes(draft).length === 0) return { field: "salesChannels", message: "Ready for Sale sellable products require at least one Sales Channel." };
+  for (const field of getCatalogOptionFields(draft)) {
+    if (!(field === "size" ? draft.availableSizesText : draft.availableColorsText)) {
+      return { field: `option-${field}`, message: `Add a ${field} value or remove the option.` };
+    }
+  }
+  return null;
 }
 
 function getCatalogDestinationCounts() {
@@ -11819,7 +11859,7 @@ function updateCatalogDraftField(field, value, inputType = "text") {
     }
   }
 
-  catalogValidationError = "";
+  if (catalogValidationError?.field === field || field === "productType") catalogValidationError = "";
   catalogSaveError = "";
 }
 
@@ -11842,6 +11882,9 @@ async function saveCatalogDraft() {
   if (validationError) {
     catalogValidationError = validationError;
     render();
+    const target = document.querySelector("[data-catalog-product-editor] [aria-invalid=true]");
+    target?.scrollIntoView({ block: "center" });
+    target?.focus({ preventScroll: true });
     return;
   }
 
@@ -11930,17 +11973,15 @@ async function saveCatalogDraft() {
     console.error("Unable to save catalog product.", error);
     catalogSaveState = "idle";
     catalogSaveError = error.message || "Save failed. Check RLS and catalog product fields.";
-    if (catalogDraft) {
-      catalogDraft = {
-        ...catalogDraft,
-        imageError: catalogSaveError,
-      };
-    }
+
     render();
   }
 }
 
 function normalizeCatalogDraft(draft) {
+  const rows = getCatalogDraftVariantRows(draft);
+  const single = !getCatalogOptionFields(draft).length && rows.length === 1 && !rows[0].size && !rows[0].color;
+  const variants = single ? [{ ...rows[0], sellingPrice: draft.startingPrice, unitCost: draft.unitCost }] : rows;
   const category = productCategories.find((item) => item.name === draft.category);
   const catalogKeys = getCatalogDraftSalesChannelCodes(draft).map(channelCodeToCatalogKey).filter(Boolean);
   return {
@@ -11960,9 +12001,9 @@ function normalizeCatalogDraft(draft) {
     startingPrice: draft.startingPrice === "" ? "" : Number(draft.startingPrice),
     priceLabel: String(draft.priceLabel || "").trim(),
     minimumQuantity: Number(draft.minimumQuantity || 1),
-    availableSizes: uniqueList(getCatalogDraftVariantRows(draft).map((variant) => variant.size).filter(Boolean)),
-    availableColors: uniqueList(getCatalogDraftVariantRows(draft).map((variant) => variant.color).filter(Boolean)),
-    variants: getCatalogDraftVariantRows(draft),
+    availableSizes: uniqueList(variants.map((variant) => variant.size).filter(Boolean)),
+    availableColors: uniqueList(variants.map((variant) => variant.color).filter(Boolean)),
+    variants,
     printMethods: splitCatalogList(draft.printMethodsText),
     sortOrder: Number(draft.sortOrder || 0),
     isFeatured: draft.isFeatured === true,
@@ -11971,15 +12012,15 @@ function normalizeCatalogDraft(draft) {
 }
 
 function validateCatalogProduct(product) {
-  if (product.catalogKeys.some((key) => !catalogOptions.some((catalog) => catalog.key === key))) return "Choose valid Sales Channels.";
-  if (new Set(product.catalogKeys).size !== product.catalogKeys.length) return "Duplicate Sales Channels are not allowed.";
-  if (!product.name) return "Product name is required.";
-  if (!catalogStatusOptions.includes(product.status)) return "Choose a valid status.";
-  if (!Number.isFinite(product.minimumQuantity) || product.minimumQuantity < 1) return "Minimum quantity must be at least 1.";
-  if (product.startingPrice !== "" && (!Number.isFinite(product.startingPrice) || product.startingPrice < 0)) return "Starting price cannot be negative.";
-  if (!Number.isFinite(product.sortOrder) || product.sortOrder < 0) return "Sort order cannot be negative.";
-  if (getCatalogEditorImageCount(product) > CATALOG_PRODUCT_IMAGE_LIMIT) return `Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product.`;
-  return "";
+  if (product.catalogKeys.some((key) => !catalogOptions.some((catalog) => catalog.key === key))) return { field: "salesChannels", message: "Choose valid Sales Channels." };
+  if (new Set(product.catalogKeys).size !== product.catalogKeys.length) return { field: "salesChannels", message: "Duplicate Sales Channels are not allowed." };
+  if (!product.name) return { field: "name", message: "Product name is required." };
+  if (!catalogStatusOptions.includes(product.status)) return { field: "status", message: "Choose a valid status." };
+  if (!Number.isFinite(product.minimumQuantity) || product.minimumQuantity < 1) return { field: "minimumQuantity", message: "Minimum quantity must be at least 1." };
+  if (product.startingPrice !== "" && (!Number.isFinite(product.startingPrice) || product.startingPrice < 0)) return { field: "startingPrice", message: "Starting price cannot be negative." };
+  if (!Number.isFinite(product.sortOrder) || product.sortOrder < 0) return { field: "sortOrder", message: "Sort order cannot be negative." };
+  if (getCatalogEditorImageCount(product) > CATALOG_PRODUCT_IMAGE_LIMIT) return { field: "images", message: `Maximum ${CATALOG_PRODUCT_IMAGE_LIMIT} images per product.` };
+  return null;
 }
 
 function upsertCatalogProduct(items, product) {
@@ -13045,11 +13086,54 @@ function bindEvents() {
     });
   });
 
+  if (catalogValidationError) {
+    const field = catalogValidationError.field;
+    const selectors = {
+      salesChannels: "[data-catalog-sales-channel]", status: "[data-catalog-status-choice]",
+      images: "[data-catalog-image-file]", "option-size": "[data-catalog-custom-size]", "option-color": "[data-catalog-custom-color]",
+    };
+    const control = document.querySelector(selectors[field] || `[data-catalog-field="${field}"]`);
+    control?.setAttribute("aria-invalid", "true");
+    control?.setAttribute("aria-describedby", "catalog-validation-message");
+  }
+  const productionDetails = document.querySelector("[data-production-details]");
+  productionDetails?.addEventListener("toggle", () => {
+    if (!productionDetails.isConnected || !catalogDraft) return;
+    catalogDraft.productionDetailsOpen = productionDetails.open;
+    productionDetails.querySelector("summary strong").textContent = productionDetails.open ? "Production details" : "+ Add production details";
+  });
+  document.querySelector("[data-catalog-add-options]")?.addEventListener("click", () => {
+    catalogDraft.choosingOptions = true;
+    render();
+    document.querySelector("[data-catalog-option-field]")?.focus();
+  });
+  document.querySelectorAll("[data-catalog-option-field]").forEach((button) => button.addEventListener("click", () => {
+    const field = button.dataset.catalogOptionField;
+    const fields = getCatalogOptionFields(catalogDraft);
+    catalogDraft.optionFields = fields.includes(field) ? fields.filter((item) => item !== field) : [...fields, field];
+    catalogDraft.choosingOptions = true;
+    catalogValidationError = "";
+    render();
+    document.querySelector(`[data-catalog-custom-${field}]`)?.focus();
+  }));
+  document.querySelector("[data-catalog-single]")?.addEventListener("click", () => {
+    catalogDraft.choosingOptions = false;
+    catalogDraft.optionFields = [];
+    catalogDraft.variants = (catalogDraft.variants || []).filter((row) => !row.size && !row.color);
+    catalogDraft.optionsChanged = false;
+    catalogValidationError = "";
+    render();
+  });
+
   document.querySelectorAll("[data-catalog-field]").forEach((field) => {
     const eventName = field.type === "checkbox" ? "change" : "input";
     field.addEventListener(eventName, (event) => {
+      const corrected = catalogValidationError?.field === field.dataset.catalogField;
       updateCatalogDraftField(field.dataset.catalogField, field.type === "checkbox" ? field.checked : event.target.value, field.type);
-      if (field.dataset.catalogField === "productType") render();
+      if (corrected || ["productType", "category"].includes(field.dataset.catalogField)) {
+        render();
+        document.getElementById(field.id)?.focus({ preventScroll: true });
+      }
     });
   });
 
@@ -13099,11 +13183,6 @@ function bindEvents() {
   document.querySelector("[data-catalog-generate-variants]")?.addEventListener("click", (event) => {
     event.preventDefault();
     generateCatalogVariantDrafts();
-  });
-
-  document.querySelector("[data-catalog-variants-done]")?.addEventListener("click", (event) => {
-    event.preventDefault();
-    document.querySelector("[data-catalog-editor-save]")?.focus();
   });
 
   document.querySelectorAll("[data-catalog-variant-field]").forEach((field) => {
